@@ -2374,22 +2374,34 @@
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
 
-  if (el.tabTowers) {
-    el.tabTowers.addEventListener("click", () => {
+  function bindRailTab(btn, which, hint) {
+    if (!btn) return;
+    const go = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       ensureAudio();
-      showRailPanel("towers");
-      setHint("Shop: select a unit, then tap grass on the map to place it.");
-      beep(400, 0.03);
+      showRailPanel(which);
+      setHint(hint);
+      beep(which === "towers" ? 400 : 440, 0.03);
+    };
+    btn.addEventListener("click", go);
+    btn.addEventListener("pointerup", (e) => {
+      // iOS sometimes drops click after scroll; pointerup is reliable for tabs.
+      if (e.pointerType === "touch" || e.pointerType === "pen") go(e);
     });
   }
-  if (el.tabStore) {
-    el.tabStore.addEventListener("click", () => {
-      ensureAudio();
-      showRailPanel("store");
-      setHint("Spirit: permanent upgrades. Keep playing waves to earn more.");
-      beep(440, 0.03);
-    });
-  }
+  bindRailTab(
+    el.tabTowers || document.getElementById("tab-towers"),
+    "towers",
+    "Shop: select a unit, then tap grass on the map to place it."
+  );
+  bindRailTab(
+    el.tabStore || document.getElementById("tab-store"),
+    "store",
+    "Spirit: permanent upgrades. Keep playing waves to earn more."
+  );
   if (el.newRun) {
     el.newRun.addEventListener("click", () => {
       ensureAudio();
@@ -2750,6 +2762,7 @@
     buyMeta: buyMetaUpgrade,
     newRun: startNewRun,
     showStore: () => showRailPanel("store"),
+    showShop: () => showRailPanel("towers"),
   };
   // Drop any boot splash immediately so Safari never sticks on "Loading…"
   document.querySelectorAll("#boot-splash").forEach((node) => {

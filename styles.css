@@ -235,6 +235,8 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.2rem;
+  position: relative;
+  z-index: 2;
 }
 
 .rail-tab {
@@ -246,6 +248,9 @@ body {
   background: #1a120e;
   color: var(--muted);
   cursor: pointer;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 2;
 }
 
 .rail-tab.active {
