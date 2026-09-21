@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,7 +64,7 @@ BOOT_TAIL = """
 """
 
 
-def main() -> None:
+def build_html() -> str:
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
     sprites = (ROOT / "sprites.js").read_text(encoding="utf-8")
@@ -76,15 +77,19 @@ def main() -> None:
     )
 
     html = html.replace(
+        "<html lang=\"en\">",
+        "<html lang=\"en\" data-offline-bundle=\"1\">",
+        1,
+    )
+    html = html.replace(
         '<link rel="stylesheet" href="styles.css" />',
         f"<style>\n{EXTRA_CSS}\n{css}\n</style>",
     )
-    # Manifest is optional; avoid broken relative fetch in single-file hosts.
+    # Manifest + SW need extra files — strip for single-file hosts / file://
     html = html.replace(
         '<link rel="manifest" href="manifest.webmanifest" />',
         "",
     )
-    # index.html already includes #boot-splash — do not insert a second one.
     html = html.replace(
         '<script src="sprites.js"></script>',
         f"<script>\n{sprites}\n</script>",
@@ -93,11 +98,38 @@ def main() -> None:
         '<script src="game.js"></script>',
         f"<script>\n{game}\n</script>\n{BOOT_TAIL}",
     )
+    # Remove SW registration block from the bundled copy (no sw.js on litterbox).
+    html = html.replace(
+        """      // Cache assets when served over http(s) so a revisit can work offline.
+      if (
+        location.protocol !== "file:" &&
+        "serviceWorker" in navigator &&
+        !document.documentElement.hasAttribute("data-offline-bundle")
+      ) {
+        navigator.serviceWorker.register("./sw.js").catch(function () {});
+      }
+""",
+        "",
+    )
+    return html
 
+
+def main() -> None:
+    html = build_html()
+    # Embed pristine source so Save Offline works with zero network.
+    # Escape "<" so a "</script>" inside the payload cannot break out of this tag.
+    payload = json.dumps(html).replace("<", "\\u003c")
+    html = html.replace(
+        "</body>",
+        f"<script>window.__SPIRIT_LANE_SOURCE__ = {payload};</script>\n</body>",
+        1,
+    )
     OUT.write_text(html, encoding="utf-8")
     print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")
     print("data-font", "data:font/woff2" in html)
     print("splash", "boot-splash" in html)
+    print("bundle-attr", 'data-offline-bundle="1"' in html)
+    print("source-embed", "__SPIRIT_LANE_SOURCE__" in html)
     print("gate", "rotate-gate" in html)
 
 

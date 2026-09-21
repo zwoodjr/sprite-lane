@@ -94,6 +94,8 @@
     mapSelect: document.getElementById("map-select"),
     mapRandom: document.getElementById("btn-map-random"),
     mapLabel: document.getElementById("map-label"),
+    saveOffline: document.getElementById("btn-save-offline"),
+    offlineTip: document.getElementById("offline-tip"),
   };
 
   const SS = window.SpiritSprites || null;
@@ -1951,6 +1953,75 @@
   });
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
+
+  async function downloadOfflineCopy() {
+    // Prefer the pristine bundled source when present (single-file build).
+    let html = window.__SPIRIT_LANE_SOURCE__ || null;
+    if (!html) {
+      try {
+        if (location.protocol !== "file:") {
+          const res = await fetch(location.href, { cache: "no-store" });
+          if (res.ok) html = await res.text();
+        }
+      } catch (_) {
+        /* fall through */
+      }
+    }
+    if (!html) {
+      // Last resort: serialize the live DOM (already self-contained for the bundle).
+      html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+    }
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "spirit-lane.html";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2500);
+    if (el.offlineTip) {
+      el.offlineTip.textContent =
+        "Saved spirit-lane.html — open that file (Files app) with Wi‑Fi off.";
+      el.offlineTip.classList.add("is-local");
+    }
+    setHint("Offline copy downloading — open the saved HTML in airplane mode.");
+    beep(660, 0.04);
+  }
+
+  function refreshOfflineTip() {
+    if (!el.offlineTip) return;
+    const isFile = location.protocol === "file:";
+    const isBundle = document.documentElement.hasAttribute("data-offline-bundle");
+    if (isFile || (isBundle && !navigator.onLine)) {
+      el.offlineTip.textContent =
+        "This copy is offline-ready — no Wi‑Fi needed.";
+      el.offlineTip.classList.add("is-local");
+      if (el.saveOffline) el.saveOffline.hidden = isFile;
+    } else if (!navigator.onLine) {
+      el.offlineTip.textContent =
+        "You're offline. Open a saved spirit-lane.html from Files — the web link needs Wi‑Fi.";
+      el.offlineTip.classList.add("is-local");
+    } else {
+      el.offlineTip.textContent =
+        "Airplane mode needs a saved file — tap Save Offline while online, then open that file.";
+      el.offlineTip.classList.remove("is-local");
+    }
+  }
+
+  if (el.saveOffline) {
+    el.saveOffline.addEventListener("click", () => {
+      ensureAudio();
+      downloadOfflineCopy().catch((err) => {
+        setHint("Save failed — long-press the page and use Share → Save to Files.");
+        console.warn(err);
+      });
+    });
+  }
+  refreshOfflineTip();
+  window.addEventListener("online", refreshOfflineTip);
+  window.addEventListener("offline", refreshOfflineTip);
 
   function populateMapSelect() {
     if (!el.mapSelect) return;

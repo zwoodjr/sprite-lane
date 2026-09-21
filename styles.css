@@ -396,6 +396,23 @@ button.ghost:not(:disabled):hover {
   border-color: var(--gold);
 }
 
+#btn-save-offline {
+  grid-column: 1 / -1;
+  border-color: var(--spirit);
+  color: var(--spirit);
+}
+
+.offline-tip {
+  margin: 0.35rem 0 0;
+  font-size: clamp(0.26rem, 1.15vh, 0.32rem);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.offline-tip.is-local {
+  color: var(--spirit);
+}
+
 /* Portrait: still playable — map on top, shop below (no black lock screen) */
 @media (orientation: portrait) and (max-width: 900px) {
   .rotate-tip {

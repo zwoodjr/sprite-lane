@@ -92,7 +92,11 @@
           <button type="button" id="btn-ready" class="primary">Ready Wave</button>
           <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
           <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+          <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
         </div>
+        <p id="offline-tip" class="offline-tip">
+          Airplane mode needs a saved file — tap Save Offline while online, then open that file.
+        </p>
       </aside>
     </div>
   </div>
@@ -141,6 +145,15 @@
           hideSplash();
         }
       }, 2500);
+
+      // Cache assets when served over http(s) so a revisit can work offline.
+      if (
+        location.protocol !== "file:" &&
+        "serviceWorker" in navigator &&
+        !document.documentElement.hasAttribute("data-offline-bundle")
+      ) {
+        navigator.serviceWorker.register("./sw.js").catch(function () {});
+      }
     })();
   </script>
 </body>
