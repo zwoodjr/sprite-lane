@@ -18,26 +18,22 @@
 
   // Size the 480×272 buffer to the stage. Prefer integer CSS scale for crisp
   // pixels on Retina/Safari (e.g. iPhone 17 Pro Max @3x); otherwise fill width.
+  // HUD/build controls are HTML overlays on the frame, so they don't steal layout.
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
-    let maxW = stageCss.width;
-    let maxH = stageCss.height;
+    let maxW = Math.max(64, stageCss.width - 2);
+    let maxH = Math.max(64, stageCss.height - 2);
 
-    // Portrait phones: stage height is not constrained — size from width,
-    // capped so the board + chrome still fit the visual viewport.
-    const vv = window.visualViewport;
-    const viewH = (vv && vv.height) || window.innerHeight;
-    const viewW = (vv && vv.width) || window.innerWidth;
-    const landscape = viewW > viewH;
-    if (!landscape || maxH < 48) {
-      const chrome = landscape ? 72 : 210;
-      maxH = Math.max(120, viewH - chrome);
+    // If the stage hasn't been given a height yet (first paint), fall back to
+    // the visual viewport so the board still fills the phone screen.
+    if (maxH < 80) {
+      const vv = window.visualViewport;
+      const viewH = (vv && vv.height) || window.innerHeight;
+      const pad =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      maxH = Math.max(120, viewH - pad * 3.5);
     }
-
-    // Leave room for the frame border/box-shadow so it doesn't clip.
-    maxW = Math.max(64, maxW - 4);
-    maxH = Math.max(64, maxH - 4);
 
     const raw = Math.min(maxW / W, maxH / H);
     if (!(raw > 0) || !isFinite(raw)) return;
@@ -48,8 +44,6 @@
       // Prefer sharp integer scale when it uses most of the available space.
       scale = raw - floor < 0.08 ? floor : raw;
     }
-    // Below 1x (narrow portrait like Pro Max 440pt): use full raw scale so
-    // the board fills the width; CSS pixelated keeps sprites crisp on @3x.
 
     const cssW = Math.floor(W * scale);
     const cssH = Math.floor(H * scale);
@@ -59,8 +53,6 @@
     canvas.style.width = "100%";
     canvas.style.height = "100%";
 
-    // Keep the backing store at native game resolution; CSS + pixelated scaling
-    // handles Retina. Re-assert smoothing off after any canvas size churn.
     if (canvas.width !== W || canvas.height !== H) {
       canvas.width = W;
       canvas.height = H;
@@ -74,12 +66,21 @@
     wave: document.getElementById("wave"),
     income: document.getElementById("income"),
     shop: document.getElementById("shop"),
+    shopSheet: document.getElementById("shop-sheet"),
     preview: document.getElementById("sprite-preview"),
     hint: document.getElementById("hint"),
+    build: document.getElementById("btn-build"),
     ready: document.getElementById("btn-ready"),
     sell: document.getElementById("btn-sell"),
     upgrade: document.getElementById("btn-upgrade"),
   };
+
+  function setShopOpen(open) {
+    if (!el.shopSheet || !el.build) return;
+    el.shopSheet.hidden = !open;
+    el.build.setAttribute("aria-expanded", open ? "true" : "false");
+    el.build.textContent = open ? "Close" : "Build";
+  }
 
   const SS = window.SpiritSprites || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
@@ -967,6 +968,8 @@
         renderShop();
         renderSpritePreview(id);
         updateHud();
+        // Keep sheet open while picking; close after so the map stays clear.
+        setShopOpen(false);
         beep(520, 0.04);
       });
       el.shop.appendChild(btn);
@@ -1093,6 +1096,7 @@
   function startWave() {
     if (state.mode !== "build") return;
     ensureAudio();
+    setShopOpen(false);
     if (!recomputePath()) {
       setHint("That seals the lane — leave a path.");
       beep(120, 0.1, "sawtooth");
@@ -1684,6 +1688,27 @@
   }
 
   // --- Input ---
+  // Overlay chrome owns its taps; map only receives clicks in the open middle.
+  document.querySelectorAll(".overlay-chrome").forEach((node) => {
+    node.addEventListener(
+      "pointerdown",
+      (e) => {
+        e.stopPropagation();
+      },
+      { passive: true }
+    );
+  });
+
+  if (el.build) {
+    el.build.addEventListener("click", () => {
+      ensureAudio();
+      const open = el.build.getAttribute("aria-expanded") !== "true";
+      setShopOpen(open);
+      if (open) setHint("Pick a unit, then tap the maze to place it.");
+      beep(480, 0.03);
+    });
+  }
+
   canvas.addEventListener("pointerdown", (e) => {
     ensureAudio();
     const rect = canvas.getBoundingClientRect();
@@ -1708,6 +1733,7 @@
   setHint(
     "Place fighters/walls to maze the mobs. Keep a path from red to teal."
   );
+  setShopOpen(false);
   fitDisplay();
   window.addEventListener("resize", fitDisplay);
   window.addEventListener("orientationchange", () => {
