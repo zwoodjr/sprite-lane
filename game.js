@@ -1137,14 +1137,18 @@
   }
 
   function placeUnit(tx, ty) {
-    if (state.mode !== "build") return;
+    if (state.mode !== "build" && state.mode !== "wave") return;
     const occ = unitAt(tx, ty);
     if (occ) {
       state.selectedUnit = occ;
       state.selectedShop = null;
       renderShop();
       const def = UNIT_MAP[state.selectedUnit.type];
-      setHint(`Selected ${def.name}. Upgrade or sell during build phase.`);
+      setHint(
+        state.mode === "wave"
+          ? `Selected ${def.name}.`
+          : `Selected ${def.name}. Upgrade or sell during build phase.`
+      );
       updateHud();
       return;
     }
@@ -1183,9 +1187,31 @@
     state.units.push(unit);
     state.selectedUnit = unit;
     recomputePath();
+    if (state.mode === "wave") repathEnemies();
     beep(660, 0.05);
-    setHint(`${def.name} deployed. Maze the mobs, keep red→teal open.`);
+    setHint(
+      state.mode === "wave"
+        ? `${def.name} deployed mid-fight!`
+        : `${def.name} deployed. Maze the mobs, keep red→teal open.`
+    );
     updateHud();
+  }
+
+  function repathEnemies() {
+    const path = state.map.path;
+    if (!path || path.length < 2) return;
+    state.enemies.forEach((en) => {
+      let bestI = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < path.length; i++) {
+        const d = Math.hypot(en.x - path[i].x, en.y - path[i].y);
+        if (d < bestD) {
+          bestD = d;
+          bestI = i;
+        }
+      }
+      en.pathIndex = Math.min(bestI, path.length - 1);
+    });
   }
 
   function sellSelected() {
@@ -1272,7 +1298,7 @@
     state.shadows = [];
     beep(400, 0.08);
     beep(500, 0.08);
-    setHint("Hold the maze!");
+    setHint("Hold the maze! Spend gold mid-wave to place more towers.");
     updateHud();
   }
 
@@ -1644,7 +1670,11 @@
             ctx.fillStyle = theme.grassA;
             ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
           }
-          if (state.mode === "build" && pathTiles.has(`${x},${y}`)) {
+          if (
+            (state.mode === "build" ||
+              (state.mode === "wave" && state.selectedShop)) &&
+            pathTiles.has(`${x},${y}`)
+          ) {
             ctx.fillStyle = "rgba(232,197,106,0.28)";
             ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
             ctx.fillStyle = "rgba(232,197,106,0.45)";
@@ -1879,7 +1909,7 @@
     const y = ((e.clientY - rect.top) / rect.height) * H;
     const tx = Math.floor(x / TILE);
     const ty = Math.floor(y / TILE);
-    if (state.mode === "build") placeUnit(tx, ty);
+    if (state.mode === "build" || state.mode === "wave") placeUnit(tx, ty);
   });
 
   el.ready.addEventListener("click", () => {
