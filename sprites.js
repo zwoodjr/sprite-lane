@@ -1108,27 +1108,48 @@
   };
   const shadowhost = tintPack(gravemark, "#7a90a8", "#c8d8e8", 0.28, 0.34);
 
+  const bakugo = tintPack(sparkfist, "#e85d3c", "#ffb080", 0.34, 0.4);
+  const todoroki = tintPack(hoverbind, "#70b0e0", "#e85d3c", 0.3, 0.34);
+  const nezuko = tintPack(veinfist, "#e07090", "#ffb0c8", 0.32, 0.36);
+  const inosuke = tintPack(shellbrute, "#a09070", "#d0c0a0", 0.28, 0.34);
+  const levi = tintPack(wirehook, "#9aa8b8", "#e8f0f8", 0.28, 0.34);
+  const armin = tintPack(markzone, "#e8d090", "#fff0c0", 0.28, 0.34);
+  const sukuna = tintPack(tideblade, "#c04040", "#ff8080", 0.34, 0.4);
+  const megumi = tintPack(gravemark, "#405878", "#80a0c0", 0.3, 0.34);
+  const cha = tintPack(wirehook, "#d0c090", "#fff0c0", 0.28, 0.34);
+  const beru = tintPack(shellbrute, "#50a060", "#90e0a0", 0.32, 0.36);
+
   const units = {
     sparkfist,
     blastcrown,
+    bakugo,
     hoverbind,
     zerofield,
+    todoroki,
     tideblade,
     torrentfang,
+    nezuko,
+    inosuke,
     flashstep,
     thunderpierce,
     shellbrute,
     colossus,
     wirehook,
     skydancer,
+    levi,
+    armin,
     veinfist,
     blackspar,
+    sukuna,
     markzone,
     innerdomain,
+    megumi,
     shadeknife,
     monarchedge,
     gravemark,
     shadowhost,
+    cha,
+    beru,
   };
 
   function drawUnit(ctx, canvas, x, y, size) {
@@ -1162,24 +1183,34 @@
     units,
     sparkfist,
     blastcrown,
+    bakugo,
     hoverbind,
     zerofield,
+    todoroki,
     tideblade,
     torrentfang,
+    nezuko,
+    inosuke,
     flashstep,
     thunderpierce,
     shellbrute,
     colossus,
     wirehook,
     skydancer,
+    levi,
+    armin,
     veinfist,
     blackspar,
+    sukuna,
     markzone,
     innerdomain,
+    megumi,
     shadeknife,
     monarchedge,
     gravemark,
     shadowhost,
+    cha,
+    beru,
     mobs,
     MOB_KINDS,
     drawUnit,
