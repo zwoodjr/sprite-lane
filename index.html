@@ -10,16 +10,22 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="screen-orientation" content="landscape" />
   <title>Spirit Lane — Pixel Line Defense</title>
+  <!-- Never flash white if CSS is slow/missing -->
+  <style>
+    html, body {
+      margin: 0;
+      background: #120e0b;
+      color: #e6dcc8;
+      min-height: 100%;
+      min-height: 100dvh;
+    }
+  </style>
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.webmanifest" />
 </head>
 <body>
-  <div id="rotate-gate" class="rotate-gate" aria-hidden="true">
-    <p class="rotate-title">Spirit Lane</p>
-    <p class="rotate-msg">Turn your phone sideways to play</p>
-  </div>
+  <p id="boot-error" hidden style="padding:1rem;font-family:monospace;font-size:12px;color:#e85d3c;"></p>
 
   <div id="app">
     <header class="top">
@@ -27,6 +33,7 @@
         <h1>Spirit Lane</h1>
         <p class="tag">Pixel line defense · fan cast · single player</p>
       </div>
+      <p class="rotate-tip">Tip: rotate sideways for the best view</p>
     </header>
 
     <div id="playfield">
@@ -66,6 +73,14 @@
       </aside>
     </div>
   </div>
+  <script>
+    window.addEventListener("error", function (e) {
+      var el = document.getElementById("boot-error");
+      if (!el) return;
+      el.hidden = false;
+      el.textContent = "Load error: " + (e.message || "unknown");
+    });
+  </script>
   <script src="sprites.js"></script>
   <script src="game.js"></script>
 </body>
