@@ -191,7 +191,7 @@ body {
 .rail {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 0.3rem;
   padding: 0.35rem;
   background: linear-gradient(180deg, #2a1c14, var(--panel));
@@ -204,6 +204,42 @@ body {
   font-size: clamp(0.3rem, 1.4vh, 0.38rem);
   color: var(--gold);
   text-shadow: 1px 1px 0 #000;
+}
+
+.map-picker {
+  display: grid;
+  gap: 0.25rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--bark);
+}
+
+.map-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.28rem;
+  align-items: stretch;
+}
+
+#map-select {
+  appearance: none;
+  min-width: 0;
+  border: 2px solid var(--bark);
+  background: #1a120e;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: clamp(0.26rem, 1.2vh, 0.32rem);
+  padding: 0.4rem 0.35rem;
+  min-height: 2rem;
+}
+
+#map-select:disabled {
+  opacity: 0.45;
+}
+
+#btn-map-random {
+  min-height: 2rem;
+  padding: 0.35rem 0.4rem;
+  font-size: clamp(0.26rem, 1.2vh, 0.32rem);
 }
 
 .shop {

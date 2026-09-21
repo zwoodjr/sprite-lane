@@ -76,6 +76,9 @@
     ready: document.getElementById("btn-ready"),
     sell: document.getElementById("btn-sell"),
     upgrade: document.getElementById("btn-upgrade"),
+    mapSelect: document.getElementById("map-select"),
+    mapRandom: document.getElementById("btn-map-random"),
+    mapLabel: document.getElementById("map-label"),
   };
 
   const SS = window.SpiritSprites || null;
@@ -703,7 +706,124 @@
   ];
 
   // Tile types: 0 grass (buildable), 3 rock, 4 spawn, 5 exit
-  function buildMap() {
+  // One layout per cast series (+ lane works). Mid row stays a clear corridor.
+  const MAPS = [
+    {
+      id: "lane-works",
+      name: "Lane Works",
+      series: "Lane Works",
+      blurb: "Crate yard — simple blocks to learn the maze",
+      grassA: "#1c2818",
+      grassB: "#182214",
+      rock: "#5a4a3a",
+      rockDeep: "#2a2018",
+      rocks: [
+        [4, 2], [5, 2], [10, 2], [14, 2],
+        [3, 3], [8, 3], [12, 3], [16, 3],
+        [6, 4], [13, 4],
+        [4, 6], [9, 6], [14, 6],
+        [6, 7], [11, 7], [15, 7],
+        [3, 8], [8, 8], [13, 8], [16, 8],
+      ],
+    },
+    {
+      id: "hero-crest",
+      name: "Hero Crest",
+      series: "Hero Crest",
+      blurb: "Training grounds — staggered pillars and open lanes",
+      grassA: "#241c14",
+      grassB: "#1e1810",
+      rock: "#c87848",
+      rockDeep: "#3a2418",
+      rocks: [
+        [3, 2], [7, 2], [11, 2], [15, 2],
+        [5, 3], [9, 3], [13, 3],
+        [3, 4], [16, 4],
+        [5, 6], [9, 6], [14, 6],
+        [3, 7], [7, 7], [12, 7], [16, 7],
+        [5, 8], [10, 8], [15, 8],
+      ],
+    },
+    {
+      id: "breath-line",
+      name: "Breath Line",
+      series: "Breath Line",
+      blurb: "River cuts — long walls with breath gaps",
+      grassA: "#142428",
+      grassB: "#101e24",
+      rock: "#4a88a8",
+      rockDeep: "#183040",
+      rocks: [
+        [3, 2], [4, 2], [5, 2], [6, 2], [12, 2], [13, 2], [14, 2], [15, 2],
+        [8, 3], [9, 3], [10, 3],
+        [3, 4], [16, 4],
+        [3, 6], [16, 6],
+        [8, 7], [9, 7], [10, 7],
+        [3, 8], [4, 8], [5, 8], [6, 8], [12, 8], [13, 8], [14, 8], [15, 8],
+      ],
+    },
+    {
+      id: "wall-corps",
+      name: "Wall Corps",
+      series: "Wall Corps",
+      blurb: "Fortress ribs — thick flanks, narrow gates",
+      grassA: "#1c1c18",
+      grassB: "#181610",
+      rock: "#8a8070",
+      rockDeep: "#3a3830",
+      rocks: [
+        [3, 2], [4, 2], [5, 2], [14, 2], [15, 2], [16, 2],
+        [3, 3], [4, 3], [15, 3], [16, 3],
+        [3, 4], [16, 4],
+        [8, 4], [9, 4], [10, 4],
+        [8, 6], [9, 6], [10, 6],
+        [3, 6], [16, 6],
+        [3, 7], [4, 7], [15, 7], [16, 7],
+        [3, 8], [4, 8], [5, 8], [14, 8], [15, 8], [16, 8],
+      ],
+    },
+    {
+      id: "curse-ward",
+      name: "Curse Ward",
+      series: "Curse Ward",
+      blurb: "Domain marks — clustered blocks around the spine",
+      grassA: "#241018",
+      grassB: "#1c0e14",
+      rock: "#a05070",
+      rockDeep: "#3a1828",
+      rocks: [
+        [5, 2], [6, 2], [13, 2], [14, 2],
+        [4, 3], [7, 3], [12, 3], [15, 3],
+        [6, 4], [9, 4], [10, 4], [13, 4],
+        [4, 6], [7, 6], [12, 6], [15, 6],
+        [5, 7], [9, 7], [10, 7], [14, 7],
+        [6, 8], [7, 8], [12, 8], [13, 8],
+      ],
+    },
+    {
+      id: "gate-shade",
+      name: "Gate Shade",
+      series: "Gate Shade",
+      blurb: "Shadow alleys — offset teeth along the lane",
+      grassA: "#141820",
+      grassB: "#10141c",
+      rock: "#607090",
+      rockDeep: "#182030",
+      rocks: [
+        [4, 2], [8, 2], [12, 2], [16, 2],
+        [3, 3], [6, 3], [10, 3], [14, 3],
+        [5, 4], [9, 4], [13, 4], [17, 4],
+        [3, 6], [7, 6], [11, 6], [15, 6],
+        [5, 7], [9, 7], [13, 7], [16, 7],
+        [4, 8], [8, 8], [12, 8], [15, 8],
+      ],
+    },
+  ];
+
+  const MAP_BY_ID = Object.fromEntries(MAPS.map((m) => [m.id, m]));
+
+  function buildMap(mapId) {
+    const theme = MAP_BY_ID[mapId] || MAPS[0];
     const tiles = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
     for (let x = 0; x < COLS; x++) {
       tiles[0][x] = 3;
@@ -713,20 +833,62 @@
       tiles[y][0] = 3;
       tiles[y][COLS - 1] = 3;
     }
-    // Interior rocks for maze interest (leave mid corridor open on row 5)
-    [
-      [4, 2], [5, 2], [10, 2], [14, 2],
-      [3, 3], [8, 3], [12, 3], [16, 3],
-      [6, 4], [13, 4],
-      [4, 6], [9, 6], [14, 6],
-      [6, 7], [11, 7], [15, 7],
-      [3, 8], [8, 8], [13, 8], [16, 8],
-    ].forEach(([x, y]) => {
+    (theme.rocks || []).forEach(([x, y]) => {
       if (tiles[y]?.[x] === 0) tiles[y][x] = 3;
     });
     tiles[SPAWN.y][SPAWN.x] = 4;
     tiles[EXIT.y][EXIT.x] = 5;
-    return { tiles, path: [], tilePath: [] };
+    return {
+      tiles,
+      path: [],
+      tilePath: [],
+      themeId: theme.id,
+      theme,
+    };
+  }
+
+  function pickRandomMapId(exceptId) {
+    const pool = MAPS.map((m) => m.id).filter((id) => id !== exceptId);
+    return pool[Math.floor(Math.random() * pool.length)] || MAPS[0].id;
+  }
+
+  function applyMap(mapId, opts = {}) {
+    const randomPick = mapId === "random";
+    const id = randomPick ? pickRandomMapId(state.map?.themeId) : mapId;
+    const theme = MAP_BY_ID[id] || MAPS[0];
+    state.map = buildMap(theme.id);
+    state.units = [];
+    state.enemies = [];
+    state.projectiles = [];
+    state.shadows = [];
+    state.fx = [];
+    state.selectedUnit = null;
+    if (!opts.keepShop) state.selectedShop = "sparkfist";
+    recomputePath();
+    renderShop();
+    updateHud();
+    syncMapSelect(randomPick ? "random" : theme.id, theme);
+    setHint(
+      randomPick
+        ? `Random map → ${theme.name}. ${theme.blurb}`
+        : `${theme.name}: ${theme.blurb}`
+    );
+    return theme;
+  }
+
+  function syncMapSelect(selectValue, theme) {
+    if (el.mapSelect) el.mapSelect.value = selectValue;
+    if (el.mapLabel) {
+      el.mapLabel.textContent = theme
+        ? `Map · ${theme.name}`
+        : "Map";
+    }
+    if (el.mapSelect) {
+      el.mapSelect.disabled = state.mode !== "build";
+    }
+    if (el.mapRandom) {
+      el.mapRandom.disabled = state.mode !== "build";
+    }
   }
 
   function unitAt(tx, ty) {
@@ -849,7 +1011,7 @@
     projectiles: [],
     shadows: [],
     fx: [],
-    map: buildMap(),
+    map: buildMap("lane-works"),
     tick: 0,
     spawnQueue: [],
     spawnTimer: 0,
@@ -881,6 +1043,8 @@
       state.gold < UNIT_MAP[UNIT_MAP[u.type].next].cost;
     el.ready.disabled = state.mode !== "build";
     el.ready.textContent = readyButtonLabel();
+    if (el.mapSelect) el.mapSelect.disabled = state.mode !== "build";
+    if (el.mapRandom) el.mapRandom.disabled = state.mode !== "build";
   }
 
   function setHint(text) {
@@ -1445,17 +1609,18 @@
     const pathTiles = new Set(
       (state.map.tilePath || []).map((p) => `${p.x},${p.y}`)
     );
+    const theme = state.map.theme || MAPS[0];
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         const t = state.map.tiles[y][x];
         const px = x * TILE;
         const py = y * TILE;
         if (t === 3) {
-          ctx.fillStyle = "#2a2018";
+          ctx.fillStyle = theme.rockDeep;
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#5a4a3a";
+          ctx.fillStyle = theme.rock;
           ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
-          ctx.fillStyle = "#3a3028";
+          ctx.fillStyle = theme.rockDeep;
           ctx.fillRect(px + 5 * PX, py + 6 * PX, 10 * PX, 3 * PX);
         } else if (t === 4) {
           ctx.fillStyle = "#5a2018";
@@ -1473,13 +1638,12 @@
           ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
         } else {
           const parity = (x + y) & 1;
-          ctx.fillStyle = parity ? "#1c2818" : "#182214";
+          ctx.fillStyle = parity ? theme.grassA : theme.grassB;
           ctx.fillRect(px, py, TILE, TILE);
           if (((x * 13 + y * 7) % 11) === 0) {
-            ctx.fillStyle = "#243820";
+            ctx.fillStyle = theme.grassA;
             ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
           }
-          // Subtle amber path preview during build
           if (state.mode === "build" && pathTiles.has(`${x},${y}`)) {
             ctx.fillStyle = "rgba(232,197,106,0.28)";
             ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
@@ -1726,12 +1890,48 @@
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
 
+  function populateMapSelect() {
+    if (!el.mapSelect) return;
+    el.mapSelect.innerHTML = "";
+    const randomOpt = document.createElement("option");
+    randomOpt.value = "random";
+    randomOpt.textContent = "Random";
+    el.mapSelect.appendChild(randomOpt);
+    MAPS.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.name;
+      el.mapSelect.appendChild(opt);
+    });
+  }
+
+  if (el.mapSelect) {
+    el.mapSelect.addEventListener("change", () => {
+      if (state.mode !== "build") return;
+      ensureAudio();
+      preferLandscape();
+      applyMap(el.mapSelect.value);
+      beep(440, 0.03);
+    });
+  }
+  if (el.mapRandom) {
+    el.mapRandom.addEventListener("click", () => {
+      if (state.mode !== "build") return;
+      ensureAudio();
+      preferLandscape();
+      applyMap("random");
+      beep(500, 0.03);
+    });
+  }
+
   // Boot
+  populateMapSelect();
   recomputePath();
   renderShop();
   updateHud();
+  syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
   setHint(
-    "Place fighters/walls to maze the mobs. Keep a path from red to teal."
+    "Pick a map (or Random), then place fighters/walls. Keep red→teal open."
   );
   preferLandscape();
   fitDisplay();
@@ -1753,6 +1953,12 @@
   window.SpiritLane = {
     fitDisplay,
     preferLandscape,
+    applyMap,
+    listMaps: () => MAPS.map((m) => ({ id: m.id, name: m.name, series: m.series })),
+    getMap: () => ({
+      id: state.map.themeId,
+      name: state.map.theme && state.map.theme.name,
+    }),
     setGold(n) {
       state.gold = n;
       updateHud();
