@@ -1,0 +1,11 @@
+{
+  "name": "Spirit Lane",
+  "short_name": "Spirit Lane",
+  "description": "Pixel maze tower defense",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#120e0b",
+  "theme_color": "#16110e",
+  "lang": "en"
+}

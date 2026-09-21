@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
+  />
+  <meta name="theme-color" content="#16110e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Spirit Lane — Pixel Line Defense</title>
+  <!-- Never flash white if CSS is slow/missing; keep UI visible even if layout CSS fails -->
+  <style>
+    html, body {
+      margin: 0;
+      background: #120e0b !important;
+      color: #e6dcc8;
+      min-height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #120e0b;
+      color: #e8c56a;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      transition: opacity 0.25s ease;
+    }
+    #boot-splash.hide { opacity: 0; pointer-events: none; }
+    #app {
+      visibility: visible !important;
+      opacity: 1 !important;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+  </style>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+</head>
+<body>
+  <div id="boot-splash" role="status">Loading Spirit Lane…</div>
+  <p id="boot-error" hidden style="padding:1rem;font-family:monospace;font-size:12px;color:#e85d3c;"></p>
+
+  <div id="app">
+    <header class="top">
+      <div class="brand">
+        <h1>Spirit Lane</h1>
+        <p class="tag">Pixel line defense · fan cast · single player</p>
+      </div>
+      <p class="rotate-tip">Tip: rotate sideways for the best view</p>
+    </header>
+
+    <div id="playfield">
+      <div id="stage">
+        <div id="frame">
+          <canvas id="game" width="480" height="264" aria-label="Spirit Lane game"></canvas>
+          <div id="overlay" class="overlay" aria-live="polite">
+            <div class="hud-bar overlay-chrome">
+              <div class="stats">
+                <span id="gold">💰 150</span>
+                <span id="lives">❤ 20</span>
+                <span id="wave">Wave 0</span>
+                <span id="income">Income +10</span>
+              </div>
+              <p id="hint" class="hint">Place fighters/walls to maze the mobs. Keep a path from red to teal.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside id="rail" class="rail" aria-label="Build rail">
+        <div class="meta-bar">
+          <span id="spirit-points" class="spirit-points">Spirit 0</span>
+          <span id="meta-best" class="meta-best">Best W0</span>
+        </div>
+        <div class="map-picker">
+          <div id="map-label" class="rail-label">Map · Lane Works</div>
+          <div class="map-controls">
+            <select id="map-select" aria-label="Choose map"></select>
+            <button type="button" id="btn-map-random" class="ghost">Random</button>
+          </div>
+        </div>
+        <div class="rail-tabs" role="tablist" aria-label="Rail panels">
+          <button type="button" id="tab-towers" class="rail-tab active" role="tab" aria-selected="true">Towers</button>
+          <button type="button" id="tab-store" class="rail-tab" role="tab" aria-selected="false">Store</button>
+        </div>
+        <div id="panel-towers" class="rail-panel">
+          <div class="rail-label">Towers</div>
+          <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
+          <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+        </div>
+        <div id="panel-store" class="rail-panel" hidden>
+          <div class="rail-label">Baseline upgrades</div>
+          <p class="store-blurb">Spend Spirit on permanent boosts. Saved on this device.</p>
+          <div id="meta-store" class="meta-store" role="list"></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="btn-ready" class="primary">Ready Wave</button>
+          <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
+          <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+          <button type="button" id="btn-new-run" class="ghost" hidden>New Run</button>
+          <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
+        </div>
+        <p id="offline-tip" class="offline-tip">
+          Airplane mode needs a saved file — tap Save Offline while online, then open that file.
+        </p>
+      </aside>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("error", function (e) {
+      document.querySelectorAll("#boot-splash").forEach(function (splash) {
+        splash.classList.add("hide");
+      });
+      var el = document.getElementById("boot-error");
+      if (!el) return;
+      el.hidden = false;
+      el.textContent = "Load error: " + (e.message || "unknown");
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      document.querySelectorAll("#boot-splash").forEach(function (splash) {
+        splash.classList.add("hide");
+      });
+      var el = document.getElementById("boot-error");
+      if (!el) return;
+      el.hidden = false;
+      var msg = (e && e.reason && (e.reason.message || e.reason)) || "promise failed";
+      el.textContent = "Load error: " + msg;
+    });
+  </script>
+  <script src="sprites.js"></script>
+  <script src="game.js"></script>
+  <script>
+    (function () {
+      function hideSplash() {
+        document.querySelectorAll("#boot-splash").forEach(function (splash) {
+          splash.classList.add("hide");
+          setTimeout(function () {
+            if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+          }, 400);
+        });
+      }
+      if (window.SpiritLane) hideSplash();
+      else setTimeout(hideSplash, 0);
+      setTimeout(function () {
+        var el = document.getElementById("boot-error");
+        if (!window.SpiritLane && el) {
+          el.hidden = false;
+          if (!el.textContent) {
+            el.textContent = "Game failed to start. Hard-refresh and try again.";
+          }
+          hideSplash();
+        }
+      }, 2500);
+
+      // Cache assets when served over http(s) so a revisit can work offline.
+      if (
+        location.protocol !== "file:" &&
+        "serviceWorker" in navigator &&
+        !document.documentElement.hasAttribute("data-offline-bundle")
+      ) {
+        navigator.serviceWorker.register("./sw.js").catch(function () {});
+      }
+    })();
+  </script>
+</body>
+</html>
