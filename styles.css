@@ -548,6 +548,76 @@ button.ghost:not(:disabled):hover {
   color: var(--spirit);
 }
 
+.offline-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  background: rgba(8, 6, 4, 0.72);
+}
+
+.offline-sheet[hidden] {
+  display: none !important;
+}
+
+.offline-sheet-card {
+  width: min(26rem, 100%);
+  background: #1a120e;
+  border: 2px solid var(--spirit);
+  color: var(--paper);
+  padding: 0.85rem 0.9rem 0.75rem;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+}
+
+.offline-sheet-card h2 {
+  margin: 0 0 0.45rem;
+  font-size: clamp(0.42rem, 2.1vh, 0.55rem);
+  color: var(--gold);
+  line-height: 1.35;
+}
+
+.offline-sheet-card p,
+.offline-steps {
+  margin: 0 0 0.55rem;
+  font-size: clamp(0.3rem, 1.35vh, 0.38rem);
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.offline-steps {
+  padding-left: 1.1rem;
+}
+
+.offline-steps li + li {
+  margin-top: 0.35rem;
+}
+
+.offline-steps strong,
+.offline-steps em {
+  color: var(--paper);
+  font-style: normal;
+}
+
+.offline-sheet-card code {
+  color: var(--spirit);
+  font-family: inherit;
+}
+
+.offline-sheet-actions {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.offline-sheet-actions .primary,
+.offline-sheet-actions .ghost {
+  width: 100%;
+  min-height: 2.3rem;
+}
+
 /* Portrait: still playable — map on top, shop below (no black lock screen) */
 @media (orientation: portrait) and (max-width: 900px) {
   .rotate-tip {

@@ -2377,12 +2377,59 @@
     });
   }
 
-  async function downloadOfflineCopy() {
+  const offlineSheet = document.getElementById("offline-sheet");
+  const btnOfflineInstall = document.getElementById("btn-offline-install");
+  const btnOfflineShare = document.getElementById("btn-offline-share");
+  const btnOfflineDismiss = document.getElementById("btn-offline-dismiss");
+
+  function isAppleTouchDevice() {
+    try {
+      if (/[?&]ios=1(?:&|$)/.test(location.search)) return true;
+    } catch (_) {
+      /* ignore */
+    }
+    const ua = navigator.userAgent || "";
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    // iPadOS desktop UA
+    return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  }
+
+  function stripSourceEmbed(html) {
+    return String(html).replace(
+      /<script>window\.__SPIRIT_LANE_SOURCE__\s*=[\s\S]*?<\/script>\s*/i,
+      ""
+    );
+  }
+
+  function injectIosInstallBanner(html) {
+    if (/id="spirit-ios-hint"/.test(html)) return html;
+    const banner = `
+<div id="spirit-ios-hint" style="position:fixed;left:0;right:0;top:0;z-index:10001;background:#1a120e;color:#e6dcc8;border-bottom:2px solid #5ec8c8;padding:10px 12px 12px;font:12px/1.45 monospace;">
+  <strong style="color:#e8c56a;">iPhone offline install</strong><br/>
+  Tap Share → <em>Add to Home Screen</em> (or Add Bookmark). Open that icon with Wi‑Fi off.
+  Files → Safari often fails — Home Screen is the reliable path.
+  <div style="margin-top:8px;">
+    <button type="button" id="spirit-ios-hint-x" style="font:inherit;padding:8px 10px;border:2px solid #5ec8c8;background:#120e0b;color:#5ec8c8;">Got it</button>
+  </div>
+</div>
+<script>
+(function(){
+  var b=document.getElementById("spirit-ios-hint");
+  var x=document.getElementById("spirit-ios-hint-x");
+  function hide(){ if(b&&b.parentNode) b.parentNode.removeChild(b); try{ localStorage.setItem("spiritLaneIosHint","1"); }catch(e){} }
+  if(x) x.addEventListener("click", hide);
+  try{ if(localStorage.getItem("spiritLaneIosHint")==="1") hide(); }catch(e){}
+})();
+<\/script>`;
+    return html.replace(/<\/body>/i, banner + "</" + "body>");
+  }
+
+  async function getOfflineHtml({ forIosInstall = false } = {}) {
     // Prefer the pristine bundled source when present (single-file build).
     let html = window.__SPIRIT_LANE_SOURCE__ || null;
     if (!html) {
       try {
-        if (location.protocol !== "file:") {
+        if (location.protocol !== "file:" && location.protocol !== "data:") {
           const res = await fetch(location.href, { cache: "no-store" });
           if (res.ok) html = await res.text();
         }
@@ -2394,6 +2441,13 @@
       // Last resort: serialize the live DOM (already self-contained for the bundle).
       html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
     }
+    // Drop the duplicated source payload so the phone copy stays smaller / bookmarkable.
+    html = stripSourceEmbed(html);
+    if (forIosInstall) html = injectIosInstallBanner(html);
+    return html;
+  }
+
+  function triggerDesktopDownload(html) {
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2404,9 +2458,77 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2500);
+  }
+
+  async function shareOfflineFile(html) {
+    const file = new File([html], "spirit-lane.html", {
+      type: "text/html",
+      lastModified: Date.now(),
+    });
+    if (!navigator.share) {
+      throw new Error("share-unavailable");
+    }
+    const payload = { files: [file], title: "Spirit Lane", text: "Spirit Lane offline" };
+    if (navigator.canShare && !navigator.canShare(payload)) {
+      throw new Error("share-files-unavailable");
+    }
+    await navigator.share(payload);
+  }
+
+  function openIosInstallTab(html) {
+    // Prefer a data: URL so Share → Add to Home Screen / Bookmark can reopen
+    // offline. Chrome blocks top-frame data: navigations; iOS Safari allows them
+    // when user-initiated. Always fall back to document.write so the tab is playable.
+    const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+    const win = window.open("about:blank", "_blank");
+    if (!win) {
+      try {
+        location.href = dataUrl;
+        return "navigated";
+      } catch (_) {
+        return "blocked";
+      }
+    }
+    try {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      // Upgrade to data: when allowed (iOS Safari) so the Home Screen icon persists offline.
+      win.location.replace(dataUrl);
+      return "opened-data";
+    } catch (_) {
+      return "opened-blank";
+    }
+  }
+
+  function showOfflineSheet(show) {
+    if (!offlineSheet) return;
+    offlineSheet.hidden = !show;
+  }
+
+  async function downloadOfflineCopy() {
+    const apple = isAppleTouchDevice();
+    if (apple) {
+      showOfflineSheet(true);
+      if (el.offlineTip) {
+        el.offlineTip.textContent =
+          "iPhone: use Open Install Tab → Share → Add to Home Screen. Files often will not open in Safari.";
+        el.offlineTip.classList.add("is-local");
+      }
+      setHint("iPhone offline setup — pick an option in the sheet.");
+      beep(660, 0.04);
+      return;
+    }
+
+    const html = await getOfflineHtml();
+    triggerDesktopDownload(html);
     if (el.offlineTip) {
       el.offlineTip.textContent =
-        "Saved spirit-lane.html — open that file (Files app) with Wi‑Fi off.";
+        "Saved spirit-lane.html — open that file with Wi‑Fi off.";
       el.offlineTip.classList.add("is-local");
     }
     setHint("Offline copy downloading — open the saved HTML in airplane mode.");
@@ -2415,20 +2537,22 @@
 
   function refreshOfflineTip() {
     if (!el.offlineTip) return;
-    const isFile = location.protocol === "file:";
+    const isFile = location.protocol === "file:" || location.protocol === "data:";
     const isBundle = document.documentElement.hasAttribute("data-offline-bundle");
     if (isFile || (isBundle && !navigator.onLine)) {
       el.offlineTip.textContent =
         "This copy is offline-ready — no Wi‑Fi needed.";
       el.offlineTip.classList.add("is-local");
-      if (el.saveOffline) el.saveOffline.hidden = isFile;
+      if (el.saveOffline) el.saveOffline.hidden = location.protocol === "file:";
     } else if (!navigator.onLine) {
-      el.offlineTip.textContent =
-        "You're offline. Open a saved spirit-lane.html from Files — the web link needs Wi‑Fi.";
+      el.offlineTip.textContent = isAppleTouchDevice()
+        ? "You're offline. Open your Home Screen / Bookmark copy — the web link needs Wi‑Fi."
+        : "You're offline. Open a saved spirit-lane.html — the web link needs Wi‑Fi.";
       el.offlineTip.classList.add("is-local");
     } else {
-      el.offlineTip.textContent =
-        "Airplane mode needs a saved file — tap Save Offline while online, then open that file.";
+      el.offlineTip.textContent = isAppleTouchDevice()
+        ? "Airplane mode: tap Save Offline → Open Install Tab → Share → Add to Home Screen."
+        : "Airplane mode needs a saved file — tap Save Offline while online, then open that file.";
       el.offlineTip.classList.remove("is-local");
     }
   }
@@ -2437,9 +2561,66 @@
     el.saveOffline.addEventListener("click", () => {
       ensureAudio();
       downloadOfflineCopy().catch((err) => {
-        setHint("Save failed — long-press the page and use Share → Save to Files.");
+        setHint("Save failed — on iPhone use Share → Add to Home Screen from this page.");
         console.warn(err);
       });
+    });
+  }
+  if (btnOfflineDismiss && offlineSheet) {
+    btnOfflineDismiss.addEventListener("click", () => showOfflineSheet(false));
+    offlineSheet.addEventListener("click", (e) => {
+      if (e.target === offlineSheet) showOfflineSheet(false);
+    });
+  }
+  if (btnOfflineInstall) {
+    btnOfflineInstall.addEventListener("click", () => {
+      ensureAudio();
+      getOfflineHtml({ forIosInstall: true })
+        .then((html) => {
+          const mode = openIosInstallTab(html);
+          showOfflineSheet(false);
+          setHint(
+            mode === "navigated"
+              ? "Share → Add to Home Screen, then open that icon offline."
+              : mode === "blocked"
+                ? "Popup blocked — allow popups, or use Share File…"
+                : "New tab: Share → Add to Home Screen (or Bookmark). Use that offline."
+          );
+          if (el.offlineTip) {
+            el.offlineTip.textContent =
+              "Install tab opened — Share → Add to Home Screen, then airplane mode.";
+            el.offlineTip.classList.add("is-local");
+          }
+          beep(720, 0.04);
+        })
+        .catch((err) => {
+          setHint("Could not open install tab — try Share File instead.");
+          console.warn(err);
+        });
+    });
+  }
+  if (btnOfflineShare) {
+    btnOfflineShare.addEventListener("click", () => {
+      ensureAudio();
+      getOfflineHtml()
+        .then((html) => shareOfflineFile(html))
+        .then(() => {
+          showOfflineSheet(false);
+          setHint("Shared. If Safari will not open it, use Open Install Tab instead.");
+          if (el.offlineTip) {
+            el.offlineTip.textContent =
+              "File shared. Prefer Home Screen install if Safari will not open the file.";
+            el.offlineTip.classList.add("is-local");
+          }
+          beep(660, 0.04);
+        })
+        .catch((err) => {
+          // User cancel vs hard failure
+          const name = err && err.name;
+          if (name === "AbortError") return;
+          setHint("Share unavailable — use Open Install Tab → Add to Home Screen.");
+          console.warn(err);
+        });
     });
   }
   refreshOfflineTip();
