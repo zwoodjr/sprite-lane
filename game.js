@@ -96,7 +96,260 @@
     mapLabel: document.getElementById("map-label"),
     saveOffline: document.getElementById("btn-save-offline"),
     offlineTip: document.getElementById("offline-tip"),
+    spiritPoints: document.getElementById("spirit-points"),
+    metaBest: document.getElementById("meta-best"),
+    metaStore: document.getElementById("meta-store"),
+    tabTowers: document.getElementById("tab-towers"),
+    tabStore: document.getElementById("tab-store"),
+    panelTowers: document.getElementById("panel-towers"),
+    panelStore: document.getElementById("panel-store"),
+    newRun: document.getElementById("btn-new-run"),
   };
+
+  // --- Meta progression (local Spirit Points store) ---
+  const META_KEY = "spirit-lane-meta-v1";
+  const META_UPGRADES = [
+    {
+      id: "startingGold",
+      name: "Starting Gold",
+      desc: "+25 gold at run start",
+      max: 5,
+      costs: [12, 20, 32, 48, 70],
+      perLevel: 25,
+    },
+    {
+      id: "attackSpeed",
+      name: "Attack Speed",
+      desc: "Towers fire 6% faster / lvl",
+      max: 5,
+      costs: [15, 24, 36, 54, 80],
+      perLevel: 0.06,
+    },
+    {
+      id: "unitDiscount",
+      name: "Unit Discount",
+      desc: "Shop & upgrades 4% cheaper / lvl",
+      max: 5,
+      costs: [15, 24, 36, 54, 80],
+      perLevel: 0.04,
+    },
+    {
+      id: "critChance",
+      name: "Crit Chance",
+      desc: "+5% crit (2× damage) / lvl",
+      max: 5,
+      costs: [18, 28, 42, 60, 90],
+      perLevel: 0.05,
+    },
+    {
+      id: "startingLives",
+      name: "Extra Lives",
+      desc: "+1 life at run start / lvl",
+      max: 5,
+      costs: [14, 22, 34, 50, 72],
+      perLevel: 1,
+    },
+    {
+      id: "incomeBoost",
+      name: "Income Boost",
+      desc: "+2 starting income / lvl",
+      max: 5,
+      costs: [12, 20, 32, 48, 70],
+      perLevel: 2,
+    },
+  ];
+  const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u]));
+
+  function defaultMeta() {
+    return {
+      points: 0,
+      lifetime: 0,
+      bestWave: 0,
+      runs: 0,
+      levels: {
+        startingGold: 0,
+        attackSpeed: 0,
+        unitDiscount: 0,
+        critChance: 0,
+        startingLives: 0,
+        incomeBoost: 0,
+      },
+    };
+  }
+
+  function loadMeta() {
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      if (!raw) return defaultMeta();
+      const parsed = JSON.parse(raw);
+      const base = defaultMeta();
+      const levels = { ...base.levels, ...(parsed.levels || {}) };
+      META_UPGRADES.forEach((u) => {
+        levels[u.id] = Math.max(0, Math.min(u.max, levels[u.id] | 0));
+      });
+      return {
+        points: Math.max(0, parsed.points | 0),
+        lifetime: Math.max(0, parsed.lifetime | 0),
+        bestWave: Math.max(0, parsed.bestWave | 0),
+        runs: Math.max(0, parsed.runs | 0),
+        levels,
+      };
+    } catch (_) {
+      return defaultMeta();
+    }
+  }
+
+  function saveMeta() {
+    try {
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (_) {
+      /* private mode / quota */
+    }
+  }
+
+  const meta = loadMeta();
+
+  function metaLevel(id) {
+    return meta.levels[id] | 0;
+  }
+
+  function metaBonus(id) {
+    const def = META_BY_ID[id];
+    if (!def) return 0;
+    return metaLevel(id) * def.perLevel;
+  }
+
+  function nextMetaCost(id) {
+    const def = META_BY_ID[id];
+    const lvl = metaLevel(id);
+    if (!def || lvl >= def.max) return null;
+    return def.costs[lvl];
+  }
+
+  function baseStartingGold() {
+    return 150 + metaBonus("startingGold");
+  }
+
+  function baseStartingLives() {
+    return 20 + metaBonus("startingLives");
+  }
+
+  function baseStartingIncome() {
+    return 12 + metaBonus("incomeBoost");
+  }
+
+  function unitCost(def) {
+    if (!def) return 9999;
+    const disc = Math.min(0.35, metaBonus("unitDiscount"));
+    return Math.max(1, Math.floor(def.cost * (1 - disc)));
+  }
+
+  function fireCooldown(def) {
+    const speed = Math.min(0.4, metaBonus("attackSpeed"));
+    return Math.max(4, Math.floor((def.rate || 30) * (1 - speed)));
+  }
+
+  function rollCrit() {
+    return Math.random() < Math.min(0.5, metaBonus("critChance"));
+  }
+
+  function spiritForRun(wave, won) {
+    let pts = 0;
+    for (let w = 1; w <= wave; w++) pts += 2 + Math.floor(w / 2);
+    if (won) pts += 35;
+    else if (wave > 0) pts += 4;
+    return pts;
+  }
+
+  function updateMetaHud() {
+    if (el.spiritPoints) el.spiritPoints.textContent = `Spirit ${meta.points}`;
+    if (el.metaBest) el.metaBest.textContent = `Best W${meta.bestWave}`;
+  }
+
+  function renderMetaStore() {
+    if (!el.metaStore) return;
+    el.metaStore.innerHTML = "";
+    META_UPGRADES.forEach((def) => {
+      const lvl = metaLevel(def.id);
+      const cost = nextMetaCost(def.id);
+      const maxed = cost == null;
+      const canBuy = !maxed && meta.points >= cost;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "meta-card";
+      btn.disabled = maxed || !canBuy;
+      btn.innerHTML =
+        `<span class="name">${def.name}</span>` +
+        `<span class="desc">${def.desc}</span>` +
+        `<span class="lvl">Lv ${lvl}/${def.max}</span>` +
+        `<span class="buy">${maxed ? "MAX" : cost + " SP"}</span>`;
+      btn.addEventListener("click", () => buyMetaUpgrade(def.id));
+      el.metaStore.appendChild(btn);
+    });
+    updateMetaHud();
+  }
+
+  function buyMetaUpgrade(id) {
+    const cost = nextMetaCost(id);
+    if (cost == null) return;
+    if (meta.points < cost) {
+      setHint("Need more Spirit — clear waves to earn SP.");
+      beep(120, 0.08, "sawtooth");
+      return;
+    }
+    meta.points -= cost;
+    meta.levels[id] = metaLevel(id) + 1;
+    saveMeta();
+    renderMetaStore();
+    renderShop();
+    updateHud();
+    beep(740, 0.05);
+    const def = META_BY_ID[id];
+    setHint(`Bought ${def.name} Lv ${metaLevel(id)}. Applies next New Run (gold/lives/income now if idle).`);
+    // Apply soft bonuses that don't require a new run when still in early build.
+    if (state.mode === "build" && state.wave === 0 && state.units.length === 0) {
+      state.gold = baseStartingGold();
+      state.lives = baseStartingLives();
+      state.income = baseStartingIncome();
+      updateHud();
+    }
+  }
+
+  function showRailPanel(which) {
+    const towers = which === "towers";
+    if (el.panelTowers) el.panelTowers.hidden = !towers;
+    if (el.panelStore) el.panelStore.hidden = towers;
+    if (el.tabTowers) {
+      el.tabTowers.classList.toggle("active", towers);
+      el.tabTowers.setAttribute("aria-selected", towers ? "true" : "false");
+    }
+    if (el.tabStore) {
+      el.tabStore.classList.toggle("active", !towers);
+      el.tabStore.setAttribute("aria-selected", towers ? "false" : "true");
+    }
+    if (!towers) renderMetaStore();
+  }
+
+  function settleRun(won) {
+    if (state.runSettled) return;
+    state.runSettled = true;
+    const gained = spiritForRun(state.wave, won);
+    meta.points += gained;
+    meta.lifetime += gained;
+    meta.runs += 1;
+    meta.bestWave = Math.max(meta.bestWave, state.wave);
+    saveMeta();
+    updateMetaHud();
+    renderMetaStore();
+    if (el.newRun) el.newRun.hidden = false;
+    el.ready.disabled = true;
+    setHint(
+      won
+        ? `Victory! +${gained} Spirit. Open Store or New Run.`
+        : `Lane broke after wave ${state.wave}. +${gained} Spirit — spend it in Store.`
+    );
+    showRailPanel("store");
+  }
 
   const SS = window.SpiritSprites || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
@@ -1034,10 +1287,10 @@
   // --- State ---
   const state = {
     mode: "build", // build | wave | win | lose
-    gold: 150,
-    lives: 20,
+    gold: baseStartingGold(),
+    lives: baseStartingLives(),
     wave: 0,
-    income: 12,
+    income: baseStartingIncome(),
     selectedShop: "sparkfist",
     selectedUnit: null,
     units: [],
@@ -1049,6 +1302,7 @@
     tick: 0,
     spawnQueue: [],
     spawnTimer: 0,
+    runSettled: false,
   };
 
   function dist(a, b) {
@@ -1068,15 +1322,23 @@
     el.lives.textContent = `Lives ${state.lives}`;
     el.wave.textContent = `Wave ${state.wave}`;
     el.income.textContent = `Income +${state.income}`;
+    updateMetaHud();
     const u = state.selectedUnit;
     el.sell.disabled = !u || state.mode !== "build";
+    const nextCost =
+      u && UNIT_MAP[u.type].next
+        ? unitCost(UNIT_MAP[UNIT_MAP[u.type].next])
+        : Infinity;
     el.upgrade.disabled =
       !u ||
       state.mode !== "build" ||
       !UNIT_MAP[u.type].next ||
-      state.gold < UNIT_MAP[UNIT_MAP[u.type].next].cost;
+      state.gold < nextCost;
     el.ready.disabled = state.mode !== "build";
     el.ready.textContent = readyButtonLabel();
+    if (el.newRun) {
+      el.newRun.hidden = !(state.mode === "win" || state.mode === "lose");
+    }
     if (el.mapSelect) el.mapSelect.disabled = state.mode !== "build";
     if (el.mapRandom) el.mapRandom.disabled = state.mode !== "build";
   }
@@ -1153,7 +1415,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "card" + (state.selectedShop === id ? " selected" : "");
-      btn.innerHTML = `<span class="name">${u.name}</span><span class="meta">${u.series}</span><span class="meta">${u.blurb}</span><span class="cost">${u.cost}g</span>`;
+      btn.innerHTML = `<span class="name">${u.name}</span><span class="meta">${u.series}</span><span class="meta">${u.blurb}</span><span class="cost">${unitCost(u)}g</span>`;
       btn.addEventListener("click", () => {
         ensureAudio();
         preferLandscape();
@@ -1196,7 +1458,7 @@
       return;
     }
     const def = UNIT_MAP[id];
-    if (state.gold < def.cost) {
+    if (state.gold < unitCost(def)) {
       setHint("Not enough gold.");
       beep(120, 0.08, "sawtooth");
       return;
@@ -1206,7 +1468,8 @@
       beep(120, 0.08, "sawtooth");
       return;
     }
-    state.gold -= def.cost;
+    const paid = unitCost(def);
+    state.gold -= paid;
     const inset = Math.floor((TILE - 8) / 2);
     const unit = {
       type: id,
@@ -1216,7 +1479,7 @@
       y: ty * TILE + inset,
       cd: 0,
       attackAnim: 0,
-      spent: def.cost,
+      spent: paid,
     };
     state.units.push(unit);
     state.selectedUnit = unit;
@@ -1267,13 +1530,14 @@
     const cur = UNIT_MAP[u.type];
     if (!cur.next) return;
     const next = UNIT_MAP[cur.next];
-    if (state.gold < next.cost) {
+    const paid = unitCost(next);
+    if (state.gold < paid) {
       setHint("Need more gold to upgrade.");
       return;
     }
-    state.gold -= next.cost;
+    state.gold -= paid;
     u.type = next.id;
-    u.spent += next.cost;
+    u.spent += paid;
     recomputePath();
     beep(880, 0.06);
     setHint(`Upgraded to ${next.name}!`);
@@ -1366,7 +1630,7 @@
     setHint(`Wave cleared! +${state.income - 3} income banked. Fortify the line.`);
     if (state.wave >= 15) {
       state.mode = "win";
-      setHint("You held the lane. Victory!");
+      settleRun(true);
     }
     updateHud();
   }
@@ -1476,12 +1740,13 @@
     if (!def.range || def.damage <= 0) return;
     const target = findTarget(unit, def);
     if (!target) return;
-    unit.cd = def.rate;
+    unit.cd = fireCooldown(def);
     if (def.animated) unit.attackAnim = 16;
     const { x: cx, y: cy } = unitCenter(unit);
     pushMuzzleAndRange(unit, def);
 
     let dmg = def.damage;
+    let crit = false;
     if (def.execute && target.hp / target.maxHp <= def.execute) {
       dmg = Math.floor(dmg * 1.75);
       state.fx.push({
@@ -1490,6 +1755,16 @@
         life: 10,
         text: "EXE",
         color: "#9ab8d0",
+      });
+    } else if (rollCrit()) {
+      dmg = Math.floor(dmg * 2);
+      crit = true;
+      state.fx.push({
+        x: target.x,
+        y: target.y - 6,
+        life: 10,
+        text: "CRIT",
+        color: "#e85d3c",
       });
     }
 
@@ -1503,9 +1778,10 @@
         ring: radius,
         color: def.color,
       });
+      const splash = crit ? Math.floor(def.damage * 2) : def.damage;
       state.enemies.forEach((en) => {
         if (dist({ x: cx, y: cy }, en) <= radius) {
-          damageEnemy(en, def.damage, def.slow);
+          damageEnemy(en, splash, def.slow);
         }
       });
       beep(def.pulse ? 280 : 200, 0.04, "square", 0.03);
@@ -1520,7 +1796,7 @@
           Math.abs(en.pathIndex - target.pathIndex) < 18 * PX &&
           dist(en, target) < 28 * PX
         ) {
-          damageEnemy(en, def.damage * 0.7, def.slow);
+          damageEnemy(en, Math.floor(dmg * 0.7), def.slow);
         }
       });
       state.fx.push({
@@ -1589,7 +1865,7 @@
         if (state.lives <= 0) {
           state.lives = 0;
           state.mode = "lose";
-          setHint("The lane broke. Refresh to try a new defense.");
+          settleRun(false);
         }
       }
     }
@@ -1883,6 +2159,39 @@
     });
   }
 
+  function startNewRun(opts = {}) {
+    const keepMap = !!opts.keepMap;
+    state.mode = "build";
+    state.gold = baseStartingGold();
+    state.lives = baseStartingLives();
+    state.wave = 0;
+    state.income = baseStartingIncome();
+    state.selectedShop = "sparkfist";
+    state.selectedUnit = null;
+    state.units = [];
+    state.enemies = [];
+    state.projectiles = [];
+    state.shadows = [];
+    state.fx = [];
+    state.spawnQueue = [];
+    state.spawnTimer = 0;
+    state.runSettled = false;
+    state.tick = 0;
+    if (!keepMap) {
+      applyMap(state.map?.themeId || "lane-works", { keepShop: true });
+    } else {
+      recomputePath();
+    }
+    if (el.newRun) el.newRun.hidden = true;
+    showRailPanel("towers");
+    renderShop();
+    updateHud();
+    setHint(
+      `New run — ${state.gold}g / ${state.lives} lives. Clear waves to earn Spirit.`
+    );
+    beep(520, 0.05);
+  }
+
   function drawOverlay() {
     if (state.mode === "win" || state.mode === "lose") {
       ctx.fillStyle = "rgba(10,8,6,0.72)";
@@ -1894,7 +2203,7 @@
       ctx.fillText(msg, (W - m.width) / 2, H / 2);
       ctx.fillStyle = "#e6dcc8";
       ctx.font = "6px Press Start 2P, monospace";
-      const sub = "Refresh page to run it back";
+      const sub = "New Run · spend Spirit in Store";
       const m2 = ctx.measureText(sub);
       ctx.fillText(sub, (W - m2.width) / 2, H / 2 + 16);
     } else if (state.mode === "build") {
@@ -1953,6 +2262,28 @@
   });
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
+
+  if (el.tabTowers) {
+    el.tabTowers.addEventListener("click", () => {
+      ensureAudio();
+      showRailPanel("towers");
+      beep(400, 0.03);
+    });
+  }
+  if (el.tabStore) {
+    el.tabStore.addEventListener("click", () => {
+      ensureAudio();
+      showRailPanel("store");
+      beep(440, 0.03);
+    });
+  }
+  if (el.newRun) {
+    el.newRun.addEventListener("click", () => {
+      ensureAudio();
+      preferLandscape();
+      startNewRun({ keepMap: true });
+    });
+  }
 
   async function downloadOfflineCopy() {
     // Prefer the pristine bundled source when present (single-file build).
@@ -2061,10 +2392,12 @@
   populateMapSelect();
   recomputePath();
   renderShop();
+  renderMetaStore();
   updateHud();
+  showRailPanel("towers");
   syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
   setHint(
-    "Pick a map (or Random), then place fighters/walls. Keep red→teal open."
+    "Clear waves for Spirit → Store for permanent upgrades. Keep red→teal open."
   );
   preferLandscape();
   fitDisplay();
@@ -2113,6 +2446,16 @@
         kind: e.kind,
       })),
     getTiles: () => state.map.tiles.map((row) => row.slice()),
+    getMeta: () => JSON.parse(JSON.stringify(meta)),
+    addSpirit(n) {
+      meta.points += Math.max(0, n | 0);
+      saveMeta();
+      updateMetaHud();
+      renderMetaStore();
+    },
+    buyMeta: buyMetaUpgrade,
+    newRun: startNewRun,
+    showStore: () => showRailPanel("store"),
   };
   // Drop any boot splash immediately so Safari never sticks on "Loading…"
   document.querySelectorAll("#boot-splash").forEach((node) => {

@@ -78,6 +78,10 @@
       </div>
 
       <aside id="rail" class="rail" aria-label="Build rail">
+        <div class="meta-bar">
+          <span id="spirit-points" class="spirit-points">Spirit 0</span>
+          <span id="meta-best" class="meta-best">Best W0</span>
+        </div>
         <div class="map-picker">
           <div id="map-label" class="rail-label">Map · Lane Works</div>
           <div class="map-controls">
@@ -85,13 +89,25 @@
             <button type="button" id="btn-map-random" class="ghost">Random</button>
           </div>
         </div>
-        <div class="rail-label">Towers</div>
-        <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
-        <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+        <div class="rail-tabs" role="tablist" aria-label="Rail panels">
+          <button type="button" id="tab-towers" class="rail-tab active" role="tab" aria-selected="true">Towers</button>
+          <button type="button" id="tab-store" class="rail-tab" role="tab" aria-selected="false">Store</button>
+        </div>
+        <div id="panel-towers" class="rail-panel">
+          <div class="rail-label">Towers</div>
+          <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
+          <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+        </div>
+        <div id="panel-store" class="rail-panel" hidden>
+          <div class="rail-label">Baseline upgrades</div>
+          <p class="store-blurb">Spend Spirit on permanent boosts. Saved on this device.</p>
+          <div id="meta-store" class="meta-store" role="list"></div>
+        </div>
         <div class="actions">
           <button type="button" id="btn-ready" class="primary">Ready Wave</button>
           <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
           <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+          <button type="button" id="btn-new-run" class="ghost" hidden>New Run</button>
           <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
         </div>
         <p id="offline-tip" class="offline-tip">

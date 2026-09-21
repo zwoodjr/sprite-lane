@@ -205,13 +205,139 @@ body {
 .rail {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   gap: 0.3rem;
   padding: 0.35rem;
   background: linear-gradient(180deg, #2a1c14, var(--panel));
   border: 3px solid var(--bark);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+}
+
+.meta-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: clamp(0.28rem, 1.3vh, 0.34rem);
+}
+
+.spirit-points {
+  color: var(--spirit);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.meta-best {
+  color: var(--muted);
+}
+
+.rail-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.2rem;
+}
+
+.rail-tab {
+  font-family: inherit;
+  font-size: clamp(0.28rem, 1.3vh, 0.34rem);
+  padding: 0.4rem 0.25rem;
+  min-height: 1.9rem;
+  border: 2px solid var(--bark);
+  background: #1a120e;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rail-tab.active {
+  color: var(--gold);
+  border-color: var(--spirit);
+  box-shadow: inset 0 0 0 1px var(--spirit);
+}
+
+.rail-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0.25rem;
+  overflow: hidden;
+}
+
+#panel-store {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.store-blurb {
+  margin: 0;
+  font-size: clamp(0.24rem, 1.1vh, 0.3rem);
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.meta-store {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: grid;
+  gap: 0.2rem;
+  align-content: start;
+  touch-action: pan-y;
+}
+
+.meta-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name buy"
+    "desc buy"
+    "lvl buy";
+  column-gap: 0.35rem;
+  row-gap: 0.08rem;
+  align-items: center;
+  padding: 0.35rem 0.4rem;
+  border: 2px solid var(--bark);
+  background: #1a120e;
+  text-align: left;
+  font-family: inherit;
+  color: var(--paper);
+  cursor: pointer;
+  min-height: 2.4rem;
+}
+
+.meta-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.meta-card .name {
+  grid-area: name;
+  margin: 0;
+  color: var(--gold);
+  font-size: clamp(0.28rem, 1.25vh, 0.34rem);
+}
+
+.meta-card .desc {
+  grid-area: desc;
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(0.24rem, 1.1vh, 0.3rem);
+  line-height: 1.3;
+}
+
+.meta-card .lvl {
+  grid-area: lvl;
+  margin: 0;
+  color: var(--spirit);
+  font-size: clamp(0.24rem, 1.05vh, 0.28rem);
+}
+
+.meta-card .buy {
+  grid-area: buy;
+  margin: 0;
+  color: var(--ember);
+  font-size: clamp(0.26rem, 1.2vh, 0.32rem);
+  white-space: nowrap;
 }
 
 .rail-label {
@@ -396,10 +522,19 @@ button.ghost:not(:disabled):hover {
   border-color: var(--gold);
 }
 
-#btn-save-offline {
+#btn-save-offline,
+#btn-new-run {
   grid-column: 1 / -1;
+}
+
+#btn-save-offline {
   border-color: var(--spirit);
   color: var(--spirit);
+}
+
+#btn-new-run {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 .offline-tip {
