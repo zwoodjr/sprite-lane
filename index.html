@@ -111,9 +111,27 @@
           <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
         </div>
         <p id="offline-tip" class="offline-tip">
-          Airplane mode needs a saved file — tap Save Offline while online, then open that file.
+          Airplane mode: tap Save Offline while online. iPhone needs Home Screen / Bookmark — Files alone often will not open in Safari.
         </p>
       </aside>
+    </div>
+  </div>
+  <div id="offline-sheet" class="offline-sheet" hidden>
+    <div class="offline-sheet-card" role="dialog" aria-labelledby="offline-sheet-title">
+      <h2 id="offline-sheet-title">Play offline on iPhone</h2>
+      <p>
+        Safari usually will not open a downloaded <code>.html</code> from Files.
+        Use one of these instead:
+      </p>
+      <ol class="offline-steps">
+        <li><strong>Best:</strong> tap <em>Open Install Tab</em>, then Share → <em>Add to Home Screen</em> (or Add Bookmark). Open that icon with Wi‑Fi off.</li>
+        <li>Or <em>Share File</em> → Save to Files, then hope Share → Open in Safari works on your iOS version.</li>
+      </ol>
+      <div class="offline-sheet-actions">
+        <button type="button" id="btn-offline-install" class="primary">Open Install Tab</button>
+        <button type="button" id="btn-offline-share" class="ghost">Share File…</button>
+        <button type="button" id="btn-offline-dismiss" class="ghost">Close</button>
+      </div>
     </div>
   </div>
   <script>
