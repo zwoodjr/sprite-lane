@@ -269,6 +269,12 @@ body {
   overflow: hidden;
 }
 
+/* `hidden` alone loses to `.rail-panel { display: grid }` — both panels
+   stayed visible, Spirit ate the rail, and Shop cards collapsed to 0 height. */
+.rail-panel[hidden] {
+  display: none !important;
+}
+
 #panel-store {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
