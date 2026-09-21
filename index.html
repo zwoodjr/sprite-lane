@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
+  />
   <meta name="theme-color" content="#16110e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Spirit Lane — Pixel Line Defense</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -17,8 +23,10 @@
       <p class="legal">Original characters &amp; kits. Inspired by popular battle tropes — not affiliated with any anime.</p>
     </header>
 
-    <div id="frame">
-      <canvas id="game" width="480" height="272" aria-label="Spirit Lane game"></canvas>
+    <div id="stage">
+      <div id="frame">
+        <canvas id="game" width="480" height="272" aria-label="Spirit Lane game"></canvas>
+      </div>
     </div>
 
     <aside id="panel" class="panel">

@@ -11,8 +11,64 @@
   const EXIT = { x: 29, y: 8 };
 
   const canvas = document.getElementById("game");
+  const frameEl = document.getElementById("frame");
+  const stageEl = document.getElementById("stage");
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.imageSmoothingEnabled = false;
+
+  // Size the 480×272 buffer to the stage. Prefer integer CSS scale for crisp
+  // pixels on Retina/Safari (e.g. iPhone 17 Pro Max @3x); otherwise fill width.
+  function fitDisplay() {
+    if (!frameEl || !stageEl) return;
+    const stageCss = stageEl.getBoundingClientRect();
+    let maxW = stageCss.width;
+    let maxH = stageCss.height;
+
+    // Portrait phones: stage height is not constrained — size from width,
+    // capped so the board + chrome still fit the visual viewport.
+    const vv = window.visualViewport;
+    const viewH = (vv && vv.height) || window.innerHeight;
+    const viewW = (vv && vv.width) || window.innerWidth;
+    const landscape = viewW > viewH;
+    if (!landscape || maxH < 48) {
+      const chrome = landscape ? 72 : 210;
+      maxH = Math.max(120, viewH - chrome);
+    }
+
+    // Leave room for the frame border/box-shadow so it doesn't clip.
+    maxW = Math.max(64, maxW - 4);
+    maxH = Math.max(64, maxH - 4);
+
+    const raw = Math.min(maxW / W, maxH / H);
+    if (!(raw > 0) || !isFinite(raw)) return;
+
+    let scale = raw;
+    const floor = Math.floor(raw);
+    if (floor >= 1) {
+      // Prefer sharp integer scale when it uses most of the available space.
+      scale = raw - floor < 0.08 ? floor : raw;
+    } else {
+      // Sub-1x (narrow portrait): snap to 0.25 steps for stabler pixels.
+      scale = Math.max(0.5, Math.floor(raw * 4) / 4);
+      if (scale * W > maxW || scale * H > maxH) scale = raw;
+    }
+
+    const cssW = Math.floor(W * scale);
+    const cssH = Math.floor(H * scale);
+    frameEl.style.width = cssW + "px";
+    frameEl.style.height = cssH + "px";
+    frameEl.style.aspectRatio = "auto";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+
+    // Keep the backing store at native game resolution; CSS + pixelated scaling
+    // handles Retina. Re-assert smoothing off after any canvas size churn.
+    if (canvas.width !== W || canvas.height !== H) {
+      canvas.width = W;
+      canvas.height = H;
+    }
+    ctx.imageSmoothingEnabled = false;
+  }
 
   const el = {
     gold: document.getElementById("gold"),
@@ -1654,7 +1710,17 @@
   setHint(
     "Place fighters/walls to maze the mobs. Keep a path from red to teal."
   );
+  fitDisplay();
+  window.addEventListener("resize", fitDisplay);
+  window.addEventListener("orientationchange", () => {
+    setTimeout(fitDisplay, 50);
+    setTimeout(fitDisplay, 250);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", fitDisplay);
+  }
   window.SpiritLane = {
+    fitDisplay,
     setGold(n) {
       state.gold = n;
       updateHud();
