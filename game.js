@@ -317,15 +317,35 @@
 
   function showRailPanel(which) {
     const towers = which === "towers";
-    if (el.panelTowers) el.panelTowers.hidden = !towers;
-    if (el.panelStore) el.panelStore.hidden = towers;
-    if (el.tabTowers) {
-      el.tabTowers.classList.toggle("active", towers);
-      el.tabTowers.setAttribute("aria-selected", towers ? "true" : "false");
+    // Re-query in case the node map went stale after DOM swaps.
+    const panelTowers =
+      el.panelTowers || document.getElementById("panel-towers");
+    const panelStore =
+      el.panelStore || document.getElementById("panel-store");
+    const tabTowers = el.tabTowers || document.getElementById("tab-towers");
+    const tabStore = el.tabStore || document.getElementById("tab-store");
+    el.panelTowers = panelTowers;
+    el.panelStore = panelStore;
+    el.tabTowers = tabTowers;
+    el.tabStore = tabStore;
+
+    if (panelTowers) {
+      panelTowers.hidden = !towers;
+      panelTowers.classList.toggle("is-open", towers);
+      panelTowers.setAttribute("aria-hidden", towers ? "false" : "true");
     }
-    if (el.tabStore) {
-      el.tabStore.classList.toggle("active", !towers);
-      el.tabStore.setAttribute("aria-selected", towers ? "false" : "true");
+    if (panelStore) {
+      panelStore.hidden = towers;
+      panelStore.classList.toggle("is-open", !towers);
+      panelStore.setAttribute("aria-hidden", towers ? "true" : "false");
+    }
+    if (tabTowers) {
+      tabTowers.classList.toggle("active", towers);
+      tabTowers.setAttribute("aria-selected", towers ? "true" : "false");
+    }
+    if (tabStore) {
+      tabStore.classList.toggle("active", !towers);
+      tabStore.setAttribute("aria-selected", towers ? "false" : "true");
     }
     if (!towers) renderMetaStore();
   }

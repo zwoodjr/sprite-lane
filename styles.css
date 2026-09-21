@@ -263,14 +263,19 @@ body {
 
 .rail-panel {
   min-height: 0;
-  display: grid;
+  display: none !important;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.25rem;
   overflow: hidden;
 }
 
-/* `hidden` alone loses to `.rail-panel { display: grid }` — both panels
-   stayed visible, Spirit ate the rail, and Shop cards collapsed to 0 height. */
+/* Only the active tab panel is shown. Do not rely on [hidden] alone —
+   `.rail-panel { display: grid }` previously overrode it and both panels
+   stayed in the rail, collapsing Shop to 0 height on phones. */
+.rail-panel.is-open {
+  display: grid !important;
+}
+
 .rail-panel[hidden] {
   display: none !important;
 }
