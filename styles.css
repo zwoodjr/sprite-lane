@@ -264,9 +264,9 @@ body {
   font-size: clamp(0.22rem, 1.05vh, 0.28rem);
   line-height: 1.3;
   text-align: left;
-  padding: 0.28rem 0.32rem;
+  padding: 0.32rem 0.35rem;
   cursor: pointer;
-  min-height: 0;
+  min-height: 1.7rem;
   -webkit-touch-callout: none;
   display: grid;
   grid-template-columns: 1fr auto;
