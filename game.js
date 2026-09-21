@@ -2476,16 +2476,33 @@
   }
 
   function openIosInstallTab(html) {
-    // data: URLs can be bookmarked / added to Home Screen and opened with Wi‑Fi off.
-    // blob: and about:blank tabs do not survive as offline icons.
+    // Prefer a data: URL so Share → Add to Home Screen / Bookmark can reopen
+    // offline. Chrome blocks top-frame data: navigations; iOS Safari allows them
+    // when user-initiated. Always fall back to document.write so the tab is playable.
     const dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(html);
-    const win = window.open(dataUrl, "_blank");
+    const win = window.open("about:blank", "_blank");
     if (!win) {
-      // Popup blocked — navigate this tab (user can Share from here).
-      location.href = dataUrl;
-      return "navigated";
+      try {
+        location.href = dataUrl;
+        return "navigated";
+      } catch (_) {
+        return "blocked";
+      }
     }
-    return "opened";
+    try {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      // Upgrade to data: when allowed (iOS Safari) so the Home Screen icon persists offline.
+      win.location.replace(dataUrl);
+      return "opened-data";
+    } catch (_) {
+      return "opened-blank";
+    }
   }
 
   function showOfflineSheet(show) {
@@ -2565,7 +2582,9 @@
           setHint(
             mode === "navigated"
               ? "Share → Add to Home Screen, then open that icon offline."
-              : "New tab: Share → Add to Home Screen (or Bookmark). Use that offline."
+              : mode === "blocked"
+                ? "Popup blocked — allow popups, or use Share File…"
+                : "New tab: Share → Add to Home Screen (or Bookmark). Use that offline."
           );
           if (el.offlineTip) {
             el.offlineTip.textContent =
