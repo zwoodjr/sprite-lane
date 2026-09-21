@@ -1,0 +1,256 @@
+:root {
+  --ink: #16110e;
+  --panel: #221811;
+  --bark: #3a2a1c;
+  --ember: #e85d3c;
+  --gold: #e8c56a;
+  --spirit: #3db8a0;
+  --paper: #e6dcc8;
+  --muted: #9a8770;
+  --danger: #d64545;
+}
+
+@font-face {
+  font-family: "Press Start 2P";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/PressStart2P.woff2") format("woff2");
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% -10%, #3a2418 0%, transparent 50%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, #1a2e28 0%, transparent 40%),
+    #120e0b;
+  color: var(--paper);
+  font-family: "Press Start 2P", "Courier New", Courier, monospace;
+  letter-spacing: 0.02em;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  padding: 0.85rem 0.75rem 1.5rem;
+}
+
+#app {
+  width: min(980px, 100%);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.top {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: clamp(0.95rem, 3.5vw, 1.35rem);
+  color: var(--gold);
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.tag {
+  margin: 0.4rem 0 0;
+  font-size: 0.45rem;
+  color: var(--spirit);
+  line-height: 1.6;
+}
+
+.legal {
+  margin: 0;
+  font-size: 0.38rem;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 52rem;
+}
+
+#frame {
+  width: 100%;
+  aspect-ratio: 480 / 272;
+  border: 4px solid var(--bark);
+  box-shadow:
+    0 0 0 2px var(--ember),
+    0 16px 36px rgba(0, 0, 0, 0.5);
+  background: #0c0a08;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  overflow: hidden;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+  background: #14100c;
+}
+
+.panel {
+  background: linear-gradient(180deg, #2a1c14, var(--panel));
+  border: 3px solid var(--bark);
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.85rem;
+  font-size: 0.48rem;
+  color: var(--paper);
+}
+
+.stats #gold { color: var(--gold); }
+.stats #lives { color: var(--danger); }
+.stats #income { color: var(--spirit); }
+
+.shop {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr));
+  gap: 0.4rem;
+}
+
+.card {
+  appearance: none;
+  border: 2px solid var(--bark);
+  background: #1a120e;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 0.4rem;
+  line-height: 1.45;
+  text-align: left;
+  padding: 0.45rem;
+  cursor: pointer;
+  min-height: 4.2rem;
+}
+
+.card:hover,
+.card:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+.card.selected {
+  border-color: var(--spirit);
+  box-shadow: inset 0 0 0 1px var(--spirit);
+}
+
+.card .name {
+  color: var(--gold);
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.card .meta {
+  color: var(--muted);
+  display: block;
+}
+
+.card .cost {
+  color: var(--spirit);
+  margin-top: 0.3rem;
+  display: block;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+button.primary,
+button.ghost {
+  font-family: inherit;
+  font-size: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border: 2px solid var(--bark);
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--ember);
+  color: #1a1008;
+  border-color: #ff8a60;
+}
+
+button.primary:disabled,
+button.ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: #1a120e;
+  color: var(--paper);
+}
+
+button.ghost:not(:disabled):hover {
+  border-color: var(--gold);
+}
+
+.sprite-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 1.6rem;
+  padding: 0.35rem 0.2rem;
+  border-top: 1px solid var(--bark);
+}
+
+.sprite-preview canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  width: 32px;
+  height: 32px;
+  background: #120e0b;
+  border: 1px solid var(--bark);
+}
+
+.sprite-preview .label {
+  font-size: 0.34rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.38rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  #app {
+    grid-template-columns: 1fr 300px;
+    grid-template-rows: auto 1fr;
+  }
+
+  .top {
+    grid-column: 1 / -1;
+  }
+
+  #frame {
+    grid-row: 2;
+  }
+
+  .panel {
+    grid-row: 2;
+    align-content: start;
+  }
+}
