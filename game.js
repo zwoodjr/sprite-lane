@@ -2,13 +2,15 @@
   "use strict";
 
   // Spirit Lane — original cast. Kits echo popular battle tropes only.
-  const W = 480;
-  const H = 272;
-  const TILE = 16;
-  const COLS = 30;
-  const ROWS = 17;
-  const SPAWN = { x: 0, y: 8 };
-  const EXIT = { x: 29, y: 8 };
+  // 24px tiles (50% over the old 16px). Fewer cols/rows keep the board clean.
+  const TILE = 24;
+  const COLS = 20;
+  const ROWS = 11;
+  const W = COLS * TILE; // 480
+  const H = ROWS * TILE; // 264
+  const PX = TILE / 16; // scale combat/draw sizes with the tile
+  const SPAWN = { x: 0, y: 5 };
+  const EXIT = { x: COLS - 1, y: 5 };
 
   const canvas = document.getElementById("game");
   const frameEl = document.getElementById("frame");
@@ -711,14 +713,14 @@
       tiles[y][0] = 3;
       tiles[y][COLS - 1] = 3;
     }
-    // Interior rocks for maze interest (leave mid corridor open)
+    // Interior rocks for maze interest (leave mid corridor open on row 5)
     [
-      [6, 3], [7, 3], [14, 3], [22, 3],
-      [4, 5], [11, 5], [18, 5], [25, 5],
-      [9, 7], [20, 7],
-      [5, 10], [12, 10], [19, 10], [26, 10],
-      [8, 12], [15, 12], [23, 12],
-      [3, 14], [10, 14], [17, 14], [24, 14],
+      [4, 2], [5, 2], [10, 2], [14, 2],
+      [3, 3], [8, 3], [12, 3], [16, 3],
+      [6, 4], [13, 4],
+      [4, 6], [9, 6], [14, 6],
+      [6, 7], [11, 7], [15, 7],
+      [3, 8], [8, 8], [13, 8], [16, 8],
     ].forEach(([x, y]) => {
       if (tiles[y]?.[x] === 0) tiles[y][x] = 3;
     });
@@ -1003,12 +1005,13 @@
       return;
     }
     state.gold -= def.cost;
+    const inset = Math.floor((TILE - 8) / 2);
     const unit = {
       type: id,
       tx,
       ty,
-      x: tx * TILE + 4,
-      y: ty * TILE + 4,
+      x: tx * TILE + inset,
+      y: ty * TILE + inset,
       cd: 0,
       attackAnim: 0,
       spent: def.cost,
@@ -1056,7 +1059,7 @@
   function waveEnemyPlan(n) {
     const count = 6 + n * 2;
     const hp = 40 + n * 18;
-    const speed = (0.55 + Math.min(0.45, n * 0.03)) * 1.1;
+    const speed = (0.55 + Math.min(0.45, n * 0.03)) * 1.1 * PX;
     const reward = 4 + Math.floor(n * 0.6);
     const list = [];
     for (let i = 0; i < count; i++) {
@@ -1145,7 +1148,15 @@
   }
 
   function unitCenter(unit) {
-    return { x: unit.x + 4, y: unit.y + 4 };
+    return { x: unit.tx * TILE + TILE / 2, y: unit.ty * TILE + TILE / 2 };
+  }
+
+  function unitRange(def) {
+    return (def.range || 0) * PX;
+  }
+
+  function unitAoe(def) {
+    return (def.aoe || 0) * PX;
   }
 
   function pushMuzzleAndRange(unit, def) {
@@ -1164,7 +1175,7 @@
       y: cy,
       life: 18,
       maxLife: 18,
-      rangePing: def.range,
+      rangePing: unitRange(def),
       color: def.color,
     });
   }
@@ -1192,7 +1203,7 @@
       const def = UNIT_MAP[u.type];
       if (!def.raiseOnKill) return;
       const c = unitCenter(u);
-      if (dist(c, corpse) > def.range) return;
+      if (dist(c, corpse) > unitRange(def)) return;
       const owned = state.shadows.filter((s) => s.owner === u).length;
       if (owned >= (def.maxShadows || 2)) return;
       state.shadows.push({
@@ -1202,7 +1213,7 @@
         life: def.shadowLife || 100,
         cd: 8,
         damage: def.shadowDamage || 7,
-        range: 40,
+        range: 40 * PX,
         rate: 18,
       });
       state.fx.push({
@@ -1210,7 +1221,7 @@
         y: corpse.y,
         life: 14,
         maxLife: 14,
-        ring: 16,
+        ring: 16 * PX,
         color: "#6a8aaa",
       });
       beep(240, 0.05, "triangle", 0.035);
@@ -1221,9 +1232,10 @@
     const c = unitCenter(unit);
     let best = null;
     let bestScore = -Infinity;
+    const range = unitRange(def);
     for (const en of state.enemies) {
       const d = dist(c, en);
-      if (d > def.range) continue;
+      if (d > range) continue;
       let score = en.pathIndex;
       if (def.prioritize === "strongest") score = en.hp + en.pathIndex * 0.01;
       if (def.prioritize === "weakest") score = -en.hp + en.pathIndex * 0.01;
@@ -1258,7 +1270,7 @@
     }
 
     if (def.pulse || def.aoe) {
-      const radius = def.aoe || def.range * 0.7;
+      const radius = unitAoe(def) || unitRange(def) * 0.7;
       state.fx.push({
         x: cx,
         y: cy,
@@ -1280,7 +1292,10 @@
       damageEnemy(target, dmg, def.slow);
       state.enemies.forEach((en) => {
         if (en === target) return;
-        if (Math.abs(en.pathIndex - target.pathIndex) < 18 && dist(en, target) < 28) {
+        if (
+          Math.abs(en.pathIndex - target.pathIndex) < 18 * PX &&
+          dist(en, target) < 28 * PX
+        ) {
           damageEnemy(en, def.damage * 0.7, def.slow);
         }
       });
@@ -1304,7 +1319,7 @@
       tx: target.x,
       ty: target.y,
       target,
-      speed: def.prioritize === "weakest" ? 4.2 : 3.2,
+      speed: (def.prioritize === "weakest" ? 4.2 : 3.2) * PX,
       damage: dmg,
       slow: def.slow || 0,
       color: def.color,
@@ -1439,45 +1454,45 @@
           ctx.fillStyle = "#2a2018";
           ctx.fillRect(px, py, TILE, TILE);
           ctx.fillStyle = "#5a4a3a";
-          ctx.fillRect(px + 3, py + 4, 10, 8);
+          ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
           ctx.fillStyle = "#3a3028";
-          ctx.fillRect(px + 4, py + 5, 8, 2);
+          ctx.fillRect(px + 5 * PX, py + 6 * PX, 10 * PX, 3 * PX);
         } else if (t === 4) {
           ctx.fillStyle = "#5a2018";
           ctx.fillRect(px, py, TILE, TILE);
           ctx.fillStyle = "#e85d3c";
-          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
           ctx.fillStyle = "#ff8a60";
-          ctx.fillRect(px + 5, py + 5, 6, 6);
+          ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
         } else if (t === 5) {
           ctx.fillStyle = "#143830";
           ctx.fillRect(px, py, TILE, TILE);
           ctx.fillStyle = "#3db8a0";
-          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
           ctx.fillStyle = "#7ae0c8";
-          ctx.fillRect(px + 5, py + 5, 6, 6);
+          ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
         } else {
           const parity = (x + y) & 1;
           ctx.fillStyle = parity ? "#1c2818" : "#182214";
           ctx.fillRect(px, py, TILE, TILE);
           if (((x * 13 + y * 7) % 11) === 0) {
             ctx.fillStyle = "#243820";
-            ctx.fillRect(px + 6, py + 9, 3, 2);
+            ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
           }
           // Subtle amber path preview during build
           if (state.mode === "build" && pathTiles.has(`${x},${y}`)) {
             ctx.fillStyle = "rgba(232,197,106,0.28)";
-            ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+            ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
             ctx.fillStyle = "rgba(232,197,106,0.45)";
-            ctx.fillRect(px + 6, py + 6, 4, 4);
+            ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
           }
         }
       }
     }
   }
 
-  const UNIT_DRAW = 12; // 8x8 sprites scaled 1.5x for readability
-  const UNIT_DRAW_ANIM = 16; // 16x16 hand-tuned frames
+  const UNIT_DRAW = Math.round(12 * PX);
+  const UNIT_DRAW_ANIM = Math.round(16 * PX);
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -1490,7 +1505,7 @@
         ctx.strokeRect(u.tx * TILE + 0.5, u.ty * TILE + 0.5, TILE - 1, TILE - 1);
         if (def.range > 0) {
           ctx.beginPath();
-          ctx.arc(c.x, c.y, def.range, 0, Math.PI * 2);
+          ctx.arc(c.x, c.y, unitRange(def), 0, Math.PI * 2);
           ctx.strokeStyle = "rgba(61,184,160,0.4)";
           ctx.lineWidth = 1;
           ctx.stroke();
@@ -1516,18 +1531,18 @@
     state.shadows.forEach((sh) => {
       ctx.globalAlpha = 0.85;
       ctx.fillStyle = "#0a1018";
-      ctx.fillRect(sh.x - 5, sh.y - 5, 10, 10);
+      ctx.fillRect(sh.x - 5 * PX, sh.y - 5 * PX, 10 * PX, 10 * PX);
       ctx.fillStyle = "#6a8aaa";
-      ctx.fillRect(sh.x - 3, sh.y - 3, 6, 6);
+      ctx.fillRect(sh.x - 3 * PX, sh.y - 3 * PX, 6 * PX, 6 * PX);
       ctx.fillStyle = "#c8d8e8";
-      ctx.fillRect(sh.x - 1, sh.y - 2, 2, 2);
+      ctx.fillRect(sh.x - 1 * PX, sh.y - 2 * PX, 2 * PX, 2 * PX);
       ctx.globalAlpha = 1;
     });
   }
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      const base = en.boss ? 22 : en.elite ? 16 : 14;
+      const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       const frame =
         SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
       if (frame) {
@@ -1537,7 +1552,7 @@
         ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
         ctx.drawImage(frame, ox, oy, base, base);
       } else {
-        const s = en.boss ? 16 : en.elite ? 11 : 9;
+        const s = (en.boss ? 16 : en.elite ? 11 : 9) * PX;
         const body = en.boss ? "#ff7048" : en.elite ? "#ffe080" : "#f0a050";
         const outline = en.boss ? "#fff8e0" : en.elite ? "#ffffff" : "#ffe8c0";
         ctx.fillStyle = outline;

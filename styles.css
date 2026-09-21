@@ -12,7 +12,7 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
-  --rail-w: clamp(9.5rem, 28vw, 13.5rem);
+  --rail-w: clamp(13.5rem, 34vw, 17rem);
   --app-pad-x: max(0.35rem, var(--safe-left), var(--safe-right));
   --app-pad-top: max(0.25rem, var(--safe-top));
   --app-pad-bottom: max(0.3rem, var(--safe-bottom));
@@ -110,7 +110,7 @@ body {
   position: relative;
   width: 100%;
   max-width: 100%;
-  aspect-ratio: 480 / 272;
+  aspect-ratio: 480 / 264;
   border: 3px solid var(--bark);
   box-shadow:
     0 0 0 2px var(--ember),
@@ -225,12 +225,12 @@ body {
   background: #1a120e;
   color: var(--paper);
   font-family: inherit;
-  font-size: clamp(0.26rem, 1.3vh, 0.34rem);
-  line-height: 1.35;
+  font-size: clamp(0.26rem, 1.25vh, 0.34rem);
+  line-height: 1.4;
   text-align: left;
-  padding: 0.35rem 0.4rem;
+  padding: 0.4rem 0.45rem;
   cursor: pointer;
-  min-height: 2.35rem;
+  min-height: 2.8rem;
   -webkit-touch-callout: none;
 }
 
@@ -247,16 +247,23 @@ body {
 
 .card .name {
   color: var(--gold);
-  margin-bottom: 0.12rem;
+  margin-bottom: 0.15rem;
   display: block;
 }
 
 .card .meta {
-  display: none;
+  color: var(--muted);
+  display: block;
+  line-height: 1.35;
+}
+
+.card .meta + .meta {
+  margin-top: 0.08rem;
 }
 
 .card .cost {
   color: var(--spirit);
+  margin-top: 0.18rem;
   display: block;
 }
 
@@ -383,12 +390,5 @@ button.ghost:not(:disabled):hover {
 
   #frame {
     border-width: 4px;
-  }
-
-  .card .meta {
-    display: block;
-    color: var(--muted);
-    max-height: 1.35em;
-    overflow: hidden;
   }
 }
