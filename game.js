@@ -16,23 +16,20 @@
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.imageSmoothingEnabled = false;
 
-  // Size the 480×272 buffer to the stage. Prefer integer CSS scale for crisp
-  // pixels on Retina/Safari (e.g. iPhone 17 Pro Max @3x); otherwise fill width.
-  // HUD/build controls are HTML overlays on the frame, so they don't steal layout.
+  // Size the 480×272 buffer inside the left stage column. The right rail keeps
+  // tower buttons visible; map scales down to share the landscape viewport.
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
     let maxW = Math.max(64, stageCss.width - 2);
     let maxH = Math.max(64, stageCss.height - 2);
 
-    // If the stage hasn't been given a height yet (first paint), fall back to
-    // the visual viewport so the board still fills the phone screen.
     if (maxH < 80) {
       const vv = window.visualViewport;
       const viewH = (vv && vv.height) || window.innerHeight;
       const pad =
         parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      maxH = Math.max(120, viewH - pad * 3.5);
+      maxH = Math.max(120, viewH - pad * 2.5);
     }
 
     const raw = Math.min(maxW / W, maxH / H);
@@ -41,7 +38,6 @@
     let scale = raw;
     const floor = Math.floor(raw);
     if (floor >= 1) {
-      // Prefer sharp integer scale when it uses most of the available space.
       scale = raw - floor < 0.08 ? floor : raw;
     }
 
@@ -60,27 +56,25 @@
     ctx.imageSmoothingEnabled = false;
   }
 
+  function preferLandscape() {
+    const orient = screen.orientation;
+    if (orient && typeof orient.lock === "function") {
+      orient.lock("landscape").catch(() => {});
+    }
+  }
+
   const el = {
     gold: document.getElementById("gold"),
     lives: document.getElementById("lives"),
     wave: document.getElementById("wave"),
     income: document.getElementById("income"),
     shop: document.getElementById("shop"),
-    shopSheet: document.getElementById("shop-sheet"),
     preview: document.getElementById("sprite-preview"),
     hint: document.getElementById("hint"),
-    build: document.getElementById("btn-build"),
     ready: document.getElementById("btn-ready"),
     sell: document.getElementById("btn-sell"),
     upgrade: document.getElementById("btn-upgrade"),
   };
-
-  function setShopOpen(open) {
-    if (!el.shopSheet || !el.build) return;
-    el.shopSheet.hidden = !open;
-    el.build.setAttribute("aria-expanded", open ? "true" : "false");
-    el.build.textContent = open ? "Close" : "Build";
-  }
 
   const SS = window.SpiritSprites || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
@@ -962,14 +956,13 @@
       btn.innerHTML = `<span class="name">${u.name}</span><span class="meta">${u.series}</span><span class="meta">${u.blurb}</span><span class="cost">${u.cost}g</span>`;
       btn.addEventListener("click", () => {
         ensureAudio();
+        preferLandscape();
         state.selectedShop = id;
         state.selectedUnit = null;
         setHint(shopHint(id));
         renderShop();
         renderSpritePreview(id);
         updateHud();
-        // Keep sheet open while picking; close after so the map stays clear.
-        setShopOpen(false);
         beep(520, 0.04);
       });
       el.shop.appendChild(btn);
@@ -1096,7 +1089,7 @@
   function startWave() {
     if (state.mode !== "build") return;
     ensureAudio();
-    setShopOpen(false);
+    preferLandscape();
     if (!recomputePath()) {
       setHint("That seals the lane — leave a path.");
       beep(120, 0.1, "sawtooth");
@@ -1699,18 +1692,9 @@
     );
   });
 
-  if (el.build) {
-    el.build.addEventListener("click", () => {
-      ensureAudio();
-      const open = el.build.getAttribute("aria-expanded") !== "true";
-      setShopOpen(open);
-      if (open) setHint("Pick a unit, then tap the maze to place it.");
-      beep(480, 0.03);
-    });
-  }
-
   canvas.addEventListener("pointerdown", (e) => {
     ensureAudio();
+    preferLandscape();
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * W;
     const y = ((e.clientY - rect.top) / rect.height) * H;
@@ -1721,6 +1705,7 @@
 
   el.ready.addEventListener("click", () => {
     ensureAudio();
+    preferLandscape();
     startWave();
   });
   el.sell.addEventListener("click", sellSelected);
@@ -1733,7 +1718,7 @@
   setHint(
     "Place fighters/walls to maze the mobs. Keep a path from red to teal."
   );
-  setShopOpen(false);
+  preferLandscape();
   fitDisplay();
   window.addEventListener("resize", fitDisplay);
   window.addEventListener("orientationchange", () => {
@@ -1743,8 +1728,16 @@
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", fitDisplay);
   }
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      preferLandscape();
+    },
+    { once: true, passive: true }
+  );
   window.SpiritLane = {
     fitDisplay,
+    preferLandscape,
     setGold(n) {
       state.gold = n;
       updateHud();

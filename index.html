@@ -10,55 +10,53 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="screen-orientation" content="landscape" />
   <title>Spirit Lane — Pixel Line Defense</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
 </head>
 <body>
+  <div id="rotate-gate" class="rotate-gate" aria-hidden="true">
+    <p class="rotate-title">Spirit Lane</p>
+    <p class="rotate-msg">Turn your phone sideways to play</p>
+  </div>
+
   <div id="app">
     <header class="top">
       <div class="brand">
         <h1>Spirit Lane</h1>
         <p class="tag">Pixel line defense · single player · original cast</p>
       </div>
-      <p class="legal">Original characters &amp; kits. Inspired by popular battle tropes — not affiliated with any anime.</p>
     </header>
 
-    <div id="stage">
-      <div id="frame">
-        <canvas id="game" width="480" height="272" aria-label="Spirit Lane game"></canvas>
-
-        <!-- Overlays on the map. Empty space passes taps through to the canvas. -->
-        <div id="overlay" class="overlay" aria-live="polite">
-          <div class="hud-bar overlay-chrome">
-            <div class="stats">
-              <span id="gold">💰 150</span>
-              <span id="lives">❤ 20</span>
-              <span id="wave">Wave 0</span>
-              <span id="income">Income +10</span>
-            </div>
-            <p id="hint" class="hint">Place fighters/walls to maze the mobs. Keep a path from red to teal.</p>
-          </div>
-
-          <div class="build-dock overlay-chrome" id="build-dock">
-            <div id="shop-sheet" class="shop-sheet" hidden>
-              <div class="dock-head">
-                <span class="dock-label">Build</span>
-                <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+    <div id="playfield">
+      <div id="stage">
+        <div id="frame">
+          <canvas id="game" width="480" height="272" aria-label="Spirit Lane game"></canvas>
+          <div id="overlay" class="overlay" aria-live="polite">
+            <div class="hud-bar overlay-chrome">
+              <div class="stats">
+                <span id="gold">💰 150</span>
+                <span id="lives">❤ 20</span>
+                <span id="wave">Wave 0</span>
+                <span id="income">Income +10</span>
               </div>
-              <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
-            </div>
-
-            <div class="actions">
-              <button type="button" id="btn-build" class="ghost" aria-expanded="false" aria-controls="shop-sheet">
-                Build
-              </button>
-              <button type="button" id="btn-ready" class="primary">Ready Wave</button>
-              <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
-              <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+              <p id="hint" class="hint">Place fighters/walls to maze the mobs. Keep a path from red to teal.</p>
             </div>
           </div>
         </div>
       </div>
+
+      <aside id="rail" class="rail" aria-label="Build rail">
+        <div class="rail-label">Towers</div>
+        <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
+        <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+        <div class="actions">
+          <button type="button" id="btn-ready" class="primary">Ready Wave</button>
+          <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
+          <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+        </div>
+      </aside>
     </div>
   </div>
   <script src="sprites.js"></script>
