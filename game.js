@@ -47,11 +47,9 @@
     if (floor >= 1) {
       // Prefer sharp integer scale when it uses most of the available space.
       scale = raw - floor < 0.08 ? floor : raw;
-    } else {
-      // Sub-1x (narrow portrait): snap to 0.25 steps for stabler pixels.
-      scale = Math.max(0.5, Math.floor(raw * 4) / 4);
-      if (scale * W > maxW || scale * H > maxH) scale = raw;
     }
+    // Below 1x (narrow portrait like Pro Max 440pt): use full raw scale so
+    // the board fills the width; CSS pixelated keeps sprites crisp on @3x.
 
     const cssW = Math.floor(W * scale);
     const cssH = Math.floor(H * scale);
