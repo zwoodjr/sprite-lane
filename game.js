@@ -999,11 +999,14 @@
       id: "lane-works",
       name: "Lane Works",
       series: "Lane Works",
-      blurb: "Crate yard — simple blocks to learn the maze",
+      blurb: "Crate yard — stacked boxes to learn the maze",
       grassA: "#1c2818",
       grassB: "#182214",
-      rock: "#5a4a3a",
+      rock: "#7a5a3a",
       rockDeep: "#2a2018",
+      rockHi: "#c0a070",
+      accent: "#e8c56a",
+      style: "crates",
       rocks: [
         [4, 2], [5, 2], [10, 2], [14, 2],
         [3, 3], [8, 3], [12, 3], [16, 3],
@@ -1025,6 +1028,7 @@
       rockHi: "#ffb080",
       accent: "#3db868",
       chalk: "#e8dcc0",
+      style: "hero",
       rocks: [
         [3, 2], [7, 2], [11, 2], [15, 2],
         [5, 3], [9, 3], [13, 3],
@@ -1043,6 +1047,10 @@
       grassB: "#101e24",
       rock: "#4a88a8",
       rockDeep: "#183040",
+      rockHi: "#8ec8e0",
+      accent: "#3db8a0",
+      chalk: "#a0d0e0",
+      style: "river",
       rocks: [
         [3, 2], [4, 2], [5, 2], [6, 2], [12, 2], [13, 2], [14, 2], [15, 2],
         [8, 3], [9, 3], [10, 3],
@@ -1061,6 +1069,10 @@
       grassB: "#181610",
       rock: "#8a8070",
       rockDeep: "#3a3830",
+      rockHi: "#c8c0b0",
+      accent: "#d64545",
+      chalk: "#b0a890",
+      style: "fort",
       rocks: [
         [3, 2], [4, 2], [5, 2], [14, 2], [15, 2], [16, 2],
         [3, 3], [4, 3], [15, 3], [16, 3],
@@ -1076,11 +1088,15 @@
       id: "curse-ward",
       name: "Jujutsu Kaisen",
       series: "Jujutsu Kaisen",
-      blurb: "Domain marks — clustered blocks around the spine",
+      blurb: "Domain marks — clustered seals around the spine",
       grassA: "#241018",
       grassB: "#1c0e14",
       rock: "#a05070",
       rockDeep: "#3a1828",
+      rockHi: "#e090b0",
+      accent: "#e85d3c",
+      chalk: "#d080a0",
+      style: "curse",
       rocks: [
         [5, 2], [6, 2], [13, 2], [14, 2],
         [4, 3], [7, 3], [12, 3], [15, 3],
@@ -1099,6 +1115,10 @@
       grassB: "#10141c",
       rock: "#607090",
       rockDeep: "#182030",
+      rockHi: "#9ab8d0",
+      accent: "#7ec8d8",
+      chalk: "#6a7880",
+      style: "gate",
       rocks: [
         [4, 2], [8, 2], [12, 2], [16, 2],
         [3, 3], [6, 3], [10, 3], [14, 3],
@@ -1949,7 +1969,7 @@
       (state.map.tilePath || []).map((p) => `${p.x},${p.y}`)
     );
     const theme = state.map.theme || MAPS[0];
-    const heroYard = theme.id === "hero-crest";
+    const style = theme.style || "default";
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         const t = state.map.tiles[y][x];
@@ -1958,17 +1978,61 @@
         if (t === 3) {
           ctx.fillStyle = theme.rockDeep;
           ctx.fillRect(px, py, TILE, TILE);
-          if (heroYard) {
-            // Training pillar: tapered block + chevron stripe
+          if (style === "hero") {
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 5 * PX, py + 3 * PX, 14 * PX, 18 * PX);
-            ctx.fillStyle = theme.rockHi || "#ffb080";
+            ctx.fillStyle = theme.rockHi;
             ctx.fillRect(px + 7 * PX, py + 5 * PX, 10 * PX, 3 * PX);
-            ctx.fillStyle = theme.accent || "#3db868";
+            ctx.fillStyle = theme.accent;
             ctx.fillRect(px + 8 * PX, py + 10 * PX, 8 * PX, 2 * PX);
             ctx.fillRect(px + 9 * PX, py + 13 * PX, 6 * PX, 2 * PX);
             ctx.fillStyle = theme.rockDeep;
             ctx.fillRect(px + 6 * PX, py + 18 * PX, 12 * PX, 3 * PX);
+          } else if (style === "river") {
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 3 * PX, py + 4 * PX, 18 * PX, 14 * PX);
+            ctx.fillStyle = theme.rockHi;
+            ctx.fillRect(px + 5 * PX, py + 6 * PX, 14 * PX, 3 * PX);
+            ctx.fillStyle = theme.accent;
+            ctx.fillRect(px + 4 * PX, py + 14 * PX, 16 * PX, 2 * PX);
+          } else if (style === "fort") {
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 2 * PX, py + 2 * PX, 20 * PX, 20 * PX);
+            ctx.fillStyle = theme.rockHi;
+            ctx.fillRect(px + 4 * PX, py + 4 * PX, 6 * PX, 6 * PX);
+            ctx.fillRect(px + 14 * PX, py + 4 * PX, 6 * PX, 6 * PX);
+            ctx.fillRect(px + 4 * PX, py + 14 * PX, 6 * PX, 6 * PX);
+            ctx.fillRect(px + 14 * PX, py + 14 * PX, 6 * PX, 6 * PX);
+            ctx.fillStyle = theme.accent;
+            ctx.fillRect(px + 10 * PX, py + 10 * PX, 4 * PX, 4 * PX);
+          } else if (style === "curse") {
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 4 * PX, py + 4 * PX, 16 * PX, 16 * PX);
+            ctx.fillStyle = theme.rockHi;
+            ctx.fillRect(px + 7 * PX, py + 7 * PX, 10 * PX, 2 * PX);
+            ctx.fillRect(px + 7 * PX, py + 15 * PX, 10 * PX, 2 * PX);
+            ctx.fillRect(px + 7 * PX, py + 7 * PX, 2 * PX, 10 * PX);
+            ctx.fillRect(px + 15 * PX, py + 7 * PX, 2 * PX, 10 * PX);
+            ctx.fillStyle = theme.accent;
+            ctx.fillRect(px + 10 * PX, py + 10 * PX, 4 * PX, 4 * PX);
+          } else if (style === "gate") {
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 6 * PX, py + 2 * PX, 12 * PX, 20 * PX);
+            ctx.fillStyle = theme.rockHi;
+            ctx.fillRect(px + 8 * PX, py + 4 * PX, 8 * PX, 3 * PX);
+            ctx.fillStyle = theme.accent;
+            ctx.fillRect(px + 9 * PX, py + 10 * PX, 6 * PX, 6 * PX);
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 7 * PX, py + 18 * PX, 10 * PX, 3 * PX);
+          } else if (style === "crates") {
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 4 * PX, py + 6 * PX, 16 * PX, 14 * PX);
+            ctx.fillStyle = theme.rockHi;
+            ctx.fillRect(px + 5 * PX, py + 7 * PX, 14 * PX, 3 * PX);
+            ctx.fillStyle = theme.accent;
+            ctx.fillRect(px + 10 * PX, py + 12 * PX, 4 * PX, 4 * PX);
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 4 * PX, py + 18 * PX, 16 * PX, 2 * PX);
           } else {
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
@@ -1993,23 +2057,20 @@
           const parity = (x + y) & 1;
           ctx.fillStyle = parity ? theme.grassA : theme.grassB;
           ctx.fillRect(px, py, TILE, TILE);
-          if (heroYard) {
-            // Chalk hash marks on the training pad
-            if (((x * 5 + y * 3) % 7) === 0) {
-              ctx.fillStyle = theme.chalk || "#e8dcc0";
-              ctx.globalAlpha = 0.35;
-              ctx.fillRect(px + 4 * PX, py + 11 * PX, 16 * PX, 2 * PX);
-              ctx.globalAlpha = 1;
-            }
-            if (((x + y * 2) % 9) === 0) {
-              ctx.fillStyle = theme.accent || "#3db868";
-              ctx.globalAlpha = 0.22;
-              ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
-              ctx.globalAlpha = 1;
-            }
+          if (theme.chalk && ((x * 5 + y * 3) % 7) === 0) {
+            ctx.fillStyle = theme.chalk;
+            ctx.globalAlpha = 0.28;
+            ctx.fillRect(px + 4 * PX, py + 11 * PX, 16 * PX, 2 * PX);
+            ctx.globalAlpha = 1;
           } else if (((x * 13 + y * 7) % 11) === 0) {
             ctx.fillStyle = theme.grassA;
             ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
+          }
+          if (theme.accent && ((x + y * 2) % 9) === 0) {
+            ctx.fillStyle = theme.accent;
+            ctx.globalAlpha = 0.18;
+            ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
+            ctx.globalAlpha = 1;
           }
           if (
             (state.mode === "build" ||
