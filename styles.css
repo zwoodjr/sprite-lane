@@ -235,6 +235,8 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.2rem;
+  position: relative;
+  z-index: 2;
 }
 
 .rail-tab {
@@ -246,6 +248,9 @@ body {
   background: #1a120e;
   color: var(--muted);
   cursor: pointer;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 2;
 }
 
 .rail-tab.active {
@@ -263,10 +268,21 @@ body {
 
 .rail-panel {
   min-height: 0;
-  display: grid;
+  display: none !important;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.25rem;
   overflow: hidden;
+}
+
+/* Only the active tab panel is shown. Do not rely on [hidden] alone —
+   `.rail-panel { display: grid }` previously overrode it and both panels
+   stayed in the rail, collapsing Shop to 0 height on phones. */
+.rail-panel.is-open {
+  display: grid !important;
+}
+
+.rail-panel[hidden] {
+  display: none !important;
 }
 
 #panel-store {

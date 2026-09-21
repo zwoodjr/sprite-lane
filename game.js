@@ -317,15 +317,35 @@
 
   function showRailPanel(which) {
     const towers = which === "towers";
-    if (el.panelTowers) el.panelTowers.hidden = !towers;
-    if (el.panelStore) el.panelStore.hidden = towers;
-    if (el.tabTowers) {
-      el.tabTowers.classList.toggle("active", towers);
-      el.tabTowers.setAttribute("aria-selected", towers ? "true" : "false");
+    // Re-query in case the node map went stale after DOM swaps.
+    const panelTowers =
+      el.panelTowers || document.getElementById("panel-towers");
+    const panelStore =
+      el.panelStore || document.getElementById("panel-store");
+    const tabTowers = el.tabTowers || document.getElementById("tab-towers");
+    const tabStore = el.tabStore || document.getElementById("tab-store");
+    el.panelTowers = panelTowers;
+    el.panelStore = panelStore;
+    el.tabTowers = tabTowers;
+    el.tabStore = tabStore;
+
+    if (panelTowers) {
+      panelTowers.hidden = !towers;
+      panelTowers.classList.toggle("is-open", towers);
+      panelTowers.setAttribute("aria-hidden", towers ? "false" : "true");
     }
-    if (el.tabStore) {
-      el.tabStore.classList.toggle("active", !towers);
-      el.tabStore.setAttribute("aria-selected", towers ? "false" : "true");
+    if (panelStore) {
+      panelStore.hidden = towers;
+      panelStore.classList.toggle("is-open", !towers);
+      panelStore.setAttribute("aria-hidden", towers ? "true" : "false");
+    }
+    if (tabTowers) {
+      tabTowers.classList.toggle("active", towers);
+      tabTowers.setAttribute("aria-selected", towers ? "true" : "false");
+    }
+    if (tabStore) {
+      tabStore.classList.toggle("active", !towers);
+      tabStore.setAttribute("aria-selected", towers ? "false" : "true");
     }
     if (!towers) renderMetaStore();
   }
@@ -2354,22 +2374,34 @@
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
 
-  if (el.tabTowers) {
-    el.tabTowers.addEventListener("click", () => {
+  function bindRailTab(btn, which, hint) {
+    if (!btn) return;
+    const go = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       ensureAudio();
-      showRailPanel("towers");
-      setHint("Shop: select a unit, then tap grass on the map to place it.");
-      beep(400, 0.03);
+      showRailPanel(which);
+      setHint(hint);
+      beep(which === "towers" ? 400 : 440, 0.03);
+    };
+    btn.addEventListener("click", go);
+    btn.addEventListener("pointerup", (e) => {
+      // iOS sometimes drops click after scroll; pointerup is reliable for tabs.
+      if (e.pointerType === "touch" || e.pointerType === "pen") go(e);
     });
   }
-  if (el.tabStore) {
-    el.tabStore.addEventListener("click", () => {
-      ensureAudio();
-      showRailPanel("store");
-      setHint("Spirit: permanent upgrades. Keep playing waves to earn more.");
-      beep(440, 0.03);
-    });
-  }
+  bindRailTab(
+    el.tabTowers || document.getElementById("tab-towers"),
+    "towers",
+    "Shop: select a unit, then tap grass on the map to place it."
+  );
+  bindRailTab(
+    el.tabStore || document.getElementById("tab-store"),
+    "store",
+    "Spirit: permanent upgrades. Keep playing waves to earn more."
+  );
   if (el.newRun) {
     el.newRun.addEventListener("click", () => {
       ensureAudio();
@@ -2730,6 +2762,7 @@
     buyMeta: buyMetaUpgrade,
     newRun: startNewRun,
     showStore: () => showRailPanel("store"),
+    showShop: () => showRailPanel("towers"),
   };
   // Drop any boot splash immediately so Safari never sticks on "Loading…"
   document.querySelectorAll("#boot-splash").forEach((node) => {
