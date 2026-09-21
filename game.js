@@ -469,7 +469,7 @@
       animated: true,
       color: "#2a8a48",
       sprite: packSprite("sparkfist", [
-        "00055000","005ee500","05e77e50","5e7777e5","05e55e50","005aa500","00a00a00","0a0000a0",
+        "000uu000","00uwwu00","0u7777u0","0tuuuut0","0kzuuzk0","00zzzz00","003zz300","00u00u00",
       ]),
     },
     {
@@ -486,7 +486,7 @@
       animated: true,
       color: "#3db868",
       sprite: packSprite("blastcrown", [
-        "005ee500","05e77e50","5e7777e5","e777777e","5e5555e5","05aaaa50","0a0aa0a0","a000000a",
+        "00uuuu00","0uwwwwu0","uw7777wu","utuuuutu","wu0uu0uw","03333330","03t00t30","0w0000w0",
       ]),
     },
     {
@@ -503,7 +503,7 @@
       animated: true,
       color: "#e85d3c",
       sprite: packSprite("bakugo", [
-        "00055000","005ee500","05e77e50","5e7777e5","05e55e50","005aa500","00a00a00","0a0000a0",
+        "00555500","05577550","0zyyyyz0","eyyyyyye","0ezzze0","03333330","03z00z30","0y0000y0",
       ]),
     },
     {
@@ -520,7 +520,7 @@
       animated: true,
       color: "#f0a0c0",
       sprite: packSprite("hoverbind", [
-        "00099000","009cc900","09c77c90","9c7777c9","09c99c90","00977900","00700700","07000070",
+        "00vvvv00","0v7777v0","0vccccv0","0vvvvvv0","0v0000v0","0ffffff0","0v0000v0","09000090",
       ]),
     },
     {
@@ -537,7 +537,7 @@
       animated: true,
       color: "#d070a0",
       sprite: packSprite("zerofield", [
-        "009cc900","09cccc90","9c7777c9","c777777c","9c9999c9","09cccc90","0c0cc0c0","c000000c",
+        "0vvvvvv0","vccccccv","vc7777cv","vvvvvvvv","cv7777vc","0ffffff0","0c0000c0","0v0000v0",
       ]),
     },
     {
@@ -555,7 +555,7 @@
       animated: true,
       color: "#70b0e0",
       sprite: packSprite("todoroki", [
-        "00099000","009cc900","09c77c90","9c7777c9","09c99c90","00977900","00700700","07000070",
+        "00x55500","0xx775y0","0x7777y0","xx7777yy","0x0000y0","0ffffff0","0x0000y0","0c0000e0",
       ]),
     },
     // —— Demon Slayer ——
@@ -1017,11 +1017,14 @@
       id: "hero-crest",
       name: "My Hero",
       series: "My Hero",
-      blurb: "Training grounds — staggered pillars and open lanes",
-      grassA: "#241c14",
-      grassB: "#1e1810",
-      rock: "#c87848",
-      rockDeep: "#3a2418",
+      blurb: "UA training yard — orange pillars, chalk lanes",
+      grassA: "#2a241c",
+      grassB: "#221e18",
+      rock: "#e07040",
+      rockDeep: "#4a2818",
+      rockHi: "#ffb080",
+      accent: "#3db868",
+      chalk: "#e8dcc0",
       rocks: [
         [3, 2], [7, 2], [11, 2], [15, 2],
         [5, 3], [9, 3], [13, 3],
@@ -1946,6 +1949,7 @@
       (state.map.tilePath || []).map((p) => `${p.x},${p.y}`)
     );
     const theme = state.map.theme || MAPS[0];
+    const heroYard = theme.id === "hero-crest";
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         const t = state.map.tiles[y][x];
@@ -1954,10 +1958,23 @@
         if (t === 3) {
           ctx.fillStyle = theme.rockDeep;
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = theme.rock;
-          ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
-          ctx.fillStyle = theme.rockDeep;
-          ctx.fillRect(px + 5 * PX, py + 6 * PX, 10 * PX, 3 * PX);
+          if (heroYard) {
+            // Training pillar: tapered block + chevron stripe
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 5 * PX, py + 3 * PX, 14 * PX, 18 * PX);
+            ctx.fillStyle = theme.rockHi || "#ffb080";
+            ctx.fillRect(px + 7 * PX, py + 5 * PX, 10 * PX, 3 * PX);
+            ctx.fillStyle = theme.accent || "#3db868";
+            ctx.fillRect(px + 8 * PX, py + 10 * PX, 8 * PX, 2 * PX);
+            ctx.fillRect(px + 9 * PX, py + 13 * PX, 6 * PX, 2 * PX);
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 6 * PX, py + 18 * PX, 12 * PX, 3 * PX);
+          } else {
+            ctx.fillStyle = theme.rock;
+            ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 5 * PX, py + 6 * PX, 10 * PX, 3 * PX);
+          }
         } else if (t === 4) {
           ctx.fillStyle = "#5a2018";
           ctx.fillRect(px, py, TILE, TILE);
@@ -1976,7 +1993,21 @@
           const parity = (x + y) & 1;
           ctx.fillStyle = parity ? theme.grassA : theme.grassB;
           ctx.fillRect(px, py, TILE, TILE);
-          if (((x * 13 + y * 7) % 11) === 0) {
+          if (heroYard) {
+            // Chalk hash marks on the training pad
+            if (((x * 5 + y * 3) % 7) === 0) {
+              ctx.fillStyle = theme.chalk || "#e8dcc0";
+              ctx.globalAlpha = 0.35;
+              ctx.fillRect(px + 4 * PX, py + 11 * PX, 16 * PX, 2 * PX);
+              ctx.globalAlpha = 1;
+            }
+            if (((x + y * 2) % 9) === 0) {
+              ctx.fillStyle = theme.accent || "#3db868";
+              ctx.globalAlpha = 0.22;
+              ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
+              ctx.globalAlpha = 1;
+            }
+          } else if (((x * 13 + y * 7) % 11) === 0) {
             ctx.fillStyle = theme.grassA;
             ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
           }
