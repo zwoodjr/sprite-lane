@@ -2383,6 +2383,11 @@
   const btnOfflineDismiss = document.getElementById("btn-offline-dismiss");
 
   function isAppleTouchDevice() {
+    try {
+      if (/[?&]ios=1(?:&|$)/.test(location.search)) return true;
+    } catch (_) {
+      /* ignore */
+    }
     const ua = navigator.userAgent || "";
     if (/iPad|iPhone|iPod/.test(ua)) return true;
     // iPadOS desktop UA
@@ -2416,7 +2421,7 @@
   try{ if(localStorage.getItem("spiritLaneIosHint")==="1") hide(); }catch(e){}
 })();
 <\/script>`;
-    return html.replace(/<\/body>/i, banner + "</body>");
+    return html.replace(/<\/body>/i, banner + "</" + "body>");
   }
 
   async function getOfflineHtml({ forIosInstall = false } = {}) {

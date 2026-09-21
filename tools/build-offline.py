@@ -118,11 +118,17 @@ def main() -> None:
     html = build_html()
     # Embed pristine source so Save Offline works with zero network.
     # Escape "<" so a "</script>" inside the payload cannot break out of this tag.
+    # Append before the FINAL </body> only — game.js may contain the substring
+    # "</body>" inside strings (e.g. install-banner helpers).
     payload = json.dumps(html).replace("<", "\\u003c")
-    html = html.replace(
-        "</body>",
-        f"<script>window.__SPIRIT_LANE_SOURCE__ = {payload};</script>\n</body>",
-        1,
+    marker = "</body>"
+    idx = html.rfind(marker)
+    if idx < 0:
+        raise SystemExit("offline build: no </body> found")
+    html = (
+        html[:idx]
+        + f"<script>window.__SPIRIT_LANE_SOURCE__ = {payload};</script>\n"
+        + html[idx:]
     )
     OUT.write_text(html, encoding="utf-8")
     print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")
