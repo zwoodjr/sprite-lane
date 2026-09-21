@@ -305,7 +305,7 @@
     updateHud();
     beep(740, 0.05);
     const def = META_BY_ID[id];
-    setHint(`Bought ${def.name} Lv ${metaLevel(id)}. Applies next New Run (gold/lives/income now if idle).`);
+    setHint(`Bought ${def.name} Lv ${metaLevel(id)}. Applies on next Reset (gold/lives/income now if idle).`);
     // Apply soft bonuses that don't require a new run when still in early build.
     if (state.mode === "build" && state.wave === 0 && state.units.length === 0) {
       state.gold = baseStartingGold();
@@ -345,8 +345,8 @@
     el.ready.disabled = true;
     setHint(
       won
-        ? `Victory! +${gained} Spirit. Open Store or New Run.`
-        : `Lane broke after wave ${state.wave}. +${gained} Spirit — spend it in Store.`
+        ? `Victory! +${gained} Spirit. Spend in Spirit tab, or tap Reset.`
+        : `Lane broke after wave ${state.wave}. +${gained} Spirit — Spirit tab to spend, Shop to rebuild, or Reset.`
     );
     showRailPanel("store");
   }
@@ -1359,9 +1359,8 @@
       state.gold < nextCost;
     el.ready.disabled = state.mode !== "build";
     el.ready.textContent = readyButtonLabel();
-    if (el.newRun) {
-      el.newRun.hidden = !(state.mode === "win" || state.mode === "lose");
-    }
+    // Reset stays visible so players never need a browser refresh.
+    if (el.newRun) el.newRun.hidden = false;
     if (el.mapSelect) el.mapSelect.disabled = state.mode !== "build";
     if (el.mapRandom) el.mapRandom.disabled = state.mode !== "build";
   }
@@ -1477,7 +1476,7 @@
     }
     const id = state.selectedShop;
     if (!id) {
-      setHint("Pick a fighter or wall from the shop first.");
+      setHint("Pick a unit from the Shop tab first, then tap grass.");
       return;
     }
     const def = UNIT_MAP[id];
@@ -2274,12 +2273,12 @@
     } else {
       recomputePath();
     }
-    if (el.newRun) el.newRun.hidden = true;
+    if (el.newRun) el.newRun.hidden = false;
     showRailPanel("towers");
     renderShop();
     updateHud();
     setHint(
-      `New run — ${state.gold}g / ${state.lives} lives. Clear waves to earn Spirit.`
+      `Reset — ${state.gold}g / ${state.lives} lives. Shop tab: buy units, tap grass to place.`
     );
     beep(520, 0.05);
   }
@@ -2295,7 +2294,7 @@
       ctx.fillText(msg, (W - m.width) / 2, H / 2);
       ctx.fillStyle = "#e6dcc8";
       ctx.font = "6px Press Start 2P, monospace";
-      const sub = "New Run · spend Spirit in Store";
+      const sub = "Reset · Spirit tab for upgrades";
       const m2 = ctx.measureText(sub);
       ctx.fillText(sub, (W - m2.width) / 2, H / 2 + 16);
     } else if (state.mode === "build") {
@@ -2359,6 +2358,7 @@
     el.tabTowers.addEventListener("click", () => {
       ensureAudio();
       showRailPanel("towers");
+      setHint("Shop: select a unit, then tap grass on the map to place it.");
       beep(400, 0.03);
     });
   }
@@ -2366,6 +2366,7 @@
     el.tabStore.addEventListener("click", () => {
       ensureAudio();
       showRailPanel("store");
+      setHint("Spirit: permanent upgrades. Keep playing waves to earn more.");
       beep(440, 0.03);
     });
   }
@@ -2670,7 +2671,7 @@
   showRailPanel("towers");
   syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
   setHint(
-    "Clear waves for Spirit → Store for permanent upgrades. Keep red→teal open."
+    "Shop tab: buy units, tap grass to place. Spirit tab: permanent upgrades. Reset anytime."
   );
   preferLandscape();
   fitDisplay();
