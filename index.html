@@ -11,13 +11,35 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>Spirit Lane — Pixel Line Defense</title>
-  <!-- Never flash white if CSS is slow/missing -->
+  <!-- Never flash white if CSS is slow/missing; keep UI visible even if layout CSS fails -->
   <style>
     html, body {
       margin: 0;
-      background: #120e0b;
+      background: #120e0b !important;
       color: #e6dcc8;
       min-height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #120e0b;
+      color: #e8c56a;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      transition: opacity 0.25s ease;
+    }
+    #boot-splash.hide { opacity: 0; pointer-events: none; }
+    #app {
+      visibility: visible !important;
+      opacity: 1 !important;
+      min-height: 100vh;
       min-height: 100dvh;
     }
   </style>
@@ -25,6 +47,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
 </head>
 <body>
+  <div id="boot-splash" role="status">Loading Spirit Lane…</div>
   <p id="boot-error" hidden style="padding:1rem;font-family:monospace;font-size:12px;color:#e85d3c;"></p>
 
   <div id="app">
@@ -75,13 +98,50 @@
   </div>
   <script>
     window.addEventListener("error", function (e) {
+      document.querySelectorAll("#boot-splash").forEach(function (splash) {
+        splash.classList.add("hide");
+      });
       var el = document.getElementById("boot-error");
       if (!el) return;
       el.hidden = false;
       el.textContent = "Load error: " + (e.message || "unknown");
     });
+    window.addEventListener("unhandledrejection", function (e) {
+      document.querySelectorAll("#boot-splash").forEach(function (splash) {
+        splash.classList.add("hide");
+      });
+      var el = document.getElementById("boot-error");
+      if (!el) return;
+      el.hidden = false;
+      var msg = (e && e.reason && (e.reason.message || e.reason)) || "promise failed";
+      el.textContent = "Load error: " + msg;
+    });
   </script>
   <script src="sprites.js"></script>
   <script src="game.js"></script>
+  <script>
+    (function () {
+      function hideSplash() {
+        document.querySelectorAll("#boot-splash").forEach(function (splash) {
+          splash.classList.add("hide");
+          setTimeout(function () {
+            if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+          }, 400);
+        });
+      }
+      if (window.SpiritLane) hideSplash();
+      else setTimeout(hideSplash, 0);
+      setTimeout(function () {
+        var el = document.getElementById("boot-error");
+        if (!window.SpiritLane && el) {
+          el.hidden = false;
+          if (!el.textContent) {
+            el.textContent = "Game failed to start. Hard-refresh and try again.";
+          }
+          hideSplash();
+        }
+      }, 2500);
+    })();
+  </script>
 </body>
 </html>

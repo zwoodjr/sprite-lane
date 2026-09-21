@@ -66,11 +66,17 @@ body {
 #app {
   width: 100%;
   max-width: 1200px;
+  /* Prefer dvh, but keep vh fallbacks so Safari never collapses to 0 */
+  height: calc(100vh - var(--app-pad-top) - var(--app-pad-bottom));
   height: calc(100dvh - var(--app-pad-top) - var(--app-pad-bottom));
+  max-height: calc(100vh - var(--app-pad-top) - var(--app-pad-bottom));
   max-height: calc(100dvh - var(--app-pad-top) - var(--app-pad-bottom));
+  min-height: 20rem;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0.25rem;
+  visibility: visible;
+  opacity: 1;
 }
 
 .top {

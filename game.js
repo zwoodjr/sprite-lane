@@ -15,7 +15,13 @@
   const canvas = document.getElementById("game");
   const frameEl = document.getElementById("frame");
   const stageEl = document.getElementById("stage");
+  if (!canvas) {
+    throw new Error("Missing #game canvas — page markup failed to load.");
+  }
   const ctx = canvas.getContext("2d", { alpha: false });
+  if (!ctx) {
+    throw new Error("Canvas 2D unavailable in this browser.");
+  }
   ctx.imageSmoothingEnabled = false;
 
   // Size the 480×272 buffer inside the left stage column. The right rail keeps
@@ -23,15 +29,24 @@
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
-    let maxW = Math.max(64, stageCss.width - 2);
-    let maxH = Math.max(64, stageCss.height - 2);
+    let maxW = Math.max(
+      64,
+      stageCss.width || stageEl.clientWidth || window.innerWidth * 0.6
+    );
+    let maxH = Math.max(
+      64,
+      stageCss.height || stageEl.clientHeight || window.innerHeight * 0.45
+    );
 
     if (maxH < 80) {
       const vv = window.visualViewport;
-      const viewH = (vv && vv.height) || window.innerHeight;
+      const viewH = (vv && vv.height) || window.innerHeight || 480;
       const pad =
         parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       maxH = Math.max(120, viewH - pad * 2.5);
+    }
+    if (maxW < 80) {
+      maxW = Math.max(160, (window.innerWidth || 320) - 24);
     }
 
     const raw = Math.min(maxW / W, maxH / H);
@@ -43,8 +58,8 @@
       scale = raw - floor < 0.08 ? floor : raw;
     }
 
-    const cssW = Math.floor(W * scale);
-    const cssH = Math.floor(H * scale);
+    const cssW = Math.max(120, Math.floor(W * scale));
+    const cssH = Math.max(66, Math.floor(H * scale));
     frameEl.style.width = cssW + "px";
     frameEl.style.height = cssH + "px";
     frameEl.style.aspectRatio = "auto";
@@ -1982,6 +1997,10 @@
   );
   preferLandscape();
   fitDisplay();
+  // Safari often lays out after the first paint — refit so the map isn't 0×0.
+  setTimeout(fitDisplay, 0);
+  setTimeout(fitDisplay, 100);
+  setTimeout(fitDisplay, 400);
   window.addEventListener("resize", fitDisplay);
   window.addEventListener("orientationchange", () => {
     setTimeout(fitDisplay, 50);
@@ -2024,5 +2043,10 @@
       })),
     getTiles: () => state.map.tiles.map((row) => row.slice()),
   };
+  // Drop any boot splash immediately so Safari never sticks on "Loading…"
+  document.querySelectorAll("#boot-splash").forEach((node) => {
+    node.classList.add("hide");
+    setTimeout(() => node.remove(), 350);
+  });
   requestAnimationFrame(frame);
 })();
