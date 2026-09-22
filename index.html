@@ -51,64 +51,44 @@
   <p id="boot-error" hidden style="padding:1rem;font-family:monospace;font-size:12px;color:#e85d3c;"></p>
 
   <div id="app">
-    <header class="top">
-      <div class="brand">
-        <h1>Spirit Lane</h1>
-        <p class="tag">Pixel line defense · fan cast · single player</p>
-      </div>
-      <p class="rotate-tip">Tip: rotate sideways for the best view</p>
-    </header>
-
     <div id="playfield">
       <div id="stage">
         <div id="frame">
           <canvas id="game" width="480" height="264" aria-label="Spirit Lane game"></canvas>
           <div id="overlay" class="overlay" aria-live="polite">
             <div class="hud-bar overlay-chrome">
+              <div class="hud-top">
+                <span class="hud-brand">Spirit Lane</span>
+                <span id="spirit-points" class="spirit-points">Spirit 0</span>
+              </div>
               <div class="stats">
                 <span id="gold">💰 150</span>
                 <span id="lives">❤ 20</span>
                 <span id="wave">Wave 0</span>
                 <span id="income">Income +10</span>
               </div>
-              <p id="hint" class="hint">Place fighters/walls to maze the mobs. Keep a path from red to teal.</p>
+              <p id="hint" class="hint">Tap Shop ▸ to buy. Tap grass to place.</p>
             </div>
           </div>
         </div>
-      </div>
 
-      <div id="edge-tabs" class="edge-tabs" aria-label="Open panels">
-        <button type="button" id="btn-drawer-shop" class="edge-tab" aria-expanded="false" aria-controls="drawer-shop">
-          <span class="edge-arrow" aria-hidden="true">◂</span>
-          <span class="edge-label">Shop</span>
-        </button>
-        <button type="button" id="btn-drawer-unit" class="edge-tab" aria-expanded="false" aria-controls="drawer-unit">
-          <span class="edge-arrow" aria-hidden="true">◂</span>
-          <span class="edge-label">Unit</span>
-        </button>
-      </div>
+        <div id="edge-tabs" class="edge-tabs overlay-chrome" aria-label="Open panels">
+          <button type="button" id="btn-drawer-shop" class="edge-tab" aria-expanded="false" aria-controls="drawer-shop">
+            <span class="edge-arrow" aria-hidden="true">◂</span>
+            <span class="edge-label">Shop</span>
+          </button>
+          <button type="button" id="btn-drawer-unit" class="edge-tab" aria-expanded="false" aria-controls="drawer-unit">
+            <span class="edge-arrow" aria-hidden="true">◂</span>
+            <span class="edge-label">Unit</span>
+          </button>
+          <button type="button" id="btn-drawer-menu" class="edge-tab" aria-expanded="false" aria-controls="drawer-menu">
+            <span class="edge-arrow" aria-hidden="true">◂</span>
+            <span class="edge-label">Menu</span>
+          </button>
+        </div>
 
-      <aside id="rail" class="rail" aria-label="Build rail">
-        <div class="meta-bar">
-          <span id="spirit-points" class="spirit-points">Spirit 0</span>
-          <span id="meta-best" class="meta-best">Best W0</span>
-        </div>
-        <div class="map-picker">
-          <div id="map-label" class="rail-label">Map · Lane Works</div>
-          <div class="map-controls">
-            <select id="map-select" aria-label="Choose map"></select>
-            <button type="button" id="btn-map-random" class="ghost">Random</button>
-          </div>
-        </div>
-        <div class="actions">
-          <button type="button" id="btn-ready" class="primary">Ready Wave</button>
-          <button type="button" id="btn-new-run" class="ghost">Reset</button>
-          <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
-        </div>
-        <p id="offline-tip" class="offline-tip">
-          Tap ◂ Shop to buy units. Tap ◂ Unit to sell / upgrade / Spirit.
-        </p>
-      </aside>
+        <button type="button" id="btn-ready" class="float-ready overlay-chrome primary">Ready Wave</button>
+      </div>
     </div>
   </div>
 
@@ -137,6 +117,30 @@
     <div class="rail-label">Spirit upgrades</div>
     <p class="store-blurb">Permanent boosts with Spirit Points. Saved on this device.</p>
     <div id="meta-store" class="meta-store" role="list"></div>
+  </aside>
+
+  <aside id="drawer-menu" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-menu-title">
+    <div class="drawer-head">
+      <h2 id="drawer-menu-title">Menu</h2>
+      <button type="button" id="btn-close-menu" class="drawer-close" aria-label="Close menu">▸</button>
+    </div>
+    <div class="meta-bar">
+      <span id="meta-best" class="meta-best">Best W0</span>
+    </div>
+    <div class="map-picker">
+      <div id="map-label" class="rail-label">Map · Lane Works</div>
+      <div class="map-controls">
+        <select id="map-select" aria-label="Choose map"></select>
+        <button type="button" id="btn-map-random" class="ghost">Random</button>
+      </div>
+    </div>
+    <div class="drawer-actions drawer-actions-stack">
+      <button type="button" id="btn-new-run" class="ghost">Reset</button>
+      <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
+    </div>
+    <p id="offline-tip" class="offline-tip">
+      Airplane mode: Save Offline while online, then open that copy. iPhone: Add to Home Screen.
+    </p>
   </aside>
 
   <div id="offline-sheet" class="offline-sheet" hidden>

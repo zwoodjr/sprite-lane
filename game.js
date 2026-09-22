@@ -24,18 +24,17 @@
   }
   ctx.imageSmoothingEnabled = false;
 
-  // Size the 480×272 buffer inside the left stage column. The right rail keeps
-  // tower buttons visible; map scales down to share the landscape viewport.
+  // Size the 480×264 buffer to fill the stage (map-first layout).
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
     let maxW = Math.max(
       64,
-      stageCss.width || stageEl.clientWidth || window.innerWidth * 0.6
+      stageCss.width || stageEl.clientWidth || window.innerWidth * 0.95
     );
     let maxH = Math.max(
       64,
-      stageCss.height || stageEl.clientHeight || window.innerHeight * 0.45
+      stageCss.height || stageEl.clientHeight || window.innerHeight * 0.9
     );
 
     if (maxH < 80) {
@@ -43,10 +42,10 @@
       const viewH = (vv && vv.height) || window.innerHeight || 480;
       const pad =
         parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      maxH = Math.max(120, viewH - pad * 2.5);
+      maxH = Math.max(120, viewH - pad * 1.5);
     }
     if (maxW < 80) {
-      maxW = Math.max(160, (window.innerWidth || 320) - 24);
+      maxW = Math.max(160, (window.innerWidth || 320) - 16);
     }
 
     const raw = Math.min(maxW / W, maxH / H);
@@ -103,11 +102,14 @@
     unitSelected: document.getElementById("unit-selected"),
     drawerShop: document.getElementById("drawer-shop"),
     drawerUnit: document.getElementById("drawer-unit"),
+    drawerMenu: document.getElementById("drawer-menu"),
     drawerBackdrop: document.getElementById("drawer-backdrop"),
     btnDrawerShop: document.getElementById("btn-drawer-shop"),
     btnDrawerUnit: document.getElementById("btn-drawer-unit"),
+    btnDrawerMenu: document.getElementById("btn-drawer-menu"),
     btnCloseShop: document.getElementById("btn-close-shop"),
     btnCloseUnit: document.getElementById("btn-close-unit"),
+    btnCloseMenu: document.getElementById("btn-close-menu"),
   };
 
   // --- Meta progression (local Spirit Points store) ---
@@ -326,25 +328,25 @@
   }
 
   function syncEdgeTabs(which) {
-    if (el.btnDrawerShop) {
-      const on = which === "shop";
-      el.btnDrawerShop.classList.toggle("is-open", on);
-      el.btnDrawerShop.setAttribute("aria-expanded", on ? "true" : "false");
-      const arrow = el.btnDrawerShop.querySelector(".edge-arrow");
+    const tabs = [
+      [el.btnDrawerShop, "shop"],
+      [el.btnDrawerUnit, "unit"],
+      [el.btnDrawerMenu, "menu"],
+    ];
+    tabs.forEach(([btn, key]) => {
+      if (!btn) return;
+      const on = which === key;
+      btn.classList.toggle("is-open", on);
+      btn.setAttribute("aria-expanded", on ? "true" : "false");
+      const arrow = btn.querySelector(".edge-arrow");
       if (arrow) arrow.textContent = on ? "▸" : "◂";
-    }
-    if (el.btnDrawerUnit) {
-      const on = which === "unit";
-      el.btnDrawerUnit.classList.toggle("is-open", on);
-      el.btnDrawerUnit.setAttribute("aria-expanded", on ? "true" : "false");
-      const arrow = el.btnDrawerUnit.querySelector(".edge-arrow");
-      if (arrow) arrow.textContent = on ? "▸" : "◂";
-    }
+    });
   }
 
   function closeDrawers() {
     setDrawerOpen(el.drawerShop, false);
     setDrawerOpen(el.drawerUnit, false);
+    setDrawerOpen(el.drawerMenu, false);
     if (el.drawerBackdrop) el.drawerBackdrop.hidden = true;
     syncEdgeTabs(null);
   }
@@ -352,17 +354,19 @@
   function openDrawer(which) {
     const shop = which === "shop";
     const unit = which === "unit";
-    // Toggle off if the same drawer is already open.
+    const menu = which === "menu";
     const shopOpen = el.drawerShop && !el.drawerShop.hidden;
     const unitOpen = el.drawerUnit && !el.drawerUnit.hidden;
-    if ((shop && shopOpen) || (unit && unitOpen)) {
+    const menuOpen = el.drawerMenu && !el.drawerMenu.hidden;
+    if ((shop && shopOpen) || (unit && unitOpen) || (menu && menuOpen)) {
       closeDrawers();
       return;
     }
     setDrawerOpen(el.drawerShop, shop);
     setDrawerOpen(el.drawerUnit, unit);
-    if (el.drawerBackdrop) el.drawerBackdrop.hidden = !(shop || unit);
-    syncEdgeTabs(shop ? "shop" : unit ? "unit" : null);
+    setDrawerOpen(el.drawerMenu, menu);
+    if (el.drawerBackdrop) el.drawerBackdrop.hidden = !(shop || unit || menu);
+    syncEdgeTabs(shop ? "shop" : unit ? "unit" : menu ? "menu" : null);
     if (unit) {
       renderMetaStore();
       updateUnitDrawerLabel();
@@ -388,6 +392,7 @@
   function showRailPanel(which) {
     if (which === "store" || which === "unit") openDrawer("unit");
     else if (which === "towers" || which === "shop") openDrawer("shop");
+    else if (which === "menu") openDrawer("menu");
     else closeDrawers();
   }
 
@@ -2432,6 +2437,7 @@
   }
   bindDrawerButton(el.btnDrawerShop, "shop");
   bindDrawerButton(el.btnDrawerUnit, "unit");
+  bindDrawerButton(el.btnDrawerMenu, "menu");
   if (el.btnCloseShop) {
     el.btnCloseShop.addEventListener("click", () => {
       ensureAudio();
@@ -2441,6 +2447,13 @@
   }
   if (el.btnCloseUnit) {
     el.btnCloseUnit.addEventListener("click", () => {
+      ensureAudio();
+      closeDrawers();
+      beep(360, 0.03);
+    });
+  }
+  if (el.btnCloseMenu) {
+    el.btnCloseMenu.addEventListener("click", () => {
       ensureAudio();
       closeDrawers();
       beep(360, 0.03);
@@ -2752,7 +2765,7 @@
   closeDrawers();
   syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
   setHint(
-    "Tap Shop ▸ to buy units, then tap grass. Unit ▸ for sell / upgrade / Spirit."
+    "Map fills the screen. Shop ▸ buy · Unit ▸ sell/Spirit · Menu ▸ map/reset."
   );
   preferLandscape();
   fitDisplay();
