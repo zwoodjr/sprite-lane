@@ -12,10 +12,10 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
-  --rail-w: clamp(11rem, 28vw, 13.5rem);
-  --app-pad-x: max(0.35rem, var(--safe-left), var(--safe-right));
-  --app-pad-top: max(0.25rem, var(--safe-top));
-  --app-pad-bottom: max(0.3rem, var(--safe-bottom));
+  --rail-w: 0;
+  --app-pad-x: max(0.2rem, var(--safe-left), var(--safe-right));
+  --app-pad-top: max(0.15rem, var(--safe-top));
+  --app-pad-bottom: max(0.15rem, var(--safe-bottom));
 }
 
 @font-face {
@@ -65,59 +65,38 @@ body {
 
 #app {
   width: 100%;
-  max-width: 1200px;
+  max-width: none;
   /* Prefer dvh, but keep vh fallbacks so Safari never collapses to 0 */
   height: calc(100vh - var(--app-pad-top) - var(--app-pad-bottom));
   height: calc(100dvh - var(--app-pad-top) - var(--app-pad-bottom));
   max-height: calc(100vh - var(--app-pad-top) - var(--app-pad-bottom));
   max-height: calc(100dvh - var(--app-pad-top) - var(--app-pad-bottom));
-  min-height: 20rem;
+  min-height: 12rem;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.25rem;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
   visibility: visible;
   opacity: 1;
 }
 
-.top {
-  min-width: 0;
-}
-
-.brand h1 {
-  margin: 0;
-  font-size: clamp(0.62rem, 2.2vh, 0.95rem);
-  color: var(--gold);
-  letter-spacing: 0.04em;
-  text-shadow: 2px 2px 0 #000;
-}
-
-.tag {
-  display: none;
-}
-
-.rotate-tip {
-  display: none;
-  margin: 0.2rem 0 0;
-  font-size: clamp(0.28rem, 1.2vh, 0.34rem);
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-/* Map (left) + edge tabs + slim rail (right) */
+/* Full-bleed map stage — chrome floats over the board */
 #playfield {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto var(--rail-w);
-  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: stretch;
 }
 
 #stage {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
   justify-content: center;
   align-items: center;
+  width: 100%;
+  height: 100%;
 }
 
 #frame {
@@ -125,10 +104,10 @@ body {
   width: 100%;
   max-width: 100%;
   aspect-ratio: 480 / 264;
-  border: 3px solid var(--bark);
+  border: 2px solid var(--bark);
   box-shadow:
-    0 0 0 2px var(--ember),
-    0 10px 24px rgba(0, 0, 0, 0.45);
+    0 0 0 1px var(--ember),
+    0 8px 20px rgba(0, 0, 0, 0.4);
   background: #0c0a08;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
@@ -170,14 +149,28 @@ body {
 
 .hud-bar {
   align-self: flex-start;
-  max-width: min(100%, 22rem);
-  padding: 0.3rem 0.35rem;
+  max-width: min(100%, 18rem);
+  padding: 0.25rem 0.3rem;
   background: rgba(18, 12, 8, 0.78);
   border: 2px solid rgba(58, 42, 28, 0.95);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: grid;
-  gap: 0.18rem;
+  gap: 0.12rem;
+}
+
+.hud-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.hud-brand {
+  color: var(--gold);
+  font-size: clamp(0.28rem, 1.3vh, 0.36rem);
+  letter-spacing: 0.04em;
+  text-shadow: 1px 1px 0 #000;
 }
 
 .stats {
@@ -575,51 +568,80 @@ button.ghost:not(:disabled):hover {
   color: var(--spirit);
 }
 
-/* Edge arrows — open Shop / Unit overlays */
+/* Edge arrows float on the map — do not steal layout width */
 .edge-tabs {
+  position: absolute;
+  right: max(0.2rem, env(safe-area-inset-right));
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.35rem;
-  z-index: 5;
+  gap: 0.28rem;
+  z-index: 6;
 }
 
 .edge-tab {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 0.15rem;
-  min-width: 2.6rem;
-  min-height: 4.2rem;
-  padding: 0.35rem 0.25rem;
+  gap: 0.12rem;
+  min-width: 2.35rem;
+  min-height: 3.4rem;
+  padding: 0.3rem 0.2rem;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   font-family: inherit;
-  font-size: clamp(0.32rem, 1.5vh, 0.4rem);
+  font-size: clamp(0.28rem, 1.35vh, 0.36rem);
   letter-spacing: 0.06em;
   color: var(--paper);
-  background: #1a120e;
+  background: rgba(26, 18, 14, 0.92);
   border: 2px solid var(--bark);
   cursor: pointer;
   touch-action: manipulation;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .edge-tab .edge-arrow {
   writing-mode: horizontal-tb;
   transform: none;
   color: var(--spirit);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   line-height: 1;
 }
 
 .edge-tab.is-open {
   border-color: var(--spirit);
   color: var(--gold);
-  background: #241810;
+  background: rgba(36, 24, 16, 0.95);
 }
 
 .edge-tab.is-open .edge-arrow {
   color: var(--gold);
+}
+
+.float-ready {
+  position: absolute;
+  left: 50%;
+  bottom: max(0.35rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 6;
+  min-width: min(14rem, 70vw);
+  min-height: 2.4rem;
+  padding: 0.45rem 0.8rem;
+  font-family: inherit;
+  font-size: clamp(0.32rem, 1.5vh, 0.42rem);
+  border: 2px solid #ff8a60;
+  background: var(--ember);
+  color: #1a1008;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.float-ready:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .drawer-backdrop {
@@ -697,6 +719,10 @@ button.ghost:not(:disabled):hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.35rem;
+}
+
+.drawer-actions-stack {
+  grid-template-columns: 1fr;
 }
 
 .drawer-actions .ghost {
@@ -782,41 +808,32 @@ button.ghost:not(:disabled):hover {
   min-height: 2.3rem;
 }
 
-/* Portrait: map on top, edge + rail below */
+/* Portrait: map still fills; edge tabs become a bottom strip */
 @media (orientation: portrait) and (max-width: 900px) {
-  .rotate-tip {
-    display: block;
-  }
-
-  #playfield {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-    gap: 0.35rem;
-  }
-
-  #stage {
-    grid-column: 1 / -1;
-    align-items: center;
-  }
-
   .edge-tabs {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 3.2rem;
+    transform: none;
     flex-direction: row;
-    align-items: stretch;
-    justify-content: stretch;
+    padding: 0 0.35rem;
+    gap: 0.25rem;
   }
 
   .edge-tab {
     writing-mode: horizontal-tb;
     transform: none;
     min-width: 0;
-    min-height: 2.8rem;
+    min-height: 2.5rem;
     flex: 1;
     grid-template-columns: auto auto;
     justify-content: center;
   }
 
-  #rail {
-    max-height: none;
+  .float-ready {
+    bottom: max(0.25rem, env(safe-area-inset-bottom));
+    min-width: min(16rem, 92vw);
   }
 
   .drawer {
@@ -836,22 +853,8 @@ button.ghost:not(:disabled):hover {
   }
 }
 
-@media (orientation: landscape), (min-width: 901px) {
-  .rotate-tip {
-    display: none;
-  }
-}
-
 @media (min-width: 900px) {
-  .tag {
-    display: block;
-    margin: 0.25rem 0 0;
-    font-size: 0.4rem;
-    color: var(--spirit);
-    line-height: 1.5;
-  }
-
   #frame {
-    border-width: 4px;
+    border-width: 3px;
   }
 }
