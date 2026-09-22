@@ -99,11 +99,15 @@
     spiritPoints: document.getElementById("spirit-points"),
     metaBest: document.getElementById("meta-best"),
     metaStore: document.getElementById("meta-store"),
-    tabTowers: document.getElementById("tab-towers"),
-    tabStore: document.getElementById("tab-store"),
-    panelTowers: document.getElementById("panel-towers"),
-    panelStore: document.getElementById("panel-store"),
     newRun: document.getElementById("btn-new-run"),
+    unitSelected: document.getElementById("unit-selected"),
+    drawerShop: document.getElementById("drawer-shop"),
+    drawerUnit: document.getElementById("drawer-unit"),
+    drawerBackdrop: document.getElementById("drawer-backdrop"),
+    btnDrawerShop: document.getElementById("btn-drawer-shop"),
+    btnDrawerUnit: document.getElementById("btn-drawer-unit"),
+    btnCloseShop: document.getElementById("btn-close-shop"),
+    btnCloseUnit: document.getElementById("btn-close-unit"),
   };
 
   // --- Meta progression (local Spirit Points store) ---
@@ -315,39 +319,76 @@
     }
   }
 
-  function showRailPanel(which) {
-    const towers = which === "towers";
-    // Re-query in case the node map went stale after DOM swaps.
-    const panelTowers =
-      el.panelTowers || document.getElementById("panel-towers");
-    const panelStore =
-      el.panelStore || document.getElementById("panel-store");
-    const tabTowers = el.tabTowers || document.getElementById("tab-towers");
-    const tabStore = el.tabStore || document.getElementById("tab-store");
-    el.panelTowers = panelTowers;
-    el.panelStore = panelStore;
-    el.tabTowers = tabTowers;
-    el.tabStore = tabStore;
+  function setDrawerOpen(drawer, open) {
+    if (!drawer) return;
+    drawer.hidden = !open;
+    drawer.setAttribute("aria-hidden", open ? "false" : "true");
+  }
 
-    if (panelTowers) {
-      panelTowers.hidden = !towers;
-      panelTowers.classList.toggle("is-open", towers);
-      panelTowers.setAttribute("aria-hidden", towers ? "false" : "true");
+  function syncEdgeTabs(which) {
+    if (el.btnDrawerShop) {
+      const on = which === "shop";
+      el.btnDrawerShop.classList.toggle("is-open", on);
+      el.btnDrawerShop.setAttribute("aria-expanded", on ? "true" : "false");
+      const arrow = el.btnDrawerShop.querySelector(".edge-arrow");
+      if (arrow) arrow.textContent = on ? "▸" : "◂";
     }
-    if (panelStore) {
-      panelStore.hidden = towers;
-      panelStore.classList.toggle("is-open", !towers);
-      panelStore.setAttribute("aria-hidden", towers ? "true" : "false");
+    if (el.btnDrawerUnit) {
+      const on = which === "unit";
+      el.btnDrawerUnit.classList.toggle("is-open", on);
+      el.btnDrawerUnit.setAttribute("aria-expanded", on ? "true" : "false");
+      const arrow = el.btnDrawerUnit.querySelector(".edge-arrow");
+      if (arrow) arrow.textContent = on ? "▸" : "◂";
     }
-    if (tabTowers) {
-      tabTowers.classList.toggle("active", towers);
-      tabTowers.setAttribute("aria-selected", towers ? "true" : "false");
+  }
+
+  function closeDrawers() {
+    setDrawerOpen(el.drawerShop, false);
+    setDrawerOpen(el.drawerUnit, false);
+    if (el.drawerBackdrop) el.drawerBackdrop.hidden = true;
+    syncEdgeTabs(null);
+  }
+
+  function openDrawer(which) {
+    const shop = which === "shop";
+    const unit = which === "unit";
+    // Toggle off if the same drawer is already open.
+    const shopOpen = el.drawerShop && !el.drawerShop.hidden;
+    const unitOpen = el.drawerUnit && !el.drawerUnit.hidden;
+    if ((shop && shopOpen) || (unit && unitOpen)) {
+      closeDrawers();
+      return;
     }
-    if (tabStore) {
-      tabStore.classList.toggle("active", !towers);
-      tabStore.setAttribute("aria-selected", towers ? "false" : "true");
+    setDrawerOpen(el.drawerShop, shop);
+    setDrawerOpen(el.drawerUnit, unit);
+    if (el.drawerBackdrop) el.drawerBackdrop.hidden = !(shop || unit);
+    syncEdgeTabs(shop ? "shop" : unit ? "unit" : null);
+    if (unit) {
+      renderMetaStore();
+      updateUnitDrawerLabel();
     }
-    if (!towers) renderMetaStore();
+    if (shop) renderShop();
+  }
+
+  function updateUnitDrawerLabel() {
+    if (!el.unitSelected) return;
+    const u = state.selectedUnit;
+    if (!u) {
+      el.unitSelected.textContent =
+        "Tap a placed unit on the map to select it. Spirit upgrades below.";
+      return;
+    }
+    const def = UNIT_MAP[u.type];
+    el.unitSelected.textContent = def
+      ? `Selected ${def.name}. Sell or upgrade below.`
+      : "Unit selected.";
+  }
+
+  // Back-compat alias used by older boot paths / exports.
+  function showRailPanel(which) {
+    if (which === "store" || which === "unit") openDrawer("unit");
+    else if (which === "towers" || which === "shop") openDrawer("shop");
+    else closeDrawers();
   }
 
   function settleRun(won) {
@@ -365,10 +406,10 @@
     el.ready.disabled = true;
     setHint(
       won
-        ? `Victory! +${gained} Spirit. Spend in Spirit tab, or tap Reset.`
-        : `Lane broke after wave ${state.wave}. +${gained} Spirit — Spirit tab to spend, Shop to rebuild, or Reset.`
+        ? `Victory! +${gained} Spirit. Open Unit ▸ for Spirit upgrades, or Reset.`
+        : `Lane broke after wave ${state.wave}. +${gained} Spirit — Unit ▸ to spend, or Reset.`
     );
-    showRailPanel("store");
+    openDrawer("unit");
   }
 
   const SS = window.SpiritSprites || null;
@@ -1383,6 +1424,7 @@
     if (el.newRun) el.newRun.hidden = false;
     if (el.mapSelect) el.mapSelect.disabled = state.mode !== "build";
     if (el.mapRandom) el.mapRandom.disabled = state.mode !== "build";
+    updateUnitDrawerLabel();
   }
 
   function setHint(text) {
@@ -1463,11 +1505,13 @@
         preferLandscape();
         state.selectedShop = id;
         state.selectedUnit = null;
-        setHint(shopHint(id));
+        setHint(shopHint(id) + " Tap grass to place.");
         renderShop();
         renderSpritePreview(id);
         updateHud();
         beep(520, 0.04);
+        // Close overlay so the map is free to tap on phones.
+        closeDrawers();
       });
       el.shop.appendChild(btn);
     });
@@ -1485,9 +1529,10 @@
       setHint(
         state.mode === "wave"
           ? `Selected ${def.name}.`
-          : `Selected ${def.name}. Upgrade or sell during build phase.`
+          : `Selected ${def.name}. Open Unit ▸ to sell or upgrade.`
       );
       updateHud();
+      openDrawer("unit");
       return;
     }
     if (state.map.tiles[ty]?.[tx] !== 0) {
@@ -1496,7 +1541,8 @@
     }
     const id = state.selectedShop;
     if (!id) {
-      setHint("Pick a unit from the Shop tab first, then tap grass.");
+      setHint("Open Shop ▸, pick a unit, then tap grass.");
+      openDrawer("shop");
       return;
     }
     const def = UNIT_MAP[id];
@@ -2294,11 +2340,11 @@
       recomputePath();
     }
     if (el.newRun) el.newRun.hidden = false;
-    showRailPanel("towers");
+    closeDrawers();
     renderShop();
     updateHud();
     setHint(
-      `Reset — ${state.gold}g / ${state.lives} lives. Shop tab: buy units, tap grass to place.`
+      `Reset — ${state.gold}g / ${state.lives} lives. Tap Shop ▸ to buy units.`
     );
     beep(520, 0.05);
   }
@@ -2314,7 +2360,7 @@
       ctx.fillText(msg, (W - m.width) / 2, H / 2);
       ctx.fillStyle = "#e6dcc8";
       ctx.font = "6px Press Start 2P, monospace";
-      const sub = "Reset · Spirit tab for upgrades";
+      const sub = "Reset · Unit ▸ for Spirit";
       const m2 = ctx.measureText(sub);
       ctx.fillText(sub, (W - m2.width) / 2, H / 2 + 16);
     } else if (state.mode === "build") {
@@ -2374,34 +2420,37 @@
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
 
-  function bindRailTab(btn, which, hint) {
+  function bindDrawerButton(btn, which) {
     if (!btn) return;
-    const go = (e) => {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       ensureAudio();
-      showRailPanel(which);
-      setHint(hint);
-      beep(which === "towers" ? 400 : 440, 0.03);
-    };
-    btn.addEventListener("click", go);
-    btn.addEventListener("pointerup", (e) => {
-      // iOS sometimes drops click after scroll; pointerup is reliable for tabs.
-      if (e.pointerType === "touch" || e.pointerType === "pen") go(e);
+      openDrawer(which);
+      beep(which === "shop" ? 400 : 440, 0.03);
     });
   }
-  bindRailTab(
-    el.tabTowers || document.getElementById("tab-towers"),
-    "towers",
-    "Shop: select a unit, then tap grass on the map to place it."
-  );
-  bindRailTab(
-    el.tabStore || document.getElementById("tab-store"),
-    "store",
-    "Spirit: permanent upgrades. Keep playing waves to earn more."
-  );
+  bindDrawerButton(el.btnDrawerShop, "shop");
+  bindDrawerButton(el.btnDrawerUnit, "unit");
+  if (el.btnCloseShop) {
+    el.btnCloseShop.addEventListener("click", () => {
+      ensureAudio();
+      closeDrawers();
+      beep(360, 0.03);
+    });
+  }
+  if (el.btnCloseUnit) {
+    el.btnCloseUnit.addEventListener("click", () => {
+      ensureAudio();
+      closeDrawers();
+      beep(360, 0.03);
+    });
+  }
+  if (el.drawerBackdrop) {
+    el.drawerBackdrop.addEventListener("click", () => {
+      closeDrawers();
+    });
+  }
   if (el.newRun) {
     el.newRun.addEventListener("click", () => {
       ensureAudio();
@@ -2700,10 +2749,10 @@
   renderShop();
   renderMetaStore();
   updateHud();
-  showRailPanel("towers");
+  closeDrawers();
   syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
   setHint(
-    "Shop tab: buy units, tap grass to place. Spirit tab: permanent upgrades. Reset anytime."
+    "Tap Shop ▸ to buy units, then tap grass. Unit ▸ for sell / upgrade / Spirit."
   );
   preferLandscape();
   fitDisplay();
@@ -2761,8 +2810,9 @@
     },
     buyMeta: buyMetaUpgrade,
     newRun: startNewRun,
-    showStore: () => showRailPanel("store"),
-    showShop: () => showRailPanel("towers"),
+    showStore: () => openDrawer("unit"),
+    showShop: () => openDrawer("shop"),
+    closeDrawers,
   };
   // Drop any boot splash immediately so Safari never sticks on "Loading…"
   document.querySelectorAll("#boot-splash").forEach((node) => {
