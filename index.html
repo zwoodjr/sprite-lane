@@ -77,6 +77,17 @@
         </div>
       </div>
 
+      <div id="edge-tabs" class="edge-tabs" aria-label="Open panels">
+        <button type="button" id="btn-drawer-shop" class="edge-tab" aria-expanded="false" aria-controls="drawer-shop">
+          <span class="edge-arrow" aria-hidden="true">◂</span>
+          <span class="edge-label">Shop</span>
+        </button>
+        <button type="button" id="btn-drawer-unit" class="edge-tab" aria-expanded="false" aria-controls="drawer-unit">
+          <span class="edge-arrow" aria-hidden="true">◂</span>
+          <span class="edge-label">Unit</span>
+        </button>
+      </div>
+
       <aside id="rail" class="rail" aria-label="Build rail">
         <div class="meta-bar">
           <span id="spirit-points" class="spirit-points">Spirit 0</span>
@@ -89,33 +100,45 @@
             <button type="button" id="btn-map-random" class="ghost">Random</button>
           </div>
         </div>
-        <div class="rail-tabs" role="tablist" aria-label="Rail panels">
-          <button type="button" id="tab-towers" class="rail-tab active" role="tab" aria-selected="true">Shop</button>
-          <button type="button" id="tab-store" class="rail-tab" role="tab" aria-selected="false">Spirit</button>
-        </div>
-        <div id="panel-towers" class="rail-panel is-open">
-          <div class="rail-label">Shop · pick one, tap grass to place</div>
-          <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
-          <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
-        </div>
-        <div id="panel-store" class="rail-panel" hidden aria-hidden="true">
-          <div class="rail-label">Spirit upgrades</div>
-          <p class="store-blurb">Permanent boosts with Spirit Points. Saved on this device.</p>
-          <div id="meta-store" class="meta-store" role="list"></div>
-        </div>
         <div class="actions">
           <button type="button" id="btn-ready" class="primary">Ready Wave</button>
-          <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
-          <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
           <button type="button" id="btn-new-run" class="ghost">Reset</button>
           <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
         </div>
         <p id="offline-tip" class="offline-tip">
-          Airplane mode: tap Save Offline while online. iPhone needs Home Screen / Bookmark — Files alone often will not open in Safari.
+          Tap ◂ Shop to buy units. Tap ◂ Unit to sell / upgrade / Spirit.
         </p>
       </aside>
     </div>
   </div>
+
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+
+  <aside id="drawer-shop" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-shop-title">
+    <div class="drawer-head">
+      <h2 id="drawer-shop-title">Shop</h2>
+      <button type="button" id="btn-close-shop" class="drawer-close" aria-label="Close shop">▸</button>
+    </div>
+    <p class="drawer-blurb">Pick a unit, then tap grass on the map to place it.</p>
+    <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
+    <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+  </aside>
+
+  <aside id="drawer-unit" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-unit-title">
+    <div class="drawer-head">
+      <h2 id="drawer-unit-title">Unit</h2>
+      <button type="button" id="btn-close-unit" class="drawer-close" aria-label="Close unit panel">▸</button>
+    </div>
+    <p id="unit-selected" class="drawer-blurb">Tap a placed unit on the map to select it.</p>
+    <div class="drawer-actions">
+      <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
+      <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+    </div>
+    <div class="rail-label">Spirit upgrades</div>
+    <p class="store-blurb">Permanent boosts with Spirit Points. Saved on this device.</p>
+    <div id="meta-store" class="meta-store" role="list"></div>
+  </aside>
+
   <div id="offline-sheet" class="offline-sheet" hidden>
     <div class="offline-sheet-card" role="dialog" aria-labelledby="offline-sheet-title">
       <h2 id="offline-sheet-title">Play offline on iPhone</h2>
