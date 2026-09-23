@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
+  />
+  <meta name="theme-color" content="#16110e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Spirit Lane — Pixel Line Defense</title>
+  <!-- Never flash white if CSS is slow/missing; keep UI visible even if layout CSS fails -->
+  <style>
+    html, body {
+      margin: 0;
+      background: #120e0b !important;
+      color: #e6dcc8;
+      min-height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #120e0b;
+      color: #e8c56a;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      transition: opacity 0.25s ease;
+    }
+    #boot-splash.hide { opacity: 0; pointer-events: none; }
+    #app {
+      visibility: visible !important;
+      opacity: 1 !important;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+  </style>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+</head>
+<body>
+  <div id="boot-splash" role="status">Loading Spirit Lane…</div>
+  <p id="boot-error" hidden style="padding:1rem;font-family:monospace;font-size:12px;color:#e85d3c;"></p>
+
+  <div id="app">
+    <div id="playfield">
+      <div id="stage">
+        <div id="frame">
+          <canvas id="game" width="480" height="264" aria-label="Spirit Lane game"></canvas>
+          <div id="overlay" class="overlay" aria-live="polite">
+            <div class="hud-bar overlay-chrome">
+              <div class="hud-top">
+                <span class="hud-brand">Spirit Lane</span>
+                <span id="spirit-points" class="spirit-points">Spirit 0</span>
+              </div>
+              <div class="stats">
+                <span id="gold" class="stat gold">Gold 150</span>
+                <span id="lives" class="stat lives">Lives 20</span>
+                <span id="wave" class="stat wave">Wave 0</span>
+                <span id="income" class="stat income">Income +10</span>
+              </div>
+              <p id="hint" class="hint">Open Shop to buy · tap grass to place</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="edge-tabs" class="edge-tabs overlay-chrome" aria-label="Open panels">
+          <button type="button" id="btn-drawer-shop" class="edge-tab" aria-expanded="false" aria-controls="drawer-shop">
+            <span class="edge-glyph" aria-hidden="true">◆</span>
+            <span class="edge-label">Shop</span>
+            <span class="edge-arrow" aria-hidden="true">◂</span>
+          </button>
+          <button type="button" id="btn-drawer-unit" class="edge-tab" aria-expanded="false" aria-controls="drawer-unit">
+            <span class="edge-glyph" aria-hidden="true">◇</span>
+            <span class="edge-label">Unit</span>
+            <span class="edge-arrow" aria-hidden="true">◂</span>
+          </button>
+          <button type="button" id="btn-drawer-menu" class="edge-tab" aria-expanded="false" aria-controls="drawer-menu">
+            <span class="edge-glyph" aria-hidden="true">☰</span>
+            <span class="edge-label">Menu</span>
+            <span class="edge-arrow" aria-hidden="true">◂</span>
+          </button>
+        </div>
+
+        <button type="button" id="btn-ready" class="float-ready overlay-chrome primary">Ready Wave</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+
+  <aside id="drawer-shop" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-shop-title">
+    <div class="drawer-head">
+      <h2 id="drawer-shop-title">Shop</h2>
+      <button type="button" id="btn-close-shop" class="drawer-close" aria-label="Close shop">▸</button>
+    </div>
+    <p class="drawer-blurb">Pick a unit, then tap grass on the map to place it.</p>
+    <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
+    <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+  </aside>
+
+  <aside id="drawer-unit" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-unit-title">
+    <div class="drawer-head">
+      <h2 id="drawer-unit-title">Unit</h2>
+      <button type="button" id="btn-close-unit" class="drawer-close" aria-label="Close unit panel">▸</button>
+    </div>
+    <p id="unit-selected" class="drawer-blurb">Tap a placed unit on the map to select it.</p>
+    <div class="drawer-actions">
+      <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
+      <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
+    </div>
+    <div class="rail-label">Spirit upgrades</div>
+    <p class="store-blurb">Permanent boosts with Spirit Points. Saved on this device.</p>
+    <div id="meta-store" class="meta-store" role="list"></div>
+  </aside>
+
+  <aside id="drawer-menu" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-menu-title">
+    <div class="drawer-head">
+      <h2 id="drawer-menu-title">Menu</h2>
+      <button type="button" id="btn-close-menu" class="drawer-close" aria-label="Close menu">▸</button>
+    </div>
+    <div class="meta-bar">
+      <span id="meta-best" class="meta-best">Best W0</span>
+    </div>
+    <div class="map-picker">
+      <div id="map-label" class="rail-label">Map · Lane Works</div>
+      <div class="map-controls">
+        <select id="map-select" aria-label="Choose map"></select>
+        <button type="button" id="btn-map-random" class="ghost">Random</button>
+      </div>
+    </div>
+    <div class="drawer-actions drawer-actions-stack">
+      <button type="button" id="btn-new-run" class="ghost">Reset</button>
+      <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
+    </div>
+    <p id="offline-tip" class="offline-tip">
+      Airplane mode: Save Offline while online, then open that copy. iPhone: Add to Home Screen.
+    </p>
+  </aside>
+
+  <div id="offline-sheet" class="offline-sheet" hidden>
+    <div class="offline-sheet-card" role="dialog" aria-labelledby="offline-sheet-title">
+      <h2 id="offline-sheet-title">Play offline on iPhone</h2>
+      <p>
+        Safari usually will not open a downloaded <code>.html</code> from Files.
+        Use one of these instead:
+      </p>
+      <ol class="offline-steps">
+        <li><strong>Best:</strong> tap <em>Open Install Tab</em>, then Share → <em>Add to Home Screen</em> (or Add Bookmark). Open that icon with Wi‑Fi off.</li>
+        <li>Or <em>Share File</em> → Save to Files, then hope Share → Open in Safari works on your iOS version.</li>
+      </ol>
+      <div class="offline-sheet-actions">
+        <button type="button" id="btn-offline-install" class="primary">Open Install Tab</button>
+        <button type="button" id="btn-offline-share" class="ghost">Share File…</button>
+        <button type="button" id="btn-offline-dismiss" class="ghost">Close</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("error", function (e) {
+      document.querySelectorAll("#boot-splash").forEach(function (splash) {
+        splash.classList.add("hide");
+      });
+      var el = document.getElementById("boot-error");
+      if (!el) return;
+      el.hidden = false;
+      el.textContent = "Load error: " + (e.message || "unknown");
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      document.querySelectorAll("#boot-splash").forEach(function (splash) {
+        splash.classList.add("hide");
+      });
+      var el = document.getElementById("boot-error");
+      if (!el) return;
+      el.hidden = false;
+      var msg = (e && e.reason && (e.reason.message || e.reason)) || "promise failed";
+      el.textContent = "Load error: " + msg;
+    });
+  </script>
+  <script src="sprites.js"></script>
+  <script src="game.js"></script>
+  <script>
+    (function () {
+      function hideSplash() {
+        document.querySelectorAll("#boot-splash").forEach(function (splash) {
+          splash.classList.add("hide");
+          setTimeout(function () {
+            if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+          }, 400);
+        });
+      }
+      if (window.SpiritLane) hideSplash();
+      else setTimeout(hideSplash, 0);
+      setTimeout(function () {
+        var el = document.getElementById("boot-error");
+        if (!window.SpiritLane && el) {
+          el.hidden = false;
+          if (!el.textContent) {
+            el.textContent = "Game failed to start. Hard-refresh and try again.";
+          }
+          hideSplash();
+        }
+      }, 2500);
+
+      // Cache assets when served over http(s) so a revisit can work offline.
+      if (
+        location.protocol !== "file:" &&
+        "serviceWorker" in navigator &&
+        !document.documentElement.hasAttribute("data-offline-bundle")
+      ) {
+        navigator.serviceWorker.register("./sw.js").catch(function () {});
+      }
+    })();
+  </script>
+</body>
+</html>
