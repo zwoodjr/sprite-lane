@@ -225,7 +225,7 @@
     {
       id: "unitDiscount",
       name: "Unit Discount",
-      desc: "Shop & upgrades 4% cheaper / lvl",
+      desc: "Units & tower upgrades 4% cheaper / lvl",
       max: 5,
       costs: [15, 24, 36, 54, 80],
       perLevel: 0.04,
@@ -350,12 +350,22 @@
     return Math.random() < Math.min(0.5, metaBonus("critChance"));
   }
 
-  function spiritForRun(wave, won) {
-    let pts = 0;
-    for (let w = 1; w <= wave; w++) pts += 2 + Math.floor(w / 2);
-    if (won) pts += 35;
-    else if (wave > 0) pts += 4;
-    return pts;
+  function spiritForWave(wave, leaks) {
+    const base = 10 + Math.max(1, wave | 0) * 2;
+    const mult = Math.max(0, 1 - 0.1 * Math.max(0, leaks | 0));
+    return Math.max(0, Math.floor(base * mult));
+  }
+
+  function awardWaveSpirit(wave, leaks) {
+    const gained = spiritForWave(wave, leaks);
+    if (gained > 0) {
+      meta.points += gained;
+      meta.lifetime += gained;
+      saveMeta();
+      updateMetaHud();
+      renderMetaStore();
+    }
+    return gained;
   }
 
   function updateMetaHud() {
@@ -390,7 +400,7 @@
     const cost = nextMetaCost(id);
     if (cost == null) return;
     if (meta.points < cost) {
-      setHint("Need more Spirit — clear waves to earn SP.");
+      setHint("Need more Spirit — clear waves cleanly to earn SP.");
       beep(120, 0.08, "sawtooth");
       return;
     }
@@ -402,7 +412,7 @@
     updateHud();
     beep(740, 0.05);
     const def = META_BY_ID[id];
-    setHint(`Bought ${def.name} Lv ${metaLevel(id)}. Applies on next Reset (gold/lives/income now if idle).`);
+    setHint(`Shop boosted: ${def.name} Lv ${metaLevel(id)}.`);
     // Apply soft bonuses that don't require a new run when still in early build.
     if (state.mode === "build" && state.wave === 0 && state.units.length === 0) {
       state.gold = baseStartingGold();
@@ -490,10 +500,12 @@
     setBackdropOpen(shop || unit || menu);
     syncEdgeTabs(shop ? "shop" : unit ? "unit" : menu ? "menu" : null);
     if (unit) {
-      renderMetaStore();
       updateUnitDrawerLabel();
     }
-    if (shop) renderShop();
+    if (shop) {
+      renderShop();
+      renderMetaStore();
+    }
   }
 
   function updateUnitDrawerLabel() {
@@ -501,18 +513,27 @@
     const u = state.selectedUnit;
     if (!u) {
       el.unitSelected.textContent =
-        "Tap a placed unit on the map to select it. Spirit upgrades below.";
+        "Tap a placed unit on the map. Sell or upgrade with gold.";
       return;
     }
     const def = UNIT_MAP[u.type];
-    el.unitSelected.textContent = def
-      ? `Selected ${def.name}. Sell or upgrade below.`
-      : "Unit selected.";
+    if (!def) {
+      el.unitSelected.textContent = "Unit selected.";
+      return;
+    }
+    if (def.next) {
+      const next = UNIT_MAP[def.next];
+      const cost = next ? unitCost(next) : 0;
+      el.unitSelected.textContent = `Selected ${def.name}. Upgrade → ${next.name} for ${cost}g, or sell.`;
+    } else {
+      el.unitSelected.textContent = `Selected ${def.name} (maxed). Sell for gold refund.`;
+    }
   }
 
   // Back-compat alias used by older boot paths / exports.
   function showRailPanel(which) {
-    if (which === "store" || which === "unit") openDrawer("unit");
+    if (which === "store") openDrawer("shop");
+    else if (which === "unit") openDrawer("unit");
     else if (which === "towers" || which === "shop") openDrawer("shop");
     else if (which === "menu") openDrawer("menu");
     else closeDrawers();
@@ -521,9 +542,6 @@
   function settleRun(won) {
     if (state.runSettled) return;
     state.runSettled = true;
-    const gained = spiritForRun(state.wave, won);
-    meta.points += gained;
-    meta.lifetime += gained;
     meta.runs += 1;
     meta.bestWave = Math.max(meta.bestWave, state.wave);
     saveMeta();
@@ -533,10 +551,10 @@
     el.ready.disabled = true;
     setHint(
       won
-        ? `Victory! +${gained} Spirit. Open Unit ▸ for Spirit upgrades, or Reset.`
-        : `Lane broke after wave ${state.wave}. +${gained} Spirit — Unit ▸ to spend, or Reset.`
+        ? `Victory! Spirit already banked each wave. Open Shop for Spirit boosts, or Reset.`
+        : `Lane broke after wave ${state.wave}. Open Shop to spend Spirit, or Reset.`
     );
-    openDrawer("unit");
+    openDrawer("shop");
   }
 
   const SS = window.SpiritSprites || null;
@@ -1521,6 +1539,7 @@
     tick: 0,
     spawnQueue: [],
     spawnTimer: 0,
+    waveLeaks: 0,
     runSettled: false,
   };
 
@@ -1845,6 +1864,7 @@
     state.wave += 1;
     state.mode = "wave";
     state.selectedUnit = null;
+    state.waveLeaks = 0;
     state.spawnQueue = waveEnemyPlan(state.wave);
     state.spawnTimer = 0;
     state.enemies = [];
@@ -1852,7 +1872,7 @@
     state.shadows = [];
     beep(400, 0.08);
     beep(500, 0.08);
-    setHint("Hold the maze! Spend gold mid-wave to place more towers.");
+    setHint("Hold the maze! Gold places/upgrades units. Spirit banks after the wave.");
     updateHud();
   }
 
@@ -1881,9 +1901,18 @@
     state.shadows = [];
     state.gold += state.income;
     state.income += 3;
+    const leaks = state.waveLeaks | 0;
+    const gained = awardWaveSpirit(state.wave, leaks);
+    const pct = Math.max(0, 100 - leaks * 10);
     beep(523, 0.07);
     beep(659, 0.08);
-    setHint(`Wave cleared! +${state.income - 3} income banked. Fortify the line.`);
+    if (leaks === 0) {
+      setHint(`Clean clear! +${gained} Spirit (100%). +${state.income - 3} income.`);
+    } else {
+      setHint(
+        `Wave cleared · ${leaks} leak${leaks === 1 ? "" : "s"} → ${pct}% · +${gained} Spirit. +${state.income - 3} income.`
+      );
+    }
     if (state.wave >= 15) {
       state.mode = "win";
       settleRun(true);
@@ -2114,6 +2143,7 @@
       if (en.pathIndex >= state.map.path.length - 1) {
         const loss = en.boss ? 5 : en.elite ? 2 : 1;
         state.lives -= loss;
+        state.waveLeaks = (state.waveLeaks | 0) + 1;
         state.enemies.splice(i, 1);
         state.fx.push({ x: en.x, y: en.y, life: 16, text: `-${loss}`, color: "#d64545" });
         beep(90, 0.12, "sawtooth", 0.05);
@@ -2533,6 +2563,7 @@
     state.fx = [];
     state.spawnQueue = [];
     state.spawnTimer = 0;
+    state.waveLeaks = 0;
     state.runSettled = false;
     state.tick = 0;
     if (!keepMap) {
@@ -3069,7 +3100,7 @@
     },
     buyMeta: buyMetaUpgrade,
     newRun: startNewRun,
-    showStore: () => openDrawer("unit"),
+    showStore: () => openDrawer("shop"),
     showShop: () => openDrawer("shop"),
     closeDrawers,
   };
