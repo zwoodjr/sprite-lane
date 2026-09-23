@@ -323,8 +323,39 @@
 
   function setDrawerOpen(drawer, open) {
     if (!drawer) return;
-    drawer.hidden = !open;
-    drawer.setAttribute("aria-hidden", open ? "false" : "true");
+    if (open) {
+      drawer.hidden = false;
+      drawer.setAttribute("aria-hidden", "false");
+      // Force reflow so the slide-in transition plays.
+      void drawer.offsetWidth;
+      drawer.classList.add("is-open");
+    } else {
+      drawer.classList.remove("is-open");
+      drawer.setAttribute("aria-hidden", "true");
+      const finish = () => {
+        if (!drawer.classList.contains("is-open")) drawer.hidden = true;
+      };
+      drawer.addEventListener("transitionend", finish, { once: true });
+      setTimeout(finish, 280);
+    }
+  }
+
+  function setBackdropOpen(open) {
+    if (!el.drawerBackdrop) return;
+    if (open) {
+      el.drawerBackdrop.hidden = false;
+      void el.drawerBackdrop.offsetWidth;
+      el.drawerBackdrop.classList.add("is-open");
+    } else {
+      el.drawerBackdrop.classList.remove("is-open");
+      const finish = () => {
+        if (!el.drawerBackdrop.classList.contains("is-open")) {
+          el.drawerBackdrop.hidden = true;
+        }
+      };
+      el.drawerBackdrop.addEventListener("transitionend", finish, { once: true });
+      setTimeout(finish, 240);
+    }
   }
 
   function syncEdgeTabs(which) {
@@ -347,7 +378,7 @@
     setDrawerOpen(el.drawerShop, false);
     setDrawerOpen(el.drawerUnit, false);
     setDrawerOpen(el.drawerMenu, false);
-    if (el.drawerBackdrop) el.drawerBackdrop.hidden = true;
+    setBackdropOpen(false);
     syncEdgeTabs(null);
   }
 
@@ -355,9 +386,9 @@
     const shop = which === "shop";
     const unit = which === "unit";
     const menu = which === "menu";
-    const shopOpen = el.drawerShop && !el.drawerShop.hidden;
-    const unitOpen = el.drawerUnit && !el.drawerUnit.hidden;
-    const menuOpen = el.drawerMenu && !el.drawerMenu.hidden;
+    const shopOpen = el.drawerShop && !el.drawerShop.hidden && el.drawerShop.classList.contains("is-open");
+    const unitOpen = el.drawerUnit && !el.drawerUnit.hidden && el.drawerUnit.classList.contains("is-open");
+    const menuOpen = el.drawerMenu && !el.drawerMenu.hidden && el.drawerMenu.classList.contains("is-open");
     if ((shop && shopOpen) || (unit && unitOpen) || (menu && menuOpen)) {
       closeDrawers();
       return;
@@ -365,7 +396,7 @@
     setDrawerOpen(el.drawerShop, shop);
     setDrawerOpen(el.drawerUnit, unit);
     setDrawerOpen(el.drawerMenu, menu);
-    if (el.drawerBackdrop) el.drawerBackdrop.hidden = !(shop || unit || menu);
+    setBackdropOpen(shop || unit || menu);
     syncEdgeTabs(shop ? "shop" : unit ? "unit" : menu ? "menu" : null);
     if (unit) {
       renderMetaStore();
@@ -510,14 +541,22 @@
       animated: false,
       color: "#5a4a3a",
       sprite: bake([
-        "0aaaaaa0",
-        "a777777a",
-        "a7aa7a7a",
-        "a777777a",
-        "a7a7aa7a",
-        "a777777a",
-        "a7aa7a7a",
-        "0aaaaaa0",
+        "000aaaaaa0000000",
+        "00a777777a000000",
+        "0a7aa7a7a7a00000",
+        "0a77777777a00000",
+        "0a7a7aa7a7a00000",
+        "0a77777777a00000",
+        "0a7aa7a7a7a00000",
+        "0a77777777a00000",
+        "00a7aaaa7a000000",
+        "000aaaaaa0000000",
+        "000a3333a0000000",
+        "000a3003a0000000",
+        "000a3333a0000000",
+        "000aaaaaa0000000",
+        "00aa0000aa000000",
+        "0000000000000000",
       ]),
     },
     // —— My Hero ——
@@ -1066,8 +1105,8 @@
       name: "Lane Works",
       series: "Lane Works",
       blurb: "Crate yard — stacked boxes to learn the maze",
-      grassA: "#1c2818",
-      grassB: "#182214",
+      grassA: "#2c4030",
+      grassB: "#243628",
       rock: "#7a5a3a",
       rockDeep: "#2a2018",
       rockHi: "#c0a070",
@@ -1504,7 +1543,40 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "card" + (state.selectedShop === id ? " selected" : "");
-      btn.innerHTML = `<span class="name">${u.name}</span><span class="meta">${u.series}</span><span class="meta">${u.blurb}</span><span class="cost">${unitCost(u)}g</span>`;
+      btn.dataset.series = u.series || "";
+      const art = document.createElement("canvas");
+      art.className = "art";
+      art.width = 32;
+      art.height = 32;
+      art.setAttribute("aria-hidden", "true");
+      const actx = art.getContext("2d");
+      actx.imageSmoothingEnabled = false;
+      actx.fillStyle = "#0c0a08";
+      actx.fillRect(0, 0, 32, 32);
+      const frame =
+        (SS && SS.units && SS.units[id] && SS.units[id].idle && SS.units[id].idle[0]) ||
+        u.sprite;
+      if (frame) {
+        const pad = 4;
+        actx.drawImage(frame, pad, pad, 32 - pad * 2, 32 - pad * 2);
+      }
+      btn.appendChild(art);
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = u.name;
+      btn.appendChild(name);
+      const series = document.createElement("span");
+      series.className = "meta";
+      series.textContent = u.series;
+      btn.appendChild(series);
+      const blurb = document.createElement("span");
+      blurb.className = "meta";
+      blurb.textContent = u.blurb;
+      btn.appendChild(blurb);
+      const cost = document.createElement("span");
+      cost.className = "cost";
+      cost.textContent = `${unitCost(u)}g`;
+      btn.appendChild(cost);
       btn.addEventListener("click", () => {
         ensureAudio();
         preferLandscape();
@@ -2095,14 +2167,19 @@
             ctx.fillStyle = theme.rockDeep;
             ctx.fillRect(px + 7 * PX, py + 18 * PX, 10 * PX, 3 * PX);
           } else if (style === "crates") {
+            // Stacked crate with plank lines + strap
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 3 * PX, py + 5 * PX, 18 * PX, 16 * PX);
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 4 * PX, py + 6 * PX, 16 * PX, 14 * PX);
             ctx.fillStyle = theme.rockHi;
             ctx.fillRect(px + 5 * PX, py + 7 * PX, 14 * PX, 3 * PX);
+            ctx.fillRect(px + 5 * PX, py + 12 * PX, 14 * PX, 2 * PX);
             ctx.fillStyle = theme.accent;
-            ctx.fillRect(px + 10 * PX, py + 12 * PX, 4 * PX, 4 * PX);
+            ctx.fillRect(px + 11 * PX, py + 8 * PX, 2 * PX, 10 * PX);
             ctx.fillStyle = theme.rockDeep;
             ctx.fillRect(px + 4 * PX, py + 18 * PX, 16 * PX, 2 * PX);
+            ctx.fillRect(px + 7 * PX, py + 4 * PX, 10 * PX, 2 * PX);
           } else {
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
@@ -2110,19 +2187,9 @@
             ctx.fillRect(px + 5 * PX, py + 6 * PX, 10 * PX, 3 * PX);
           }
         } else if (t === 4) {
-          ctx.fillStyle = "#5a2018";
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#e85d3c";
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-          ctx.fillStyle = "#ff8a60";
-          ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
+          drawPortalTile(px, py, "spawn");
         } else if (t === 5) {
-          ctx.fillStyle = "#143830";
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#3db8a0";
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-          ctx.fillStyle = "#7ae0c8";
-          ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
+          drawPortalTile(px, py, "exit");
         } else {
           const parity = (x + y) & 1;
           ctx.fillStyle = parity ? theme.grassA : theme.grassB;
@@ -2142,23 +2209,57 @@
             ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
             ctx.globalAlpha = 1;
           }
-          if (
-            (state.mode === "build" ||
-              (state.mode === "wave" && state.selectedShop)) &&
-            pathTiles.has(`${x},${y}`)
-          ) {
-            ctx.fillStyle = "rgba(232,197,106,0.28)";
+          if (pathTiles.has(`${x},${y}`)) {
+            // Always show a soft lane trail so the maze reads at a glance.
+            ctx.fillStyle = "rgba(200, 170, 110, 0.16)";
             ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-            ctx.fillStyle = "rgba(232,197,106,0.45)";
-            ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
+            ctx.fillStyle = "rgba(232, 197, 106, 0.22)";
+            ctx.fillRect(px + 10 * PX, py + 10 * PX, 4 * PX, 4 * PX);
+            if (
+              state.mode === "build" ||
+              (state.mode === "wave" && state.selectedShop)
+            ) {
+              ctx.fillStyle = "rgba(232,197,106,0.22)";
+              ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+              ctx.fillStyle = "rgba(232,197,106,0.5)";
+              ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
+            }
           }
         }
       }
     }
   }
 
-  const UNIT_DRAW = Math.round(12 * PX);
-  const UNIT_DRAW_ANIM = Math.round(16 * PX);
+  function drawPortalTile(px, py, kind) {
+    const pulse = 0.55 + 0.45 * Math.sin(state.tick * 0.12);
+    const isSpawn = kind === "spawn";
+    const deep = isSpawn ? "#2a100c" : "#0c221c";
+    const mid = isSpawn ? "#e85d3c" : "#3db8a0";
+    const hi = isSpawn ? "#ffb080" : "#9af0d8";
+    const rim = isSpawn ? "#7a2818" : "#184838";
+    ctx.fillStyle = deep;
+    ctx.fillRect(px, py, TILE, TILE);
+    ctx.fillStyle = rim;
+    ctx.fillRect(px + 2 * PX, py + 2 * PX, 20 * PX, 20 * PX);
+    ctx.fillStyle = mid;
+    ctx.globalAlpha = 0.55 + pulse * 0.35;
+    ctx.fillRect(px + 5 * PX, py + 5 * PX, 14 * PX, 14 * PX);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = hi;
+    ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
+    // Arch posts
+    ctx.fillStyle = rim;
+    ctx.fillRect(px + 3 * PX, py + 3 * PX, 3 * PX, 18 * PX);
+    ctx.fillRect(px + 18 * PX, py + 3 * PX, 3 * PX, 18 * PX);
+    ctx.fillRect(px + 3 * PX, py + 3 * PX, 18 * PX, 3 * PX);
+    ctx.fillStyle = hi;
+    ctx.globalAlpha = 0.35 + pulse * 0.4;
+    ctx.fillRect(px + 6 * PX, py + 1 * PX, 12 * PX, 2 * PX);
+    ctx.globalAlpha = 1;
+  }
+
+  const UNIT_DRAW = Math.round(14 * PX);
+  const UNIT_DRAW_ANIM = Math.round(18 * PX);
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2166,13 +2267,17 @@
       const c = unitCenter(u);
       if (state.selectedUnit === u) {
         ctx.beginPath();
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = "#e8c56a";
-        ctx.strokeRect(u.tx * TILE + 0.5, u.ty * TILE + 0.5, TILE - 1, TILE - 1);
+        ctx.strokeRect(u.tx * TILE + 1, u.ty * TILE + 1, TILE - 2, TILE - 2);
+        ctx.strokeStyle = "rgba(61,184,160,0.55)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(u.tx * TILE + 3, u.ty * TILE + 3, TILE - 6, TILE - 6);
         if (def.range > 0) {
+          const pulse = 0.35 + 0.15 * Math.sin(state.tick * 0.15);
           ctx.beginPath();
           ctx.arc(c.x, c.y, unitRange(def), 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(61,184,160,0.4)";
+          ctx.strokeStyle = `rgba(61,184,160,${pulse})`;
           ctx.lineWidth = 1;
           ctx.stroke();
         }
@@ -2354,6 +2459,29 @@
     beep(520, 0.05);
   }
 
+  function drawAtmosphere() {
+    // Soft vignette so the lane reads as a stage, not a flat grid.
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.48, H * 0.35, W * 0.5, H * 0.5, H * 0.9);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(0.75, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.22)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // Theme dust motes
+    const theme = state.map.theme || MAPS[0];
+    const mote = theme.accent || "#e8c56a";
+    for (let i = 0; i < 8; i++) {
+      const seed = i * 97 + (state.tick >> 1);
+      const x = (seed * 13) % W;
+      const y = ((seed * 29) + Math.floor(state.tick * (0.15 + (i % 3) * 0.05))) % H;
+      ctx.globalAlpha = 0.1 + (i % 3) * 0.05;
+      ctx.fillStyle = mote;
+      ctx.fillRect(x, y, 1 + (i % 2), 1 + (i % 2));
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawOverlay() {
     if (state.mode === "win" || state.mode === "lose") {
       ctx.fillStyle = "rgba(10,8,6,0.72)";
@@ -2365,17 +2493,9 @@
       ctx.fillText(msg, (W - m.width) / 2, H / 2);
       ctx.fillStyle = "#e6dcc8";
       ctx.font = "6px Press Start 2P, monospace";
-      const sub = "Reset · Unit ▸ for Spirit";
+      const sub = "Reset · Unit panel for Spirit";
       const m2 = ctx.measureText(sub);
       ctx.fillText(sub, (W - m2.width) / 2, H / 2 + 16);
-    } else if (state.mode === "build") {
-      ctx.fillStyle = "rgba(230,220,200,0.8)";
-      ctx.font = "6px Press Start 2P, monospace";
-      ctx.fillText("BUILD PHASE", 6, 10);
-    } else {
-      ctx.fillStyle = "#e85d3c";
-      ctx.font = "6px Press Start 2P, monospace";
-      ctx.fillText(`WAVE ${state.wave}`, 6, 10);
     }
   }
 
@@ -2390,6 +2510,7 @@
     drawEnemies();
     drawProjectiles();
     drawFx();
+    drawAtmosphere();
     drawOverlay();
     requestAnimationFrame(frame);
   }
@@ -2764,9 +2885,7 @@
   updateHud();
   closeDrawers();
   syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
-  setHint(
-    "Map fills the screen. Shop ▸ buy · Unit ▸ sell/Spirit · Menu ▸ map/reset."
-  );
+  setHint("Open Shop to buy a unit, then tap grass to place it.");
   preferLandscape();
   fitDisplay();
   // Safari often lays out after the first paint — refit so the map isn't 0×0.
