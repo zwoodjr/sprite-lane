@@ -101,16 +101,20 @@ body {
   min-width: 0;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   width: 100%;
   height: 100%;
+  gap: 0.25rem;
 }
 
 #frame {
   position: relative;
   width: 100%;
   max-width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   aspect-ratio: 480 / 264;
   border: 3px solid #2a1c14;
   outline: 1px solid rgba(232, 93, 60, 0.55);
@@ -122,7 +126,6 @@ body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   overflow: hidden;
-  flex: 0 0 auto;
   animation: frame-in 0.55s ease-out both;
 }
 
@@ -169,21 +172,35 @@ body {
   user-select: none;
 }
 
+/* HUD sits above the map so it never covers tiles */
+.hud-dock {
+  position: relative;
+  z-index: 8;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.35rem;
+  width: min(100%, 42rem);
+  max-width: 100%;
+  padding: 0 0.2rem;
+  animation: hud-in 0.45s ease-out both;
+}
+
 .hud-bar {
-  align-self: flex-start;
-  max-width: min(100%, 17.5rem);
-  padding: 0.4rem 0.45rem 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.28rem 0.4rem 0.22rem;
   background:
     linear-gradient(180deg, rgba(48, 32, 20, 0.96), rgba(18, 12, 8, 0.94));
   border: 2px solid rgba(200, 160, 90, 0.55);
   box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.5),
+    0 4px 14px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(232, 197, 106, 0.18);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: grid;
-  gap: 0.22rem;
-  animation: hud-in 0.45s ease-out both;
+  gap: 0.12rem;
 }
 
 @keyframes hud-in {
@@ -197,49 +214,100 @@ body {
   }
 }
 
-.hud-top {
+.hud-row {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.55rem;
-  padding-bottom: 0.15rem;
-  border-bottom: 1px solid rgba(58, 42, 28, 0.85);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.4rem;
+  font-size: clamp(0.28rem, 1.35vh, 0.36rem);
+  text-shadow: 1px 1px 0 #000;
 }
 
 .hud-brand {
   color: var(--gold);
-  font-size: clamp(0.32rem, 1.45vh, 0.4rem);
+  font-size: clamp(0.3rem, 1.4vh, 0.38rem);
   letter-spacing: 0.06em;
   text-shadow: 1px 1px 0 #000, 0 0 12px rgba(232, 197, 106, 0.25);
 }
 
-.stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.35rem;
-  font-size: clamp(0.28rem, 1.35vh, 0.36rem);
-  color: var(--paper);
-  text-shadow: 1px 1px 0 #000;
-}
-
-.stats .stat {
-  padding: 0.12rem 0.22rem;
+.hud-row .stat,
+.hud-row .spirit-points {
+  padding: 0.1rem 0.2rem;
   background: rgba(10, 8, 6, 0.45);
   border: 1px solid rgba(58, 42, 28, 0.7);
 }
 
-.stats .gold { color: var(--gold); }
-.stats .lives { color: #ff7a6a; }
-.stats .wave { color: var(--mist); }
-.stats .income { color: var(--spirit); }
+.hud-row .gold { color: var(--gold); }
+.hud-row .lives { color: #ff7a6a; }
+.hud-row .wave { color: var(--mist); }
+.hud-row .income { color: var(--spirit); }
+
+.spirit-points {
+  color: var(--spirit);
+  text-shadow: 1px 1px 0 #000;
+}
 
 .hint {
   margin: 0;
-  font-size: clamp(0.24rem, 1.15vh, 0.3rem);
-  line-height: 1.5;
+  font-size: clamp(0.22rem, 1.1vh, 0.28rem);
+  line-height: 1.4;
   color: var(--muted);
-  max-height: 2.5em;
+  max-height: 1.5em;
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.btn-fullscreen {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 2.6rem;
+  padding: 0.25rem 0.4rem;
+  font-family: inherit;
+  font-size: clamp(0.26rem, 1.25vh, 0.34rem);
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  background: rgba(26, 18, 14, 0.96);
+  border: 2px solid #5a4030;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.btn-fullscreen[aria-pressed="true"],
+.btn-fullscreen.is-active {
+  border-color: var(--spirit);
+  color: var(--spirit);
+}
+
+html.is-fullscreen #app,
+html:fullscreen #app,
+html:-webkit-full-screen #app {
+  max-width: none;
+  height: 100%;
+  max-height: none;
+}
+
+html.is-fullscreen body,
+html:fullscreen body,
+html:-webkit-full-screen body {
+  padding: 0;
+  background: #0c0a08;
+}
+
+html.is-fullscreen #stage,
+html:fullscreen #stage,
+html:-webkit-full-screen #stage {
+  gap: 0.15rem;
+}
+
+/* Home Screen / standalone: already chrome-free */
+html.is-standalone body {
+  padding:
+    max(0.1rem, env(safe-area-inset-top))
+    max(0.1rem, env(safe-area-inset-right))
+    max(0.1rem, env(safe-area-inset-bottom))
+    max(0.1rem, env(safe-area-inset-left));
 }
 
 .rail {
