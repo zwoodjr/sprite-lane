@@ -2,4 +2,4 @@
 
 Play: https://zwoodjr.github.io/sprite-lane/
 
-Source branch for GitHub Pages. Enable in Settings → Pages → Deploy from branch → `gh-pages` / root.
+Tap **Full** for fullscreen. iPhone: Share → Add to Home Screen for no Safari bar.

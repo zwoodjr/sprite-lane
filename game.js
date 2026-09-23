@@ -28,13 +28,15 @@
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
+    const hudDock = document.getElementById("hud-dock");
+    const hudH = hudDock ? hudDock.getBoundingClientRect().height + 6 : 0;
     let maxW = Math.max(
       64,
       stageCss.width || stageEl.clientWidth || window.innerWidth * 0.95
     );
     let maxH = Math.max(
       64,
-      stageCss.height || stageEl.clientHeight || window.innerHeight * 0.9
+      (stageCss.height || stageEl.clientHeight || window.innerHeight * 0.9) - hudH
     );
 
     if (maxH < 80) {
@@ -42,7 +44,7 @@
       const viewH = (vv && vv.height) || window.innerHeight || 480;
       const pad =
         parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      maxH = Math.max(120, viewH - pad * 1.5);
+      maxH = Math.max(120, viewH - pad * 1.5 - hudH);
     }
     if (maxW < 80) {
       maxW = Math.max(160, (window.innerWidth || 320) - 16);
@@ -79,6 +81,93 @@
     }
   }
 
+  function isStandaloneApp() {
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+    );
+  }
+
+  function isBrowserFullscreen() {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.msFullscreenElement
+    );
+  }
+
+  function syncFullscreenUi() {
+    const on = isBrowserFullscreen() || document.documentElement.classList.contains("is-fullscreen");
+    document.documentElement.classList.toggle("is-fullscreen", on || isBrowserFullscreen());
+    document.documentElement.classList.toggle("is-standalone", isStandaloneApp());
+    const label = on ? "Exit" : "Full";
+    const pressed = on ? "true" : "false";
+    [el.btnFullscreen, el.btnFullscreenMenu].forEach((btn) => {
+      if (!btn) return;
+      btn.textContent = btn === el.btnFullscreenMenu
+        ? on
+          ? "Exit Full Screen"
+          : "Full Screen"
+        : label;
+      btn.setAttribute("aria-pressed", pressed);
+      btn.classList.toggle("is-active", on);
+    });
+  }
+
+  async function enterFullscreen() {
+    preferLandscape();
+    const root = document.documentElement;
+    try {
+      if (root.requestFullscreen) await root.requestFullscreen();
+      else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+      else if (root.webkitRequestFullScreen) root.webkitRequestFullScreen();
+      else throw new Error("no-fs-api");
+      root.classList.add("is-fullscreen");
+    } catch (err) {
+      // iPhone Safari: no Fullscreen API — guide user to Home Screen.
+      root.classList.add("is-fullscreen");
+      if (isStandaloneApp()) {
+        setHint("Already running as Home Screen app.");
+      } else {
+        setHint("iPhone: Share → Add to Home Screen for true fullscreen (no Safari bar).");
+        openDrawer("menu");
+      }
+    }
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 50);
+    setTimeout(fitDisplay, 250);
+  }
+
+  async function exitFullscreen() {
+    try {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.webkitCancelFullScreen) document.webkitCancelFullScreen();
+    } catch (_) {
+      /* ignore */
+    }
+    document.documentElement.classList.remove("is-fullscreen");
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 50);
+    setTimeout(fitDisplay, 250);
+  }
+
+  async function toggleFullscreen() {
+    ensureAudio();
+    if (isBrowserFullscreen() || document.documentElement.classList.contains("is-fullscreen")) {
+      // If only CSS class (iOS fallback), toggle off; else exit browser FS.
+      if (!isBrowserFullscreen() && document.documentElement.classList.contains("is-fullscreen")) {
+        document.documentElement.classList.remove("is-fullscreen");
+        syncFullscreenUi();
+        setTimeout(fitDisplay, 50);
+        return;
+      }
+      await exitFullscreen();
+    } else {
+      await enterFullscreen();
+    }
+  }
+
   const el = {
     gold: document.getElementById("gold"),
     lives: document.getElementById("lives"),
@@ -110,6 +199,8 @@
     btnCloseShop: document.getElementById("btn-close-shop"),
     btnCloseUnit: document.getElementById("btn-close-unit"),
     btnCloseMenu: document.getElementById("btn-close-menu"),
+    btnFullscreen: document.getElementById("btn-fullscreen"),
+    btnFullscreenMenu: document.getElementById("btn-fullscreen-menu"),
   };
 
   // --- Meta progression (local Spirit Points store) ---
@@ -268,7 +359,7 @@
   }
 
   function updateMetaHud() {
-    if (el.spiritPoints) el.spiritPoints.textContent = `Spirit ${meta.points}`;
+    if (el.spiritPoints) el.spiritPoints.textContent = `SP ${meta.points}`;
     if (el.metaBest) el.metaBest.textContent = `Best W${meta.bestWave}`;
   }
 
@@ -1446,10 +1537,10 @@
   }
 
   function updateHud() {
-    el.gold.textContent = `Gold ${state.gold}`;
-    el.lives.textContent = `Lives ${state.lives}`;
-    el.wave.textContent = `Wave ${state.wave}`;
-    el.income.textContent = `Income +${state.income}`;
+    el.gold.textContent = `${state.gold}g`;
+    el.lives.textContent = `HP${state.lives}`;
+    el.wave.textContent = `W${state.wave}`;
+    el.income.textContent = `+${state.income}`;
     updateMetaHud();
     const u = state.selectedUnit;
     el.sell.disabled = !u || state.mode !== "build";
@@ -2545,6 +2636,42 @@
   });
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
+
+  if (el.btnFullscreen) {
+    el.btnFullscreen.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+      beep(480, 0.03);
+    });
+  }
+  if (el.btnFullscreenMenu) {
+    el.btnFullscreenMenu.addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleFullscreen();
+      beep(480, 0.03);
+    });
+  }
+  document.addEventListener("fullscreenchange", () => {
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 40);
+  });
+  document.addEventListener("webkitfullscreenchange", () => {
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 40);
+  });
+  // Offer fullscreen on first meaningful tap (desktop / Android / some iPads).
+  let offeredFs = false;
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      if (offeredFs || isStandaloneApp() || isBrowserFullscreen()) return;
+      offeredFs = true;
+      // Don't force — just mark that user interacted; button remains primary control.
+    },
+    { passive: true }
+  );
+  syncFullscreenUi();
 
   function bindDrawerButton(btn, which) {
     if (!btn) return;

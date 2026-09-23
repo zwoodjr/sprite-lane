@@ -45,6 +45,8 @@
   </style>
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
 </head>
 <body>
   <div id="boot-splash" role="status">Loading Spirit Lane…</div>
@@ -53,23 +55,31 @@
   <div id="app">
     <div id="playfield">
       <div id="stage">
+        <div id="hud-dock" class="hud-dock overlay-chrome">
+          <div class="hud-bar">
+            <div class="hud-row">
+              <span class="hud-brand">Spirit Lane</span>
+              <span id="spirit-points" class="spirit-points">SP 0</span>
+              <span id="gold" class="stat gold">150g</span>
+              <span id="lives" class="stat lives">HP20</span>
+              <span id="wave" class="stat wave">W0</span>
+              <span id="income" class="stat income">+10</span>
+            </div>
+            <p id="hint" class="hint">Open Shop to buy · tap grass to place</p>
+          </div>
+          <button
+            type="button"
+            id="btn-fullscreen"
+            class="btn-fullscreen"
+            aria-pressed="false"
+            title="Full screen"
+          >
+            Full
+          </button>
+        </div>
+
         <div id="frame">
           <canvas id="game" width="480" height="264" aria-label="Spirit Lane game"></canvas>
-          <div id="overlay" class="overlay" aria-live="polite">
-            <div class="hud-bar overlay-chrome">
-              <div class="hud-top">
-                <span class="hud-brand">Spirit Lane</span>
-                <span id="spirit-points" class="spirit-points">Spirit 0</span>
-              </div>
-              <div class="stats">
-                <span id="gold" class="stat gold">Gold 150</span>
-                <span id="lives" class="stat lives">Lives 20</span>
-                <span id="wave" class="stat wave">Wave 0</span>
-                <span id="income" class="stat income">Income +10</span>
-              </div>
-              <p id="hint" class="hint">Open Shop to buy · tap grass to place</p>
-            </div>
-          </div>
         </div>
 
         <div id="edge-tabs" class="edge-tabs overlay-chrome" aria-label="Open panels">
@@ -138,9 +148,13 @@
       </div>
     </div>
     <div class="drawer-actions drawer-actions-stack">
+      <button type="button" id="btn-fullscreen-menu" class="ghost">Full Screen</button>
       <button type="button" id="btn-new-run" class="ghost">Reset</button>
       <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
     </div>
+    <p id="ios-home-tip" class="offline-tip">
+      iPhone: Share → Add to Home Screen for a chrome-free fullscreen app.
+    </p>
     <p id="offline-tip" class="offline-tip">
       Airplane mode: Save Offline while online, then open that copy. iPhone: Add to Home Screen.
     </p>

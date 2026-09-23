@@ -3,9 +3,19 @@
   "short_name": "Spirit Lane",
   "description": "Pixel maze tower defense",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "orientation": "any",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "landscape",
   "background_color": "#120e0b",
   "theme_color": "#16110e",
-  "lang": "en"
+  "lang": "en",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
