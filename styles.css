@@ -970,11 +970,17 @@ button.ghost:not(:disabled):hover {
 
 #drawer-shop .shop {
   flex: 1 1 auto;
+  min-height: 0;
 }
 
-#drawer-unit .meta-store {
-  flex: 1 1 auto;
+#drawer-shop .meta-store {
+  flex: 0 1 auto;
+  max-height: 40%;
   min-height: 0;
+}
+
+#drawer-unit .drawer-actions {
+  margin-top: 0.25rem;
 }
 
 .offline-sheet {
