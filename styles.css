@@ -968,19 +968,18 @@ button.ghost:not(:disabled):hover {
   min-height: 2.6rem;
 }
 
-#drawer-shop .shop {
+#drawer-shop .meta-store {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-#drawer-shop .meta-store {
-  flex: 0 1 auto;
-  max-height: 40%;
+#drawer-unit .shop {
+  flex: 1 1 auto;
   min-height: 0;
 }
 
 #drawer-unit .drawer-actions {
-  margin-top: 0.25rem;
+  margin-top: 0.15rem;
 }
 
 .offline-sheet {
