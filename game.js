@@ -185,6 +185,7 @@
     saveOffline: document.getElementById("btn-save-offline"),
     offlineTip: document.getElementById("offline-tip"),
     spiritPoints: document.getElementById("spirit-points"),
+    shopSpirit: document.getElementById("shop-spirit"),
     metaBest: document.getElementById("meta-best"),
     metaStore: document.getElementById("meta-store"),
     newRun: document.getElementById("btn-new-run"),
@@ -369,7 +370,9 @@
   }
 
   function updateMetaHud() {
-    if (el.spiritPoints) el.spiritPoints.textContent = `SP ${meta.points}`;
+    const label = `SP ${meta.points}`;
+    if (el.spiritPoints) el.spiritPoints.textContent = label;
+    if (el.shopSpirit) el.shopSpirit.textContent = `Spirit ${meta.points}`;
     if (el.metaBest) el.metaBest.textContent = `Best W${meta.bestWave}`;
   }
 
@@ -500,11 +503,12 @@
     setBackdropOpen(shop || unit || menu);
     syncEdgeTabs(shop ? "shop" : unit ? "unit" : menu ? "menu" : null);
     if (unit) {
+      renderShop();
       updateUnitDrawerLabel();
     }
     if (shop) {
-      renderShop();
       renderMetaStore();
+      updateMetaHud();
     }
   }
 
@@ -513,7 +517,7 @@
     const u = state.selectedUnit;
     if (!u) {
       el.unitSelected.textContent =
-        "Tap a placed unit on the map. Sell or upgrade with gold.";
+        "Pick a unit below (gold), then tap grass — or tap a placed unit to upgrade.";
       return;
     }
     const def = UNIT_MAP[u.type];
@@ -521,20 +525,23 @@
       el.unitSelected.textContent = "Unit selected.";
       return;
     }
+    const star = unitStar(u);
     if (def.next) {
       const next = UNIT_MAP[def.next];
       const cost = next ? unitCost(next) : 0;
-      el.unitSelected.textContent = `Selected ${def.name}. Upgrade → ${next.name} for ${cost}g, or sell.`;
+      el.unitSelected.textContent = `${def.name} ★${star}. Evolve → ${next.name} for ${cost}g, then keep leveling with gold.`;
+    } else if (star < MAX_UNIT_STAR) {
+      el.unitSelected.textContent = `${def.name} ★${star}/${MAX_UNIT_STAR}. Next level ${starUpgradeCost(u)}g.`;
     } else {
-      el.unitSelected.textContent = `Selected ${def.name} (maxed). Sell for gold refund.`;
+      el.unitSelected.textContent = `${def.name} ★${star} (max). Sell for gold refund.`;
     }
   }
 
   // Back-compat alias used by older boot paths / exports.
   function showRailPanel(which) {
     if (which === "store") openDrawer("shop");
-    else if (which === "unit") openDrawer("unit");
-    else if (which === "towers" || which === "shop") openDrawer("shop");
+    else if (which === "unit" || which === "towers") openDrawer("unit");
+    else if (which === "shop") openDrawer("shop");
     else if (which === "menu") openDrawer("menu");
     else closeDrawers();
   }
@@ -1205,6 +1212,49 @@
     "veinfist", "sukuna", "markzone", "megumi",
     "shadeknife", "gravemark", "cha", "beru",
   ];
+  const MAX_UNIT_STAR = 5;
+
+  function unitStar(u) {
+    if (!u) return 1;
+    return Math.max(1, Math.min(MAX_UNIT_STAR, u.star | 1));
+  }
+
+  function starUpgradeCost(u) {
+    const def = UNIT_MAP[u.type];
+    if (!def) return Infinity;
+    const star = unitStar(u);
+    return Math.floor(unitCost(def) * (0.7 + star * 0.55));
+  }
+
+  function canGoldUpgrade(u) {
+    if (!u) return false;
+    const def = UNIT_MAP[u.type];
+    if (!def) return false;
+    if (def.next) return true;
+    return unitStar(u) < MAX_UNIT_STAR;
+  }
+
+  function goldUpgradeCost(u) {
+    if (!u) return Infinity;
+    const def = UNIT_MAP[u.type];
+    if (!def) return Infinity;
+    if (def.next) return unitCost(UNIT_MAP[def.next]);
+    return starUpgradeCost(u);
+  }
+
+  function scaledDamage(def, u) {
+    const base = def.damage || 0;
+    if (!base) return 0;
+    const star = unitStar(u);
+    return Math.max(1, Math.floor(base * (1 + (star - 1) * 0.3)));
+  }
+
+  function scaledRange(def, u) {
+    const base = def.range || 0;
+    if (!base) return 0;
+    const star = unitStar(u);
+    return base * (1 + (star - 1) * 0.08);
+  }
 
   // Tile types: 0 grass (buildable), 3 rock, 4 spawn, 5 exit
   // One layout per cast series (+ lane works). Mid row stays a clear corridor.
@@ -1563,15 +1613,22 @@
     updateMetaHud();
     const u = state.selectedUnit;
     el.sell.disabled = !u || state.mode !== "build";
-    const nextCost =
-      u && UNIT_MAP[u.type].next
-        ? unitCost(UNIT_MAP[UNIT_MAP[u.type].next])
-        : Infinity;
+    const upCost = goldUpgradeCost(u);
     el.upgrade.disabled =
       !u ||
       state.mode !== "build" ||
-      !UNIT_MAP[u.type].next ||
-      state.gold < nextCost;
+      !canGoldUpgrade(u) ||
+      state.gold < upCost;
+    if (el.upgrade) {
+      if (!u) el.upgrade.textContent = "Upgrade";
+      else if (!canGoldUpgrade(u)) el.upgrade.textContent = "Maxed";
+      else {
+        const def = UNIT_MAP[u.type];
+        el.upgrade.textContent = def && def.next
+          ? `Evolve ${upCost}g`
+          : `Lv ${unitStar(u) + 1} · ${upCost}g`;
+      }
+    }
     el.ready.disabled = state.mode !== "build";
     el.ready.textContent = readyButtonLabel();
     // Reset stays visible so players never need a browser refresh.
@@ -1697,8 +1754,6 @@
         renderSpritePreview(id);
         updateHud();
         beep(520, 0.04);
-        // Close overlay so the map is free to tap on phones.
-        closeDrawers();
       });
       el.shop.appendChild(btn);
     });
@@ -1715,8 +1770,8 @@
       const def = UNIT_MAP[state.selectedUnit.type];
       setHint(
         state.mode === "wave"
-          ? `Selected ${def.name}.`
-          : `Selected ${def.name}. Open Unit ▸ to sell or upgrade.`
+          ? `Selected ${def.name} ★${unitStar(state.selectedUnit)}.`
+          : `Selected ${def.name} ★${unitStar(state.selectedUnit)}. Sell or upgrade with gold.`
       );
       updateHud();
       openDrawer("unit");
@@ -1728,8 +1783,8 @@
     }
     const id = state.selectedShop;
     if (!id) {
-      setHint("Open Shop ▸, pick a unit, then tap grass.");
-      openDrawer("shop");
+      setHint("Open Units ▸, pick a unit, then tap grass.");
+      openDrawer("unit");
       return;
     }
     const def = UNIT_MAP[id];
@@ -1755,6 +1810,7 @@
       cd: 0,
       attackAnim: 0,
       spent: paid,
+      star: 1,
     };
     state.units.push(unit);
     state.selectedUnit = unit;
@@ -1803,19 +1859,42 @@
     const u = state.selectedUnit;
     if (!u || state.mode !== "build") return;
     const cur = UNIT_MAP[u.type];
-    if (!cur.next) return;
-    const next = UNIT_MAP[cur.next];
-    const paid = unitCost(next);
+    if (!cur) return;
+
+    // Prefer form evolve when available, then star levels with gold.
+    if (cur.next) {
+      const next = UNIT_MAP[cur.next];
+      if (!next) return;
+      const paid = unitCost(next);
+      if (state.gold < paid) {
+        setHint("Need more gold to evolve.");
+        return;
+      }
+      state.gold -= paid;
+      u.type = next.id;
+      u.spent += paid;
+      u.star = unitStar(u);
+      recomputePath();
+      beep(880, 0.06);
+      setHint(`Evolved to ${next.name} ★${unitStar(u)}. Keep upgrading with gold.`);
+      updateHud();
+      return;
+    }
+
+    if (unitStar(u) >= MAX_UNIT_STAR) {
+      setHint(`${cur.name} is maxed.`);
+      return;
+    }
+    const paid = starUpgradeCost(u);
     if (state.gold < paid) {
-      setHint("Need more gold to upgrade.");
+      setHint("Need more gold to level up.");
       return;
     }
     state.gold -= paid;
-    u.type = next.id;
+    u.star = unitStar(u) + 1;
     u.spent += paid;
-    recomputePath();
-    beep(880, 0.06);
-    setHint(`Upgraded to ${next.name}!`);
+    beep(920, 0.05);
+    setHint(`${cur.name} → ★${unitStar(u)}. Damage up.`);
     updateHud();
   }
 
@@ -1924,12 +2003,15 @@
     return { x: unit.tx * TILE + TILE / 2, y: unit.ty * TILE + TILE / 2 };
   }
 
-  function unitRange(def) {
-    return (def.range || 0) * PX;
+  function unitRange(def, u) {
+    return scaledRange(def, u) * PX;
   }
 
-  function unitAoe(def) {
-    return (def.aoe || 0) * PX;
+  function unitAoe(def, u) {
+    const base = def.aoe || 0;
+    if (!base) return 0;
+    const star = unitStar(u);
+    return base * PX * (1 + (star - 1) * 0.06);
   }
 
   function pushMuzzleAndRange(unit, def) {
@@ -1948,7 +2030,7 @@
       y: cy,
       life: 18,
       maxLife: 18,
-      rangePing: unitRange(def),
+      rangePing: unitRange(def, unit),
       color: def.color,
     });
   }
@@ -1976,7 +2058,7 @@
       const def = UNIT_MAP[u.type];
       if (!def.raiseOnKill) return;
       const c = unitCenter(u);
-      if (dist(c, corpse) > unitRange(def)) return;
+      if (dist(c, corpse) > unitRange(def, u)) return;
       const owned = state.shadows.filter((s) => s.owner === u).length;
       if (owned >= (def.maxShadows || 2)) return;
       state.shadows.push({
@@ -2005,7 +2087,7 @@
     const c = unitCenter(unit);
     let best = null;
     let bestScore = -Infinity;
-    const range = unitRange(def);
+    const range = unitRange(def, unit);
     for (const en of state.enemies) {
       const d = dist(c, en);
       if (d > range) continue;
@@ -2030,7 +2112,7 @@
     const { x: cx, y: cy } = unitCenter(unit);
     pushMuzzleAndRange(unit, def);
 
-    let dmg = def.damage;
+    let dmg = scaledDamage(def, unit);
     let crit = false;
     if (def.execute && target.hp / target.maxHp <= def.execute) {
       dmg = Math.floor(dmg * 1.75);
@@ -2054,7 +2136,7 @@
     }
 
     if (def.pulse || def.aoe) {
-      const radius = unitAoe(def) || unitRange(def) * 0.7;
+      const radius = unitAoe(def, unit) || unitRange(def, unit) * 0.7;
       state.fx.push({
         x: cx,
         y: cy,
@@ -2063,7 +2145,7 @@
         ring: radius,
         color: def.color,
       });
-      const splash = crit ? Math.floor(def.damage * 2) : def.damage;
+      const splash = crit ? Math.floor(scaledDamage(def, unit) * 2) : scaledDamage(def, unit);
       state.enemies.forEach((en) => {
         if (dist({ x: cx, y: cy }, en) <= radius) {
           damageEnemy(en, splash, def.slow);
@@ -2397,7 +2479,7 @@
         if (def.range > 0) {
           const pulse = 0.35 + 0.15 * Math.sin(state.tick * 0.15);
           ctx.beginPath();
-          ctx.arc(c.x, c.y, unitRange(def), 0, Math.PI * 2);
+          ctx.arc(c.x, c.y, unitRange(def, u), 0, Math.PI * 2);
           ctx.strokeStyle = `rgba(61,184,160,${pulse})`;
           ctx.lineWidth = 1;
           ctx.stroke();
