@@ -596,8 +596,9 @@ html.is-standalone body {
   width: 48px;
   height: 48px;
   object-fit: cover;
-  image-rendering: auto;
-  border-radius: 2px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 0;
 }
 
 .card .name {

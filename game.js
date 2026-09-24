@@ -2616,7 +2616,7 @@
       ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
       ctx.fillStyle = def.color;
       ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
-      ctx.imageSmoothingEnabled = !endgame;
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(endgame || anim || def.sprite, ox, oy, drawSize, drawSize);
       ctx.imageSmoothingEnabled = false;
     });
@@ -2647,7 +2647,7 @@
         const oy = en.y - base / 2;
         ctx.fillStyle = "#0a0806";
         ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
-        ctx.imageSmoothingEnabled = !!endgame;
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(endgame || frame, ox, oy, base, base);
         ctx.imageSmoothingEnabled = false;
       } else {
