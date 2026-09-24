@@ -64,10 +64,36 @@ BOOT_TAIL = """
 """
 
 
+def data_url(path: Path) -> str:
+    raw = path.read_bytes()
+    mime = "image/png" if path.suffix.lower() == ".png" else "application/octet-stream"
+    return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+
+def build_endgame_js() -> str:
+    """Inline endgame-art.js with PNG paths rewritten to data URLs."""
+    import re
+
+    src = (ROOT / "assets" / "hero" / "endgame-art.js").read_text(encoding="utf-8")
+    hero_dir = ROOT / "assets" / "hero"
+
+    def repl(match: re.Match[str]) -> str:
+        rel = match.group(0)
+        path = ROOT / rel
+        if not path.exists():
+            path = hero_dir / Path(rel).name
+        if not path.exists():
+            return rel
+        return data_url(path)
+
+    return re.sub(r"assets/hero/[A-Za-z0-9._-]+\.png", repl, src)
+
+
 def build_html() -> str:
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
     sprites = (ROOT / "sprites.js").read_text(encoding="utf-8")
+    endgame = build_endgame_js()
     game = (ROOT / "game.js").read_text(encoding="utf-8")
     font = (ROOT / "fonts" / "PressStart2P.woff2").read_bytes()
     b64 = base64.b64encode(font).decode("ascii")
@@ -93,6 +119,10 @@ def build_html() -> str:
     html = html.replace(
         '<script src="sprites.js"></script>',
         f"<script>\n{sprites}\n</script>",
+    )
+    html = html.replace(
+        '<script src="assets/hero/endgame-art.js"></script>',
+        f"<script>\n{endgame}\n</script>",
     )
     html = html.replace(
         '<script src="game.js"></script>',
