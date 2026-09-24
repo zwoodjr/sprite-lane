@@ -567,11 +567,28 @@
   const SS = window.SpiritSprites || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
     "quirling",
+    "multifist",
+    "floatdrone",
+    "sparkgrub",
     "ashfiend",
     "shardbrute",
     "hexwisp",
     "gatehound",
   ];
+  const HERO_MOB_KINDS = (SS && SS.HERO_MOB_KINDS) || [
+    "quirling",
+    "multifist",
+    "floatdrone",
+    "sparkgrub",
+  ];
+  const SERIES_MOBS = {
+    "Lane Works": ["quirling", "ashfiend", "shardbrute", "hexwisp", "gatehound"],
+    "My Hero": HERO_MOB_KINDS,
+    "Demon Slayer": ["ashfiend", "shardbrute", "gatehound"],
+    "Attack on Titan": ["shardbrute", "ashfiend", "gatehound"],
+    "Jujutsu Kaisen": ["hexwisp", "ashfiend", "gatehound"],
+    "Solo Leveling": ["gatehound", "hexwisp", "shardbrute"],
+  };
 
   // --- Audio ---
   let audioCtx = null;
@@ -713,7 +730,7 @@
     {
       id: "bakugo",
       name: "Bakugo",
-      next: null,
+      next: "howitzer",
       series: "My Hero",
       blurb: "Explosion pops",
       cost: 48,
@@ -725,6 +742,23 @@
       color: "#e85d3c",
       sprite: packSprite("bakugo", [
         "00555500","05577550","0zyyyyz0","eyyyyyye","0ezzze0","03333330","03z00z30","0y0000y0",
+      ]),
+    },
+    {
+      id: "howitzer",
+      name: "Howitzer",
+      next: null,
+      series: "My Hero",
+      blurb: "Gauntlet howitzer blasts",
+      cost: 100,
+      range: 52,
+      rate: 28,
+      damage: 40,
+      aoe: 42,
+      animated: true,
+      color: "#ff7040",
+      sprite: packSprite("howitzer", [
+        "055w5500","55777550","zyyyyyyz","weyyyyew","wezzzzewe","03333330","03z00z30","0y0w0y00",
       ]),
     },
     {
@@ -764,7 +798,7 @@
     {
       id: "todoroki",
       name: "Todoroki",
-      next: null,
+      next: "halfcold",
       series: "My Hero",
       blurb: "Ice slow + fire hit",
       cost: 55,
@@ -777,6 +811,24 @@
       color: "#70b0e0",
       sprite: packSprite("todoroki", [
         "00x55500","0xx775y0","0x7777y0","xx7777yy","0x0000y0","0ffffff0","0x0000y0","0c0000e0",
+      ]),
+    },
+    {
+      id: "halfcold",
+      name: "Half-Cold",
+      next: null,
+      series: "My Hero",
+      blurb: "Full dual ice / fire field",
+      cost: 110,
+      range: 68,
+      rate: 30,
+      damage: 28,
+      slow: 0.5,
+      aoe: 32,
+      animated: true,
+      color: "#90c8e8",
+      sprite: packSprite("halfcold", [
+        "0xxx55y0","xx7775yy","x777777y","xxx777yyy","cx0000ye","0ffffff0","0x0000y0","0cxxxxe0",
       ]),
     },
     // —— Demon Slayer ——
@@ -1898,11 +1950,19 @@
     updateHud();
   }
 
+  function mapMobKinds() {
+    const theme = state.map && state.map.theme;
+    const series = theme && theme.series;
+    const list = (series && SERIES_MOBS[series]) || MOB_KINDS;
+    return list.length ? list : MOB_KINDS;
+  }
+
   function waveEnemyPlan(n) {
     const count = 6 + n * 2;
     const hp = 40 + n * 18;
     const speed = (0.55 + Math.min(0.45, n * 0.03)) * 1.1 * PX;
     const reward = 4 + Math.floor(n * 0.6);
+    const kinds = mapMobKinds();
     const list = [];
     for (let i = 0; i < count; i++) {
       const elite = n > 3 && i % 7 === 0;
@@ -1912,11 +1972,19 @@
         speed: elite ? speed * 0.85 : speed,
         reward: elite ? reward * 3 : reward,
         elite,
-        kind: MOB_KINDS[i % MOB_KINDS.length],
+        kind: kinds[i % kinds.length],
         delay: i * 22,
       });
     }
     if (n % 5 === 0) {
+      const bossKind =
+        kinds.includes("multifist")
+          ? "multifist"
+          : kinds.includes("shardbrute")
+            ? "shardbrute"
+            : kinds.includes("gatehound")
+              ? "gatehound"
+              : kinds[kinds.length - 1];
       list.push({
         hp: hp * 6,
         maxHp: hp * 6,
@@ -1924,7 +1992,7 @@
         reward: reward * 8,
         elite: true,
         boss: true,
-        kind: n % 10 === 0 ? "gatehound" : "shardbrute",
+        kind: n % 10 === 0 && kinds.includes("gatehound") ? "gatehound" : bossKind,
         delay: count * 22 + 30,
       });
     }
@@ -2324,15 +2392,22 @@
           ctx.fillStyle = theme.rockDeep;
           ctx.fillRect(px, py, TILE, TILE);
           if (style === "hero") {
+            // UA training pillar — chevron plate + green crest band
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 4 * PX, py + 2 * PX, 16 * PX, 20 * PX);
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 5 * PX, py + 3 * PX, 14 * PX, 18 * PX);
             ctx.fillStyle = theme.rockHi;
             ctx.fillRect(px + 7 * PX, py + 5 * PX, 10 * PX, 3 * PX);
+            // chevron
+            ctx.fillStyle = theme.chalk || "#e8dcc0";
+            ctx.fillRect(px + 8 * PX, py + 9 * PX, 8 * PX, 2 * PX);
+            ctx.fillRect(px + 9 * PX, py + 11 * PX, 6 * PX, 2 * PX);
+            ctx.fillRect(px + 10 * PX, py + 13 * PX, 4 * PX, 2 * PX);
             ctx.fillStyle = theme.accent;
-            ctx.fillRect(px + 8 * PX, py + 10 * PX, 8 * PX, 2 * PX);
-            ctx.fillRect(px + 9 * PX, py + 13 * PX, 6 * PX, 2 * PX);
+            ctx.fillRect(px + 8 * PX, py + 16 * PX, 8 * PX, 2 * PX);
             ctx.fillStyle = theme.rockDeep;
-            ctx.fillRect(px + 6 * PX, py + 18 * PX, 12 * PX, 3 * PX);
+            ctx.fillRect(px + 6 * PX, py + 19 * PX, 12 * PX, 2 * PX);
           } else if (style === "river") {
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 3 * PX, py + 4 * PX, 18 * PX, 14 * PX);
@@ -2402,11 +2477,24 @@
             ctx.globalAlpha = 0.28;
             ctx.fillRect(px + 4 * PX, py + 11 * PX, 16 * PX, 2 * PX);
             ctx.globalAlpha = 1;
+          } else if (style === "hero" && ((x + y) % 5) === 0) {
+            // training-lane hash marks
+            ctx.fillStyle = theme.chalk || "#e8dcc0";
+            ctx.globalAlpha = 0.2;
+            ctx.fillRect(px + 2 * PX, py + 10 * PX, 4 * PX, 2 * PX);
+            ctx.fillRect(px + 18 * PX, py + 12 * PX, 4 * PX, 2 * PX);
+            ctx.globalAlpha = 1;
           } else if (((x * 13 + y * 7) % 11) === 0) {
             ctx.fillStyle = theme.grassA;
             ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
           }
-          if (theme.accent && ((x + y * 2) % 9) === 0) {
+          if (style === "hero" && theme.accent && ((x * 3 + y) % 8) === 0) {
+            ctx.fillStyle = theme.accent;
+            ctx.globalAlpha = 0.22;
+            ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
+            ctx.fillRect(px + 11 * PX, py + 5 * PX, 2 * PX, 6 * PX);
+            ctx.globalAlpha = 1;
+          } else if (theme.accent && ((x + y * 2) % 9) === 0) {
             ctx.fillStyle = theme.accent;
             ctx.globalAlpha = 0.18;
             ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
