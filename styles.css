@@ -592,6 +592,14 @@ html.is-standalone body {
   flex-shrink: 0;
 }
 
+.card .art-endgame {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  image-rendering: auto;
+  border-radius: 2px;
+}
+
 .card .name {
   grid-area: name;
   color: var(--gold);

@@ -565,6 +565,7 @@
   }
 
   const SS = window.SpiritSprites || null;
+  const EA = window.SpiritEndgameArt || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
     "quirling",
     "multifist",
@@ -1763,21 +1764,33 @@
       btn.type = "button";
       btn.className = "card" + (state.selectedShop === id ? " selected" : "");
       btn.dataset.series = u.series || "";
-      const art = document.createElement("canvas");
-      art.className = "art";
-      art.width = 32;
-      art.height = 32;
-      art.setAttribute("aria-hidden", "true");
-      const actx = art.getContext("2d");
-      actx.imageSmoothingEnabled = false;
-      actx.fillStyle = "#0c0a08";
-      actx.fillRect(0, 0, 32, 32);
-      const frame =
-        (SS && SS.units && SS.units[id] && SS.units[id].idle && SS.units[id].idle[0]) ||
-        u.sprite;
-      if (frame) {
-        const pad = 4;
-        actx.drawImage(frame, pad, pad, 32 - pad * 2, 32 - pad * 2);
+      const endgame = EA && EA.unitPortrait && EA.unitPortrait(id);
+      let art;
+      if (endgame) {
+        art = document.createElement("img");
+        art.className = "art art-endgame";
+        art.src = endgame.src;
+        art.alt = "";
+        art.width = 48;
+        art.height = 48;
+        art.setAttribute("aria-hidden", "true");
+      } else {
+        art = document.createElement("canvas");
+        art.className = "art";
+        art.width = 32;
+        art.height = 32;
+        art.setAttribute("aria-hidden", "true");
+        const actx = art.getContext("2d");
+        actx.imageSmoothingEnabled = false;
+        actx.fillStyle = "#0c0a08";
+        actx.fillRect(0, 0, 32, 32);
+        const frame =
+          (SS && SS.units && SS.units[id] && SS.units[id].idle && SS.units[id].idle[0]) ||
+          u.sprite;
+        if (frame) {
+          const pad = 4;
+          actx.drawImage(frame, pad, pad, 32 - pad * 2, 32 - pad * 2);
+        }
       }
       btn.appendChild(art);
       const name = document.createElement("span");
@@ -2383,6 +2396,12 @@
     );
     const theme = state.map.theme || MAPS[0];
     const style = theme.style || "default";
+    // Endgame Hero Crest backdrop under the yard
+    if (style === "hero" && EA && EA.mapBackdrop) {
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(EA.mapBackdrop, 0, 0, COLS * TILE, ROWS * TILE);
+      ctx.globalAlpha = 1;
+    }
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         const t = state.map.tiles[y][x];
@@ -2470,8 +2489,14 @@
           drawPortalTile(px, py, "exit");
         } else {
           const parity = (x + y) & 1;
-          ctx.fillStyle = parity ? theme.grassA : theme.grassB;
-          ctx.fillRect(px, py, TILE, TILE);
+          if (style === "hero" && EA && EA.mapBackdrop) {
+            // Let the endgame UA yard show through; keep a light checker wash
+            ctx.fillStyle = parity ? "rgba(42,36,28,0.35)" : "rgba(34,30,24,0.28)";
+            ctx.fillRect(px, py, TILE, TILE);
+          } else {
+            ctx.fillStyle = parity ? theme.grassA : theme.grassB;
+            ctx.fillRect(px, py, TILE, TILE);
+          }
           if (theme.chalk && ((x * 5 + y * 3) % 7) === 0) {
             ctx.fillStyle = theme.chalk;
             ctx.globalAlpha = 0.28;
@@ -2575,9 +2600,15 @@
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
       }
+      const endgame =
+        EA && EA.unitMapSprite ? EA.unitMapSprite(u.type) : null;
       const anim =
-        def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
-      const drawSize = anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
+        !endgame && def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
+      const drawSize = endgame
+        ? Math.round(22 * PX)
+        : anim
+          ? UNIT_DRAW_ANIM
+          : UNIT_DRAW;
       const ox = c.x - drawSize / 2;
       const oy = c.y - drawSize / 2;
       // Outline so units read on teal pads / grass
@@ -2585,7 +2616,9 @@
       ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
       ctx.fillStyle = def.color;
       ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
-      ctx.drawImage(anim || def.sprite, ox, oy, drawSize, drawSize);
+      ctx.imageSmoothingEnabled = !endgame;
+      ctx.drawImage(endgame || anim || def.sprite, ox, oy, drawSize, drawSize);
+      ctx.imageSmoothingEnabled = false;
     });
   }
 
@@ -2605,14 +2638,18 @@
   function drawEnemies() {
     state.enemies.forEach((en) => {
       const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+      const endgame =
+        EA && EA.mobMapSprite ? EA.mobMapSprite(en.kind) : null;
       const frame =
-        SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
-      if (frame) {
+        !endgame && SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
+      if (endgame || frame) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
         ctx.fillStyle = "#0a0806";
         ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
-        ctx.drawImage(frame, ox, oy, base, base);
+        ctx.imageSmoothingEnabled = !!endgame;
+        ctx.drawImage(endgame || frame, ox, oy, base, base);
+        ctx.imageSmoothingEnabled = false;
       } else {
         const s = (en.boss ? 16 : en.elite ? 11 : 9) * PX;
         const body = en.boss ? "#ff7048" : en.elite ? "#ffe080" : "#f0a050";
@@ -3315,5 +3352,11 @@
     node.classList.add("hide");
     setTimeout(() => node.remove(), 350);
   });
+  if (EA && EA.whenReady) {
+    EA.whenReady(() => {
+      renderShop();
+      updateHud();
+    });
+  }
   requestAnimationFrame(frame);
 })();
