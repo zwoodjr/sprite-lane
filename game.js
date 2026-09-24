@@ -3248,7 +3248,9 @@
       state.gold = n;
       updateHud();
     },
-    getUnits: () => state.units.map((u) => ({ type: u.type, tx: u.tx, ty: u.ty })),
+    placeUnit,
+    startWave,
+    getUnits: () => state.units.map((u) => ({ type: u.type, tx: u.tx, ty: u.ty, star: unitStar(u) })),
     getPath: () => (state.map.tilePath || []).map((p) => ({ x: p.x, y: p.y })),
     getPathPixels: () => (state.map.path || []).length,
     getMode: () => state.mode,
@@ -3273,7 +3275,41 @@
     showStore: () => openDrawer("shop"),
     showShop: () => openDrawer("shop"),
     closeDrawers,
+    mapMobKinds,
   };
+
+  // Optional demo harness: ?demo=hero loads My Hero map with roster + wave.
+  try {
+    const demo = new URLSearchParams(location.search).get("demo");
+    if (demo === "hero") {
+      applyMap("hero-crest");
+      state.gold = 9999;
+      updateHud();
+      const roster = [
+        ["sparkfist", 4, 3],
+        ["bakugo", 6, 3],
+        ["hoverbind", 8, 3],
+        ["todoroki", 10, 3],
+        ["blastcrown", 12, 3],
+        ["howitzer", 14, 3],
+        ["zerofield", 5, 7],
+        ["halfcold", 11, 7],
+      ];
+      roster.forEach(([id, tx, ty]) => {
+        state.selectedShop = id;
+        placeUnit(tx, ty);
+      });
+      closeDrawers();
+      startWave();
+      // Advance a few ticks so mobs are visible.
+      for (let i = 0; i < 90; i++) {
+        if (typeof updateWave === "function") updateWave();
+      }
+      setHint("My Hero demo — UA yard, full roster, themed wave mobs.");
+      document.title = "Spirit Lane — My Hero Demo";
+    }
+  } catch (_) {}
+
   // Drop any boot splash immediately so Safari never sticks on "Loading…"
   document.querySelectorAll("#boot-splash").forEach((node) => {
     node.classList.add("hide");
