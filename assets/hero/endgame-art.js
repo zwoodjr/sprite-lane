@@ -12,22 +12,22 @@
     "zerofield-endgame": "assets/hero/hero-zerofield-endgame.png",
     "todoroki-endgame": "assets/hero/hero-todoroki-endgame.png",
     "halfcold-endgame": "assets/hero/hero-halfcold-endgame.png",
-    "sparkfist-64": "assets/hero/hero-sparkfist-64.png",
-    "blastcrown-64": "assets/hero/hero-blastcrown-64.png",
-    "bakugo-64": "assets/hero/hero-bakugo-64.png",
-    "howitzer-64": "assets/hero/hero-howitzer-64.png",
-    "hoverbind-64": "assets/hero/hero-hoverbind-64.png",
-    "zerofield-64": "assets/hero/hero-zerofield-64.png",
-    "todoroki-64": "assets/hero/hero-todoroki-64.png",
-    "halfcold-64": "assets/hero/hero-halfcold-64.png",
+    "sparkfist-board": "assets/hero/hero-sparkfist-board.png",
+    "blastcrown-board": "assets/hero/hero-blastcrown-board.png",
+    "bakugo-board": "assets/hero/hero-bakugo-board.png",
+    "howitzer-board": "assets/hero/hero-howitzer-board.png",
+    "hoverbind-board": "assets/hero/hero-hoverbind-board.png",
+    "zerofield-board": "assets/hero/hero-zerofield-board.png",
+    "todoroki-board": "assets/hero/hero-todoroki-board.png",
+    "halfcold-board": "assets/hero/hero-halfcold-board.png",
     "quirling-endgame": "assets/hero/hero-quirling-endgame.png",
     "multifist-endgame": "assets/hero/hero-multifist-endgame.png",
     "floatdrone-endgame": "assets/hero/hero-floatdrone-endgame.png",
     "sparkgrub-endgame": "assets/hero/hero-sparkgrub-endgame.png",
-    "quirling-64": "assets/hero/hero-quirling-64.png",
-    "multifist-64": "assets/hero/hero-multifist-64.png",
-    "floatdrone-64": "assets/hero/hero-floatdrone-64.png",
-    "sparkgrub-64": "assets/hero/hero-sparkgrub-64.png",
+    "quirling-board": "assets/hero/hero-quirling-board.png",
+    "multifist-board": "assets/hero/hero-multifist-board.png",
+    "floatdrone-board": "assets/hero/hero-floatdrone-board.png",
+    "sparkgrub-board": "assets/hero/hero-sparkgrub-board.png",
     "crest-map": "assets/hero/hero-crest-map-endgame.png",
   };
 
@@ -75,7 +75,7 @@
         })
       );
       jobs.push(
-        loadImage(ASSET_URLS[`${id}-64`]).then((img) => {
+        loadImage(ASSET_URLS[`${id}-board`]).then((img) => {
           if (img) mapSprites[id] = img;
         })
       );
@@ -88,7 +88,7 @@
         })
       );
       jobs.push(
-        loadImage(ASSET_URLS[`${id}-64`]).then((img) => {
+        loadImage(ASSET_URLS[`${id}-board`]).then((img) => {
           if (img) mapSprites[`mob:${id}`] = img;
         })
       );
