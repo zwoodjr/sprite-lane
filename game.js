@@ -2574,8 +2574,11 @@
     ctx.globalAlpha = 1;
   }
 
+  // Board-native draw sizes: sprites are baked to TILE×TILE and must fill one cell.
   const UNIT_DRAW = Math.round(14 * PX);
   const UNIT_DRAW_ANIM = Math.round(18 * PX);
+  const UNIT_DRAW_BOARD = TILE; // endgame pixel art matches one maze cell
+  const MOB_DRAW_BOARD = TILE - 2;
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2605,17 +2608,23 @@
       const anim =
         !endgame && def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
       const drawSize = endgame
-        ? Math.round(22 * PX)
+        ? UNIT_DRAW_BOARD
         : anim
           ? UNIT_DRAW_ANIM
           : UNIT_DRAW;
-      const ox = c.x - drawSize / 2;
-      const oy = c.y - drawSize / 2;
-      // Outline so units read on teal pads / grass
-      ctx.fillStyle = "#0a0806";
-      ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
-      ctx.fillStyle = def.color;
-      ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
+      // Snap endgame art to the tile so it scales with the board, not free-float.
+      const ox = endgame ? u.tx * TILE : c.x - drawSize / 2;
+      const oy = endgame ? u.ty * TILE : c.y - drawSize / 2;
+      if (!endgame) {
+        ctx.fillStyle = "#0a0806";
+        ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
+        ctx.fillStyle = def.color;
+        ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
+      } else {
+        // Thin underplate so the cell still reads on busy backdrops
+        ctx.fillStyle = "rgba(10,8,6,0.55)";
+        ctx.fillRect(ox, oy, TILE, TILE);
+      }
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(endgame || anim || def.sprite, ox, oy, drawSize, drawSize);
       ctx.imageSmoothingEnabled = false;
@@ -2637,16 +2646,24 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       const endgame =
         EA && EA.mobMapSprite ? EA.mobMapSprite(en.kind) : null;
+      const base = endgame
+        ? en.boss
+          ? TILE + 4
+          : en.elite
+            ? TILE
+            : MOB_DRAW_BOARD
+        : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       const frame =
         !endgame && SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
       if (endgame || frame) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
-        ctx.fillStyle = "#0a0806";
-        ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
+        if (!endgame) {
+          ctx.fillStyle = "#0a0806";
+          ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
+        }
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(endgame || frame, ox, oy, base, base);
         ctx.imageSmoothingEnabled = false;
