@@ -28,13 +28,15 @@
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
+    const hudDock = document.getElementById("hud-dock");
+    const hudH = hudDock ? hudDock.getBoundingClientRect().height + 6 : 0;
     let maxW = Math.max(
       64,
       stageCss.width || stageEl.clientWidth || window.innerWidth * 0.95
     );
     let maxH = Math.max(
       64,
-      stageCss.height || stageEl.clientHeight || window.innerHeight * 0.9
+      (stageCss.height || stageEl.clientHeight || window.innerHeight * 0.9) - hudH
     );
 
     if (maxH < 80) {
@@ -42,7 +44,7 @@
       const viewH = (vv && vv.height) || window.innerHeight || 480;
       const pad =
         parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      maxH = Math.max(120, viewH - pad * 1.5);
+      maxH = Math.max(120, viewH - pad * 1.5 - hudH);
     }
     if (maxW < 80) {
       maxW = Math.max(160, (window.innerWidth || 320) - 16);
@@ -79,6 +81,93 @@
     }
   }
 
+  function isStandaloneApp() {
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+    );
+  }
+
+  function isBrowserFullscreen() {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.msFullscreenElement
+    );
+  }
+
+  function syncFullscreenUi() {
+    const on = isBrowserFullscreen() || document.documentElement.classList.contains("is-fullscreen");
+    document.documentElement.classList.toggle("is-fullscreen", on || isBrowserFullscreen());
+    document.documentElement.classList.toggle("is-standalone", isStandaloneApp());
+    const label = on ? "Exit" : "Full";
+    const pressed = on ? "true" : "false";
+    [el.btnFullscreen, el.btnFullscreenMenu].forEach((btn) => {
+      if (!btn) return;
+      btn.textContent = btn === el.btnFullscreenMenu
+        ? on
+          ? "Exit Full Screen"
+          : "Full Screen"
+        : label;
+      btn.setAttribute("aria-pressed", pressed);
+      btn.classList.toggle("is-active", on);
+    });
+  }
+
+  async function enterFullscreen() {
+    preferLandscape();
+    const root = document.documentElement;
+    try {
+      if (root.requestFullscreen) await root.requestFullscreen();
+      else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+      else if (root.webkitRequestFullScreen) root.webkitRequestFullScreen();
+      else throw new Error("no-fs-api");
+      root.classList.add("is-fullscreen");
+    } catch (err) {
+      // iPhone Safari: no Fullscreen API — guide user to Home Screen.
+      root.classList.add("is-fullscreen");
+      if (isStandaloneApp()) {
+        setHint("Already running as Home Screen app.");
+      } else {
+        setHint("iPhone: Share → Add to Home Screen for true fullscreen (no Safari bar).");
+        openDrawer("menu");
+      }
+    }
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 50);
+    setTimeout(fitDisplay, 250);
+  }
+
+  async function exitFullscreen() {
+    try {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.webkitCancelFullScreen) document.webkitCancelFullScreen();
+    } catch (_) {
+      /* ignore */
+    }
+    document.documentElement.classList.remove("is-fullscreen");
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 50);
+    setTimeout(fitDisplay, 250);
+  }
+
+  async function toggleFullscreen() {
+    ensureAudio();
+    if (isBrowserFullscreen() || document.documentElement.classList.contains("is-fullscreen")) {
+      // If only CSS class (iOS fallback), toggle off; else exit browser FS.
+      if (!isBrowserFullscreen() && document.documentElement.classList.contains("is-fullscreen")) {
+        document.documentElement.classList.remove("is-fullscreen");
+        syncFullscreenUi();
+        setTimeout(fitDisplay, 50);
+        return;
+      }
+      await exitFullscreen();
+    } else {
+      await enterFullscreen();
+    }
+  }
+
   const el = {
     gold: document.getElementById("gold"),
     lives: document.getElementById("lives"),
@@ -96,6 +185,7 @@
     saveOffline: document.getElementById("btn-save-offline"),
     offlineTip: document.getElementById("offline-tip"),
     spiritPoints: document.getElementById("spirit-points"),
+    shopSpirit: document.getElementById("shop-spirit"),
     metaBest: document.getElementById("meta-best"),
     metaStore: document.getElementById("meta-store"),
     newRun: document.getElementById("btn-new-run"),
@@ -110,6 +200,8 @@
     btnCloseShop: document.getElementById("btn-close-shop"),
     btnCloseUnit: document.getElementById("btn-close-unit"),
     btnCloseMenu: document.getElementById("btn-close-menu"),
+    btnFullscreen: document.getElementById("btn-fullscreen"),
+    btnFullscreenMenu: document.getElementById("btn-fullscreen-menu"),
   };
 
   // --- Meta progression (local Spirit Points store) ---
@@ -134,7 +226,7 @@
     {
       id: "unitDiscount",
       name: "Unit Discount",
-      desc: "Shop & upgrades 4% cheaper / lvl",
+      desc: "Units & tower upgrades 4% cheaper / lvl",
       max: 5,
       costs: [15, 24, 36, 54, 80],
       perLevel: 0.04,
@@ -259,16 +351,28 @@
     return Math.random() < Math.min(0.5, metaBonus("critChance"));
   }
 
-  function spiritForRun(wave, won) {
-    let pts = 0;
-    for (let w = 1; w <= wave; w++) pts += 2 + Math.floor(w / 2);
-    if (won) pts += 35;
-    else if (wave > 0) pts += 4;
-    return pts;
+  function spiritForWave(wave, leaks) {
+    const base = 10 + Math.max(1, wave | 0) * 2;
+    const mult = Math.max(0, 1 - 0.1 * Math.max(0, leaks | 0));
+    return Math.max(0, Math.floor(base * mult));
+  }
+
+  function awardWaveSpirit(wave, leaks) {
+    const gained = spiritForWave(wave, leaks);
+    if (gained > 0) {
+      meta.points += gained;
+      meta.lifetime += gained;
+      saveMeta();
+      updateMetaHud();
+      renderMetaStore();
+    }
+    return gained;
   }
 
   function updateMetaHud() {
-    if (el.spiritPoints) el.spiritPoints.textContent = `Spirit ${meta.points}`;
+    const label = `SP ${meta.points}`;
+    if (el.spiritPoints) el.spiritPoints.textContent = label;
+    if (el.shopSpirit) el.shopSpirit.textContent = `Spirit ${meta.points}`;
     if (el.metaBest) el.metaBest.textContent = `Best W${meta.bestWave}`;
   }
 
@@ -299,7 +403,7 @@
     const cost = nextMetaCost(id);
     if (cost == null) return;
     if (meta.points < cost) {
-      setHint("Need more Spirit — clear waves to earn SP.");
+      setHint("Need more Spirit — clear waves cleanly to earn SP.");
       beep(120, 0.08, "sawtooth");
       return;
     }
@@ -311,7 +415,7 @@
     updateHud();
     beep(740, 0.05);
     const def = META_BY_ID[id];
-    setHint(`Bought ${def.name} Lv ${metaLevel(id)}. Applies on next Reset (gold/lives/income now if idle).`);
+    setHint(`Shop boosted: ${def.name} Lv ${metaLevel(id)}.`);
     // Apply soft bonuses that don't require a new run when still in early build.
     if (state.mode === "build" && state.wave === 0 && state.units.length === 0) {
       state.gold = baseStartingGold();
@@ -323,8 +427,39 @@
 
   function setDrawerOpen(drawer, open) {
     if (!drawer) return;
-    drawer.hidden = !open;
-    drawer.setAttribute("aria-hidden", open ? "false" : "true");
+    if (open) {
+      drawer.hidden = false;
+      drawer.setAttribute("aria-hidden", "false");
+      // Force reflow so the slide-in transition plays.
+      void drawer.offsetWidth;
+      drawer.classList.add("is-open");
+    } else {
+      drawer.classList.remove("is-open");
+      drawer.setAttribute("aria-hidden", "true");
+      const finish = () => {
+        if (!drawer.classList.contains("is-open")) drawer.hidden = true;
+      };
+      drawer.addEventListener("transitionend", finish, { once: true });
+      setTimeout(finish, 280);
+    }
+  }
+
+  function setBackdropOpen(open) {
+    if (!el.drawerBackdrop) return;
+    if (open) {
+      el.drawerBackdrop.hidden = false;
+      void el.drawerBackdrop.offsetWidth;
+      el.drawerBackdrop.classList.add("is-open");
+    } else {
+      el.drawerBackdrop.classList.remove("is-open");
+      const finish = () => {
+        if (!el.drawerBackdrop.classList.contains("is-open")) {
+          el.drawerBackdrop.hidden = true;
+        }
+      };
+      el.drawerBackdrop.addEventListener("transitionend", finish, { once: true });
+      setTimeout(finish, 240);
+    }
   }
 
   function syncEdgeTabs(which) {
@@ -347,7 +482,7 @@
     setDrawerOpen(el.drawerShop, false);
     setDrawerOpen(el.drawerUnit, false);
     setDrawerOpen(el.drawerMenu, false);
-    if (el.drawerBackdrop) el.drawerBackdrop.hidden = true;
+    setBackdropOpen(false);
     syncEdgeTabs(null);
   }
 
@@ -355,9 +490,9 @@
     const shop = which === "shop";
     const unit = which === "unit";
     const menu = which === "menu";
-    const shopOpen = el.drawerShop && !el.drawerShop.hidden;
-    const unitOpen = el.drawerUnit && !el.drawerUnit.hidden;
-    const menuOpen = el.drawerMenu && !el.drawerMenu.hidden;
+    const shopOpen = el.drawerShop && !el.drawerShop.hidden && el.drawerShop.classList.contains("is-open");
+    const unitOpen = el.drawerUnit && !el.drawerUnit.hidden && el.drawerUnit.classList.contains("is-open");
+    const menuOpen = el.drawerMenu && !el.drawerMenu.hidden && el.drawerMenu.classList.contains("is-open");
     if ((shop && shopOpen) || (unit && unitOpen) || (menu && menuOpen)) {
       closeDrawers();
       return;
@@ -365,13 +500,16 @@
     setDrawerOpen(el.drawerShop, shop);
     setDrawerOpen(el.drawerUnit, unit);
     setDrawerOpen(el.drawerMenu, menu);
-    if (el.drawerBackdrop) el.drawerBackdrop.hidden = !(shop || unit || menu);
+    setBackdropOpen(shop || unit || menu);
     syncEdgeTabs(shop ? "shop" : unit ? "unit" : menu ? "menu" : null);
     if (unit) {
-      renderMetaStore();
+      renderShop();
       updateUnitDrawerLabel();
     }
-    if (shop) renderShop();
+    if (shop) {
+      renderMetaStore();
+      updateMetaHud();
+    }
   }
 
   function updateUnitDrawerLabel() {
@@ -379,19 +517,31 @@
     const u = state.selectedUnit;
     if (!u) {
       el.unitSelected.textContent =
-        "Tap a placed unit on the map to select it. Spirit upgrades below.";
+        "Pick a unit below (gold), then tap grass — or tap a placed unit to upgrade.";
       return;
     }
     const def = UNIT_MAP[u.type];
-    el.unitSelected.textContent = def
-      ? `Selected ${def.name}. Sell or upgrade below.`
-      : "Unit selected.";
+    if (!def) {
+      el.unitSelected.textContent = "Unit selected.";
+      return;
+    }
+    const star = unitStar(u);
+    if (def.next) {
+      const next = UNIT_MAP[def.next];
+      const cost = next ? unitCost(next) : 0;
+      el.unitSelected.textContent = `${def.name} ★${star}. Evolve → ${next.name} for ${cost}g, then keep leveling with gold.`;
+    } else if (star < MAX_UNIT_STAR) {
+      el.unitSelected.textContent = `${def.name} ★${star}/${MAX_UNIT_STAR}. Next level ${starUpgradeCost(u)}g.`;
+    } else {
+      el.unitSelected.textContent = `${def.name} ★${star} (max). Sell for gold refund.`;
+    }
   }
 
   // Back-compat alias used by older boot paths / exports.
   function showRailPanel(which) {
-    if (which === "store" || which === "unit") openDrawer("unit");
-    else if (which === "towers" || which === "shop") openDrawer("shop");
+    if (which === "store") openDrawer("shop");
+    else if (which === "unit" || which === "towers") openDrawer("unit");
+    else if (which === "shop") openDrawer("shop");
     else if (which === "menu") openDrawer("menu");
     else closeDrawers();
   }
@@ -399,9 +549,6 @@
   function settleRun(won) {
     if (state.runSettled) return;
     state.runSettled = true;
-    const gained = spiritForRun(state.wave, won);
-    meta.points += gained;
-    meta.lifetime += gained;
     meta.runs += 1;
     meta.bestWave = Math.max(meta.bestWave, state.wave);
     saveMeta();
@@ -411,20 +558,38 @@
     el.ready.disabled = true;
     setHint(
       won
-        ? `Victory! +${gained} Spirit. Open Unit ▸ for Spirit upgrades, or Reset.`
-        : `Lane broke after wave ${state.wave}. +${gained} Spirit — Unit ▸ to spend, or Reset.`
+        ? `Victory! Spirit already banked each wave. Open Shop for Spirit boosts, or Reset.`
+        : `Lane broke after wave ${state.wave}. Open Shop to spend Spirit, or Reset.`
     );
-    openDrawer("unit");
+    openDrawer("shop");
   }
 
   const SS = window.SpiritSprites || null;
+  const EA = window.SpiritEndgameArt || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
     "quirling",
+    "multifist",
+    "floatdrone",
+    "sparkgrub",
     "ashfiend",
     "shardbrute",
     "hexwisp",
     "gatehound",
   ];
+  const HERO_MOB_KINDS = (SS && SS.HERO_MOB_KINDS) || [
+    "quirling",
+    "multifist",
+    "floatdrone",
+    "sparkgrub",
+  ];
+  const SERIES_MOBS = {
+    "Lane Works": ["quirling", "ashfiend", "shardbrute", "hexwisp", "gatehound"],
+    "My Hero": HERO_MOB_KINDS,
+    "Demon Slayer": ["ashfiend", "shardbrute", "gatehound"],
+    "Attack on Titan": ["shardbrute", "ashfiend", "gatehound"],
+    "Jujutsu Kaisen": ["hexwisp", "ashfiend", "gatehound"],
+    "Solo Leveling": ["gatehound", "hexwisp", "shardbrute"],
+  };
 
   // --- Audio ---
   let audioCtx = null;
@@ -510,14 +675,22 @@
       animated: false,
       color: "#5a4a3a",
       sprite: bake([
-        "0aaaaaa0",
-        "a777777a",
-        "a7aa7a7a",
-        "a777777a",
-        "a7a7aa7a",
-        "a777777a",
-        "a7aa7a7a",
-        "0aaaaaa0",
+        "000aaaaaa0000000",
+        "00a777777a000000",
+        "0a7aa7a7a7a00000",
+        "0a77777777a00000",
+        "0a7a7aa7a7a00000",
+        "0a77777777a00000",
+        "0a7aa7a7a7a00000",
+        "0a77777777a00000",
+        "00a7aaaa7a000000",
+        "000aaaaaa0000000",
+        "000a3333a0000000",
+        "000a3003a0000000",
+        "000a3333a0000000",
+        "000aaaaaa0000000",
+        "00aa0000aa000000",
+        "0000000000000000",
       ]),
     },
     // —— My Hero ——
@@ -558,7 +731,7 @@
     {
       id: "bakugo",
       name: "Bakugo",
-      next: null,
+      next: "howitzer",
       series: "My Hero",
       blurb: "Explosion pops",
       cost: 48,
@@ -570,6 +743,23 @@
       color: "#e85d3c",
       sprite: packSprite("bakugo", [
         "00555500","05577550","0zyyyyz0","eyyyyyye","0ezzze0","03333330","03z00z30","0y0000y0",
+      ]),
+    },
+    {
+      id: "howitzer",
+      name: "Howitzer",
+      next: null,
+      series: "My Hero",
+      blurb: "Gauntlet howitzer blasts",
+      cost: 100,
+      range: 52,
+      rate: 28,
+      damage: 40,
+      aoe: 42,
+      animated: true,
+      color: "#ff7040",
+      sprite: packSprite("howitzer", [
+        "055w5500","55777550","zyyyyyyz","weyyyyew","wezzzzewe","03333330","03z00z30","0y0w0y00",
       ]),
     },
     {
@@ -609,7 +799,7 @@
     {
       id: "todoroki",
       name: "Todoroki",
-      next: null,
+      next: "halfcold",
       series: "My Hero",
       blurb: "Ice slow + fire hit",
       cost: 55,
@@ -622,6 +812,24 @@
       color: "#70b0e0",
       sprite: packSprite("todoroki", [
         "00x55500","0xx775y0","0x7777y0","xx7777yy","0x0000y0","0ffffff0","0x0000y0","0c0000e0",
+      ]),
+    },
+    {
+      id: "halfcold",
+      name: "Half-Cold",
+      next: null,
+      series: "My Hero",
+      blurb: "Full dual ice / fire field",
+      cost: 110,
+      range: 68,
+      rate: 30,
+      damage: 28,
+      slow: 0.5,
+      aoe: 32,
+      animated: true,
+      color: "#90c8e8",
+      sprite: packSprite("halfcold", [
+        "0xxx55y0","xx7775yy","x777777y","xxx777yyy","cx0000ye","0ffffff0","0x0000y0","0cxxxxe0",
       ]),
     },
     // —— Demon Slayer ——
@@ -1057,6 +1265,49 @@
     "veinfist", "sukuna", "markzone", "megumi",
     "shadeknife", "gravemark", "cha", "beru",
   ];
+  const MAX_UNIT_STAR = 5;
+
+  function unitStar(u) {
+    if (!u) return 1;
+    return Math.max(1, Math.min(MAX_UNIT_STAR, u.star | 1));
+  }
+
+  function starUpgradeCost(u) {
+    const def = UNIT_MAP[u.type];
+    if (!def) return Infinity;
+    const star = unitStar(u);
+    return Math.floor(unitCost(def) * (0.7 + star * 0.55));
+  }
+
+  function canGoldUpgrade(u) {
+    if (!u) return false;
+    const def = UNIT_MAP[u.type];
+    if (!def) return false;
+    if (def.next) return true;
+    return unitStar(u) < MAX_UNIT_STAR;
+  }
+
+  function goldUpgradeCost(u) {
+    if (!u) return Infinity;
+    const def = UNIT_MAP[u.type];
+    if (!def) return Infinity;
+    if (def.next) return unitCost(UNIT_MAP[def.next]);
+    return starUpgradeCost(u);
+  }
+
+  function scaledDamage(def, u) {
+    const base = def.damage || 0;
+    if (!base) return 0;
+    const star = unitStar(u);
+    return Math.max(1, Math.floor(base * (1 + (star - 1) * 0.3)));
+  }
+
+  function scaledRange(def, u) {
+    const base = def.range || 0;
+    if (!base) return 0;
+    const star = unitStar(u);
+    return base * (1 + (star - 1) * 0.08);
+  }
 
   // Tile types: 0 grass (buildable), 3 rock, 4 spawn, 5 exit
   // One layout per cast series (+ lane works). Mid row stays a clear corridor.
@@ -1066,8 +1317,8 @@
       name: "Lane Works",
       series: "Lane Works",
       blurb: "Crate yard — stacked boxes to learn the maze",
-      grassA: "#1c2818",
-      grassB: "#182214",
+      grassA: "#2c4030",
+      grassB: "#243628",
       rock: "#7a5a3a",
       rockDeep: "#2a2018",
       rockHi: "#c0a070",
@@ -1391,6 +1642,7 @@
     tick: 0,
     spawnQueue: [],
     spawnTimer: 0,
+    waveLeaks: 0,
     runSettled: false,
   };
 
@@ -1407,22 +1659,29 @@
   }
 
   function updateHud() {
-    el.gold.textContent = `Gold ${state.gold}`;
-    el.lives.textContent = `Lives ${state.lives}`;
-    el.wave.textContent = `Wave ${state.wave}`;
-    el.income.textContent = `Income +${state.income}`;
+    el.gold.textContent = `${state.gold}g`;
+    el.lives.textContent = `HP${state.lives}`;
+    el.wave.textContent = `W${state.wave}`;
+    el.income.textContent = `+${state.income}`;
     updateMetaHud();
     const u = state.selectedUnit;
     el.sell.disabled = !u || state.mode !== "build";
-    const nextCost =
-      u && UNIT_MAP[u.type].next
-        ? unitCost(UNIT_MAP[UNIT_MAP[u.type].next])
-        : Infinity;
+    const upCost = goldUpgradeCost(u);
     el.upgrade.disabled =
       !u ||
       state.mode !== "build" ||
-      !UNIT_MAP[u.type].next ||
-      state.gold < nextCost;
+      !canGoldUpgrade(u) ||
+      state.gold < upCost;
+    if (el.upgrade) {
+      if (!u) el.upgrade.textContent = "Upgrade";
+      else if (!canGoldUpgrade(u)) el.upgrade.textContent = "Maxed";
+      else {
+        const def = UNIT_MAP[u.type];
+        el.upgrade.textContent = def && def.next
+          ? `Evolve ${upCost}g`
+          : `Lv ${unitStar(u) + 1} · ${upCost}g`;
+      }
+    }
     el.ready.disabled = state.mode !== "build";
     el.ready.textContent = readyButtonLabel();
     // Reset stays visible so players never need a browser refresh.
@@ -1504,7 +1763,52 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "card" + (state.selectedShop === id ? " selected" : "");
-      btn.innerHTML = `<span class="name">${u.name}</span><span class="meta">${u.series}</span><span class="meta">${u.blurb}</span><span class="cost">${unitCost(u)}g</span>`;
+      btn.dataset.series = u.series || "";
+      const endgame = EA && EA.unitPortrait && EA.unitPortrait(id);
+      let art;
+      if (endgame) {
+        art = document.createElement("img");
+        art.className = "art art-endgame";
+        art.src = endgame.src;
+        art.alt = "";
+        art.width = 48;
+        art.height = 48;
+        art.setAttribute("aria-hidden", "true");
+      } else {
+        art = document.createElement("canvas");
+        art.className = "art";
+        art.width = 32;
+        art.height = 32;
+        art.setAttribute("aria-hidden", "true");
+        const actx = art.getContext("2d");
+        actx.imageSmoothingEnabled = false;
+        actx.fillStyle = "#0c0a08";
+        actx.fillRect(0, 0, 32, 32);
+        const frame =
+          (SS && SS.units && SS.units[id] && SS.units[id].idle && SS.units[id].idle[0]) ||
+          u.sprite;
+        if (frame) {
+          const pad = 4;
+          actx.drawImage(frame, pad, pad, 32 - pad * 2, 32 - pad * 2);
+        }
+      }
+      btn.appendChild(art);
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = u.name;
+      btn.appendChild(name);
+      const series = document.createElement("span");
+      series.className = "meta";
+      series.textContent = u.series;
+      btn.appendChild(series);
+      const blurb = document.createElement("span");
+      blurb.className = "meta";
+      blurb.textContent = u.blurb;
+      btn.appendChild(blurb);
+      const cost = document.createElement("span");
+      cost.className = "cost";
+      cost.textContent = `${unitCost(u)}g`;
+      btn.appendChild(cost);
       btn.addEventListener("click", () => {
         ensureAudio();
         preferLandscape();
@@ -1515,8 +1819,6 @@
         renderSpritePreview(id);
         updateHud();
         beep(520, 0.04);
-        // Close overlay so the map is free to tap on phones.
-        closeDrawers();
       });
       el.shop.appendChild(btn);
     });
@@ -1533,8 +1835,8 @@
       const def = UNIT_MAP[state.selectedUnit.type];
       setHint(
         state.mode === "wave"
-          ? `Selected ${def.name}.`
-          : `Selected ${def.name}. Open Unit ▸ to sell or upgrade.`
+          ? `Selected ${def.name} ★${unitStar(state.selectedUnit)}.`
+          : `Selected ${def.name} ★${unitStar(state.selectedUnit)}. Sell or upgrade with gold.`
       );
       updateHud();
       openDrawer("unit");
@@ -1546,8 +1848,8 @@
     }
     const id = state.selectedShop;
     if (!id) {
-      setHint("Open Shop ▸, pick a unit, then tap grass.");
-      openDrawer("shop");
+      setHint("Open Units ▸, pick a unit, then tap grass.");
+      openDrawer("unit");
       return;
     }
     const def = UNIT_MAP[id];
@@ -1573,6 +1875,7 @@
       cd: 0,
       attackAnim: 0,
       spent: paid,
+      star: 1,
     };
     state.units.push(unit);
     state.selectedUnit = unit;
@@ -1621,20 +1924,50 @@
     const u = state.selectedUnit;
     if (!u || state.mode !== "build") return;
     const cur = UNIT_MAP[u.type];
-    if (!cur.next) return;
-    const next = UNIT_MAP[cur.next];
-    const paid = unitCost(next);
+    if (!cur) return;
+
+    // Prefer form evolve when available, then star levels with gold.
+    if (cur.next) {
+      const next = UNIT_MAP[cur.next];
+      if (!next) return;
+      const paid = unitCost(next);
+      if (state.gold < paid) {
+        setHint("Need more gold to evolve.");
+        return;
+      }
+      state.gold -= paid;
+      u.type = next.id;
+      u.spent += paid;
+      u.star = unitStar(u);
+      recomputePath();
+      beep(880, 0.06);
+      setHint(`Evolved to ${next.name} ★${unitStar(u)}. Keep upgrading with gold.`);
+      updateHud();
+      return;
+    }
+
+    if (unitStar(u) >= MAX_UNIT_STAR) {
+      setHint(`${cur.name} is maxed.`);
+      return;
+    }
+    const paid = starUpgradeCost(u);
     if (state.gold < paid) {
-      setHint("Need more gold to upgrade.");
+      setHint("Need more gold to level up.");
       return;
     }
     state.gold -= paid;
-    u.type = next.id;
+    u.star = unitStar(u) + 1;
     u.spent += paid;
-    recomputePath();
-    beep(880, 0.06);
-    setHint(`Upgraded to ${next.name}!`);
+    beep(920, 0.05);
+    setHint(`${cur.name} → ★${unitStar(u)}. Damage up.`);
     updateHud();
+  }
+
+  function mapMobKinds() {
+    const theme = state.map && state.map.theme;
+    const series = theme && theme.series;
+    const list = (series && SERIES_MOBS[series]) || MOB_KINDS;
+    return list.length ? list : MOB_KINDS;
   }
 
   function waveEnemyPlan(n) {
@@ -1642,6 +1975,7 @@
     const hp = 40 + n * 18;
     const speed = (0.55 + Math.min(0.45, n * 0.03)) * 1.1 * PX;
     const reward = 4 + Math.floor(n * 0.6);
+    const kinds = mapMobKinds();
     const list = [];
     for (let i = 0; i < count; i++) {
       const elite = n > 3 && i % 7 === 0;
@@ -1651,11 +1985,19 @@
         speed: elite ? speed * 0.85 : speed,
         reward: elite ? reward * 3 : reward,
         elite,
-        kind: MOB_KINDS[i % MOB_KINDS.length],
+        kind: kinds[i % kinds.length],
         delay: i * 22,
       });
     }
     if (n % 5 === 0) {
+      const bossKind =
+        kinds.includes("multifist")
+          ? "multifist"
+          : kinds.includes("shardbrute")
+            ? "shardbrute"
+            : kinds.includes("gatehound")
+              ? "gatehound"
+              : kinds[kinds.length - 1];
       list.push({
         hp: hp * 6,
         maxHp: hp * 6,
@@ -1663,7 +2005,7 @@
         reward: reward * 8,
         elite: true,
         boss: true,
-        kind: n % 10 === 0 ? "gatehound" : "shardbrute",
+        kind: n % 10 === 0 && kinds.includes("gatehound") ? "gatehound" : bossKind,
         delay: count * 22 + 30,
       });
     }
@@ -1682,6 +2024,7 @@
     state.wave += 1;
     state.mode = "wave";
     state.selectedUnit = null;
+    state.waveLeaks = 0;
     state.spawnQueue = waveEnemyPlan(state.wave);
     state.spawnTimer = 0;
     state.enemies = [];
@@ -1689,7 +2032,7 @@
     state.shadows = [];
     beep(400, 0.08);
     beep(500, 0.08);
-    setHint("Hold the maze! Spend gold mid-wave to place more towers.");
+    setHint("Hold the maze! Gold places/upgrades units. Spirit banks after the wave.");
     updateHud();
   }
 
@@ -1718,9 +2061,18 @@
     state.shadows = [];
     state.gold += state.income;
     state.income += 3;
+    const leaks = state.waveLeaks | 0;
+    const gained = awardWaveSpirit(state.wave, leaks);
+    const pct = Math.max(0, 100 - leaks * 10);
     beep(523, 0.07);
     beep(659, 0.08);
-    setHint(`Wave cleared! +${state.income - 3} income banked. Fortify the line.`);
+    if (leaks === 0) {
+      setHint(`Clean clear! +${gained} Spirit (100%). +${state.income - 3} income.`);
+    } else {
+      setHint(
+        `Wave cleared · ${leaks} leak${leaks === 1 ? "" : "s"} → ${pct}% · +${gained} Spirit. +${state.income - 3} income.`
+      );
+    }
     if (state.wave >= 15) {
       state.mode = "win";
       settleRun(true);
@@ -1732,12 +2084,15 @@
     return { x: unit.tx * TILE + TILE / 2, y: unit.ty * TILE + TILE / 2 };
   }
 
-  function unitRange(def) {
-    return (def.range || 0) * PX;
+  function unitRange(def, u) {
+    return scaledRange(def, u) * PX;
   }
 
-  function unitAoe(def) {
-    return (def.aoe || 0) * PX;
+  function unitAoe(def, u) {
+    const base = def.aoe || 0;
+    if (!base) return 0;
+    const star = unitStar(u);
+    return base * PX * (1 + (star - 1) * 0.06);
   }
 
   function pushMuzzleAndRange(unit, def) {
@@ -1756,7 +2111,7 @@
       y: cy,
       life: 18,
       maxLife: 18,
-      rangePing: unitRange(def),
+      rangePing: unitRange(def, unit),
       color: def.color,
     });
   }
@@ -1784,7 +2139,7 @@
       const def = UNIT_MAP[u.type];
       if (!def.raiseOnKill) return;
       const c = unitCenter(u);
-      if (dist(c, corpse) > unitRange(def)) return;
+      if (dist(c, corpse) > unitRange(def, u)) return;
       const owned = state.shadows.filter((s) => s.owner === u).length;
       if (owned >= (def.maxShadows || 2)) return;
       state.shadows.push({
@@ -1813,7 +2168,7 @@
     const c = unitCenter(unit);
     let best = null;
     let bestScore = -Infinity;
-    const range = unitRange(def);
+    const range = unitRange(def, unit);
     for (const en of state.enemies) {
       const d = dist(c, en);
       if (d > range) continue;
@@ -1838,7 +2193,7 @@
     const { x: cx, y: cy } = unitCenter(unit);
     pushMuzzleAndRange(unit, def);
 
-    let dmg = def.damage;
+    let dmg = scaledDamage(def, unit);
     let crit = false;
     if (def.execute && target.hp / target.maxHp <= def.execute) {
       dmg = Math.floor(dmg * 1.75);
@@ -1862,7 +2217,7 @@
     }
 
     if (def.pulse || def.aoe) {
-      const radius = unitAoe(def) || unitRange(def) * 0.7;
+      const radius = unitAoe(def, unit) || unitRange(def, unit) * 0.7;
       state.fx.push({
         x: cx,
         y: cy,
@@ -1871,7 +2226,7 @@
         ring: radius,
         color: def.color,
       });
-      const splash = crit ? Math.floor(def.damage * 2) : def.damage;
+      const splash = crit ? Math.floor(scaledDamage(def, unit) * 2) : scaledDamage(def, unit);
       state.enemies.forEach((en) => {
         if (dist({ x: cx, y: cy }, en) <= radius) {
           damageEnemy(en, splash, def.slow);
@@ -1951,6 +2306,7 @@
       if (en.pathIndex >= state.map.path.length - 1) {
         const loss = en.boss ? 5 : en.elite ? 2 : 1;
         state.lives -= loss;
+        state.waveLeaks = (state.waveLeaks | 0) + 1;
         state.enemies.splice(i, 1);
         state.fx.push({ x: en.x, y: en.y, life: 16, text: `-${loss}`, color: "#d64545" });
         beep(90, 0.12, "sawtooth", 0.05);
@@ -2040,6 +2396,12 @@
     );
     const theme = state.map.theme || MAPS[0];
     const style = theme.style || "default";
+    // Endgame Hero Crest backdrop under the yard
+    if (style === "hero" && EA && EA.mapBackdrop) {
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(EA.mapBackdrop, 0, 0, COLS * TILE, ROWS * TILE);
+      ctx.globalAlpha = 1;
+    }
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         const t = state.map.tiles[y][x];
@@ -2049,15 +2411,22 @@
           ctx.fillStyle = theme.rockDeep;
           ctx.fillRect(px, py, TILE, TILE);
           if (style === "hero") {
+            // UA training pillar — chevron plate + green crest band
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 4 * PX, py + 2 * PX, 16 * PX, 20 * PX);
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 5 * PX, py + 3 * PX, 14 * PX, 18 * PX);
             ctx.fillStyle = theme.rockHi;
             ctx.fillRect(px + 7 * PX, py + 5 * PX, 10 * PX, 3 * PX);
+            // chevron
+            ctx.fillStyle = theme.chalk || "#e8dcc0";
+            ctx.fillRect(px + 8 * PX, py + 9 * PX, 8 * PX, 2 * PX);
+            ctx.fillRect(px + 9 * PX, py + 11 * PX, 6 * PX, 2 * PX);
+            ctx.fillRect(px + 10 * PX, py + 13 * PX, 4 * PX, 2 * PX);
             ctx.fillStyle = theme.accent;
-            ctx.fillRect(px + 8 * PX, py + 10 * PX, 8 * PX, 2 * PX);
-            ctx.fillRect(px + 9 * PX, py + 13 * PX, 6 * PX, 2 * PX);
+            ctx.fillRect(px + 8 * PX, py + 16 * PX, 8 * PX, 2 * PX);
             ctx.fillStyle = theme.rockDeep;
-            ctx.fillRect(px + 6 * PX, py + 18 * PX, 12 * PX, 3 * PX);
+            ctx.fillRect(px + 6 * PX, py + 19 * PX, 12 * PX, 2 * PX);
           } else if (style === "river") {
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 3 * PX, py + 4 * PX, 18 * PX, 14 * PX);
@@ -2095,14 +2464,19 @@
             ctx.fillStyle = theme.rockDeep;
             ctx.fillRect(px + 7 * PX, py + 18 * PX, 10 * PX, 3 * PX);
           } else if (style === "crates") {
+            // Stacked crate with plank lines + strap
+            ctx.fillStyle = theme.rockDeep;
+            ctx.fillRect(px + 3 * PX, py + 5 * PX, 18 * PX, 16 * PX);
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 4 * PX, py + 6 * PX, 16 * PX, 14 * PX);
             ctx.fillStyle = theme.rockHi;
             ctx.fillRect(px + 5 * PX, py + 7 * PX, 14 * PX, 3 * PX);
+            ctx.fillRect(px + 5 * PX, py + 12 * PX, 14 * PX, 2 * PX);
             ctx.fillStyle = theme.accent;
-            ctx.fillRect(px + 10 * PX, py + 12 * PX, 4 * PX, 4 * PX);
+            ctx.fillRect(px + 11 * PX, py + 8 * PX, 2 * PX, 10 * PX);
             ctx.fillStyle = theme.rockDeep;
             ctx.fillRect(px + 4 * PX, py + 18 * PX, 16 * PX, 2 * PX);
+            ctx.fillRect(px + 7 * PX, py + 4 * PX, 10 * PX, 2 * PX);
           } else {
             ctx.fillStyle = theme.rock;
             ctx.fillRect(px + 4 * PX, py + 5 * PX, 12 * PX, 10 * PX);
@@ -2110,55 +2484,101 @@
             ctx.fillRect(px + 5 * PX, py + 6 * PX, 10 * PX, 3 * PX);
           }
         } else if (t === 4) {
-          ctx.fillStyle = "#5a2018";
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#e85d3c";
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-          ctx.fillStyle = "#ff8a60";
-          ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
+          drawPortalTile(px, py, "spawn");
         } else if (t === 5) {
-          ctx.fillStyle = "#143830";
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = "#3db8a0";
-          ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
-          ctx.fillStyle = "#7ae0c8";
-          ctx.fillRect(px + 7 * PX, py + 7 * PX, 8 * PX, 8 * PX);
+          drawPortalTile(px, py, "exit");
         } else {
           const parity = (x + y) & 1;
-          ctx.fillStyle = parity ? theme.grassA : theme.grassB;
-          ctx.fillRect(px, py, TILE, TILE);
+          if (style === "hero" && EA && EA.mapBackdrop) {
+            // Let the endgame UA yard show through; keep a light checker wash
+            ctx.fillStyle = parity ? "rgba(42,36,28,0.35)" : "rgba(34,30,24,0.28)";
+            ctx.fillRect(px, py, TILE, TILE);
+          } else {
+            ctx.fillStyle = parity ? theme.grassA : theme.grassB;
+            ctx.fillRect(px, py, TILE, TILE);
+          }
           if (theme.chalk && ((x * 5 + y * 3) % 7) === 0) {
             ctx.fillStyle = theme.chalk;
             ctx.globalAlpha = 0.28;
             ctx.fillRect(px + 4 * PX, py + 11 * PX, 16 * PX, 2 * PX);
             ctx.globalAlpha = 1;
+          } else if (style === "hero" && ((x + y) % 5) === 0) {
+            // training-lane hash marks
+            ctx.fillStyle = theme.chalk || "#e8dcc0";
+            ctx.globalAlpha = 0.2;
+            ctx.fillRect(px + 2 * PX, py + 10 * PX, 4 * PX, 2 * PX);
+            ctx.fillRect(px + 18 * PX, py + 12 * PX, 4 * PX, 2 * PX);
+            ctx.globalAlpha = 1;
           } else if (((x * 13 + y * 7) % 11) === 0) {
             ctx.fillStyle = theme.grassA;
             ctx.fillRect(px + 8 * PX, py + 12 * PX, 4 * PX, 3 * PX);
           }
-          if (theme.accent && ((x + y * 2) % 9) === 0) {
+          if (style === "hero" && theme.accent && ((x * 3 + y) % 8) === 0) {
+            ctx.fillStyle = theme.accent;
+            ctx.globalAlpha = 0.22;
+            ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
+            ctx.fillRect(px + 11 * PX, py + 5 * PX, 2 * PX, 6 * PX);
+            ctx.globalAlpha = 1;
+          } else if (theme.accent && ((x + y * 2) % 9) === 0) {
             ctx.fillStyle = theme.accent;
             ctx.globalAlpha = 0.18;
             ctx.fillRect(px + 10 * PX, py + 6 * PX, 4 * PX, 4 * PX);
             ctx.globalAlpha = 1;
           }
-          if (
-            (state.mode === "build" ||
-              (state.mode === "wave" && state.selectedShop)) &&
-            pathTiles.has(`${x},${y}`)
-          ) {
-            ctx.fillStyle = "rgba(232,197,106,0.28)";
+          if (pathTiles.has(`${x},${y}`)) {
+            // Always show a soft lane trail so the maze reads at a glance.
+            ctx.fillStyle = "rgba(200, 170, 110, 0.16)";
             ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-            ctx.fillStyle = "rgba(232,197,106,0.45)";
-            ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
+            ctx.fillStyle = "rgba(232, 197, 106, 0.22)";
+            ctx.fillRect(px + 10 * PX, py + 10 * PX, 4 * PX, 4 * PX);
+            if (
+              state.mode === "build" ||
+              (state.mode === "wave" && state.selectedShop)
+            ) {
+              ctx.fillStyle = "rgba(232,197,106,0.22)";
+              ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+              ctx.fillStyle = "rgba(232,197,106,0.5)";
+              ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
+            }
           }
         }
       }
     }
   }
 
-  const UNIT_DRAW = Math.round(12 * PX);
-  const UNIT_DRAW_ANIM = Math.round(16 * PX);
+  function drawPortalTile(px, py, kind) {
+    const pulse = 0.55 + 0.45 * Math.sin(state.tick * 0.12);
+    const isSpawn = kind === "spawn";
+    const deep = isSpawn ? "#2a100c" : "#0c221c";
+    const mid = isSpawn ? "#e85d3c" : "#3db8a0";
+    const hi = isSpawn ? "#ffb080" : "#9af0d8";
+    const rim = isSpawn ? "#7a2818" : "#184838";
+    ctx.fillStyle = deep;
+    ctx.fillRect(px, py, TILE, TILE);
+    ctx.fillStyle = rim;
+    ctx.fillRect(px + 2 * PX, py + 2 * PX, 20 * PX, 20 * PX);
+    ctx.fillStyle = mid;
+    ctx.globalAlpha = 0.55 + pulse * 0.35;
+    ctx.fillRect(px + 5 * PX, py + 5 * PX, 14 * PX, 14 * PX);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = hi;
+    ctx.fillRect(px + 9 * PX, py + 9 * PX, 6 * PX, 6 * PX);
+    // Arch posts
+    ctx.fillStyle = rim;
+    ctx.fillRect(px + 3 * PX, py + 3 * PX, 3 * PX, 18 * PX);
+    ctx.fillRect(px + 18 * PX, py + 3 * PX, 3 * PX, 18 * PX);
+    ctx.fillRect(px + 3 * PX, py + 3 * PX, 18 * PX, 3 * PX);
+    ctx.fillStyle = hi;
+    ctx.globalAlpha = 0.35 + pulse * 0.4;
+    ctx.fillRect(px + 6 * PX, py + 1 * PX, 12 * PX, 2 * PX);
+    ctx.globalAlpha = 1;
+  }
+
+  // Board-native draw sizes: sprites are baked to TILE×TILE and must fill one cell.
+  const UNIT_DRAW = Math.round(14 * PX);
+  const UNIT_DRAW_ANIM = Math.round(18 * PX);
+  const UNIT_DRAW_BOARD = TILE; // endgame pixel art matches one maze cell
+  const MOB_DRAW_BOARD = TILE - 2;
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2166,30 +2586,48 @@
       const c = unitCenter(u);
       if (state.selectedUnit === u) {
         ctx.beginPath();
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = "#e8c56a";
-        ctx.strokeRect(u.tx * TILE + 0.5, u.ty * TILE + 0.5, TILE - 1, TILE - 1);
+        ctx.strokeRect(u.tx * TILE + 1, u.ty * TILE + 1, TILE - 2, TILE - 2);
+        ctx.strokeStyle = "rgba(61,184,160,0.55)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(u.tx * TILE + 3, u.ty * TILE + 3, TILE - 6, TILE - 6);
         if (def.range > 0) {
+          const pulse = 0.35 + 0.15 * Math.sin(state.tick * 0.15);
           ctx.beginPath();
-          ctx.arc(c.x, c.y, unitRange(def), 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(61,184,160,0.4)";
+          ctx.arc(c.x, c.y, unitRange(def, u), 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(61,184,160,${pulse})`;
           ctx.lineWidth = 1;
           ctx.stroke();
         }
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
       }
+      const endgame =
+        EA && EA.unitMapSprite ? EA.unitMapSprite(u.type) : null;
       const anim =
-        def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
-      const drawSize = anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
-      const ox = c.x - drawSize / 2;
-      const oy = c.y - drawSize / 2;
-      // Outline so units read on teal pads / grass
-      ctx.fillStyle = "#0a0806";
-      ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
-      ctx.fillStyle = def.color;
-      ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
-      ctx.drawImage(anim || def.sprite, ox, oy, drawSize, drawSize);
+        !endgame && def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
+      const drawSize = endgame
+        ? UNIT_DRAW_BOARD
+        : anim
+          ? UNIT_DRAW_ANIM
+          : UNIT_DRAW;
+      // Snap endgame art to the tile so it scales with the board, not free-float.
+      const ox = endgame ? u.tx * TILE : c.x - drawSize / 2;
+      const oy = endgame ? u.ty * TILE : c.y - drawSize / 2;
+      if (!endgame) {
+        ctx.fillStyle = "#0a0806";
+        ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
+        ctx.fillStyle = def.color;
+        ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
+      } else {
+        // Thin underplate so the cell still reads on busy backdrops
+        ctx.fillStyle = "rgba(10,8,6,0.55)";
+        ctx.fillRect(ox, oy, TILE, TILE);
+      }
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(endgame || anim || def.sprite, ox, oy, drawSize, drawSize);
+      ctx.imageSmoothingEnabled = false;
     });
   }
 
@@ -2208,15 +2646,27 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+      const endgame =
+        EA && EA.mobMapSprite ? EA.mobMapSprite(en.kind) : null;
+      const base = endgame
+        ? en.boss
+          ? TILE + 4
+          : en.elite
+            ? TILE
+            : MOB_DRAW_BOARD
+        : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       const frame =
-        SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
-      if (frame) {
+        !endgame && SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
+      if (endgame || frame) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
-        ctx.fillStyle = "#0a0806";
-        ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
-        ctx.drawImage(frame, ox, oy, base, base);
+        if (!endgame) {
+          ctx.fillStyle = "#0a0806";
+          ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
+        }
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(endgame || frame, ox, oy, base, base);
+        ctx.imageSmoothingEnabled = false;
       } else {
         const s = (en.boss ? 16 : en.elite ? 11 : 9) * PX;
         const body = en.boss ? "#ff7048" : en.elite ? "#ffe080" : "#f0a050";
@@ -2337,6 +2787,7 @@
     state.fx = [];
     state.spawnQueue = [];
     state.spawnTimer = 0;
+    state.waveLeaks = 0;
     state.runSettled = false;
     state.tick = 0;
     if (!keepMap) {
@@ -2354,6 +2805,29 @@
     beep(520, 0.05);
   }
 
+  function drawAtmosphere() {
+    // Soft vignette so the lane reads as a stage, not a flat grid.
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.48, H * 0.35, W * 0.5, H * 0.5, H * 0.9);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(0.75, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.22)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // Theme dust motes
+    const theme = state.map.theme || MAPS[0];
+    const mote = theme.accent || "#e8c56a";
+    for (let i = 0; i < 8; i++) {
+      const seed = i * 97 + (state.tick >> 1);
+      const x = (seed * 13) % W;
+      const y = ((seed * 29) + Math.floor(state.tick * (0.15 + (i % 3) * 0.05))) % H;
+      ctx.globalAlpha = 0.1 + (i % 3) * 0.05;
+      ctx.fillStyle = mote;
+      ctx.fillRect(x, y, 1 + (i % 2), 1 + (i % 2));
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawOverlay() {
     if (state.mode === "win" || state.mode === "lose") {
       ctx.fillStyle = "rgba(10,8,6,0.72)";
@@ -2365,17 +2839,9 @@
       ctx.fillText(msg, (W - m.width) / 2, H / 2);
       ctx.fillStyle = "#e6dcc8";
       ctx.font = "6px Press Start 2P, monospace";
-      const sub = "Reset · Unit ▸ for Spirit";
+      const sub = "Reset · Unit panel for Spirit";
       const m2 = ctx.measureText(sub);
       ctx.fillText(sub, (W - m2.width) / 2, H / 2 + 16);
-    } else if (state.mode === "build") {
-      ctx.fillStyle = "rgba(230,220,200,0.8)";
-      ctx.font = "6px Press Start 2P, monospace";
-      ctx.fillText("BUILD PHASE", 6, 10);
-    } else {
-      ctx.fillStyle = "#e85d3c";
-      ctx.font = "6px Press Start 2P, monospace";
-      ctx.fillText(`WAVE ${state.wave}`, 6, 10);
     }
   }
 
@@ -2390,6 +2856,7 @@
     drawEnemies();
     drawProjectiles();
     drawFx();
+    drawAtmosphere();
     drawOverlay();
     requestAnimationFrame(frame);
   }
@@ -2424,6 +2891,42 @@
   });
   el.sell.addEventListener("click", sellSelected);
   el.upgrade.addEventListener("click", upgradeSelected);
+
+  if (el.btnFullscreen) {
+    el.btnFullscreen.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+      beep(480, 0.03);
+    });
+  }
+  if (el.btnFullscreenMenu) {
+    el.btnFullscreenMenu.addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleFullscreen();
+      beep(480, 0.03);
+    });
+  }
+  document.addEventListener("fullscreenchange", () => {
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 40);
+  });
+  document.addEventListener("webkitfullscreenchange", () => {
+    syncFullscreenUi();
+    setTimeout(fitDisplay, 40);
+  });
+  // Offer fullscreen on first meaningful tap (desktop / Android / some iPads).
+  let offeredFs = false;
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      if (offeredFs || isStandaloneApp() || isBrowserFullscreen()) return;
+      offeredFs = true;
+      // Don't force — just mark that user interacted; button remains primary control.
+    },
+    { passive: true }
+  );
+  syncFullscreenUi();
 
   function bindDrawerButton(btn, which) {
     if (!btn) return;
@@ -2764,9 +3267,7 @@
   updateHud();
   closeDrawers();
   syncMapSelect("lane-works", MAP_BY_ID["lane-works"]);
-  setHint(
-    "Map fills the screen. Shop ▸ buy · Unit ▸ sell/Spirit · Menu ▸ map/reset."
-  );
+  setHint("Open Shop to buy a unit, then tap grass to place it.");
   preferLandscape();
   fitDisplay();
   // Safari often lays out after the first paint — refit so the map isn't 0×0.
@@ -2798,10 +3299,10 @@
       name: state.map.theme && state.map.theme.name,
     }),
     setGold(n) {
-      state.gold = n;
+      state.gold = Math.max(0, n | 0);
       updateHud();
     },
-    getUnits: () => state.units.map((u) => ({ type: u.type, tx: u.tx, ty: u.ty })),
+    getUnits: () => state.units.map((u) => ({ type: u.type, tx: u.tx, ty: u.ty, star: unitStar(u) })),
     getPath: () => (state.map.tilePath || []).map((p) => ({ x: p.x, y: p.y })),
     getPathPixels: () => (state.map.path || []).length,
     getMode: () => state.mode,
@@ -2823,14 +3324,22 @@
     },
     buyMeta: buyMetaUpgrade,
     newRun: startNewRun,
-    showStore: () => openDrawer("unit"),
+    showStore: () => openDrawer("shop"),
     showShop: () => openDrawer("shop"),
     closeDrawers,
+    mapMobKinds,
   };
+
   // Drop any boot splash immediately so Safari never sticks on "Loading…"
   document.querySelectorAll("#boot-splash").forEach((node) => {
     node.classList.add("hide");
     setTimeout(() => node.remove(), 350);
   });
+  if (EA && EA.whenReady) {
+    EA.whenReady(() => {
+      renderShop();
+      updateHud();
+    });
+  }
   requestAnimationFrame(frame);
 })();

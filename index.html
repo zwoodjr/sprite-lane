@@ -45,6 +45,8 @@
   </style>
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
 </head>
 <body>
   <div id="boot-splash" role="status">Loading Spirit Lane…</div>
@@ -53,37 +55,48 @@
   <div id="app">
     <div id="playfield">
       <div id="stage">
+        <div id="hud-dock" class="hud-dock overlay-chrome">
+          <div class="hud-bar">
+            <div class="hud-row">
+              <span class="hud-brand">Spirit Lane</span>
+              <span id="spirit-points" class="spirit-points">SP 0</span>
+              <span id="gold" class="stat gold">150g</span>
+              <span id="lives" class="stat lives">HP20</span>
+              <span id="wave" class="stat wave">W0</span>
+              <span id="income" class="stat income">+10</span>
+            </div>
+            <p id="hint" class="hint">Open Shop to buy · tap grass to place</p>
+          </div>
+          <button
+            type="button"
+            id="btn-fullscreen"
+            class="btn-fullscreen"
+            aria-pressed="false"
+            title="Full screen"
+          >
+            Full
+          </button>
+        </div>
+
         <div id="frame">
           <canvas id="game" width="480" height="264" aria-label="Spirit Lane game"></canvas>
-          <div id="overlay" class="overlay" aria-live="polite">
-            <div class="hud-bar overlay-chrome">
-              <div class="hud-top">
-                <span class="hud-brand">Spirit Lane</span>
-                <span id="spirit-points" class="spirit-points">Spirit 0</span>
-              </div>
-              <div class="stats">
-                <span id="gold">💰 150</span>
-                <span id="lives">❤ 20</span>
-                <span id="wave">Wave 0</span>
-                <span id="income">Income +10</span>
-              </div>
-              <p id="hint" class="hint">Tap Shop ▸ to buy. Tap grass to place.</p>
-            </div>
-          </div>
         </div>
 
         <div id="edge-tabs" class="edge-tabs overlay-chrome" aria-label="Open panels">
           <button type="button" id="btn-drawer-shop" class="edge-tab" aria-expanded="false" aria-controls="drawer-shop">
-            <span class="edge-arrow" aria-hidden="true">◂</span>
+            <span class="edge-glyph" aria-hidden="true">◆</span>
             <span class="edge-label">Shop</span>
+            <span class="edge-arrow" aria-hidden="true">◂</span>
           </button>
           <button type="button" id="btn-drawer-unit" class="edge-tab" aria-expanded="false" aria-controls="drawer-unit">
+            <span class="edge-glyph" aria-hidden="true">◇</span>
+            <span class="edge-label">Units</span>
             <span class="edge-arrow" aria-hidden="true">◂</span>
-            <span class="edge-label">Unit</span>
           </button>
           <button type="button" id="btn-drawer-menu" class="edge-tab" aria-expanded="false" aria-controls="drawer-menu">
-            <span class="edge-arrow" aria-hidden="true">◂</span>
+            <span class="edge-glyph" aria-hidden="true">☰</span>
             <span class="edge-label">Menu</span>
+            <span class="edge-arrow" aria-hidden="true">◂</span>
           </button>
         </div>
 
@@ -99,24 +112,30 @@
       <h2 id="drawer-shop-title">Shop</h2>
       <button type="button" id="btn-close-shop" class="drawer-close" aria-label="Close shop">▸</button>
     </div>
-    <p class="drawer-blurb">Pick a unit, then tap grass on the map to place it.</p>
-    <div id="shop" class="shop" role="listbox" aria-label="Unit shop"></div>
-    <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
+    <p class="drawer-blurb">
+      Spirit only. Boosts are permanent on this device. Earn Spirit each wave — full payout if nothing leaks (−10% per leak).
+    </p>
+    <div class="meta-bar">
+      <span id="shop-spirit" class="spirit-points">Spirit 0</span>
+      <span id="meta-best" class="meta-best">Best W0</span>
+    </div>
+    <div id="meta-store" class="meta-store" role="list"></div>
   </aside>
 
   <aside id="drawer-unit" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-unit-title">
     <div class="drawer-head">
-      <h2 id="drawer-unit-title">Unit</h2>
-      <button type="button" id="btn-close-unit" class="drawer-close" aria-label="Close unit panel">▸</button>
+      <h2 id="drawer-unit-title">Units</h2>
+      <button type="button" id="btn-close-unit" class="drawer-close" aria-label="Close units panel">▸</button>
     </div>
-    <p id="unit-selected" class="drawer-blurb">Tap a placed unit on the map to select it.</p>
+    <p class="drawer-blurb">Gold only. Pick a unit to place, or select one on the map to sell / upgrade.</p>
+    <p id="unit-selected" class="drawer-blurb">No unit selected.</p>
     <div class="drawer-actions">
       <button type="button" id="btn-sell" class="ghost" disabled>Sell</button>
       <button type="button" id="btn-upgrade" class="ghost" disabled>Upgrade</button>
     </div>
-    <div class="rail-label">Spirit upgrades</div>
-    <p class="store-blurb">Permanent boosts with Spirit Points. Saved on this device.</p>
-    <div id="meta-store" class="meta-store" role="list"></div>
+    <div class="rail-label">Buy with gold</div>
+    <div id="shop" class="shop" role="listbox" aria-label="Buy units"></div>
+    <div id="sprite-preview" class="sprite-preview" aria-label="Sprite preview"></div>
   </aside>
 
   <aside id="drawer-menu" class="drawer" hidden aria-hidden="true" aria-labelledby="drawer-menu-title">
@@ -125,7 +144,7 @@
       <button type="button" id="btn-close-menu" class="drawer-close" aria-label="Close menu">▸</button>
     </div>
     <div class="meta-bar">
-      <span id="meta-best" class="meta-best">Best W0</span>
+      <span class="meta-best">Maps &amp; settings</span>
     </div>
     <div class="map-picker">
       <div id="map-label" class="rail-label">Map · Lane Works</div>
@@ -135,9 +154,13 @@
       </div>
     </div>
     <div class="drawer-actions drawer-actions-stack">
+      <button type="button" id="btn-fullscreen-menu" class="ghost">Full Screen</button>
       <button type="button" id="btn-new-run" class="ghost">Reset</button>
       <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
     </div>
+    <p id="ios-home-tip" class="offline-tip">
+      iPhone: Share → Add to Home Screen for a chrome-free fullscreen app.
+    </p>
     <p id="offline-tip" class="offline-tip">
       Airplane mode: Save Offline while online, then open that copy. iPhone: Add to Home Screen.
     </p>
@@ -183,6 +206,7 @@
     });
   </script>
   <script src="sprites.js"></script>
+  <script src="assets/hero/endgame-art.js"></script>
   <script src="game.js"></script>
   <script>
     (function () {
