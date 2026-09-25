@@ -1,10 +1,11 @@
 (() => {
   "use strict";
 
-  // Endgame rendered art for My Hero (UI + in-map).
-  // Board sprites are turned into short idle / attack / walk packs so shop +
-  // maze show moving models instead of static face cards.
-  // Paths listed explicitly so the offline builder can rewrite them to data URLs.
+  // Endgame art for My Hero:
+  //  - Shop cards: portrait stages (endgame PNGs)
+  //  - Map models: NEW full-body idle/attack packs built from those same
+  //    shop cards so board units match the hero card look while moving
+  //    like the other anime series.
   const ASSET_URLS = {
     "sparkfist-endgame": "assets/hero/hero-sparkfist-endgame.png",
     "blastcrown-endgame": "assets/hero/hero-blastcrown-endgame.png",
@@ -45,29 +46,30 @@
   ];
   const HERO_MOB_IDS = ["quirling", "multifist", "floatdrone", "sparkgrub"];
 
-  const UNIT_FX = {
-    sparkfist: "#5ee08a",
-    blastcrown: "#ffe08a",
-    bakugo: "#ff8a40",
-    howitzer: "#ffb060",
-    hoverbind: "#f0b0c8",
-    zerofield: "#d0e8ff",
-    todoroki: "#90c8e8",
-    halfcold: "#ff7040",
+  // Costume / FX hints per unit (used when sampling is thin).
+  const UNIT_STYLE = {
+    sparkfist: { suit: "#1a5030", accent: "#5ee08a", boot: "#2a2018", fx: "#7dff9a" },
+    blastcrown: { suit: "#1a5030", accent: "#ffe08a", boot: "#2a2018", fx: "#fff0a0" },
+    bakugo: { suit: "#1a1410", accent: "#ff8a40", boot: "#3a2010", fx: "#ffb060" },
+    howitzer: { suit: "#1a1410", accent: "#ff7040", boot: "#3a2010", fx: "#ffe080" },
+    hoverbind: { suit: "#2a1828", accent: "#f0b0c8", boot: "#3a2030", fx: "#ffd0e8" },
+    zerofield: { suit: "#201828", accent: "#e8a0c8", boot: "#3a2038", fx: "#f0d0ff" },
+    todoroki: { suit: "#141828", accent: "#90c8e8", boot: "#1a2030", fx: "#ff7040" },
+    halfcold: { suit: "#141828", accent: "#90c8e8", boot: "#1a2030", fx: "#ff6030" },
   };
-  const MOB_FX = {
-    quirling: "#6ee0a0",
-    multifist: "#ffe080",
-    floatdrone: "#a8d0ff",
-    sparkgrub: "#ff9060",
+  const MOB_STYLE = {
+    quirling: { suit: "#1a5030", accent: "#6ee0a0", boot: "#2a2018", fx: "#9dffb0" },
+    multifist: { suit: "#2a1810", accent: "#ffe080", boot: "#3a2010", fx: "#ffd060" },
+    floatdrone: { suit: "#182030", accent: "#a8d0ff", boot: "#203040", fx: "#d0e8ff" },
+    sparkgrub: { suit: "#301810", accent: "#ff9060", boot: "#3a2010", fx: "#ffc080" },
   };
 
   const portraits = Object.create(null);
   const mapSprites = Object.create(null);
   const mobPortraits = Object.create(null);
-  const unitPacks = Object.create(null); // shop stages (fresh endgame bob)
-  const mobPacks = Object.create(null); // shop/preview fallbacks
-  const mapUnitPacks = Object.create(null); // board models: endgame look + sprite pose mechanics
+  const unitPacks = Object.create(null); // shop portrait stages
+  const mobPacks = Object.create(null);
+  const mapUnitPacks = Object.create(null); // new full-body map models
   const mapMobPacks = Object.create(null);
   let mapBackdrop = null;
   let ready = false;
@@ -104,132 +106,7 @@
     };
   }
 
-  /** Bake a posed frame from a static board/portrait sprite. */
-  function poseFrame(src, opts = {}) {
-    const { w, h } = sourceSize(src);
-    const { canvas, ctx } = makeCanvas(w, h);
-    const dx = opts.dx || 0;
-    const dy = opts.dy || 0;
-    const scaleX = opts.scaleX == null ? 1 : opts.scaleX;
-    const scaleY = opts.scaleY == null ? 1 : opts.scaleY;
-    const nw = Math.max(1, Math.round(w * scaleX));
-    const nh = Math.max(1, Math.round(h * scaleY));
-    const ox = Math.round((w - nw) / 2) + dx;
-    const oy = Math.round((h - nh) / 2) + dy;
-
-    ctx.clearRect(0, 0, w, h);
-    if (opts.mirror) {
-      ctx.save();
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(src, w - ox - nw, oy, nw, nh);
-      ctx.restore();
-    } else {
-      ctx.drawImage(src, ox, oy, nw, nh);
-    }
-
-    if (opts.tint) {
-      ctx.globalCompositeOperation = "source-atop";
-      ctx.globalAlpha = opts.tintStrength == null ? 0.22 : opts.tintStrength;
-      ctx.fillStyle = opts.tint;
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-    }
-
-    if (opts.flash) {
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = opts.flashStrength == null ? 0.35 : opts.flashStrength;
-      ctx.fillStyle = opts.flash;
-      // Accent burst near fists / lower body so it reads as motion, not a flat wash.
-      ctx.fillRect(2, Math.floor(h * 0.45), 4, 5);
-      ctx.fillRect(w - 6, Math.floor(h * 0.45), 4, 5);
-      ctx.fillRect(Math.floor(w / 2) - 2, Math.floor(h * 0.2), 4, 3);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-    }
-
-    if (opts.liftShadow) {
-      ctx.globalCompositeOperation = "destination-over";
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(Math.floor(w * 0.2), h - 2, Math.floor(w * 0.6), 2);
-      ctx.globalCompositeOperation = "source-over";
-    }
-
-    return canvas;
-  }
-
-  function buildUnitPack(src, fx) {
-    return {
-      idle: [
-        poseFrame(src, { liftShadow: true }),
-        poseFrame(src, {
-          dy: -2,
-          scaleY: 1.04,
-          tint: fx,
-          tintStrength: 0.16,
-          liftShadow: true,
-        }),
-      ],
-      attack: [
-        poseFrame(src, {
-          dy: 2,
-          scaleY: 0.82,
-          scaleX: 1.06,
-          tint: fx,
-          tintStrength: 0.28,
-          flash: fx,
-          flashStrength: 0.5,
-        }),
-        poseFrame(src, {
-          dy: -2,
-          scaleX: 1.12,
-          scaleY: 0.92,
-          tint: "#fff6d0",
-          tintStrength: 0.22,
-          flash: fx,
-          flashStrength: 0.7,
-        }),
-      ],
-    };
-  }
-
-  function buildMobPack(src, fx) {
-    return {
-      walk: [
-        poseFrame(src, { dy: 0, liftShadow: true }),
-        poseFrame(src, {
-          dy: -2,
-          dx: 1,
-          scaleY: 1.05,
-          tint: fx,
-          tintStrength: 0.14,
-          liftShadow: true,
-        }),
-        poseFrame(src, { dy: 0, mirror: true, liftShadow: true }),
-        poseFrame(src, {
-          dy: -2,
-          dx: -1,
-          mirror: true,
-          scaleY: 1.05,
-          tint: fx,
-          tintStrength: 0.14,
-          liftShadow: true,
-        }),
-      ],
-    };
-  }
-
-  /** Prefer board sprite; fall back to portrait so packs always exist when art loads. */
-  function modelSource(id, board, portrait) {
-    return board || portrait || null;
-  }
-
-  /**
-   * Merge fresh endgame art (upper body) with SpiritSprites pose frames (legs / stance).
-   * Same idle+attack mechanics as other anime series, My Hero endgame identity on top.
-   */
-  function knockOutInk(src, threshold = 22) {
+  function knockOutInk(src, threshold = 24) {
     const { w, h } = sourceSize(src);
     const { canvas, ctx } = makeCanvas(w, h);
     ctx.drawImage(src, 0, 0);
@@ -244,120 +121,273 @@
     return canvas;
   }
 
-  const knocked = Object.create(null);
-  function transparentModel(src, key) {
-    if (!src) return null;
-    if (knocked[key]) return knocked[key];
-    knocked[key] = knockOutInk(src);
-    return knocked[key];
+  function contentBounds(src) {
+    const { w, h } = sourceSize(src);
+    const { ctx } = (() => {
+      const m = makeCanvas(w, h);
+      m.ctx.drawImage(src, 0, 0);
+      return m;
+    })();
+    const d = ctx.getImageData(0, 0, w, h).data;
+    let minX = w,
+      minY = h,
+      maxX = 0,
+      maxY = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const a = d[(y * w + x) * 4 + 3];
+        if (a < 16) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < minX) return { x: 0, y: 0, w, h };
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX + 1,
+      h: maxY - minY + 1,
+    };
   }
 
-  function hybridMapFrame(endgameImg, ssFrame, opts = {}) {
-    const size = 24;
-    const { canvas, ctx } = makeCanvas(size, size);
-    const dy = opts.dy || 0;
-    const bustH = opts.bustH == null ? 17 : opts.bustH;
-    const model = endgameImg;
-
-    if (ssFrame) {
-      ctx.drawImage(ssFrame, 0, 0, size, size);
-    } else {
-      return poseFrame(model, opts);
-    }
-
-    // Stamp fresh model over head/torso; keep sprite legs/stance below.
-    // Endgame PNGs ship with opaque black mats — knock those out first.
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, size, bustH);
-    ctx.clip();
-    ctx.drawImage(model, 0, dy, size, bustH);
-    ctx.restore();
-
-    if (opts.tint) {
-      ctx.globalCompositeOperation = "source-atop";
-      ctx.globalAlpha = opts.tintStrength == null ? 0.16 : opts.tintStrength;
-      ctx.fillStyle = opts.tint;
-      ctx.fillRect(0, 0, size, size);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-    }
-    if (opts.flash) {
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = opts.flashStrength == null ? 0.45 : opts.flashStrength;
-      ctx.fillStyle = opts.flash;
-      ctx.fillRect(1, Math.floor(size * 0.42), 5, 5);
-      ctx.fillRect(size - 6, Math.floor(size * 0.42), 5, 5);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-    }
-    if (opts.liftShadow) {
-      ctx.globalCompositeOperation = "destination-over";
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillRect(Math.floor(size * 0.2), size - 2, Math.floor(size * 0.6), 2);
-      ctx.globalCompositeOperation = "source-over";
-    }
+  function cropCanvas(src, box) {
+    const { canvas, ctx } = makeCanvas(box.w, box.h);
+    ctx.drawImage(src, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
     return canvas;
   }
 
-  function buildMapUnitPack(endgameImg, ssPack, fx) {
-    const idle0 = (ssPack && ssPack.idle && ssPack.idle[0]) || null;
-    const idle1 = (ssPack && ssPack.idle && ssPack.idle[1]) || idle0;
-    const atk0 = (ssPack && ssPack.attack && ssPack.attack[0]) || idle0;
-    const atk1 = (ssPack && ssPack.attack && ssPack.attack[1]) || atk0;
+  function sampleAccent(src, fallback) {
+    const { w, h } = sourceSize(src);
+    const { ctx } = (() => {
+      const m = makeCanvas(w, h);
+      m.ctx.drawImage(src, 0, 0);
+      return m;
+    })();
+    const d = ctx.getImageData(0, 0, w, h).data;
+    let best = null;
+    let bestScore = -1;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3];
+      if (a < 200) continue;
+      const r = d[i],
+        g = d[i + 1],
+        b = d[i + 2];
+      // Prefer saturated mid/bright pixels for accents (gauntlets, FX, hair tips).
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const sat = max - min;
+      const score = sat * 2 + max;
+      if (score > bestScore && max > 80) {
+        bestScore = score;
+        best = `rgb(${r},${g},${b})`;
+      }
+    }
+    return best || fallback;
+  }
+
+  /** Shop portrait stage: card art with a light idle bob (stage drawn by UI). */
+  function buildShopPack(src, fx) {
+    const cut = knockOutInk(src);
+    const box = contentBounds(cut);
+    const head = cropCanvas(cut, box);
+    function portrait(dy, tintStr) {
+      const size = 48;
+      const { canvas, ctx } = makeCanvas(size, size);
+      const pad = 4;
+      ctx.drawImage(head, pad, pad + dy, size - pad * 2, size - pad * 2 - 4);
+      if (tintStr) {
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.globalAlpha = tintStr;
+        ctx.fillStyle = fx;
+        ctx.fillRect(0, 0, size, size);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+      return canvas;
+    }
+    return {
+      idle: [portrait(0, 0), portrait(-1, 0.08)],
+      attack: [portrait(1, 0.16), portrait(-1, 0.24)],
+    };
+  }
+
+  /**
+   * New map model: full-body 16×16 figure whose head/bust comes from the
+   * shop hero card, with anime-series-style idle bob + attack poses.
+   */
+  function buildMapModelPack(cardImg, style) {
+    const cut = knockOutInk(cardImg);
+    const box = contentBounds(cut);
+    // Face/hair only from the shop card (not the whole bust), so the map
+    // model can grow a matching full body underneath like other series.
+    const headBox = {
+      x: box.x + Math.floor(box.w * 0.08),
+      y: box.y,
+      w: Math.max(8, Math.floor(box.w * 0.84)),
+      h: Math.max(8, Math.floor(box.h * 0.48)),
+    };
+    const head = cropCanvas(cut, headBox);
+    const accent = sampleAccent(cut, style.accent);
+
+    function drawModel(pose) {
+      const SIZE = 16;
+      const { canvas, ctx } = makeCanvas(SIZE, SIZE);
+      const bob = pose.bob || 0;
+      const squat = pose.squat || 0;
+      const armsOut = !!pose.armsOut;
+      const flash = !!pose.flash;
+      const step = pose.step || 0;
+
+      // Boots / legs (same silhouette language as other anime packs)
+      ctx.fillStyle = style.boot;
+      const legY = 13 + squat;
+      if (step === 0) {
+        ctx.fillRect(5, legY, 2, 2);
+        ctx.fillRect(9, legY, 2, 2);
+      } else {
+        ctx.fillRect(4, legY, 2, 2);
+        ctx.fillRect(10, legY - 1, 2, 2);
+      }
+      // Lower suit
+      ctx.fillStyle = style.suit;
+      ctx.fillRect(5, 11 + squat, 6, 3);
+
+      // Torso
+      ctx.fillRect(4, 7 + bob + squat, 8, 5);
+      // Belt / chest accent from card palette
+      ctx.fillStyle = accent;
+      ctx.fillRect(5, 9 + bob + squat, 6, 1);
+      ctx.fillRect(4, 8 + bob + squat, 1, 2);
+      ctx.fillRect(11, 8 + bob + squat, 1, 2);
+
+      // Arms
+      ctx.fillStyle = style.suit;
+      if (armsOut) {
+        ctx.fillRect(1, 8 + bob, 3, 2);
+        ctx.fillRect(12, 8 + bob, 3, 2);
+        ctx.fillStyle = accent;
+        ctx.fillRect(0, 7 + bob, 2, 3);
+        ctx.fillRect(14, 7 + bob, 2, 3);
+      } else {
+        ctx.fillRect(3, 8 + bob, 2, 3);
+        ctx.fillRect(11, 8 + bob, 2, 3);
+        ctx.fillStyle = accent;
+        ctx.fillRect(2, 9 + bob, 2, 2);
+        ctx.fillRect(12, 9 + bob, 2, 2);
+      }
+
+      // Shop-card face/hair on top
+      const headW = 10;
+      const headH = 7;
+      const hx = 3;
+      const hy = Math.max(0, bob);
+      ctx.drawImage(head, hx, hy, headW, headH);
+
+      if (flash) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = style.fx;
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(0, 6 + bob, 3, 3);
+        ctx.fillRect(13, 6 + bob, 3, 3);
+        ctx.fillRect(7, 1 + bob, 2, 2);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(4, 15, 8, 1);
+
+      return canvas;
+    }
+
     return {
       idle: [
-        hybridMapFrame(endgameImg, idle0, { liftShadow: true, tint: fx, tintStrength: 0.05 }),
-        hybridMapFrame(endgameImg, idle1, {
-          dy: -1,
-          liftShadow: true,
-          tint: fx,
-          tintStrength: 0.12,
-        }),
+        drawModel({ bob: 0, step: 0 }),
+        drawModel({ bob: -1, step: 1 }),
       ],
       attack: [
-        hybridMapFrame(endgameImg, atk0, {
-          dy: 1,
-          bustH: 16,
-          tint: fx,
-          tintStrength: 0.22,
-          flash: fx,
-          flashStrength: 0.5,
-        }),
-        hybridMapFrame(endgameImg, atk1, {
-          dy: -1,
-          bustH: 16,
-          tint: "#fff6d0",
-          tintStrength: 0.18,
-          flash: fx,
-          flashStrength: 0.65,
-        }),
+        drawModel({ bob: 1, squat: 1, armsOut: true }),
+        drawModel({ bob: -1, armsOut: true, flash: true }),
       ],
     };
   }
 
-  function buildMapMobPack(endgameImg, ssPack, fx) {
-    const walk0 = (ssPack && ssPack.walk && ssPack.walk[0]) || null;
-    const walk1 = (ssPack && ssPack.walk && ssPack.walk[1]) || walk0;
-    const a = hybridMapFrame(endgameImg, walk0, { liftShadow: true });
-    const b = hybridMapFrame(endgameImg, walk1, {
-      dy: -1,
-      tint: fx,
-      tintStrength: 0.12,
-      liftShadow: true,
-    });
+  function buildMapMobPack(cardImg, style) {
+    const cut = knockOutInk(cardImg);
+    const box = contentBounds(cut);
+    const body = cropCanvas(cut, box);
+    const accent = sampleAccent(cut, style.accent);
+
+    function drawMob(pose) {
+      const SIZE = 16;
+      const { canvas, ctx } = makeCanvas(SIZE, SIZE);
+      const bob = pose.bob || 0;
+      const mirror = !!pose.mirror;
+
+      ctx.save();
+      if (mirror) {
+        ctx.translate(SIZE, 0);
+        ctx.scale(-1, 1);
+      }
+
+      // Legs / float base
+      ctx.fillStyle = style.boot;
+      ctx.fillRect(5, 12 + bob, 2, 3);
+      ctx.fillRect(9, 12 + (pose.step ? bob - 1 : bob), 2, 3);
+      ctx.fillStyle = style.suit;
+      ctx.fillRect(4, 10 + bob, 8, 3);
+
+      // Body from card
+      ctx.drawImage(body, 2, 1 + bob, 12, 10);
+
+      if (pose.flash) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(1, 4 + bob, 2, 2);
+        ctx.fillRect(13, 4 + bob, 2, 2);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(4, 15, 8, 1);
+      ctx.restore();
+      return canvas;
+    }
+
+    const a = drawMob({ bob: 0, step: 0 });
+    const b = drawMob({ bob: -1, step: 1 });
     return {
-      walk: [a, b, mirrorCanvas(a), mirrorCanvas(b)],
+      walk: [
+        a,
+        b,
+        drawMob({ bob: 0, step: 0, mirror: true }),
+        drawMob({ bob: -1, step: 1, mirror: true }),
+      ],
     };
   }
 
-  function mirrorCanvas(src) {
-    const { w, h } = sourceSize(src);
-    const { canvas, ctx } = makeCanvas(w, h);
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(src, 0, 0);
-    return canvas;
+  function installIntoSpiritSprites() {
+    const SS = window.SpiritSprites;
+    if (!SS) return;
+    if (SS.units) {
+      HERO_UNIT_IDS.forEach((id) => {
+        const pack = mapUnitPacks[id];
+        if (!pack) return;
+        SS.units[id] = pack;
+        SS[id] = pack;
+      });
+    }
+    if (SS.mobs) {
+      HERO_MOB_IDS.forEach((id) => {
+        const pack = mapMobPacks[id];
+        if (!pack) return;
+        SS.mobs[id] = pack;
+      });
+    }
   }
 
   async function boot() {
@@ -397,26 +427,25 @@
 
     await Promise.all(jobs);
 
-    const SS = window.SpiritSprites || null;
-
     HERO_UNIT_IDS.forEach((id) => {
-      const src = modelSource(id, mapSprites[id], portraits[id]);
-      if (!src) return;
-      // Shop keeps the fresh endgame stage bob.
-      unitPacks[id] = buildUnitPack(src, UNIT_FX[id] || "#e8c56a");
-      // Map uses other-anime pose mechanics under the fresh endgame bust.
-      const cut = transparentModel(src, `unit:${id}`);
-      const ssPack = SS && SS.units && SS.units[id];
-      mapUnitPacks[id] = buildMapUnitPack(cut, ssPack, UNIT_FX[id] || "#e8c56a");
+      const card = portraits[id] || mapSprites[id];
+      if (!card) return;
+      const style = UNIT_STYLE[id] || UNIT_STYLE.sparkfist;
+      unitPacks[id] = buildShopPack(card, style.fx);
+      mapUnitPacks[id] = buildMapModelPack(card, style);
     });
+
     HERO_MOB_IDS.forEach((id) => {
-      const src = modelSource(id, mapSprites[`mob:${id}`], mobPortraits[id]);
-      if (!src) return;
-      mobPacks[id] = buildMobPack(src, MOB_FX[id] || "#e8c56a");
-      const cut = transparentModel(src, `mob:${id}`);
-      const ssPack = SS && SS.mobs && SS.mobs[id];
-      mapMobPacks[id] = buildMapMobPack(cut, ssPack, MOB_FX[id] || "#e8c56a");
+      const card = mobPortraits[id] || mapSprites[`mob:${id}`];
+      if (!card) return;
+      const style = MOB_STYLE[id] || MOB_STYLE.quirling;
+      mobPacks[id] = buildShopPack(card, style.fx);
+      mapMobPacks[id] = buildMapMobPack(card, style);
     });
+
+    // Replace old My Hero test packs so map drawing (SS.unitFrame) uses the
+    // new card-matched models automatically.
+    installIntoSpiritSprites();
 
     ready = true;
     waiters.splice(0).forEach((cb) => {
@@ -426,38 +455,25 @@
     });
   }
 
-  function unitFrame(defId, unit, tick) {
-    // Prefer map packs (pose mechanics); fall back to shop packs.
-    const pack = mapUnitPacks[defId] || unitPacks[defId];
-    if (!pack) return null;
-    if (unit && unit.attackAnim && unit.attackAnim > 0) {
-      const fi = unit.attackAnim > 8 ? 0 : 1;
-      return pack.attack[fi];
-    }
-    const fi = (tick >> 3) & 1;
-    return pack.idle[fi];
-  }
-
-  function mapUnitFrame(defId, unit, tick) {
-    return unitFrame(defId, unit, tick);
-  }
-
-  function mobFrame(kind, pathIndex) {
-    const pack = mapMobPacks[kind] || mobPacks[kind];
-    if (!pack || !pack.walk) return null;
-    const fi = Math.floor(pathIndex / 5) % pack.walk.length;
-    return pack.walk[fi];
-  }
-
-  function mapMobFrame(kind, pathIndex) {
-    return mobFrame(kind, pathIndex);
-  }
-
   function shopFrame(defId, tick) {
     const pack = unitPacks[defId];
     if (!pack) return null;
-    const fi = (tick >> 3) & 1;
-    return pack.idle[fi];
+    return pack.idle[(tick >> 3) & 1];
+  }
+
+  function mapUnitFrame(defId, unit, tick) {
+    const pack = mapUnitPacks[defId];
+    if (!pack) return null;
+    if (unit && unit.attackAnim && unit.attackAnim > 0) {
+      return pack.attack[unit.attackAnim > 8 ? 0 : 1];
+    }
+    return pack.idle[(tick >> 3) & 1];
+  }
+
+  function mapMobFrame(kind, pathIndex) {
+    const pack = mapMobPacks[kind];
+    if (!pack || !pack.walk) return null;
+    return pack.walk[Math.floor(pathIndex / 5) % pack.walk.length];
   }
 
   window.SpiritEndgameArt = {
@@ -482,22 +498,25 @@
     },
     unitModel(id) {
       return (
-        (unitPacks[id] && unitPacks[id].idle[0]) ||
+        (mapUnitPacks[id] && mapUnitPacks[id].idle[0]) ||
         mapSprites[id] ||
         portraits[id] ||
         null
       );
     },
     unitMapSprite(id) {
-      // Kept for callers; gameplay should prefer mapUnitFrame().
-      return mapSprites[id] || portraits[id] || null;
+      return (mapUnitPacks[id] && mapUnitPacks[id].idle[0]) || mapSprites[id] || null;
     },
     mobMapSprite(kind) {
-      return mapSprites[`mob:${kind}`] || mobPortraits[kind] || null;
+      return (
+        (mapMobPacks[kind] && mapMobPacks[kind].walk[0]) ||
+        mapSprites[`mob:${kind}`] ||
+        null
+      );
     },
-    unitFrame,
+    unitFrame: mapUnitFrame,
     mapUnitFrame,
-    mobFrame,
+    mobFrame: mapMobFrame,
     mapMobFrame,
     shopFrame,
   };
