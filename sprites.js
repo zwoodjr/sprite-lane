@@ -3012,14 +3012,15 @@
       const fi = unit.attackAnim > 8 ? 0 : 1;
       return pack.attack[fi];
     }
-    const fi = (tick >> 4) & 1;
+    // Faster idle bob so map models clearly move like the other series.
+    const fi = (tick >> 3) & 1;
     return pack.idle[fi];
   }
 
   function mobFrame(kind, pathIndex) {
     const pack = mobs[kind];
     if (!pack) return null;
-    const fi = Math.floor(pathIndex / 8) & 1;
+    const fi = Math.floor(pathIndex / 5) & 1;
     return pack.walk[fi];
   }
 

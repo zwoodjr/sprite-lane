@@ -2607,11 +2607,9 @@
     ctx.globalAlpha = 1;
   }
 
-  // Board-native draw sizes: sprites are baked to TILE×TILE and must fill one cell.
+  // Animated packs fill the cell so moving models read clearly on the board.
   const UNIT_DRAW = Math.round(14 * PX);
-  const UNIT_DRAW_ANIM = Math.round(18 * PX);
-  const UNIT_DRAW_BOARD = TILE; // My Hero / endgame models fill one maze cell
-  const MOB_DRAW_BOARD = TILE - 2;
+  const UNIT_DRAW_ANIM = TILE;
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2636,38 +2634,18 @@
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
       }
-      // My Hero: fresh endgame models + same idle/attack pose mechanics as other anime.
-      // Other series: SpiritSprites packs. Shop cards stay on endgame stages separately.
-      const heroAnim =
-        def.series === "My Hero" && EA && EA.mapUnitFrame
-          ? EA.mapUnitFrame(u.type, u, state.tick)
-          : null;
+      // Map uses the same full-body SpiritSprites idle/attack packs for every
+      // series — including My Hero. Endgame face/board stamps stay in the shop.
       const anim =
-        !heroAnim && def.animated && SS
-          ? SS.unitFrame(u.type, u, state.tick)
-          : null;
-      const sprite = heroAnim || anim || def.sprite;
-      const heroMapModel = !!(
-        heroAnim ||
-        (anim && def.series === "My Hero")
-      );
-      const drawSize = heroMapModel
-        ? UNIT_DRAW_BOARD
-        : anim
-          ? UNIT_DRAW_ANIM
-          : UNIT_DRAW;
-      const snapTile = heroMapModel;
-      const ox = snapTile ? u.tx * TILE : c.x - drawSize / 2;
-      const oy = snapTile ? u.ty * TILE : c.y - drawSize / 2;
-      if (snapTile) {
-        ctx.fillStyle = "rgba(10,8,6,0.55)";
-        ctx.fillRect(ox, oy, TILE, TILE);
-      } else {
-        ctx.fillStyle = "#0a0806";
-        ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
-        ctx.fillStyle = def.color;
-        ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
-      }
+        def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
+      const sprite = anim || def.sprite;
+      const drawSize = anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
+      const ox = c.x - drawSize / 2;
+      const oy = c.y - drawSize / 2;
+      ctx.fillStyle = "#0a0806";
+      ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
       ctx.imageSmoothingEnabled = false;
       if (sprite) ctx.drawImage(sprite, ox, oy, drawSize, drawSize);
       ctx.imageSmoothingEnabled = false;
@@ -2689,33 +2667,16 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      const heroMob =
-        !!(HERO_MOB_KINDS && HERO_MOB_KINDS.indexOf(en.kind) >= 0);
-      // Hero Crest mobs: fresh endgame look + walk cycles from sprite mechanics.
-      const heroAnim =
-        heroMob && EA && EA.mapMobFrame
-          ? EA.mapMobFrame(en.kind, en.pathIndex)
-          : null;
+      // Same walk-cycle packs for every series (Hero Crest included).
       const frame =
-        !heroAnim && SS && SS.mobFrame
-          ? SS.mobFrame(en.kind, en.pathIndex)
-          : null;
-      const sprite = heroAnim || frame;
-      const base =
-        heroAnim || heroMob
-          ? en.boss
-            ? TILE + 4
-            : en.elite
-              ? TILE
-              : MOB_DRAW_BOARD
-          : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+        SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
+      const sprite = frame;
+      const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       if (sprite) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
-        if (!heroAnim && !heroMob) {
-          ctx.fillStyle = "#0a0806";
-          ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
-        }
+        ctx.fillStyle = "#0a0806";
+        ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(sprite, ox, oy, base, base);
         ctx.imageSmoothingEnabled = false;
