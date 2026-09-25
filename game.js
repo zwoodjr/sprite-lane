@@ -2608,8 +2608,10 @@
   }
 
   // Animated packs fill the cell so moving models read clearly on the board.
+  // My Hero full-body packs are authored at 32×32.
   const UNIT_DRAW = Math.round(14 * PX);
   const UNIT_DRAW_ANIM = TILE;
+  const UNIT_DRAW_HERO = 32;
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2645,7 +2647,11 @@
           ? SS.unitFrame(u.type, u, state.tick)
           : null;
       const sprite = heroAnim || anim || def.sprite;
-      const drawSize = heroAnim || anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
+      const drawSize = heroAnim
+        ? UNIT_DRAW_HERO
+        : anim
+          ? UNIT_DRAW_ANIM
+          : UNIT_DRAW;
       const ox = c.x - drawSize / 2;
       const oy = c.y - drawSize / 2;
       ctx.fillStyle = "#0a0806";
@@ -2684,7 +2690,13 @@
           ? SS.mobFrame(en.kind, en.pathIndex)
           : null;
       const sprite = heroAnim || frame;
-      const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+      const base = heroAnim
+        ? en.boss
+          ? 40
+          : en.elite
+            ? 36
+            : 32
+        : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       if (sprite) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
