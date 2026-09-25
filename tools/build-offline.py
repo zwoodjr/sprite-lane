@@ -86,7 +86,7 @@ def build_endgame_js() -> str:
             return rel
         return data_url(path)
 
-    return re.sub(r"assets/hero/[A-Za-z0-9._-]+\.png", repl, src)
+    return re.sub(r"assets/hero/(?:models/)?[A-Za-z0-9._-]+\.png", repl, src)
 
 
 def build_html() -> str:
