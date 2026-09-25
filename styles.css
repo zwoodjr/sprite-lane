@@ -115,7 +115,7 @@ body {
   max-width: 100%;
   flex: 1 1 auto;
   min-height: 0;
-  aspect-ratio: 480 / 264;
+  aspect-ratio: 640 / 352;
   border: 3px solid #2a1c14;
   outline: 1px solid rgba(232, 93, 60, 0.55);
   box-shadow:

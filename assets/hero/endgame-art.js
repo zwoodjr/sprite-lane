@@ -219,6 +219,24 @@
     };
   }
 
+  /** Drop residual black mats and keep the model filling its square. */
+  function normalizeModelFrame(src, size = 32) {
+    const cut = knockOutInk(src, 28);
+    const box = contentBounds(cut);
+    const cropped = cropCanvas(cut, box);
+    const { canvas, ctx } = makeCanvas(size, size);
+    const pad = 1;
+    const max = size - pad * 2;
+    const scale = Math.min(max / cropped.width, max / cropped.height);
+    const dw = Math.max(1, Math.round(cropped.width * scale));
+    const dh = Math.max(1, Math.round(cropped.height * scale));
+    const dx = Math.floor((size - dw) / 2);
+    const dy = Math.min(size - dh - pad, Math.max(pad, Math.floor((size - dh) / 2) + 1));
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(cropped, dx, dy, dw, dh);
+    return knockOutInk(canvas, 30);
+  }
+
   function modelUrl(id, frame) {
     return MODEL_URLS[`${id}-${frame}`] || `assets/hero/models/${id}-${frame}.png`;
   }
@@ -232,8 +250,8 @@
     ]);
     if (!idle0 || !idle1 || !atk0 || !atk1) return null;
     return {
-      idle: [toCanvas(idle0), toCanvas(idle1)],
-      attack: [toCanvas(atk0), toCanvas(atk1)],
+      idle: [normalizeModelFrame(idle0), normalizeModelFrame(idle1)],
+      attack: [normalizeModelFrame(atk0), normalizeModelFrame(atk1)],
     };
   }
 
@@ -246,7 +264,12 @@
     ]);
     if (!w0 || !w1 || !w2 || !w3) return null;
     return {
-      walk: [toCanvas(w0), toCanvas(w1), toCanvas(w2), toCanvas(w3)],
+      walk: [
+        normalizeModelFrame(w0),
+        normalizeModelFrame(w1),
+        normalizeModelFrame(w2),
+        normalizeModelFrame(w3),
+      ],
     };
   }
 
