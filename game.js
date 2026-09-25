@@ -2,12 +2,12 @@
   "use strict";
 
   // Spirit Lane — original cast. Kits echo popular battle tropes only.
-  // 24px tiles (50% over the old 16px). Fewer cols/rows keep the board clean.
-  const TILE = 24;
+  // 32px tiles so My Hero full-body packs sit cleanly in one cell.
+  const TILE = 32;
   const COLS = 20;
   const ROWS = 11;
-  const W = COLS * TILE; // 480
-  const H = ROWS * TILE; // 264
+  const W = COLS * TILE; // 640
+  const H = ROWS * TILE; // 352
   const PX = TILE / 16; // scale combat/draw sizes with the tile
   const SPAWN = { x: 0, y: 5 };
   const EXIT = { x: COLS - 1, y: 5 };
@@ -24,7 +24,7 @@
   }
   ctx.imageSmoothingEnabled = false;
 
-  // Size the 480×264 buffer to fill the stage (map-first layout).
+  // Size the 640×352 buffer to fill the stage (map-first layout).
   function fitDisplay() {
     if (!frameEl || !stageEl) return;
     const stageCss = stageEl.getBoundingClientRect();
@@ -100,23 +100,68 @@
     const on = isBrowserFullscreen() || document.documentElement.classList.contains("is-fullscreen");
     document.documentElement.classList.toggle("is-fullscreen", on || isBrowserFullscreen());
     document.documentElement.classList.toggle("is-standalone", isStandaloneApp());
-    const label = on ? "Exit" : "Full";
-    const pressed = on ? "true" : "false";
+    const needsInstall = !isStandaloneApp() && isIosSafari();
+    const label = needsInstall ? "Install" : on ? "Exit" : "Full";
+    const pressed = on && !needsInstall ? "true" : "false";
     [el.btnFullscreen, el.btnFullscreenMenu].forEach((btn) => {
       if (!btn) return;
       btn.textContent = btn === el.btnFullscreenMenu
-        ? on
-          ? "Exit Full Screen"
-          : "Full Screen"
+        ? needsInstall
+          ? "Install Fullscreen App"
+          : on
+            ? "Exit Full Screen"
+            : "Full Screen"
         : label;
       btn.setAttribute("aria-pressed", pressed);
-      btn.classList.toggle("is-active", on);
+      btn.classList.toggle("is-active", on && !needsInstall);
+      if (needsInstall) {
+        btn.title = "Add to Home Screen for fullscreen (no Safari chrome)";
+      }
     });
+    const tip = document.getElementById("ios-home-tip");
+    if (tip) {
+      tip.hidden = isStandaloneApp();
+      tip.textContent = isStandaloneApp()
+        ? "Running as Home Screen app — Safari chrome is hidden."
+        : "iPhone cannot hide Safari tabs from a link. Share → Add to Home Screen, then open that icon.";
+    }
+  }
+
+  function isIosSafari() {
+    const ua = navigator.userAgent || "";
+    const iOS = /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const webkit = /WebKit/.test(ua);
+    const notOther = !/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/.test(ua);
+    return iOS && webkit && notOther;
+  }
+
+  function showHomeScreenInstall() {
+    const sheet = document.getElementById("homescreen-sheet");
+    if (sheet) {
+      sheet.hidden = false;
+      return;
+    }
+    openDrawer("menu");
+    setHint("iPhone: Share → Add to Home Screen, then open the icon (no Safari bars).");
+  }
+
+  function hideHomeScreenInstall() {
+    const sheet = document.getElementById("homescreen-sheet");
+    if (sheet) sheet.hidden = true;
   }
 
   async function enterFullscreen() {
     preferLandscape();
     const root = document.documentElement;
+    // Safari cannot hide its tabs/chrome from a normal link — only a Home Screen
+    // install (standalone display) gives true fullscreen on iPhone.
+    if (!isStandaloneApp() && (isIosSafari() || !document.documentElement.requestFullscreen)) {
+      showHomeScreenInstall();
+      setHint("Add to Home Screen for fullscreen — Safari links always show the browser chrome.");
+      syncFullscreenUi();
+      return;
+    }
     try {
       if (root.requestFullscreen) await root.requestFullscreen();
       else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
@@ -124,13 +169,12 @@
       else throw new Error("no-fs-api");
       root.classList.add("is-fullscreen");
     } catch (err) {
-      // iPhone Safari: no Fullscreen API — guide user to Home Screen.
-      root.classList.add("is-fullscreen");
       if (isStandaloneApp()) {
+        root.classList.add("is-fullscreen");
         setHint("Already running as Home Screen app.");
       } else {
+        showHomeScreenInstall();
         setHint("iPhone: Share → Add to Home Screen for true fullscreen (no Safari bar).");
-        openDrawer("menu");
       }
     }
     syncFullscreenUi();
@@ -2608,10 +2652,10 @@
   }
 
   // Animated packs fill the cell so moving models read clearly on the board.
-  // My Hero full-body packs are authored at 32×32.
+  // My Hero full-body packs are authored at 32×32 to match TILE.
   const UNIT_DRAW = Math.round(14 * PX);
   const UNIT_DRAW_ANIM = TILE;
-  const UNIT_DRAW_HERO = 32;
+  const UNIT_DRAW_HERO = TILE;
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2654,10 +2698,11 @@
           : UNIT_DRAW;
       const ox = c.x - drawSize / 2;
       const oy = c.y - drawSize / 2;
-      ctx.fillStyle = "#0a0806";
-      ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
-      ctx.fillStyle = def.color;
-      ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
+      // Transparent sprites — no black mat underplate.
+      if (!heroAnim && !anim) {
+        ctx.fillStyle = def.color;
+        ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
+      }
       ctx.imageSmoothingEnabled = false;
       if (sprite) ctx.drawImage(sprite, ox, oy, drawSize, drawSize);
       ctx.imageSmoothingEnabled = false;
@@ -2692,16 +2737,15 @@
       const sprite = heroAnim || frame;
       const base = heroAnim
         ? en.boss
-          ? 40
+          ? Math.round(TILE * 1.25)
           : en.elite
-            ? 36
-            : 32
+            ? Math.round(TILE * 1.12)
+            : TILE
         : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       if (sprite) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
-        ctx.fillStyle = "#0a0806";
-        ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
+        // Transparent mob sprites — no black mat underplate.
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(sprite, ox, oy, base, base);
         ctx.imageSmoothingEnabled = false;
@@ -2966,6 +3010,11 @@
     { passive: true }
   );
   syncFullscreenUi();
+  if (!isStandaloneApp() && isIosSafari()) {
+    setTimeout(() => {
+      setHint("For fullscreen: Share → Add to Home Screen, then open the Spirit Lane icon.");
+    }, 800);
+  }
 
   function bindDrawerButton(btn, which) {
     if (!btn) return;
@@ -3018,6 +3067,19 @@
   const btnOfflineInstall = document.getElementById("btn-offline-install");
   const btnOfflineShare = document.getElementById("btn-offline-share");
   const btnOfflineDismiss = document.getElementById("btn-offline-dismiss");
+  const btnHomescreenDismiss = document.getElementById("btn-homescreen-dismiss");
+  if (btnHomescreenDismiss) {
+    btnHomescreenDismiss.addEventListener("click", () => {
+      hideHomeScreenInstall();
+      beep(360, 0.03);
+    });
+  }
+  const homescreenSheet = document.getElementById("homescreen-sheet");
+  if (homescreenSheet) {
+    homescreenSheet.addEventListener("click", (e) => {
+      if (e.target === homescreenSheet) hideHomeScreenInstall();
+    });
+  }
 
   function isAppleTouchDevice() {
     try {

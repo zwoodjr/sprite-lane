@@ -1,5 +1,5 @@
 /* Spirit Lane — cache shell for offline replay after first online visit. */
-const CACHE = "spirit-lane-v26";
+const CACHE = "spirit-lane-v27";
 const ASSETS = [
   "./",
   "./index.html",
@@ -71,6 +71,7 @@ const ASSETS = [
   "./fonts/PressStart2P.woff2",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./icon-180.png",
 ];
 
 self.addEventListener("install", (event) => {

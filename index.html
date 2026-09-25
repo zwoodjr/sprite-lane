@@ -45,8 +45,9 @@
   </style>
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon-180.png" sizes="180x180" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <meta name="apple-mobile-web-app-title" content="Spirit Lane" />
 </head>
 <body>
   <div id="boot-splash" role="status">Loading Spirit Lane…</div>
@@ -79,7 +80,7 @@
         </div>
 
         <div id="frame">
-          <canvas id="game" width="480" height="264" aria-label="Spirit Lane game"></canvas>
+          <canvas id="game" width="640" height="352" aria-label="Spirit Lane game"></canvas>
         </div>
 
         <div id="edge-tabs" class="edge-tabs overlay-chrome" aria-label="Open panels">
@@ -159,12 +160,33 @@
       <button type="button" id="btn-save-offline" class="ghost">Save Offline</button>
     </div>
     <p id="ios-home-tip" class="offline-tip">
-      iPhone: Share → Add to Home Screen for a chrome-free fullscreen app.
+      iPhone cannot hide Safari tabs from a normal link. Tap <em>Install Fullscreen App</em>, then Share → Add to Home Screen, and open that icon.
     </p>
     <p id="offline-tip" class="offline-tip">
       Airplane mode: Save Offline while online, then open that copy. iPhone: Add to Home Screen.
     </p>
   </aside>
+
+  <div id="homescreen-sheet" class="offline-sheet" hidden>
+    <div class="offline-sheet-card" role="dialog" aria-labelledby="homescreen-sheet-title">
+      <h2 id="homescreen-sheet-title">Fullscreen on iPhone</h2>
+      <p>
+        Safari always shows tabs and the address bar when you open a webpage link.
+        To get a true full-screen game with no Safari chrome:
+      </p>
+      <ol class="offline-steps">
+        <li>Tap the <strong>Share</strong> button (square with ↑) in Safari.</li>
+        <li>Choose <strong>Add to Home Screen</strong>, then Add.</li>
+        <li>Close Safari and open the <strong>Spirit Lane</strong> icon from your Home Screen.</li>
+      </ol>
+      <p class="offline-tip">
+        That Home Screen icon launches in standalone mode — no tabs, no Safari borders.
+      </p>
+      <div class="offline-sheet-actions">
+        <button type="button" id="btn-homescreen-dismiss" class="primary">Got it</button>
+      </div>
+    </div>
+  </div>
 
   <div id="offline-sheet" class="offline-sheet" hidden>
     <div class="offline-sheet-card" role="dialog" aria-labelledby="offline-sheet-title">
