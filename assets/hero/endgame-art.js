@@ -373,8 +373,12 @@
   function installIntoSpiritSprites() {
     const SS = window.SpiritSprites;
     if (!SS) return;
+    // Dark Deku uses the hand-tuned full-body pack in sprites.js (card-matched).
+    // Other My Hero units keep generated card-matched packs until authored.
+    const SKIP = { sparkfist: true };
     if (SS.units) {
       HERO_UNIT_IDS.forEach((id) => {
+        if (SKIP[id]) return;
         const pack = mapUnitPacks[id];
         if (!pack) return;
         SS.units[id] = pack;
@@ -462,6 +466,11 @@
   }
 
   function mapUnitFrame(defId, unit, tick) {
+    // Prefer hand-tuned SpiritSprites packs when present (Dark Deku).
+    const SS = window.SpiritSprites;
+    if (SS && SS.unitFrame && SS.units && SS.units[defId] && defId === "sparkfist") {
+      return SS.unitFrame(defId, unit || { attackAnim: 0 }, tick);
+    }
     const pack = mapUnitPacks[defId];
     if (!pack) return null;
     if (unit && unit.attackAnim && unit.attackAnim > 0) {
