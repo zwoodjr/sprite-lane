@@ -65,8 +65,10 @@
   const portraits = Object.create(null);
   const mapSprites = Object.create(null);
   const mobPortraits = Object.create(null);
-  const unitPacks = Object.create(null);
-  const mobPacks = Object.create(null);
+  const unitPacks = Object.create(null); // shop stages (fresh endgame bob)
+  const mobPacks = Object.create(null); // shop/preview fallbacks
+  const mapUnitPacks = Object.create(null); // board models: endgame look + sprite pose mechanics
+  const mapMobPacks = Object.create(null);
   let mapBackdrop = null;
   let ready = false;
   const waiters = [];
@@ -223,6 +225,141 @@
     return board || portrait || null;
   }
 
+  /**
+   * Merge fresh endgame art (upper body) with SpiritSprites pose frames (legs / stance).
+   * Same idle+attack mechanics as other anime series, My Hero endgame identity on top.
+   */
+  function knockOutInk(src, threshold = 22) {
+    const { w, h } = sourceSize(src);
+    const { canvas, ctx } = makeCanvas(w, h);
+    ctx.drawImage(src, 0, 0);
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] <= threshold && d[i + 1] <= threshold && d[i + 2] <= threshold) {
+        d[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  const knocked = Object.create(null);
+  function transparentModel(src, key) {
+    if (!src) return null;
+    if (knocked[key]) return knocked[key];
+    knocked[key] = knockOutInk(src);
+    return knocked[key];
+  }
+
+  function hybridMapFrame(endgameImg, ssFrame, opts = {}) {
+    const size = 24;
+    const { canvas, ctx } = makeCanvas(size, size);
+    const dy = opts.dy || 0;
+    const bustH = opts.bustH == null ? 17 : opts.bustH;
+    const model = endgameImg;
+
+    if (ssFrame) {
+      ctx.drawImage(ssFrame, 0, 0, size, size);
+    } else {
+      return poseFrame(model, opts);
+    }
+
+    // Stamp fresh model over head/torso; keep sprite legs/stance below.
+    // Endgame PNGs ship with opaque black mats — knock those out first.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, size, bustH);
+    ctx.clip();
+    ctx.drawImage(model, 0, dy, size, bustH);
+    ctx.restore();
+
+    if (opts.tint) {
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.globalAlpha = opts.tintStrength == null ? 0.16 : opts.tintStrength;
+      ctx.fillStyle = opts.tint;
+      ctx.fillRect(0, 0, size, size);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+    if (opts.flash) {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = opts.flashStrength == null ? 0.45 : opts.flashStrength;
+      ctx.fillStyle = opts.flash;
+      ctx.fillRect(1, Math.floor(size * 0.42), 5, 5);
+      ctx.fillRect(size - 6, Math.floor(size * 0.42), 5, 5);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+    if (opts.liftShadow) {
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(Math.floor(size * 0.2), size - 2, Math.floor(size * 0.6), 2);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    return canvas;
+  }
+
+  function buildMapUnitPack(endgameImg, ssPack, fx) {
+    const idle0 = (ssPack && ssPack.idle && ssPack.idle[0]) || null;
+    const idle1 = (ssPack && ssPack.idle && ssPack.idle[1]) || idle0;
+    const atk0 = (ssPack && ssPack.attack && ssPack.attack[0]) || idle0;
+    const atk1 = (ssPack && ssPack.attack && ssPack.attack[1]) || atk0;
+    return {
+      idle: [
+        hybridMapFrame(endgameImg, idle0, { liftShadow: true, tint: fx, tintStrength: 0.05 }),
+        hybridMapFrame(endgameImg, idle1, {
+          dy: -1,
+          liftShadow: true,
+          tint: fx,
+          tintStrength: 0.12,
+        }),
+      ],
+      attack: [
+        hybridMapFrame(endgameImg, atk0, {
+          dy: 1,
+          bustH: 16,
+          tint: fx,
+          tintStrength: 0.22,
+          flash: fx,
+          flashStrength: 0.5,
+        }),
+        hybridMapFrame(endgameImg, atk1, {
+          dy: -1,
+          bustH: 16,
+          tint: "#fff6d0",
+          tintStrength: 0.18,
+          flash: fx,
+          flashStrength: 0.65,
+        }),
+      ],
+    };
+  }
+
+  function buildMapMobPack(endgameImg, ssPack, fx) {
+    const walk0 = (ssPack && ssPack.walk && ssPack.walk[0]) || null;
+    const walk1 = (ssPack && ssPack.walk && ssPack.walk[1]) || walk0;
+    const a = hybridMapFrame(endgameImg, walk0, { liftShadow: true });
+    const b = hybridMapFrame(endgameImg, walk1, {
+      dy: -1,
+      tint: fx,
+      tintStrength: 0.12,
+      liftShadow: true,
+    });
+    return {
+      walk: [a, b, mirrorCanvas(a), mirrorCanvas(b)],
+    };
+  }
+
+  function mirrorCanvas(src) {
+    const { w, h } = sourceSize(src);
+    const { canvas, ctx } = makeCanvas(w, h);
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(src, 0, 0);
+    return canvas;
+  }
+
   async function boot() {
     const jobs = [];
 
@@ -260,13 +397,25 @@
 
     await Promise.all(jobs);
 
+    const SS = window.SpiritSprites || null;
+
     HERO_UNIT_IDS.forEach((id) => {
       const src = modelSource(id, mapSprites[id], portraits[id]);
-      if (src) unitPacks[id] = buildUnitPack(src, UNIT_FX[id] || "#e8c56a");
+      if (!src) return;
+      // Shop keeps the fresh endgame stage bob.
+      unitPacks[id] = buildUnitPack(src, UNIT_FX[id] || "#e8c56a");
+      // Map uses other-anime pose mechanics under the fresh endgame bust.
+      const cut = transparentModel(src, `unit:${id}`);
+      const ssPack = SS && SS.units && SS.units[id];
+      mapUnitPacks[id] = buildMapUnitPack(cut, ssPack, UNIT_FX[id] || "#e8c56a");
     });
     HERO_MOB_IDS.forEach((id) => {
       const src = modelSource(id, mapSprites[`mob:${id}`], mobPortraits[id]);
-      if (src) mobPacks[id] = buildMobPack(src, MOB_FX[id] || "#e8c56a");
+      if (!src) return;
+      mobPacks[id] = buildMobPack(src, MOB_FX[id] || "#e8c56a");
+      const cut = transparentModel(src, `mob:${id}`);
+      const ssPack = SS && SS.mobs && SS.mobs[id];
+      mapMobPacks[id] = buildMapMobPack(cut, ssPack, MOB_FX[id] || "#e8c56a");
     });
 
     ready = true;
@@ -278,7 +427,8 @@
   }
 
   function unitFrame(defId, unit, tick) {
-    const pack = unitPacks[defId];
+    // Prefer map packs (pose mechanics); fall back to shop packs.
+    const pack = mapUnitPacks[defId] || unitPacks[defId];
     if (!pack) return null;
     if (unit && unit.attackAnim && unit.attackAnim > 0) {
       const fi = unit.attackAnim > 8 ? 0 : 1;
@@ -288,11 +438,19 @@
     return pack.idle[fi];
   }
 
+  function mapUnitFrame(defId, unit, tick) {
+    return unitFrame(defId, unit, tick);
+  }
+
   function mobFrame(kind, pathIndex) {
-    const pack = mobPacks[kind];
+    const pack = mapMobPacks[kind] || mobPacks[kind];
     if (!pack || !pack.walk) return null;
     const fi = Math.floor(pathIndex / 5) % pack.walk.length;
     return pack.walk[fi];
+  }
+
+  function mapMobFrame(kind, pathIndex) {
+    return mobFrame(kind, pathIndex);
   }
 
   function shopFrame(defId, tick) {
@@ -310,6 +468,8 @@
     mobPortraits,
     unitPacks,
     mobPacks,
+    mapUnitPacks,
+    mapMobPacks,
     get mapBackdrop() {
       return mapBackdrop;
     },
@@ -329,14 +489,16 @@
       );
     },
     unitMapSprite(id) {
-      // Kept for callers; gameplay should prefer unitFrame().
+      // Kept for callers; gameplay should prefer mapUnitFrame().
       return mapSprites[id] || portraits[id] || null;
     },
     mobMapSprite(kind) {
       return mapSprites[`mob:${kind}`] || mobPortraits[kind] || null;
     },
     unitFrame,
+    mapUnitFrame,
     mobFrame,
+    mapMobFrame,
     shopFrame,
   };
 

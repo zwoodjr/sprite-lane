@@ -2610,7 +2610,7 @@
   // Board-native draw sizes: sprites are baked to TILE×TILE and must fill one cell.
   const UNIT_DRAW = Math.round(14 * PX);
   const UNIT_DRAW_ANIM = Math.round(18 * PX);
-  const UNIT_DRAW_BOARD = TILE; // endgame pixel art matches one maze cell
+  const UNIT_DRAW_BOARD = TILE; // My Hero / endgame models fill one maze cell
   const MOB_DRAW_BOARD = TILE - 2;
 
   function drawUnits() {
@@ -2636,22 +2636,30 @@
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
       }
-      // Endgame models animate in place; sprite packs cover other series.
-      const endgameAnim =
-        EA && EA.unitFrame ? EA.unitFrame(u.type, u, state.tick) : null;
+      // My Hero: fresh endgame models + same idle/attack pose mechanics as other anime.
+      // Other series: SpiritSprites packs. Shop cards stay on endgame stages separately.
+      const heroAnim =
+        def.series === "My Hero" && EA && EA.mapUnitFrame
+          ? EA.mapUnitFrame(u.type, u, state.tick)
+          : null;
       const anim =
-        !endgameAnim && def.animated && SS
+        !heroAnim && def.animated && SS
           ? SS.unitFrame(u.type, u, state.tick)
           : null;
-      const sprite = endgameAnim || anim || def.sprite;
-      const drawSize = endgameAnim
+      const sprite = heroAnim || anim || def.sprite;
+      const heroMapModel = !!(
+        heroAnim ||
+        (anim && def.series === "My Hero")
+      );
+      const drawSize = heroMapModel
         ? UNIT_DRAW_BOARD
         : anim
           ? UNIT_DRAW_ANIM
           : UNIT_DRAW;
-      const ox = endgameAnim ? u.tx * TILE : c.x - drawSize / 2;
-      const oy = endgameAnim ? u.ty * TILE : c.y - drawSize / 2;
-      if (endgameAnim) {
+      const snapTile = heroMapModel;
+      const ox = snapTile ? u.tx * TILE : c.x - drawSize / 2;
+      const oy = snapTile ? u.ty * TILE : c.y - drawSize / 2;
+      if (snapTile) {
         ctx.fillStyle = "rgba(10,8,6,0.55)";
         ctx.fillRect(ox, oy, TILE, TILE);
       } else {
@@ -2681,24 +2689,30 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      const endgameAnim =
-        EA && EA.mobFrame ? EA.mobFrame(en.kind, en.pathIndex) : null;
+      const heroMob =
+        !!(HERO_MOB_KINDS && HERO_MOB_KINDS.indexOf(en.kind) >= 0);
+      // Hero Crest mobs: fresh endgame look + walk cycles from sprite mechanics.
+      const heroAnim =
+        heroMob && EA && EA.mapMobFrame
+          ? EA.mapMobFrame(en.kind, en.pathIndex)
+          : null;
       const frame =
-        !endgameAnim && SS && SS.mobFrame
+        !heroAnim && SS && SS.mobFrame
           ? SS.mobFrame(en.kind, en.pathIndex)
           : null;
-      const sprite = endgameAnim || frame;
-      const base = endgameAnim
-        ? en.boss
-          ? TILE + 4
-          : en.elite
-            ? TILE
-            : MOB_DRAW_BOARD
-        : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+      const sprite = heroAnim || frame;
+      const base =
+        heroAnim || heroMob
+          ? en.boss
+            ? TILE + 4
+            : en.elite
+              ? TILE
+              : MOB_DRAW_BOARD
+          : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       if (sprite) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
-        if (!endgameAnim) {
+        if (!heroAnim && !heroMob) {
           ctx.fillStyle = "#0a0806";
           ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
         }
