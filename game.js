@@ -2634,12 +2634,18 @@
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
       }
-      // Map uses the same full-body SpiritSprites idle/attack packs for every
-      // series — including My Hero. Endgame face/board stamps stay in the shop.
+      // My Hero: card-matched full-body packs from SpiritEndgameArt.
+      // Other series: SpiritSprites. Shop cards stay on endgame portraits.
+      const heroAnim =
+        def.series === "My Hero" && EA && EA.mapUnitFrame
+          ? EA.mapUnitFrame(u.type, u, state.tick)
+          : null;
       const anim =
-        def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
-      const sprite = anim || def.sprite;
-      const drawSize = anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
+        !heroAnim && def.animated && SS
+          ? SS.unitFrame(u.type, u, state.tick)
+          : null;
+      const sprite = heroAnim || anim || def.sprite;
+      const drawSize = heroAnim || anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
       const ox = c.x - drawSize / 2;
       const oy = c.y - drawSize / 2;
       ctx.fillStyle = "#0a0806";
@@ -2667,10 +2673,17 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      // Same walk-cycle packs for every series (Hero Crest included).
+      const heroMob =
+        !!(HERO_MOB_KINDS && HERO_MOB_KINDS.indexOf(en.kind) >= 0);
+      const heroAnim =
+        heroMob && EA && EA.mapMobFrame
+          ? EA.mapMobFrame(en.kind, en.pathIndex)
+          : null;
       const frame =
-        SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
-      const sprite = frame;
+        !heroAnim && SS && SS.mobFrame
+          ? SS.mobFrame(en.kind, en.pathIndex)
+          : null;
+      const sprite = heroAnim || frame;
       const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
       if (sprite) {
         const ox = en.x - base / 2;
