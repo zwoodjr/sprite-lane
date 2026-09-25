@@ -1698,36 +1698,42 @@
   function renderSpritePreview(shopId) {
     if (!el.preview) return;
     el.preview.innerHTML = "";
-    if (!SS || !shopId) return;
-    const pack = SS.units && SS.units[shopId];
+    if (!shopId) return;
+    const def = UNIT_MAP[shopId];
+    const pack =
+      (EA && EA.unitPacks && EA.unitPacks[shopId]) ||
+      (SS && SS.units && SS.units[shopId]);
     if (pack && pack.idle && pack.attack) {
-      const def = UNIT_MAP[shopId];
       const label = document.createElement("span");
       label.className = "label";
-      label.textContent = `${def ? def.name : shopId} frames`;
+      label.textContent = `${def ? def.name : shopId} model`;
       el.preview.appendChild(label);
       [...pack.idle, ...pack.attack].forEach((frame) => {
         const c = document.createElement("canvas");
-        c.width = 16;
-        c.height = 16;
+        const size = Math.max(16, frame.width || 16);
+        c.width = size;
+        c.height = size;
         const cctx = c.getContext("2d");
         cctx.imageSmoothingEnabled = false;
-        cctx.drawImage(frame, 0, 0);
+        cctx.drawImage(frame, 0, 0, size, size);
         el.preview.appendChild(c);
       });
       return;
     }
+    if (!SS && !(EA && EA.mobPacks)) return;
     // Fallback: mob roster strip when no fighter pack
     const label = document.createElement("span");
     label.className = "label";
     label.textContent = "Lane mobs";
     el.preview.appendChild(label);
     MOB_KINDS.forEach((kind) => {
-      const frame = SS.mobs[kind]?.walk[0];
+      const frame =
+        (EA && EA.mobPacks && EA.mobPacks[kind] && EA.mobPacks[kind].walk[0]) ||
+        (SS && SS.mobs[kind] && SS.mobs[kind].walk[0]);
       if (!frame) return;
       const c = document.createElement("canvas");
-      c.width = 16;
-      c.height = 16;
+      c.width = frame.width || 16;
+      c.height = frame.height || 16;
       const cctx = c.getContext("2d");
       cctx.imageSmoothingEnabled = false;
       cctx.drawImage(frame, 0, 0);
@@ -1756,42 +1762,69 @@
     return `Place ${u.name} on grass to maze mobs. ${u.blurb}.`;
   }
 
+  // Live model canvases in the Units shop (animated idle, not static face cards).
+  const shopModelCanvases = [];
+
+  function paintShopModel(canvas, id, tick) {
+    if (!canvas) return;
+    const actx = canvas.getContext("2d");
+    const size = canvas.width;
+    actx.imageSmoothingEnabled = false;
+    actx.clearRect(0, 0, size, size);
+    actx.fillStyle = "#0c0a08";
+    actx.fillRect(0, 0, size, size);
+    // Stage floor so the figure reads as a standing model, not a face card.
+    actx.fillStyle = "rgba(232, 197, 106, 0.12)";
+    actx.fillRect(4, size - 7, size - 8, 3);
+    actx.fillStyle = "rgba(10, 8, 6, 0.65)";
+    actx.fillRect(6, size - 5, size - 12, 2);
+
+    // Keep the endgame look, but as a moving model stage (never a static face card).
+    const endgameFrame =
+      EA && EA.shopFrame ? EA.shopFrame(id, tick) : null;
+    const spriteFrame =
+      !endgameFrame &&
+      SS &&
+      SS.units &&
+      SS.units[id] &&
+      SS.units[id].idle
+        ? SS.units[id].idle[(tick >> 4) & 1]
+        : null;
+    const frame =
+      endgameFrame ||
+      spriteFrame ||
+      (UNIT_MAP[id] && UNIT_MAP[id].sprite);
+    if (!frame) return;
+    const pad = endgameFrame ? 3 : 6;
+    const bob = ((tick >> 3) & 1) ? -1 : 0;
+    actx.drawImage(frame, pad, pad + bob, size - pad * 2, size - pad * 2 - 2);
+  }
+
+  function tickShopModels() {
+    if (!shopModelCanvases.length) return;
+    for (let i = 0; i < shopModelCanvases.length; i++) {
+      const entry = shopModelCanvases[i];
+      if (!entry || !entry.canvas.isConnected) continue;
+      paintShopModel(entry.canvas, entry.id, state.tick);
+    }
+  }
+
   function renderShop() {
     el.shop.innerHTML = "";
+    shopModelCanvases.length = 0;
     SHOP_IDS.forEach((id) => {
       const u = UNIT_MAP[id];
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "card" + (state.selectedShop === id ? " selected" : "");
       btn.dataset.series = u.series || "";
-      const endgame = EA && EA.unitPortrait && EA.unitPortrait(id);
-      let art;
-      if (endgame) {
-        art = document.createElement("img");
-        art.className = "art art-endgame";
-        art.src = endgame.src;
-        art.alt = "";
-        art.width = 48;
-        art.height = 48;
-        art.setAttribute("aria-hidden", "true");
-      } else {
-        art = document.createElement("canvas");
-        art.className = "art";
-        art.width = 32;
-        art.height = 32;
-        art.setAttribute("aria-hidden", "true");
-        const actx = art.getContext("2d");
-        actx.imageSmoothingEnabled = false;
-        actx.fillStyle = "#0c0a08";
-        actx.fillRect(0, 0, 32, 32);
-        const frame =
-          (SS && SS.units && SS.units[id] && SS.units[id].idle && SS.units[id].idle[0]) ||
-          u.sprite;
-        if (frame) {
-          const pad = 4;
-          actx.drawImage(frame, pad, pad, 32 - pad * 2, 32 - pad * 2);
-        }
-      }
+      const art = document.createElement("canvas");
+      art.className = "art art-model";
+      art.width = 48;
+      art.height = 48;
+      art.setAttribute("aria-hidden", "true");
+      paintShopModel(art, id, state.tick);
+      shopModelCanvases.push({ canvas: art, id });
       btn.appendChild(art);
       const name = document.createElement("span");
       name.className = "name";
@@ -2574,11 +2607,9 @@
     ctx.globalAlpha = 1;
   }
 
-  // Board-native draw sizes: sprites are baked to TILE×TILE and must fill one cell.
+  // Animated packs fill the cell so moving models read clearly on the board.
   const UNIT_DRAW = Math.round(14 * PX);
-  const UNIT_DRAW_ANIM = Math.round(18 * PX);
-  const UNIT_DRAW_BOARD = TILE; // endgame pixel art matches one maze cell
-  const MOB_DRAW_BOARD = TILE - 2;
+  const UNIT_DRAW_ANIM = TILE;
 
   function drawUnits() {
     state.units.forEach((u) => {
@@ -2603,30 +2634,20 @@
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
       }
-      const endgame =
-        EA && EA.unitMapSprite ? EA.unitMapSprite(u.type) : null;
+      // Map uses the same full-body SpiritSprites idle/attack packs for every
+      // series — including My Hero. Endgame face/board stamps stay in the shop.
       const anim =
-        !endgame && def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
-      const drawSize = endgame
-        ? UNIT_DRAW_BOARD
-        : anim
-          ? UNIT_DRAW_ANIM
-          : UNIT_DRAW;
-      // Snap endgame art to the tile so it scales with the board, not free-float.
-      const ox = endgame ? u.tx * TILE : c.x - drawSize / 2;
-      const oy = endgame ? u.ty * TILE : c.y - drawSize / 2;
-      if (!endgame) {
-        ctx.fillStyle = "#0a0806";
-        ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
-        ctx.fillStyle = def.color;
-        ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
-      } else {
-        // Thin underplate so the cell still reads on busy backdrops
-        ctx.fillStyle = "rgba(10,8,6,0.55)";
-        ctx.fillRect(ox, oy, TILE, TILE);
-      }
+        def.animated && SS ? SS.unitFrame(u.type, u, state.tick) : null;
+      const sprite = anim || def.sprite;
+      const drawSize = anim ? UNIT_DRAW_ANIM : UNIT_DRAW;
+      const ox = c.x - drawSize / 2;
+      const oy = c.y - drawSize / 2;
+      ctx.fillStyle = "#0a0806";
+      ctx.fillRect(ox - 1, oy - 1, drawSize + 2, drawSize + 2);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(ox - 1, oy + drawSize - 1, drawSize + 2, 2);
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(endgame || anim || def.sprite, ox, oy, drawSize, drawSize);
+      if (sprite) ctx.drawImage(sprite, ox, oy, drawSize, drawSize);
       ctx.imageSmoothingEnabled = false;
     });
   }
@@ -2646,26 +2667,18 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
-      const endgame =
-        EA && EA.mobMapSprite ? EA.mobMapSprite(en.kind) : null;
-      const base = endgame
-        ? en.boss
-          ? TILE + 4
-          : en.elite
-            ? TILE
-            : MOB_DRAW_BOARD
-        : (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+      // Same walk-cycle packs for every series (Hero Crest included).
       const frame =
-        !endgame && SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
-      if (endgame || frame) {
+        SS && SS.mobFrame ? SS.mobFrame(en.kind, en.pathIndex) : null;
+      const sprite = frame;
+      const base = (en.boss ? 22 : en.elite ? 16 : 14) * PX;
+      if (sprite) {
         const ox = en.x - base / 2;
         const oy = en.y - base / 2;
-        if (!endgame) {
-          ctx.fillStyle = "#0a0806";
-          ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
-        }
+        ctx.fillStyle = "#0a0806";
+        ctx.fillRect(ox - 1, oy - 1, base + 2, base + 2);
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(endgame || frame, ox, oy, base, base);
+        ctx.drawImage(sprite, ox, oy, base, base);
         ctx.imageSmoothingEnabled = false;
       } else {
         const s = (en.boss ? 16 : en.elite ? 11 : 9) * PX;
@@ -2858,6 +2871,7 @@
     drawFx();
     drawAtmosphere();
     drawOverlay();
+    if ((state.tick & 3) === 0) tickShopModels();
     requestAnimationFrame(frame);
   }
 

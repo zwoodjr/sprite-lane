@@ -592,13 +592,22 @@ html.is-standalone body {
   flex-shrink: 0;
 }
 
-.card .art-endgame {
+.card .art-endgame,
+.card .art-model {
   width: 48px;
   height: 48px;
   object-fit: cover;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   border-radius: 0;
+}
+
+.card .art-model {
+  object-fit: unset;
+  background:
+    linear-gradient(180deg, rgba(61, 184, 160, 0.08) 0%, transparent 42%),
+    radial-gradient(circle at 50% 78%, rgba(232, 197, 106, 0.16), transparent 55%),
+    #0c0a08;
 }
 
 .card .name {
@@ -649,8 +658,8 @@ html.is-standalone body {
 .sprite-preview canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   background: #120e0b;
   border: 1px solid var(--bark);
 }
