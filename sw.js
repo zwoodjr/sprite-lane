@@ -1,5 +1,5 @@
 /* Spirit Lane — cache shell for offline replay after first online visit. */
-const CACHE = "spirit-lane-v19";
+const CACHE = "spirit-lane-v21";
 const ASSETS = [
   "./",
   "./index.html",
@@ -54,6 +54,26 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  const isCode =
+    /\.(js|css|html?)$/i.test(url.pathname) ||
+    url.pathname.endsWith("/") ||
+    url.pathname.endsWith("/index.html");
+
+  // Prefer network for code so map/shop art updates are not stuck on old SW caches.
+  if (isCode) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
