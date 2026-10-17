@@ -29,7 +29,10 @@ func build(c: VBoxContainer) -> void:
 	var sub := HBoxContainer.new()
 	sub.add_theme_constant_override("separation", 12)
 	left.add_child(sub)
-	var how := UiTheme.big_button("HOW TO PLAY", UiTheme.TEAL, 60, 19)
+	var hangar := UiTheme.big_button("HANGAR", UiTheme.TEAL, 60, 19)
+	hangar.pressed.connect(GameState.go_hangar)
+	sub.add_child(hangar)
+	var how := UiTheme.big_button("HOW TO PLAY", UiTheme.LINE, 60, 19)
 	how.pressed.connect(GameState.go_how_to_play)
 	sub.add_child(how)
 	var set_b := UiTheme.big_button("SETTINGS", UiTheme.LINE, 60, 19)
@@ -42,9 +45,9 @@ func build(c: VBoxContainer) -> void:
 		sub.add_child(quit)
 	left.add_child(spacer())
 
-	## Right: profile card
+	## Right: progression card
 	var right := VBoxContainer.new()
-	right.custom_minimum_size = Vector2(300, 0)
+	right.custom_minimum_size = Vector2(320, 0)
 	row.add_child(right)
 	right.add_child(spacer())
 	var pc := card(UiTheme.LINE, Color(0.1, 0.075, 0.055, 0.86))
@@ -53,15 +56,49 @@ func build(c: VBoxContainer) -> void:
 	pv.add_theme_constant_override("separation", 6)
 	pc.add_child(pv)
 	pv.add_child(UiTheme.body_label("YOUR WANDERER", 14, UiTheme.AMBER))
-	_stat(pv, "Account XP", str(GameState.account_xp))
+
+	## Scrap — primary meta currency
+	_stat(pv, "Banked scrap", str(GameState.account_scrap))
+
+	## Soft account prestige bar
+	var ab: Dictionary = GameState.account_bar_state()
+	_stat(pv, "Account level", "Lv %d (prestige)" % int(ab["level"]))
+	var xp_row := VBoxContainer.new()
+	xp_row.add_theme_constant_override("separation", 2)
+	pv.add_child(xp_row)
+	var xp_bar := ProgressBar.new()
+	xp_bar.min_value = 0.0
+	xp_bar.max_value = 1.0
+	xp_bar.value = float(ab["ratio"])
+	xp_bar.show_percentage = false
+	xp_bar.custom_minimum_size = Vector2(0, 18)
+	xp_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.TEAL, Color(0, 0, 0, 0), 6, 0, 0))
+	xp_bar.add_theme_stylebox_override("background", UiTheme.box(Color(0.08, 0.06, 0.05, 0.9), UiTheme.LINE, 6, 2, 0))
+	xp_row.add_child(xp_bar)
+	xp_row.add_child(UiTheme.body_label(
+		"%d / %d XP to next · gates Hangar tiers" % [int(ab["into"]), int(ab["need"])],
+		12, UiTheme.TEXT_DIM, false
+	))
+
 	_stat(pv, "Successful extracts", str(GameState.successful_extracts))
-	_stat(pv, "Runs played", str(GameState.total_runs))
 	_stat(pv, "Best payout", "%d scrap" % GameState.best_payout)
-	_stat(pv, "Garage tokens", str(GameState.garage_tokens))
+
+	## Meta ranks summary
+	var ranks: PackedStringArray = PackedStringArray()
+	for id in GameState.meta_upgrades.keys():
+		ranks.append("%s %d" % [str(id).replace("_", " "), int(GameState.meta_upgrades[id])])
+	if ranks.size() > 0:
+		pv.add_child(UiTheme.body_label("Hangar: " + ", ".join(ranks), 12, UiTheme.TEAL))
+	else:
+		pv.add_child(UiTheme.body_label("Hangar empty — extract scrap, then Upgrade.", 12, UiTheme.TEXT_DIM))
+
 	var mount_name := "Skateboard" if GameState.mount_unlock_tier == 0 else "Scooter"
 	_stat(pv, "Mount", mount_name)
 	if GameState.mount_unlock_tier == 0:
-		pv.add_child(UiTheme.body_label("Scooter unlocks after %d more extract(s)." % maxi(0, 3 - GameState.successful_extracts), 12, UiTheme.TEXT_DIM))
+		pv.add_child(UiTheme.body_label(
+			"Scooter unlocks after %d more extract(s)." % maxi(0, 3 - GameState.successful_extracts),
+			12, UiTheme.TEXT_DIM
+		))
 	right.add_child(spacer())
 
 

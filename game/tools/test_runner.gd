@@ -14,6 +14,7 @@ const MENUS := [
 	"res://scenes/ui/how_to_play.tscn",
 	"res://scenes/ui/settings_menu.tscn",
 	"res://scenes/ui/result_screen.tscn",
+	"res://scenes/ui/hangar.tscn",
 ]
 
 var _bad: int = 0

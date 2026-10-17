@@ -27,12 +27,13 @@ Settings: aim-stick firing, auto-aim, aim assist, stick size, left-handed, hints
 - 3 enemy types with visible wind-up warnings: raider, charger, brute
 - Juice: SFX, screen shake, hitstop, hit flashes, damage numbers, particles, recoil, muzzle flash, dash afterimages, low-HP vignette
 - HUD explains itself: phase card says what to do now; Threat badge shows the cost/reward
-- Save file (`user://wanderer_save.json`): settings, XP, extracts, best payout, unlocks
+- Save file (`user://wanderer_save.json`): settings, banked scrap, Hangar ranks, account prestige, extracts, unlocks
+- Dual-track progression: **run levels** (temporary loadout picks mid-match) + **Hangar scrap** (permanent between runs)
 - Endless chunk map with terrain variation, varied decor, extract beams + arrows + minimap
 
 ## Not in yet (waiting on design doc)
 
-Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, meta progression/shop.
+Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill trees.
 
 ## Tools
 

@@ -1,0 +1,173 @@
+class_name Progression
+extends RefCounted
+
+## Dual-track progression (MVP):
+##   A) In-run levels — kill/stay XP → loadout picks; RESETS every deploy.
+##   B) Meta scrap — banked on extract; spent in Hangar on permanent upgrades.
+## Account XP is soft prestige only (gates a few Hangar tiers); scrap is the fuel.
+
+## --- In-run level curve (fast) ---
+## L1→2: 30 · L2→3: 42 · L3→4: 54 · …
+const RUN_XP_BASE := 30
+const RUN_XP_STEP := 12
+const RUN_LEVEL_CAP := 8
+
+## --- Soft account prestige (not spend power) ---
+const ACCOUNT_XP_BASE := 120
+const ACCOUNT_XP_STEP := 60
+const EXTRACT_ACCOUNT_XP := 25
+const WIPE_ACCOUNT_XP_FLOOR := 8
+
+
+static func run_xp_to_next(level: int) -> int:
+	var lv := clampi(level, 1, RUN_LEVEL_CAP)
+	return RUN_XP_BASE + (lv - 1) * RUN_XP_STEP
+
+
+static func run_progress(run_xp: int, run_level: int) -> Dictionary:
+	if run_level >= RUN_LEVEL_CAP:
+		return {"level": run_level, "into": 0, "need": 1, "ratio": 1.0, "capped": true}
+	var need := run_xp_to_next(run_level)
+	## run_xp is XP earned toward the *next* level (resets on level-up).
+	return {
+		"level": run_level,
+		"into": run_xp,
+		"need": need,
+		"ratio": clampf(float(run_xp) / float(need), 0.0, 1.0),
+		"capped": false,
+	}
+
+
+static func account_xp_to_next(level: int) -> int:
+	var lv := maxi(1, level)
+	return ACCOUNT_XP_BASE + (lv - 1) * ACCOUNT_XP_STEP
+
+
+static func account_progress(total_xp: int) -> Dictionary:
+	var xp := maxi(0, total_xp)
+	var level := 1
+	while xp >= account_xp_to_next(level):
+		xp -= account_xp_to_next(level)
+		level += 1
+	var need := account_xp_to_next(level)
+	return {
+		"level": level,
+		"into": xp,
+		"need": need,
+		"ratio": clampf(float(xp) / float(need), 0.0, 1.0),
+	}
+
+
+static func account_level_from_xp(total_xp: int) -> int:
+	return int(account_progress(total_xp)["level"])
+
+
+static func award_extract_account_xp(kills: int, tl_payout: float, mode_payout: float) -> int:
+	## Soft prestige only — small vs scrap payout.
+	var raw := EXTRACT_ACCOUNT_XP + kills * 2
+	return maxi(1, int(float(raw) * tl_payout * mode_payout))
+
+
+static func award_wipe_account_xp(kills: int, mode_payout: float) -> int:
+	return maxi(WIPE_ACCOUNT_XP_FLOOR + kills, int(float(WIPE_ACCOUNT_XP_FLOOR + kills) * mode_payout))
+
+
+## In-run upgrade pick pool (temporary — gone on extract/wipe).
+static func run_upgrade_pool() -> Array[Dictionary]:
+	return [
+		{"id": "harder_hit", "name": "Harder Hit", "desc": "+15% weapon damage", "stat": "damage", "add": 0.15},
+		{"id": "quick_mag", "name": "Quick Mag", "desc": "+20% fire rate", "stat": "firerate", "add": 0.20},
+		{"id": "thick_plate", "name": "Thick Plate", "desc": "+30 max HP (heals the gain)", "stat": "max_hp", "add": 30.0},
+		{"id": "dust_runner", "name": "Dust Runner", "desc": "+12% move speed", "stat": "move", "add": 0.12},
+		{"id": "deep_mag", "name": "Deep Mag", "desc": "+8 mag size", "stat": "mag", "add": 8.0},
+		{"id": "cool_head", "name": "Cool Head", "desc": "−20% ability cooldown", "stat": "ability_cd", "add": 0.20},
+	]
+
+
+static func roll_run_choices(count: int = 2, exclude: Array = []) -> Array[Dictionary]:
+	var pool := run_upgrade_pool()
+	var available: Array[Dictionary] = []
+	for u in pool:
+		if str(u["id"]) in exclude:
+			continue
+		available.append(u)
+	available.shuffle()
+	var out: Array[Dictionary] = []
+	for i in range(mini(count, available.size())):
+		out.append(available[i])
+	return out
+
+
+## Meta Hangar catalog — scrap spend, permanent. Soft-gated by account_level.
+static func hangar_catalog() -> Array[Dictionary]:
+	return [
+		{
+			"id": "starting_hp",
+			"name": "Iron Rations",
+			"desc": "+15 starting HP per rank",
+			"cost": 70,
+			"cost_step": 40,
+			"max_rank": 5,
+			"min_account_level": 1,
+			"effect": "max_hp",
+			"per_rank": 15.0,
+		},
+		{
+			"id": "scrap_find",
+			"name": "Magnet Fingers",
+			"desc": "+12% scrap found in-run per rank",
+			"cost": 55,
+			"cost_step": 35,
+			"max_rank": 5,
+			"min_account_level": 1,
+			"effect": "scrap_find",
+			"per_rank": 0.12,
+		},
+		{
+			"id": "starting_damage",
+			"name": "Honed Edge",
+			"desc": "+6% starting damage per rank",
+			"cost": 80,
+			"cost_step": 45,
+			"max_rank": 4,
+			"min_account_level": 2,
+			"effect": "damage",
+			"per_rank": 0.06,
+		},
+		{
+			"id": "insurance_slot",
+			"name": "Extra Tape",
+			"desc": "+1 insurance slot (mode cap still applies)",
+			"cost": 140,
+			"cost_step": 80,
+			"max_rank": 2,
+			"min_account_level": 3,
+			"effect": "insurance",
+			"per_rank": 1.0,
+		},
+		{
+			"id": "hangar_notes",
+			"name": "Field Notes",
+			"desc": "Unlock stub — hangar lore scrap (cosmetic for now)",
+			"cost": 40,
+			"cost_step": 0,
+			"max_rank": 1,
+			"min_account_level": 1,
+			"effect": "notes",
+			"per_rank": 1.0,
+		},
+	]
+
+
+static func hangar_cost(entry: Dictionary, current_rank: int) -> int:
+	return int(entry.get("cost", 50)) + int(entry.get("cost_step", 0)) * current_rank
+
+
+static func meta_bonus(meta: Dictionary, effect: String) -> float:
+	var total := 0.0
+	for entry in hangar_catalog():
+		if str(entry.get("effect", "")) != effect:
+			continue
+		var rank := int(meta.get(str(entry["id"]), 0))
+		total += float(entry.get("per_rank", 0.0)) * float(rank)
+	return total

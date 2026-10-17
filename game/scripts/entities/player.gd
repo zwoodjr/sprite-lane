@@ -84,15 +84,44 @@ func _apply_loadout() -> void:
 	_mount = GameState.mount
 	_armor = GameState.armor
 	_ability = _char.get("ability", {})
-	max_hp = base_max_hp + float(_char.get("max_hp_bonus", 0)) + float(_armor.get("flat_armor", 0)) * 0.5
-	damage_mult = float(_char.get("damage_mult", 1.0))
-	move_mult = float(_char.get("move_speed_mult", 1.0))
-	_ammo = int(_weapon.get("mag_size", 24))
+	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
 	body.texture = load(str(_char.get("sprite", "res://assets/sprites/characters/rook_vex.png"))) as Texture2D
 	label.text = str(_char.get("display_name", "Wanderer"))
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", _char.get("accent", Color(0.9, 0.8, 0.5)))
+	if not GameState.loadout_changed.is_connected(_on_loadout_changed):
+		GameState.loadout_changed.connect(_on_loadout_changed)
+
+
+func _on_loadout_changed() -> void:
+	## In-run upgrade pick or meta refresh mid-match.
+	var old_max := max_hp
+	_refresh_run_stats(false)
+	if max_hp > old_max:
+		hp = minf(max_hp, hp + (max_hp - old_max))
+		health_changed.emit(hp, max_hp)
+	ammo_changed.emit(_ammo, _mag_size(), _reload_left > 0.0)
+
+
+func _refresh_run_stats(reset_ammo: bool) -> void:
+	var rm: Dictionary = GameState.run_mods
+	max_hp = base_max_hp \
+		+ float(_char.get("max_hp_bonus", 0)) \
+		+ float(_armor.get("flat_armor", 0)) * 0.5 \
+		+ GameState.starting_hp_bonus() \
+		+ float(rm.get("max_hp", 0.0))
+	damage_mult = float(_char.get("damage_mult", 1.0)) \
+		* (1.0 + GameState.starting_damage_bonus()) \
+		* (1.0 + float(rm.get("damage", 0.0)))
+	move_mult = float(_char.get("move_speed_mult", 1.0)) * (1.0 + float(rm.get("move", 0.0)))
+	firerate_mult = 1.0 + float(rm.get("firerate", 0.0))
+	if reset_ammo:
+		_ammo = _mag_size()
+
+
+func _mag_size() -> int:
+	return int(_weapon.get("mag_size", 24)) + int(GameState.run_mods.get("mag", 0.0))
 
 
 func _build_visuals() -> void:
@@ -155,8 +184,8 @@ func _tick_timers(delta: float) -> void:
 		_reload_left -= delta
 		if _reload_left <= 0.0:
 			_reload_left = 0.0
-			_ammo = int(_weapon.get("mag_size", 24))
-			ammo_changed.emit(_ammo, int(_weapon.get("mag_size", 24)), false)
+			_ammo = _mag_size()
+			ammo_changed.emit(_ammo, _mag_size(), false)
 
 
 func _current_speed() -> float:
@@ -204,7 +233,7 @@ func _update_aim_and_fire(_delta: float) -> void:
 	_aim_line.visible = TouchInput.aim_vector.length() > 0.01
 	if TouchInput.is_firing() and _reload_left <= 0.0 and _dash_left <= 0.0:
 		_try_shoot()
-	if Input.is_action_just_pressed("reload") and _ammo < int(_weapon.get("mag_size", 24)) and _reload_left <= 0.0:
+	if Input.is_action_just_pressed("reload") and _ammo < _mag_size() and _reload_left <= 0.0:
 		_start_reload()
 
 
@@ -299,7 +328,7 @@ func apply_powerup(def: Dictionary) -> void:
 		_buffs[id] = {"time_left": dur, "def": def}
 	buffs_changed.emit(_buffs)
 	if id == "magnet":
-		GameState.scrap_found += randi_range(4, 8)
+		GameState.add_scrap(randi_range(4, 8))
 
 
 func get_active_buffs() -> Dictionary:
@@ -388,8 +417,14 @@ func get_ability_short_name() -> String:
 	return str(_ability.get("short", "ABILITY"))
 
 
-func get_ability_cooldown_ratio() -> float:
+func _ability_cooldown() -> float:
 	var cd := float(_ability.get("cooldown", 12.0))
+	var reduce := float(GameState.run_mods.get("ability_cd", 0.0))
+	return cd * maxf(0.4, 1.0 - reduce)
+
+
+func get_ability_cooldown_ratio() -> float:
+	var cd := _ability_cooldown()
 	return _ability_cd / cd if cd > 0.0 else 0.0
 
 
@@ -399,7 +434,7 @@ func _try_ability() -> void:
 	if _ability_cd > 0.0:
 		Juice.sfx("empty", -6.0)
 		return
-	_ability_cd = float(_ability.get("cooldown", 12.0))
+	_ability_cd = _ability_cooldown()
 	match str(_ability.get("id", "")):
 		"field_draught":
 			var amt := float(_ability.get("heal", 28.0))
@@ -516,7 +551,7 @@ func _try_shoot() -> void:
 	_flash_left = 0.045
 	Juice.sfx("shot", -4.0)
 	Juice.shake(0.035)
-	ammo_changed.emit(_ammo, int(_weapon.get("mag_size", 24)), false)
+	ammo_changed.emit(_ammo, _mag_size(), false)
 	GameState.weapon["weapon_xp"] = int(GameState.weapon.get("weapon_xp", 0)) + 1
 	if int(GameState.weapon["weapon_xp"]) >= 20 * int(GameState.weapon.get("weapon_level", 1)):
 		GameState.weapon["weapon_level"] = int(GameState.weapon.get("weapon_level", 1)) + 1
@@ -529,7 +564,7 @@ func _start_reload() -> void:
 		return
 	_reload_left = float(_weapon.get("reload_time", 1.4))
 	Juice.sfx("reload")
-	ammo_changed.emit(0, int(_weapon.get("mag_size", 24)), true)
+	ammo_changed.emit(0, _mag_size(), true)
 
 
 func get_reload_ratio() -> float:
@@ -579,7 +614,7 @@ func is_dashing() -> bool:
 func get_ammo_text() -> String:
 	if _reload_left > 0.0:
 		return "RELOADING"
-	return "%d / %d" % [_ammo, int(_weapon.get("mag_size", 24))]
+	return "%d / %d" % [_ammo, _mag_size()]
 
 
 func get_ammo() -> int:
@@ -587,7 +622,7 @@ func get_ammo() -> int:
 
 
 func get_mag_size() -> int:
-	return int(_weapon.get("mag_size", 24))
+	return _mag_size()
 
 
 func is_reloading() -> bool:

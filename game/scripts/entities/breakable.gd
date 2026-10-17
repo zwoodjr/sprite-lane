@@ -88,7 +88,6 @@ func _break_open() -> void:
 	if randf() <= drop_chance:
 		## Deferred: we're usually inside a physics callback (bullet hit).
 		_spawn_pickup.call_deferred(get_tree().current_scene, pos)
-	var scrap := randi_range(1, 3)
-	GameState.scrap_found += scrap
+	var scrap := GameState.add_scrap(randi_range(1, 3))
 	Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap, UiTheme.AMBER, 15)
 	queue_free()

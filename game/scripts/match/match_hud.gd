@@ -43,6 +43,8 @@ var _threat_panel: PanelContainer
 var _threat_label: Label
 var _threat_sub: Label
 var _counter_label: Label
+var _run_level_label: Label
+var _run_xp_bar: ProgressBar
 ## center
 var _banner: Label
 var _banner_sub: Label
@@ -196,6 +198,17 @@ func _build() -> void:
 	_buff_row.add_theme_constant_override("separation", 6)
 	_buff_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_buff_row)
+	_run_level_label = _label("RUN Lv 1", 13, UiTheme.TEAL)
+	vb.add_child(_run_level_label)
+	_run_xp_bar = ProgressBar.new()
+	_run_xp_bar.custom_minimum_size = Vector2(230, 8)
+	_run_xp_bar.show_percentage = false
+	_run_xp_bar.max_value = 1.0
+	_run_xp_bar.value = 0.0
+	_run_xp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_run_xp_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.TEAL, Color(0, 0, 0, 0), 3, 0, 0))
+	_run_xp_bar.add_theme_stylebox_override("background", UiTheme.box(Color(0.08, 0.06, 0.05, 0.85), Color(0.3, 0.22, 0.15), 3, 1, 0))
+	vb.add_child(_run_xp_bar)
 
 	## Top-center: phase card
 	_phase_card = _panel(0.82)
@@ -380,6 +393,12 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 		_last_tl = tl
 		_pulse(_threat_panel)
 	_counter_label.text = "Scrap %d · Kills %d · Stay ×%.2f" % [GameState.scrap_found, GameState.kills, stay]
+	var rp: Dictionary = GameState.run_bar_state()
+	_run_level_label.text = "RUN Lv %d%s" % [
+		int(rp["level"]),
+		"  MAX" if bool(rp.get("capped", false)) else "",
+	]
+	_run_xp_bar.value = float(rp["ratio"])
 	if player and is_instance_valid(player) and not bool(player.call("is_reloading")):
 		_refresh_ammo()
 

@@ -239,10 +239,9 @@ func _die() -> void:
 	_dead = true
 	remove_from_group("enemies")
 	var range_v: Vector2i = _def.get("scrap", Vector2i(1, 3))
-	var scrap := randi_range(range_v.x, range_v.y)
+	var scrap := GameState.add_scrap(randi_range(range_v.x, range_v.y))
 	GameState.kills += 1
-	GameState.scrap_found += scrap
-	GameState.xp_this_run += int(_def.get("xp", 3))
+	GameState.add_run_xp(int(_def.get("xp", 3)))
 	Juice.sfx("enemy_die", -2.0)
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)

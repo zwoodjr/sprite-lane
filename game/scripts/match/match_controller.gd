@@ -47,6 +47,14 @@ func _ready() -> void:
 	TouchInput.extract_pressed.connect(_on_touch_extract)
 	hud.setup(self)
 	hud.setup_nav(player, _pads, wasteland.get_landmarks())
+	## In-run level-up picker (pauses on level).
+	var picker := CanvasLayer.new()
+	picker.set_script(load("res://scripts/ui/run_upgrade_picker.gd"))
+	add_child(picker)
+	picker.chosen.connect(func(u: Dictionary) -> void:
+		if is_instance_valid(hud):
+			hud.show_toast(str(u.get("name", "Upgrade")) + "!", UiTheme.TEAL)
+	)
 
 	_phase_index = 0
 	_start_phase(0)
@@ -122,8 +130,8 @@ func _start_phase(index: int) -> void:
 			hud.show_banner("EXTRACT OPEN", "Stand on a gold pad to leave — or stay for more", Color(0.55, 1.0, 0.6))
 		if GameState.selected_character_id == CharacterDefs.ROOK_ID and not _ping_done_for_window:
 			_ping_done_for_window = true
-			hud.show_toast("Second Glance: +2 scrap", UiTheme.AMBER)
-			GameState.scrap_found += 2
+			var sg := GameState.add_scrap(2)
+			hud.show_toast("Second Glance: +%d scrap" % sg, UiTheme.AMBER)
 		if hud.tutorial and is_instance_valid(hud.tutorial):
 			hud.tutorial.call("event", "extract_open")
 	elif index > 0:
@@ -218,8 +226,8 @@ func _update_stay_bonus(delta: float) -> void:
 		_stay_accum = 0.0
 		var loot_w := 1.0 + float(GameState.get_character().get("loot_weight_bonus", 0.0))
 		GameState.stay_bonus += 0.05 * loot_w
-		GameState.xp_this_run += int(2 * loot_w)
-		GameState.scrap_found += 1
+		GameState.add_run_xp(int(2 * loot_w))
+		GameState.add_scrap(1)
 
 
 func _on_extract_requested() -> void:
