@@ -14,6 +14,8 @@ const LANDMARK_NAMES := ["Scrapyard", "Flood Garage", "Signal Tower", "Neon Mark
 @export var player_path: NodePath
 
 var run_seed: int = 1
+var terrain_noise: FastNoiseLite
+var _decor: Array[Texture2D] = []
 var landmarks: Array[Dictionary] = [] ## {name, position, kind}
 var _loaded: Dictionary = {} ## Vector2i -> Node2D
 var _player: Node2D
@@ -49,8 +51,15 @@ func setup(p_seed: int, player: Node2D) -> void:
 
 func _load_textures() -> void:
 	_tile_tex.clear()
-	for i in range(4):
-		_tile_tex.append(load("res://assets/sprites/tiles/dust_%d.png" % i) as Texture2D)
+	for i in range(6):
+		_tile_tex.append(load("res://assets/sprites/tiles/ground_%d.png" % i) as Texture2D)
+	_decor.clear()
+	for n in ["rock_small", "rock_small", "rock_large", "dead_bush", "dead_bush", "bones", "tire", "cactus", "sign_post", "scrap_pile"]:
+		_decor.append(load("res://assets/sprites/props/%s.png" % n) as Texture2D)
+	terrain_noise = FastNoiseLite.new()
+	terrain_noise.seed = run_seed
+	terrain_noise.frequency = 0.0016
+	terrain_noise.fractal_octaves = 2
 	_prop_wreck = load("res://assets/sprites/props/wreck.png")
 	_prop_crate = load("res://assets/sprites/props/herb_crate.png")
 	_prop_tower = load("res://assets/sprites/props/signal_tower.png")
@@ -141,15 +150,24 @@ func _spawn_chunk(coord: Vector2i) -> Node2D:
 func _populate_props(chunk: Node2D, coord: Vector2i) -> void:
 	var h := _hash2(coord.x, coord.y, 3)
 	## Decorative (non-breakable) scrap / wrecks
-	var decor := 3 + (h % 5)
+	## Sparse, varied decor. Occasional wreck as a mini-landmark.
+	var decor := 2 + (h % 4)
 	for i in range(decor):
 		var ph := _hash2(coord.x, coord.y, 100 + i)
 		var sp := Sprite2D.new()
-		sp.texture = _prop_wreck if (ph % 3) == 0 else _prop_scrap
+		sp.texture = _decor[ph % _decor.size()]
 		sp.position = Vector2((ph >> 3) % (CHUNK_SIZE - 40) + 20, (ph >> 9) % (CHUNK_SIZE - 40) + 20)
+		sp.flip_h = ((ph >> 5) & 1) == 1
 		sp.centered = true
 		sp.z_index = 0
 		chunk.add_child(sp)
+	if (h % 7) == 0:
+		var wr := Sprite2D.new()
+		wr.texture = _prop_wreck
+		var wh := _hash2(coord.x, coord.y, 77)
+		wr.position = Vector2((wh >> 3) % (CHUNK_SIZE - 80) + 40, (wh >> 9) % (CHUNK_SIZE - 80) + 40)
+		wr.scale = Vector2(1.3, 1.3)
+		chunk.add_child(wr)
 	## Destructible crates — sparse (~⅕ prior density). Power-ups are rare finds.
 	var breaks := 1 if (h % 10) < 7 else 0
 	for i in range(breaks):

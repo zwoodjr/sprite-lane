@@ -1,5 +1,3 @@
 # MVP status (repo mirror)
 
-See Project Context `docs/mvp-status.md`.
-
-**Latest:** floating twin sticks (finger-down origin) · ~⅕ power-up rate · camera zoom 1.2 · Xogot fullscreen = host chrome limit.
+**Latest:** controls + feel + onboarding pass — multi-touch buttons, aim-stick fire, dash, aim assist, SFX/juice, 3 enemy types, tutorial, pause/settings, rebuilt menus, terrain art. See game/README.md.
