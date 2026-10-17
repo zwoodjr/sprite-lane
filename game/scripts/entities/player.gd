@@ -60,6 +60,10 @@ var _ability: Dictionary = {}
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
+## Keep ~48px on-screen footprint when character art is authored at 64×64 (FOV ~1/13).
+const BODY_FOV_PX := 48.0
+var _body_base_scale: float = 1.0
+
 var _gun_poly: Polygon2D
 var _muzzle: Polygon2D
 var _shadow: Polygon2D
@@ -87,11 +91,21 @@ func _apply_loadout() -> void:
 	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
 	body.texture = load(str(_char.get("sprite", "res://assets/sprites/characters/rook_vex.png"))) as Texture2D
+	_sync_body_fov_scale()
 	label.text = str(_char.get("display_name", "Wanderer"))
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", _char.get("accent", Color(0.9, 0.8, 0.5)))
 	if not GameState.loadout_changed.is_connected(_on_loadout_changed):
 		GameState.loadout_changed.connect(_on_loadout_changed)
+
+
+func _sync_body_fov_scale() -> void:
+	## Native 64×64 heroes → scale so width ≈ BODY_FOV_PX at zoom 1.12 (~1/13 screen).
+	var tw := 48.0
+	if body.texture != null:
+		tw = float(body.texture.get_width())
+	_body_base_scale = BODY_FOV_PX / maxf(tw, 1.0)
+	body.scale = Vector2.ONE * _body_base_scale
 
 
 func _on_loadout_changed() -> void:
@@ -262,18 +276,22 @@ func _update_regen(delta: float) -> void:
 
 func _update_visuals(delta: float) -> void:
 	var moving := velocity.length() > 30.0
-	## Walk bob + squash
+	var bs := _body_base_scale
+	## Walk bob + squash (relative to FOV base scale)
 	if moving and not _mounted:
 		_bob_t += delta * 14.0 * clampf(velocity.length() / base_speed, 0.5, 1.6)
 		body.position.y = -absf(sin(_bob_t)) * 3.0
-		body.scale = Vector2(1.0 + sin(_bob_t * 2.0) * 0.03, 1.0 - sin(_bob_t * 2.0) * 0.03)
+		body.scale = Vector2(
+			bs * (1.0 + sin(_bob_t * 2.0) * 0.03),
+			bs * (1.0 - sin(_bob_t * 2.0) * 0.03)
+		)
 		_step_t += delta
 		if _step_t > 0.26:
 			_step_t = 0.0
 			Juice.dust_puff(global_position + Vector2(0, 18), 3)
 	else:
 		body.position.y = lerpf(body.position.y, 0.0, 0.3)
-		body.scale = body.scale.lerp(Vector2.ONE, 0.3)
+		body.scale = body.scale.lerp(Vector2.ONE * bs, 0.3)
 	## Recoil
 	_recoil = lerpf(_recoil, 0.0, clampf(delta * 18.0, 0.0, 1.0))
 	_gun_poly.position.x = -_recoil
@@ -361,6 +379,7 @@ func _spawn_afterimage() -> void:
 	var ghost := Sprite2D.new()
 	ghost.texture = body.texture
 	ghost.flip_h = body.flip_h
+	ghost.scale = body.scale
 	ghost.global_position = body.global_position
 	ghost.modulate = Color(0.6, 0.95, 0.85, 0.5)
 	ghost.z_index = -1
