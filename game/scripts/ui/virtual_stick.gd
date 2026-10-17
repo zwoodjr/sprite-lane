@@ -1,26 +1,32 @@
 extends Control
 
-## Floating virtual stick. Press anywhere in the pad → drag for direction.
+## Large floating virtual stick. Touch anywhere in the pad → origin follows thumb.
 
 signal stick_changed(vector: Vector2, active: bool)
 
-@export var stick_radius: float = 56.0
-@export var knob_radius: float = 22.0
-@export var deadzone: float = 0.12
-@export var base_color: Color = Color(1, 1, 1, 0.18)
-@export var knob_color: Color = Color(0.95, 0.82, 0.45, 0.75)
+@export var stick_radius: float = 78.0
+@export var knob_radius: float = 32.0
+@export var deadzone: float = 0.18
+@export var response_power: float = 1.35 ## >1 = gentler near center (thumb-friendly)
+@export var idle_alpha: float = 0.22
+@export var active_alpha: float = 0.92
+@export var base_color: Color = Color(1, 1, 1, 1)
+@export var knob_color: Color = Color(0.95, 0.82, 0.45, 1)
 @export var label_text: String = ""
 
 var _touch_index: int = -1
 var _origin: Vector2 = Vector2.ZERO
 var _knob: Vector2 = Vector2.ZERO
 var _vector: Vector2 = Vector2.ZERO
+var _smoothed: Vector2 = Vector2.ZERO
 var _active: bool = false
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	focus_mode = Control.FOCUS_NONE
 	resized.connect(queue_redraw)
+	set_process(true)
 	queue_redraw()
 
 
@@ -32,15 +38,22 @@ func is_active() -> bool:
 	return _active
 
 
+func _process(delta: float) -> void:
+	## Smooth stick output so thumbs don't jitter aim/move
+	var target := _vector if _active else Vector2.ZERO
+	var prev_len := _smoothed.length()
+	_smoothed = _smoothed.lerp(target, clampf(delta * 18.0, 0.0, 1.0))
+	if _smoothed.length() < 0.02:
+		_smoothed = Vector2.ZERO
+	if _active or prev_len > 0.01 or _smoothed.length() > 0.01:
+		stick_changed.emit(_smoothed, _active)
+
+
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed and _touch_index < 0:
-			_touch_index = st.index
-			_origin = st.position
-			_knob = _origin
-			_active = true
-			_update_vector(_origin)
+			_begin(st.index, st.position)
 			accept_event()
 		elif not st.pressed and st.index == _touch_index:
 			_release()
@@ -50,16 +63,11 @@ func _gui_input(event: InputEvent) -> void:
 		if sd.index == _touch_index:
 			_update_vector(sd.position)
 			accept_event()
-	## Mouse fallback for editor testing without a device
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed and _touch_index < 0:
-				_touch_index = 999
-				_origin = mb.position
-				_knob = _origin
-				_active = true
-				_update_vector(_origin)
+				_begin(999, mb.position)
 				accept_event()
 			elif not mb.pressed and _touch_index == 999:
 				_release()
@@ -71,18 +79,29 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 
 
+func _begin(index: int, local_pos: Vector2) -> void:
+	_touch_index = index
+	_origin = local_pos
+	_knob = local_pos
+	_active = true
+	_update_vector(local_pos)
+
+
 func _update_vector(local_pos: Vector2) -> void:
 	var delta := local_pos - _origin
 	var max_r := stick_radius
 	if delta.length() > max_r:
 		delta = delta.limit_length(max_r)
 	_knob = _origin + delta
-	var v := delta / max_r
-	if v.length() < deadzone:
+	var raw := delta / max_r
+	var mag := raw.length()
+	if mag < deadzone:
 		_vector = Vector2.ZERO
 	else:
-		_vector = v.limit_length(1.0)
-	stick_changed.emit(_vector, true)
+		## Remap deadzone → 1, then apply soft response curve for fine aim
+		var t := (mag - deadzone) / (1.0 - deadzone)
+		t = pow(clampf(t, 0.0, 1.0), response_power)
+		_vector = raw.normalized() * t
 	queue_redraw()
 
 
@@ -90,18 +109,26 @@ func _release() -> void:
 	_touch_index = -1
 	_active = false
 	_vector = Vector2.ZERO
-	_knob = _origin
+	_knob = size * 0.5
+	_origin = _knob
 	stick_changed.emit(Vector2.ZERO, false)
 	queue_redraw()
 
 
 func _draw() -> void:
 	var center := size * 0.5
-	## Resting ring in the middle of the pad when idle
 	var base_c := _origin if _active else center
 	var knob_c := _knob if _active else center
-	draw_circle(base_c, stick_radius, base_color)
-	draw_arc(base_c, stick_radius, 0.0, TAU, 48, Color(1, 1, 1, 0.35), 2.0)
-	draw_circle(knob_c, knob_radius, knob_color)
+	var a := active_alpha if _active else idle_alpha
+	var ring := Color(base_color.r, base_color.g, base_color.b, a * 0.35)
+	var fill := Color(base_color.r, base_color.g, base_color.b, a * 0.22)
+	var knob := Color(knob_color.r, knob_color.g, knob_color.b, a)
+	## Outer hit-zone hint (full pad)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, 0.04 if not _active else 0.08), true)
+	draw_circle(base_c, stick_radius, fill)
+	draw_arc(base_c, stick_radius, 0.0, TAU, 64, ring, 3.0, true)
+	draw_circle(knob_c, knob_radius, knob)
+	draw_arc(knob_c, knob_radius, 0.0, TAU, 32, Color(1, 1, 1, a * 0.5), 2.0, true)
 	if label_text != "":
-		draw_string(ThemeDB.fallback_font, base_c + Vector2(-20, stick_radius + 18), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.55))
+		var col := Color(1, 1, 1, 0.4 if not _active else 0.75)
+		draw_string(ThemeDB.fallback_font, Vector2(12, 22), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col)

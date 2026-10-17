@@ -9,17 +9,24 @@ static func is_touch_ui() -> bool:
 
 
 static func safe_margin() -> Rect2:
-	## DisplayServer window safe area in pixels (notches / home indicator).
+	return control_safe_margin()
+
+
+static func control_safe_margin() -> Rect2:
+	## Extra padding for thumbs / notch / home indicator — used by controls & HUD text only.
+	## Game world should still render edge-to-edge behind the HUD.
 	var wa := DisplayServer.get_display_safe_area()
 	var win_size := DisplayServer.window_get_size()
-	if wa.size.x <= 0 or wa.size.y <= 0:
-		return Rect2(24, 16, win_size.x - 48, win_size.y - 32)
-	var left := maxf(16.0, float(wa.position.x))
-	var top := maxf(12.0, float(wa.position.y))
-	var right := maxf(16.0, float(win_size.x - (wa.position.x + wa.size.x)))
-	var bottom := maxf(24.0, float(win_size.y - (wa.position.y + wa.size.y)))
-	## Always leave room for home indicator on phones
-	bottom = maxf(bottom, 28.0)
+	var left := 20.0
+	var top := 16.0
+	var right := 20.0
+	var bottom := 36.0
+	if wa.size.x > 0 and wa.size.y > 0:
+		left = maxf(left, float(wa.position.x) + 8.0)
+		top = maxf(top, float(wa.position.y) + 6.0)
+		right = maxf(right, float(win_size.x - (wa.position.x + wa.size.x)) + 8.0)
+		bottom = maxf(bottom, float(win_size.y - (wa.position.y + wa.size.y)) + 12.0)
+	bottom = maxf(bottom, 40.0)
 	return Rect2(left, top, win_size.x - left - right, win_size.y - top - bottom)
 
 

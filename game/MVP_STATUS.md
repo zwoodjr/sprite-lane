@@ -1,28 +1,16 @@
 # Wanderer MVP Status (repo mirror)
 
-Authoritative copy: Project Context `docs/mvp-status.md`.
+See Project Context `docs/mvp-status.md` for the full note.
 
-## Platform
+## Controls (pass 2)
 
-- **Primary: iPhone** (landscape, touch dual-stick, safe-area HUD)
-- **Also: PC** (WASD + mouse; sticks still available)
-- Android: later / optional
+- Bigger left/right stick pads; aim stick ≠ fire
+- Separate hold **FIRE** + **AUTO-AIM ON** (nearest enemy; stick overrides)
+- Larger EXTRACT / ABILITY / MOUNT; PAUSE top-right; safe-area margins
+- **FILL** tries fullscreen; world full-bleed
 
-## Control scheme
+## Xogot
 
-Left stick = move · Right stick = aim + fire · EXTRACT / ABILITY / MOUNT / PAUSE buttons
+Play chrome stays — game fills the Play viewport only.
 
-## Playable
-
-- Godot 4.3 project opens; menus tappable; match loop Easy/Medium + Rook/Cinder
-- Extract windows, TL on skip, payout/wipe stubs, skateboard mount
-
-## Out of slice
-
-Hard+ modes, Ash/Quill, real art, pet AI, full gear trees, App Store IPA from phone, monetization
-
-## Run on iPhone
-
-1. Clone/copy repo so `game/project.godot` is on device (Working Copy / Files / ZIP).  
-2. Godot → Import → Play (landscape).  
-See `README.md` for full steps.
+## Landscape only · Easy/Medium · Rook/Cinder

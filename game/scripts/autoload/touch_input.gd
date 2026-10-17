@@ -1,7 +1,6 @@
 extends Node
 
-## Shared touch / virtual-control state. Keyboard/mouse still work via InputMap;
-## player merges both. Always available — sticks show when touch is primary.
+## Shared touch / virtual-control state. Keyboard/mouse still work via InputMap.
 
 signal extract_pressed
 signal ability_pressed
@@ -11,18 +10,22 @@ signal pause_pressed
 var move_vector: Vector2 = Vector2.ZERO
 var aim_vector: Vector2 = Vector2.ZERO
 var wants_fire: bool = false
+var fire_held: bool = false
+
+## Phone default: auto-aim nearest enemy while firing (stick aim still overrides).
+var auto_aim: bool = true
 
 var _extract_just: bool = false
 var _ability_just: bool = false
 var _mount_just: bool = false
 var _pause_just: bool = false
 
-## True when we should prefer on-screen controls (iPhone / touch displays).
 var touch_primary: bool = true
 
 
 func _ready() -> void:
 	touch_primary = _detect_touch_primary()
+	auto_aim = touch_primary
 
 
 func _detect_touch_primary() -> bool:
@@ -30,7 +33,6 @@ func _detect_touch_primary() -> bool:
 		return true
 	if DisplayServer.is_touchscreen_available():
 		return true
-	## Godot-on-iPhone editor often reports touchscreen; also treat small windows as mobile.
 	var size := DisplayServer.window_get_size()
 	return mini(size.x, size.y) > 0 and maxi(size.x, size.y) <= 1400 and DisplayServer.is_touchscreen_available()
 
@@ -39,13 +41,19 @@ func set_move(v: Vector2) -> void:
 	move_vector = v.limit_length(1.0)
 
 
-func set_aim(v: Vector2, firing: bool) -> void:
-	if v.length() > 0.15:
+func set_aim(v: Vector2, firing_from_stick: bool = false) -> void:
+	if v.length() > 0.08:
 		aim_vector = v.normalized()
-		wants_fire = firing
+		if firing_from_stick:
+			wants_fire = true
 	else:
 		aim_vector = Vector2.ZERO
-		wants_fire = false
+		if firing_from_stick:
+			wants_fire = false
+
+
+func set_fire_held(held: bool) -> void:
+	fire_held = held
 
 
 func clear_sticks() -> void:
@@ -106,4 +114,4 @@ func get_move() -> Vector2:
 
 
 func is_firing() -> bool:
-	return wants_fire or Input.is_action_pressed("shoot")
+	return fire_held or wants_fire or Input.is_action_pressed("shoot")

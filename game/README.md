@@ -1,93 +1,50 @@
-# Wanderer (Godot 4 MVP) — iPhone first
+# Wanderer (Godot 4 MVP) — iPhone / Xogot first
 
-Solo top-down extraction survival vertical slice. **Primary target: iPhone** (Godot on device). PC keyboard/mouse still works.
+Solo top-down extraction. **Primary: iPhone in Xogot/Godot Play (landscape).** PC keyboard/mouse still works.
 
-Design SoT: Project Context `docs/game-design.md`.
+## Control scheme
 
-## Layout
+| Control | Touch | PC |
+|---------|-------|-----|
+| Move | **Left stick** (large pad) | WASD |
+| Aim | **Right stick** | Mouse |
+| Fire | Hold **FIRE** (auto-aim ON by default) | LMB |
+| Extract / Ability / Mount | Large bottom buttons | E / Q / F |
+| Pause | Top-right **PAUSE** | Esc |
+| Auto-aim toggle | **AUTO-AIM** (top-left) | — |
+| Fill screen | **FILL** (top-left) | — |
 
-Godot project lives in **`game/`** (repo root keeps the legacy web prototype).
+Sticks: bigger hit zones, low idle opacity / high when active, deadzone + smoothed response.
 
-```
-game/
-  project.godot          # Open this in Godot 4.3+
-  scenes/                # UI + match + entities + touch controls
-  scripts/               # GDScript (TouchInput, match, entities, data)
-```
+**Landscape only.**
 
-## Orientation & display
+## Display / fullscreen
 
-- **Landscape** (locked via `window/handheld/orientation`)
-- Viewport **1280×720**, stretch `canvas_items` + `expand` (fits common iPhone landscape aspects + notches via safe-area padding)
-- Rendering method: **mobile**
-- Touch emulation from mouse enabled (desktop testing of sticks)
+- Stretch: `canvas_items` + `expand` — game fills the host viewport.
+- Safe-area padding is for **controls/HUD only**; the world draws full-bleed behind.
+- **FILL** tries OS fullscreen. **Xogot Play chrome cannot be removed from game code** — maximize inside Play only.
 
-## Control scheme (shipped)
+## Run on iPhone (Xogot)
 
-| Control | Touch (primary) | PC |
-|---------|-----------------|-----|
-| Move | **Left virtual stick** | WASD / arrows |
-| Aim + fire | **Right virtual stick** (drag past deadzone → aim and auto-fire) | Mouse aim + LMB |
-| Extract | Large **EXTRACT** button (must be on open pad) | E |
-| Ability | **ABILITY** (Sister Cinder heal) | Q |
-| Mount | **MOUNT** (skateboard) | F |
-| Pause / menu | **PAUSE** | Esc |
+1. Clone/copy repo so `game/project.godot` is on the phone (Working Copy / Files / ZIP). Branch: `cursor/wanderer-godot-mvp-83de`.
+2. Xogot → Import → **Play** (keep landscape).
+3. Left = move, right = aim, hold FIRE to shoot.
 
-## How to run on iPhone (Godot installed)
+### Limits
 
-### 1. Get `game/` onto the phone
+| Works | Doesn't |
+|-------|---------|
+| In-editor Play + touch controls | Removing Xogot editor chrome |
+| Light script edits on phone | App Store IPA without Mac/Xcode |
 
-Pick one:
+## Run on PC
 
-**A. Working Copy (recommended for git)**  
-1. Install [Working Copy](https://workingcopyapp.com/).  
-2. Clone `https://github.com/zwoodjr/sprite-lane` (or your fork). Checkout branch `cursor/wanderer-godot-mvp-83de` if needed.  
-3. In Files / Working Copy, note the folder that contains `game/project.godot`.
-
-**B. GitHub app + Files**  
-1. Open the repo in GitHub / download ZIP of the branch.  
-2. Save/extract into **On My iPhone** (Files app), e.g. `sprite-lane/game/`.
-
-**C. AirDrop / iCloud Drive**  
-1. On a computer: zip the `game/` folder.  
-2. AirDrop or put in iCloud Drive → open in Files on iPhone → unzip.
-
-You need the folder that **directly contains** `project.godot` (the `game/` directory).
-
-### 2. Open in Godot on iOS
-
-1. Launch **Godot** on the iPhone.  
-2. **Import** → browse to `game/project.godot` (Files picker / Working Copy location).  
-3. Open the project.  
-4. Press **Play** (▶). Phone should stay **landscape**.  
-5. Use left stick to move, right stick to aim/fire, bottom buttons for Extract / Ability / Mount / Pause.
-
-### 3. What works / limits on phone
-
-| Works | Limitations |
-|-------|-------------|
-| Edit GDScript / scenes in Godot iOS editor | Small screen — prefer light edits |
-| Run the MVP in-editor (Play) | Full App Store **export/signing** needs a Mac + Xcode / Apple Developer account — not from phone alone |
-| Touch dual-stick + menus | External keyboard optional; mouse not required |
-| Fast timers checkbox for quick loops | Heavy debugging / profilers are awkward on device |
-
-## How to run on PC
-
-1. Install [Godot 4.3+](https://godotengine.org/download).  
-2. Import `game/project.godot` → F5.  
-3. Sticks still appear (dimmed); WASD + mouse work.
-
-### Headless smoke
+Godot 4.3+ → open `game/project.godot` → F5.
 
 ```bash
 godot4 --headless --path game --quit-after 3
-godot4 --headless --path game -s res://tools/smoke_test.gd
 ```
-
-## Flow
-
-**Main → Mode (Easy/Medium) → Character (Rook/Cinder) → Deploy → Match → Extract / Wipe**
 
 ## Status
 
-See `MVP_STATUS.md` and Project Context `docs/mvp-status.md`.
+`MVP_STATUS.md` · Project Context `docs/mvp-status.md`

@@ -21,12 +21,18 @@ layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 12.0
-offset_top = -220.0
-offset_right = 200.0
-offset_bottom = -32.0
+offset_left = 8.0
+offset_top = -280.0
+offset_right = 268.0
+offset_bottom = -20.0
 grow_vertical = 0
 script = ExtResource("2_stick")
+stick_radius = 82.0
+knob_radius = 34.0
+deadzone = 0.16
+response_power = 1.2
+idle_alpha = 0.2
+active_alpha = 0.95
 label_text = "MOVE"
 
 [node name="RightStick" type="Control" parent="Root"]
@@ -36,15 +42,38 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -200.0
-offset_top = -220.0
-offset_right = -12.0
-offset_bottom = -32.0
+offset_left = -268.0
+offset_top = -280.0
+offset_right = -8.0
+offset_bottom = -20.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("2_stick")
-knob_color = Color(0.9, 0.45, 0.3, 0.8)
-label_text = "AIM+FIRE"
+stick_radius = 82.0
+knob_radius = 34.0
+deadzone = 0.14
+response_power = 1.45
+idle_alpha = 0.2
+active_alpha = 0.95
+knob_color = Color(0.92, 0.55, 0.32, 1)
+label_text = "AIM"
+
+[node name="FireBtn" type="Button" parent="Root"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -400.0
+offset_right = -160.0
+offset_bottom = -290.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 0.95, 0.85, 1)
+theme_override_font_sizes/font_size = 26
+text = "FIRE"
 
 [node name="Actions" type="HBoxContainer" parent="Root"]
 layout_mode = 1
@@ -53,35 +82,66 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -280.0
-offset_top = -96.0
-offset_right = 280.0
-offset_bottom = -24.0
+offset_left = -340.0
+offset_top = -118.0
+offset_right = 340.0
+offset_bottom = -28.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_constants/separation = 12
+theme_override_constants/separation = 14
 alignment = 1
+mouse_filter = 2
 
 [node name="ExtractBtn" type="Button" parent="Root/Actions"]
-custom_minimum_size = Vector2(120, 64)
+custom_minimum_size = Vector2(150, 78)
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
 text = "EXTRACT"
 
 [node name="AbilityBtn" type="Button" parent="Root/Actions"]
-custom_minimum_size = Vector2(110, 64)
+custom_minimum_size = Vector2(130, 78)
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
 text = "ABILITY"
 
 [node name="MountBtn" type="Button" parent="Root/Actions"]
-custom_minimum_size = Vector2(100, 64)
+custom_minimum_size = Vector2(120, 78)
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
 text = "MOUNT"
 
-[node name="PauseBtn" type="Button" parent="Root/Actions"]
-custom_minimum_size = Vector2(90, 64)
-layout_mode = 2
+[node name="PauseBtn" type="Button" parent="Root"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -130.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 72.0
+grow_horizontal = 0
 theme_override_font_sizes/font_size = 18
 text = "PAUSE"
+
+[node name="AutoAimBtn" type="Button" parent="Root"]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 190.0
+offset_bottom = 64.0
+theme_override_font_sizes/font_size = 15
+text = "AUTO-AIM: ON"
+
+[node name="FillBtn" type="Button" parent="Root"]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 200.0
+offset_top = 8.0
+offset_right = 300.0
+offset_bottom = 64.0
+theme_override_font_sizes/font_size = 15
+text = "FILL"

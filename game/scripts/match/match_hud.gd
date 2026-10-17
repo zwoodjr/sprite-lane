@@ -23,38 +23,47 @@ var _touch_controls: CanvasLayer = null
 
 func setup(match_node: Node) -> void:
 	_match = match_node
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_mobile_hud()
 	_touch_controls = TouchControlsScene.instantiate()
-	add_child(_touch_controls)
-	hint_label.text = "Left stick move · Right stick aim+fire · EXTRACT / ABILITY / MOUNT · PAUSE"
+	## Sibling layer under Match so touch stays on top without nesting filter issues
+	get_parent().add_child(_touch_controls)
+	hint_label.text = "MOVE · AIM · hold FIRE (auto-aim ON) · EXTRACT / ABILITY / MOUNT"
 	if not TouchInput.touch_primary:
 		hint_label.text += "  |  WASD · Mouse · E/Q/F · Esc"
 	toast_label.text = ""
 
 
 func _apply_mobile_hud() -> void:
+	## HUD text uses safe padding; game world behind stays full-bleed.
 	var win := DisplayServer.window_get_size()
-	var m := MobileLayout.safe_margin()
+	var m := MobileLayout.control_safe_margin()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.offset_left = m.position.x
 	root.offset_top = m.position.y
 	root.offset_right = -(win.x - (m.position.x + m.size.x))
 	root.offset_bottom = -(win.y - (m.position.y + m.size.y))
-	## Bigger type for phone readability
-	MobileLayout.bump_label(phase_label, 22)
-	MobileLayout.bump_label(timer_label, 36)
-	MobileLayout.bump_label(tl_label, 22)
+	MobileLayout.bump_label(phase_label, 24)
+	MobileLayout.bump_label(timer_label, 40)
+	MobileLayout.bump_label(tl_label, 24)
 	MobileLayout.bump_label(ammo_label, 18)
 	MobileLayout.bump_label(mount_label, 16)
 	MobileLayout.bump_label(stay_label, 15)
 	MobileLayout.bump_label(toast_label, 24)
-	hp_bar.custom_minimum_size = Vector2(0, 26)
-	## Keep bottom stats above virtual sticks / action row
-	bottom_bar.offset_top = -200.0
-	bottom_bar.offset_bottom = -110.0
-	hint_label.offset_top = -250.0
-	hint_label.offset_bottom = -226.0
+	hp_bar.custom_minimum_size = Vector2(0, 28)
+	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	## Keep stats above sticks / action row / FIRE
+	bottom_bar.offset_top = -250.0
+	bottom_bar.offset_bottom = -140.0
+	hint_label.offset_top = -280.0
+	hint_label.offset_bottom = -256.0
 	top_bar.offset_top = 4.0
-	top_bar.offset_bottom = 52.0
+	top_bar.offset_bottom = 56.0
+
 
 
 func _process(delta: float) -> void:

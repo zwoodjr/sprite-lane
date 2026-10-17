@@ -122,12 +122,35 @@ func _try_ability() -> void:
 
 
 func _aim_direction() -> Vector2:
+	## Manual AIM stick wins.
 	if TouchInput.aim_vector.length() > 0.01:
 		return TouchInput.aim_vector
-	var to_mouse := get_global_mouse_position() - global_position
-	if to_mouse.length() > 1.0:
-		return to_mouse.normalized()
+	## Phone default: auto-aim nearest enemy while holding FIRE.
+	if TouchInput.auto_aim and TouchInput.is_firing():
+		var nearest := _nearest_enemy_dir()
+		if nearest.length() > 0.01:
+			return nearest
+	## Mouse aim (PC / editor); ignore while thumb-firing so last tap doesn't skew aim.
+	if not TouchInput.fire_held:
+		var to_mouse := get_global_mouse_position() - global_position
+		if to_mouse.length() > 1.0:
+			return to_mouse.normalized()
 	return Vector2.RIGHT.rotated(gun.rotation)
+
+
+func _nearest_enemy_dir() -> Vector2:
+	var best: Node2D = null
+	var best_d := 99999.0
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var d := global_position.distance_to((n as Node2D).global_position)
+		if d < best_d:
+			best_d = d
+			best = n as Node2D
+	if best == null or best_d > 520.0:
+		return Vector2.ZERO
+	return (best.global_position - global_position).normalized()
 
 
 func _try_shoot() -> void:
