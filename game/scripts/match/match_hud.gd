@@ -38,7 +38,7 @@ func setup(match_node: Node) -> void:
 	_apply_mobile_hud()
 	_touch_controls = TouchControlsScene.instantiate()
 	get_parent().add_child(_touch_controls)
-	hint_label.text = "Endless map · shoot crates for power-ups · extract arrows"
+	hint_label.text = "Touch L/R halves = move/aim · FIRE · rare crate buffs · extract arrows"
 	if not TouchInput.touch_primary:
 		hint_label.text += "  |  WASD · Mouse · E/Q/F · Esc"
 	toast_label.text = ""
