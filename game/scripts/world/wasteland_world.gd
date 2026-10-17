@@ -150,8 +150,8 @@ func _populate_props(chunk: Node2D, coord: Vector2i) -> void:
 		sp.centered = true
 		sp.z_index = 0
 		chunk.add_child(sp)
-	## Destructible crates / drums / chests / vial crates
-	var breaks := 2 + (h % 4)
+	## Destructible crates — sparse (~⅕ prior density). Power-ups are rare finds.
+	var breaks := 1 if (h % 10) < 7 else 0
 	for i in range(breaks):
 		var ph := _hash2(coord.x, coord.y, 500 + i)
 		var br: StaticBody2D = BreakableScene.instantiate()

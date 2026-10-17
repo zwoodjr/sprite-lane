@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://wanderer_touch"]
 
 [ext_resource type="Script" path="res://scripts/ui/touch_controls.gd" id="1_touch"]
-[ext_resource type="Script" path="res://scripts/ui/virtual_stick.gd" id="2_stick"]
+[ext_resource type="Script" path="res://scripts/ui/stick_draw.gd" id="2_draw"]
 
 [node name="TouchControls" type="CanvasLayer"]
 layer = 20
@@ -16,47 +16,15 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="LeftStick" type="Control" parent="Root"]
+[node name="StickDraw" type="Control" parent="Root"]
 layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = -280.0
-offset_right = 268.0
-offset_bottom = -20.0
-grow_vertical = 0
-script = ExtResource("2_stick")
-stick_radius = 82.0
-knob_radius = 34.0
-deadzone = 0.16
-response_power = 1.2
-idle_alpha = 0.2
-active_alpha = 0.95
-label_text = "MOVE"
-
-[node name="RightStick" type="Control" parent="Root"]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -268.0
-offset_top = -280.0
-offset_right = -8.0
-offset_bottom = -20.0
-grow_horizontal = 0
-grow_vertical = 0
-script = ExtResource("2_stick")
-stick_radius = 82.0
-knob_radius = 34.0
-deadzone = 0.14
-response_power = 1.45
-idle_alpha = 0.2
-active_alpha = 0.95
-knob_color = Color(0.92, 0.55, 0.32, 1)
-label_text = "AIM"
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_draw")
 
 [node name="FireBtn" type="Button" parent="Root"]
 layout_mode = 1

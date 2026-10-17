@@ -1,7 +1,5 @@
 # MVP status (repo mirror)
 
-Full note: Project Context `docs/mvp-status.md`.
+See Project Context `docs/mvp-status.md`.
 
-**Shipped in this pass:** endless chunk map · minimap/arrows · per-run extracts · sprite art · breakables → temp power-ups · Rook/Cinder data-driven (+ future ID stubs).
-
-**Xogot:** Play chrome not removable from code.
+**Latest:** floating twin sticks (finger-down origin) · ~⅕ power-up rate · camera zoom 1.2 · Xogot fullscreen = host chrome limit.

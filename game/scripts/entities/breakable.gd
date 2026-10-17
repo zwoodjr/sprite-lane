@@ -8,7 +8,7 @@ const PowerupDefs = preload("res://scripts/data/powerup_defs.gd")
 const PickupScene := preload("res://scenes/entities/powerup_pickup.tscn")
 
 @export var max_hp: float = 24.0
-@export var drop_chance: float = 0.72
+@export var drop_chance: float = 0.65 ## with ~⅕ spawn density ≈ rare finds overall
 
 var hp: float = 24.0
 var kind: String = "crate"
