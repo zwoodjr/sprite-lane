@@ -1,16 +1,7 @@
-# Wanderer MVP Status (repo mirror)
+# MVP status (repo mirror)
 
-See Project Context `docs/mvp-status.md` for the full note.
+Full note: Project Context `docs/mvp-status.md`.
 
-## Controls (pass 2)
+**Shipped in this pass:** endless chunk map · minimap/arrows · per-run extracts · sprite art · breakables → temp power-ups · Rook/Cinder data-driven (+ future ID stubs).
 
-- Bigger left/right stick pads; aim stick ≠ fire
-- Separate hold **FIRE** + **AUTO-AIM ON** (nearest enemy; stick overrides)
-- Larger EXTRACT / ABILITY / MOUNT; PAUSE top-right; safe-area margins
-- **FILL** tries fullscreen; world full-bleed
-
-## Xogot
-
-Play chrome stays — game fills the Play viewport only.
-
-## Landscape only · Easy/Medium · Rook/Cinder
+**Xogot:** Play chrome not removable from code.

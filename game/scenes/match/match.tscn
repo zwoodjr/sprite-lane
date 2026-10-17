@@ -1,106 +1,22 @@
-[gd_scene load_steps=7 format=3 uid="uid://wanderer_match"]
+[gd_scene load_steps=5 format=3 uid="uid://wanderer_match"]
 
 [ext_resource type="Script" path="res://scripts/match/match_controller.gd" id="1_match"]
-[ext_resource type="Script" path="res://scripts/match/world_builder.gd" id="2_world"]
+[ext_resource type="Script" path="res://scripts/world/wasteland_world.gd" id="2_waste"]
 [ext_resource type="PackedScene" uid="uid://wanderer_player" path="res://scenes/entities/player.tscn" id="3_player"]
-[ext_resource type="PackedScene" uid="uid://wanderer_pad" path="res://scenes/entities/extract_pad.tscn" id="4_pad"]
 [ext_resource type="Script" path="res://scripts/match/match_hud.gd" id="5_hud"]
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
-size = Vector2(40, 40)
 
 [node name="Match" type="Node2D"]
 script = ExtResource("1_match")
 
 [node name="World" type="Node2D" parent="."]
 
-[node name="Ground" type="Node2D" parent="World"]
-script = ExtResource("2_world")
+[node name="Wasteland" type="Node2D" parent="World"]
+script = ExtResource("2_waste")
 
 [node name="Player" parent="World" instance=ExtResource("3_player")]
-position = Vector2(0, 40)
+position = Vector2(0, 0)
 
 [node name="ExtractPads" type="Node2D" parent="World"]
-
-[node name="PadHub" parent="World/ExtractPads" instance=ExtResource("4_pad")]
-position = Vector2(0, -120)
-pad_name = "Hub Extract"
-
-[node name="PadSpokeA" parent="World/ExtractPads" instance=ExtResource("4_pad")]
-position = Vector2(420, 40)
-pad_name = "Scrapyard Pad"
-
-[node name="PadSpokeB" parent="World/ExtractPads" instance=ExtResource("4_pad")]
-position = Vector2(-360, -240)
-pad_name = "Garage Pad"
-
-[node name="SpawnPoints" type="Node2D" parent="World"]
-
-[node name="S1" type="Marker2D" parent="World/SpawnPoints"]
-position = Vector2(380, -80)
-
-[node name="S2" type="Marker2D" parent="World/SpawnPoints"]
-position = Vector2(-320, -200)
-
-[node name="S3" type="Marker2D" parent="World/SpawnPoints"]
-position = Vector2(-180, 300)
-
-[node name="S4" type="Marker2D" parent="World/SpawnPoints"]
-position = Vector2(200, 260)
-
-[node name="S5" type="Marker2D" parent="World/SpawnPoints"]
-position = Vector2(-80, -320)
-
-[node name="S6" type="Marker2D" parent="World/SpawnPoints"]
-position = Vector2(280, 160)
-
-[node name="Cover" type="Node2D" parent="World"]
-
-[node name="Wall1" type="StaticBody2D" parent="World/Cover"]
-position = Vector2(80, -90)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="World/Cover/Wall1"]
-shape = SubResource("RectangleShape2D_wall")
-
-[node name="Wall2" type="StaticBody2D" parent="World/Cover"]
-position = Vector2(-110, 60)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="World/Cover/Wall2"]
-shape = SubResource("RectangleShape2D_wall")
-
-[node name="Wall3" type="StaticBody2D" parent="World/Cover"]
-position = Vector2(200, 120)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="World/Cover/Wall3"]
-shape = SubResource("RectangleShape2D_wall")
-
-[node name="Wall4" type="StaticBody2D" parent="World/Cover"]
-position = Vector2(-250, -40)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="World/Cover/Wall4"]
-shape = SubResource("RectangleShape2D_wall")
-
-[node name="Boundary" type="StaticBody2D" parent="World"]
-
-[node name="N" type="CollisionShape2D" parent="World/Boundary"]
-position = Vector2(0, -720)
-shape = SubResource("RectangleShape2D_wall")
-scale = Vector2(50, 1)
-
-[node name="S" type="CollisionShape2D" parent="World/Boundary"]
-position = Vector2(0, 720)
-shape = SubResource("RectangleShape2D_wall")
-scale = Vector2(50, 1)
-
-[node name="W" type="CollisionShape2D" parent="World/Boundary"]
-position = Vector2(-940, 0)
-shape = SubResource("RectangleShape2D_wall")
-scale = Vector2(1, 40)
-
-[node name="E" type="CollisionShape2D" parent="World/Boundary"]
-position = Vector2(940, 0)
-shape = SubResource("RectangleShape2D_wall")
-scale = Vector2(1, 40)
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("5_hud")
@@ -124,6 +40,7 @@ offset_right = -16.0
 offset_bottom = 48.0
 grow_horizontal = 2
 theme_override_constants/separation = 24
+mouse_filter = 2
 
 [node name="PhaseLabel" type="Label" parent="HUD/Root/Top"]
 layout_mode = 2
@@ -131,6 +48,7 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.95, 0.85, 0.55, 1)
 theme_override_font_sizes/font_size = 20
 text = "Lockout"
+mouse_filter = 2
 
 [node name="TimerLabel" type="Label" parent="HUD/Root/Top"]
 layout_mode = 2
@@ -138,6 +56,7 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 28
 text = "1:30"
 horizontal_alignment = 1
+mouse_filter = 2
 
 [node name="TLLabel" type="Label" parent="HUD/Root/Top"]
 layout_mode = 2
@@ -145,6 +64,7 @@ theme_override_colors/font_color = Color(0.9, 0.4, 0.25, 1)
 theme_override_font_sizes/font_size = 20
 text = "TL 0"
 horizontal_alignment = 2
+mouse_filter = 2
 
 [node name="Bottom" type="VBoxContainer" parent="HUD/Root"]
 layout_mode = 1
@@ -158,6 +78,7 @@ offset_right = -16.0
 offset_bottom = -12.0
 grow_horizontal = 2
 grow_vertical = 0
+mouse_filter = 2
 
 [node name="HpBar" type="ProgressBar" parent="HUD/Root/Bottom"]
 custom_minimum_size = Vector2(0, 18)
@@ -165,19 +86,23 @@ layout_mode = 2
 max_value = 100.0
 value = 100.0
 show_percentage = false
+mouse_filter = 2
 
 [node name="AmmoLabel" type="Label" parent="HUD/Root/Bottom"]
 layout_mode = 2
 text = "24/24"
+mouse_filter = 2
 
 [node name="MountLabel" type="Label" parent="HUD/Root/Bottom"]
 layout_mode = 2
 text = "Mount: Skateboard"
+mouse_filter = 2
 
 [node name="StayLabel" type="Label" parent="HUD/Root/Bottom"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.8, 0.65, 1)
 text = "Stay x1.00"
+mouse_filter = 2
 
 [node name="Toast" type="Label" parent="HUD/Root"]
 layout_mode = 1
@@ -196,6 +121,7 @@ theme_override_colors/font_color = Color(1, 0.9, 0.5, 1)
 theme_override_font_sizes/font_size = 22
 text = ""
 horizontal_alignment = 1
+mouse_filter = 2
 
 [node name="Hint" type="Label" parent="HUD/Root"]
 layout_mode = 1
@@ -214,3 +140,25 @@ theme_override_colors/font_color = Color(0.7, 0.65, 0.55, 1)
 theme_override_font_sizes/font_size = 12
 text = "Controls"
 horizontal_alignment = 1
+mouse_filter = 2
+
+[node name="MinimapHost" type="Control" parent="HUD/Root"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -168.0
+offset_top = 80.0
+offset_right = -12.0
+offset_bottom = 236.0
+grow_horizontal = 0
+mouse_filter = 2
+
+[node name="ExtractArrows" type="Control" parent="HUD/Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

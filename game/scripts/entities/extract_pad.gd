@@ -7,9 +7,8 @@ signal extract_requested
 var open: bool = false
 var player_inside: bool = false
 
-@onready var poly: Polygon2D = $Poly
+@onready var sprite: Sprite2D = $Sprite
 @onready var label: Label = $Label
-@onready var beacon: Polygon2D = $Beacon
 
 
 func _ready() -> void:
@@ -21,14 +20,16 @@ func _ready() -> void:
 
 func set_open(is_open: bool) -> void:
 	open = is_open
+	if sprite:
+		sprite.texture = load(
+			"res://assets/sprites/props/extract_open.png" if open else "res://assets/sprites/props/extract_sealed.png"
+		) as Texture2D
 	if open:
-		poly.color = Color(0.95, 0.75, 0.25, 0.45)
-		beacon.color = Color(1.0, 0.85, 0.3, 0.9)
-		label.text = "%s — OPEN (E)" % pad_name
+		label.text = "%s — OPEN" % pad_name
+		label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	else:
-		poly.color = Color(0.35, 0.32, 0.28, 0.35)
-		beacon.color = Color(0.4, 0.38, 0.35, 0.5)
 		label.text = "%s — SEALED" % pad_name
+		label.add_theme_color_override("font_color", Color(0.7, 0.65, 0.55))
 
 
 func _process(_delta: float) -> void:

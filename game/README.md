@@ -1,41 +1,33 @@
-# Wanderer (Godot 4 MVP) — iPhone / Xogot first
+# Wanderer (Godot 4) — iPhone / Xogot first
 
-Solo top-down extraction. **Primary: iPhone in Xogot/Godot Play (landscape).** PC keyboard/mouse still works.
+Endless top-down extraction MVP. Landscape dual-stick + FIRE. PC WASD/mouse still work.
 
-## Control scheme
+## What’s in this build
 
-| Control | Touch | PC |
-|---------|-------|-----|
-| Move | **Left stick** (large pad) | WASD |
-| Aim | **Right stick** | Mouse |
-| Fire | Hold **FIRE** (auto-aim ON by default) | LMB |
-| Extract / Ability / Mount | Large bottom buttons | E / Q / F |
-| Pause | Top-right **PAUSE** | Esc |
-| Auto-aim toggle | **AUTO-AIM** (top-left) | — |
-| Fill screen | **FILL** (top-left) | — |
+- **Endless chunk wasteland** (Crazy Gunner–scale explore feel)
+- **Minimap + extract arrows** (open vs sealed)
+- **Per-run randomized extract pads** near landmarks
+- **Breakable crates/drums/chests** → temporary power-ups
+- **Real sprites** (Dust Apothecary palette) — see `assets/`
+- Characters: **Rook + Cinder** playable; more IDs stubbed data-only
 
-Sticks: bigger hit zones, low idle opacity / high when active, deadzone + smoothed response.
+## Controls
 
-**Landscape only.**
-
-## Display / fullscreen
-
-- Stretch: `canvas_items` + `expand` — game fills the host viewport.
-- Safe-area padding is for **controls/HUD only**; the world draws full-bleed behind.
-- **FILL** tries OS fullscreen. **Xogot Play chrome cannot be removed from game code** — maximize inside Play only.
+| Touch | Action |
+|-------|--------|
+| Left stick | Move |
+| Right stick | Aim |
+| FIRE (hold) | Shoot (auto-aim ON by default) |
+| EXTRACT / ABILITY / MOUNT | Actions |
+| PAUSE / FILL / AUTO-AIM | Top toggles |
 
 ## Run on iPhone (Xogot)
 
-1. Clone/copy repo so `game/project.godot` is on the phone (Working Copy / Files / ZIP). Branch: `cursor/wanderer-godot-mvp-83de`.
-2. Xogot → Import → **Play** (keep landscape).
-3. Left = move, right = aim, hold FIRE to shoot.
+1. Clone/copy repo branch `cursor/wanderer-godot-mvp-83de` so `game/project.godot` is on device.
+2. Import in Xogot → **Play** (landscape).
+3. Follow arrows to extracts; shoot breakables for buffs.
 
-### Limits
-
-| Works | Doesn't |
-|-------|---------|
-| In-editor Play + touch controls | Removing Xogot editor chrome |
-| Light script edits on phone | App Store IPA without Mac/Xcode |
+**Xogot limit:** editor Play chrome stays; FILL only expands the game viewport inside Play.
 
 ## Run on PC
 
@@ -45,6 +37,6 @@ Godot 4.3+ → open `game/project.godot` → F5.
 godot4 --headless --path game --quit-after 3
 ```
 
-## Status
+## Map notes
 
-`MVP_STATUS.md` · Project Context `docs/mvp-status.md`
+Chunks = 512px; ~5×5 loaded. No hard edge nearby — streaming unload only. Extracts re-roll each deploy from run seed.

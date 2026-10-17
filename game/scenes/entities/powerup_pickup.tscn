@@ -1,0 +1,28 @@
+[gd_scene load_steps=3 format=3 uid="uid://wanderer_pickup"]
+
+[ext_resource type="Script" path="res://scripts/entities/powerup_pickup.gd" id="1_pu"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_1"]
+radius = 18.0
+
+[node name="PowerupPickup" type="Area2D"]
+collision_layer = 0
+collision_mask = 2
+monitoring = true
+script = ExtResource("1_pu")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+scale = Vector2(1.15, 1.15)
+centered = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_1")
+
+[node name="Label" type="Label" parent="."]
+offset_left = -40.0
+offset_top = -28.0
+offset_right = 40.0
+offset_bottom = -10.0
+theme_override_font_sizes/font_size = 10
+text = "Boost"
+horizontal_alignment = 1

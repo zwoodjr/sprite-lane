@@ -17,7 +17,7 @@ var speed: float = 110.0
 var _fire_cd: float = 0.0
 var _player: Node2D
 
-@onready var body: Polygon2D = $Body
+@onready var body: Sprite2D = $Body
 @onready var hp_bar: ProgressBar = $HpBar
 
 
@@ -34,7 +34,8 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 
 func _ready() -> void:
 	add_to_group("enemies")
-	body.color = Color(0.55, 0.18, 0.14)
+	if body and body.texture == null:
+		body.texture = load("res://assets/sprites/enemies/raider.png")
 	if hp_bar:
 		hp_bar.max_value = max_hp
 		hp_bar.value = hp
@@ -45,16 +46,23 @@ func _physics_process(delta: float) -> void:
 	_player = get_tree().get_first_node_in_group("player") as Node2D
 	if _player == null:
 		return
+	## Soft steps: player with quiet buff is slightly less chase-priority (slower enemies when far)
 	var to_player := _player.global_position - global_position
 	var dist := to_player.length()
 	var dir := to_player.normalized()
+	var chase := speed
+	if _player.has_method("get_active_buffs") and (_player.get_active_buffs() as Dictionary).has("quiet"):
+		if dist > 220.0:
+			chase *= 0.75
 	if dist > preferred_range:
-		velocity = dir * speed
+		velocity = dir * chase
 	elif dist < preferred_range * 0.6:
-		velocity = -dir * speed * 0.7
+		velocity = -dir * chase * 0.7
 	else:
-		velocity = dir.orthogonal() * speed * 0.5
+		velocity = dir.orthogonal() * chase * 0.5
 	move_and_slide()
+	if body:
+		body.flip_h = dir.x < 0.0
 	if dist <= attack_range and _fire_cd <= 0.0:
 		_shoot(dir)
 

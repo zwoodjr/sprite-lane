@@ -2,6 +2,8 @@ extends CanvasLayer
 
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const TouchControlsScene := preload("res://scenes/ui/touch_controls.tscn")
+const MinimapScript = preload("res://scripts/ui/minimap.gd")
+const ExtractArrowsScript = preload("res://scripts/ui/extract_arrows.gd")
 
 @onready var root: Control = $Root
 @onready var top_bar: HBoxContainer = $Root/Top
@@ -15,10 +17,15 @@ const TouchControlsScene := preload("res://scenes/ui/touch_controls.tscn")
 @onready var stay_label: Label = $Root/Bottom/StayLabel
 @onready var toast_label: Label = $Root/Toast
 @onready var hint_label: Label = $Root/Hint
+@onready var minimap_host: Control = $Root/MinimapHost
+@onready var arrows_host: Control = $Root/ExtractArrows
 
 var _toast_time: float = 0.0
 var _match: Node = null
 var _touch_controls: CanvasLayer = null
+var _minimap: Control = null
+var _arrows: Control = null
+var _buff_label: Label = null
 
 
 func setup(match_node: Node) -> void:
@@ -30,16 +37,42 @@ func setup(match_node: Node) -> void:
 	toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_mobile_hud()
 	_touch_controls = TouchControlsScene.instantiate()
-	## Sibling layer under Match so touch stays on top without nesting filter issues
 	get_parent().add_child(_touch_controls)
-	hint_label.text = "MOVE · AIM · hold FIRE (auto-aim ON) · EXTRACT / ABILITY / MOUNT"
+	hint_label.text = "Endless map · shoot crates for power-ups · extract arrows"
 	if not TouchInput.touch_primary:
 		hint_label.text += "  |  WASD · Mouse · E/Q/F · Esc"
 	toast_label.text = ""
+	_buff_label = Label.new()
+	_buff_label.name = "BuffLabel"
+	_buff_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_buff_label.position = Vector2(8, 70)
+	_buff_label.add_theme_font_size_override("font_size", 14)
+	_buff_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.45))
+	root.add_child(_buff_label)
+
+
+func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
+	_minimap = Control.new()
+	_minimap.set_script(MinimapScript)
+	_minimap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	minimap_host.add_child(_minimap)
+	_minimap.call("setup", player, pads, landmarks)
+
+	_arrows = Control.new()
+	_arrows.set_script(ExtractArrowsScript)
+	arrows_host.add_child(_arrows)
+	_arrows.call("setup", player, pads)
+	_arrows.call("set_anchors_and_offsets_preset", Control.PRESET_FULL_RECT)
+
+
+func set_extract_open(is_open: bool) -> void:
+	if _minimap and _minimap.has_method("set_extract_open"):
+		_minimap.set_extract_open(is_open)
+	if _arrows and _arrows.has_method("set_extract_open"):
+		_arrows.set_extract_open(is_open)
 
 
 func _apply_mobile_hud() -> void:
-	## HUD text uses safe padding; game world behind stays full-bleed.
 	var win := DisplayServer.window_get_size()
 	var m := MobileLayout.control_safe_margin()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -56,14 +89,17 @@ func _apply_mobile_hud() -> void:
 	MobileLayout.bump_label(toast_label, 24)
 	hp_bar.custom_minimum_size = Vector2(0, 28)
 	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	## Keep stats above sticks / action row / FIRE
 	bottom_bar.offset_top = -250.0
 	bottom_bar.offset_bottom = -140.0
 	hint_label.offset_top = -280.0
 	hint_label.offset_bottom = -256.0
 	top_bar.offset_top = 4.0
 	top_bar.offset_bottom = 56.0
-
+	## Minimap under pause / fill row
+	minimap_host.offset_left = -168.0
+	minimap_host.offset_top = 78.0
+	minimap_host.offset_right = -8.0
+	minimap_host.offset_bottom = 234.0
 
 
 func _process(delta: float) -> void:
@@ -79,8 +115,8 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 	phase_label.text = str(phase.get("label", ""))
 	timer_label.text = _fmt_time(time_left)
 	tl_label.text = "TL %d" % tl
-	stay_label.text = "Stay ×%.2f · Scrap %d · XP %d · Kills %d" % [
-		stay, GameState.scrap_found, GameState.xp_this_run, GameState.kills
+	stay_label.text = "Stay ×%.2f · Scrap %d · XP %d · Kills %d · seed %d" % [
+		stay, GameState.scrap_found, GameState.xp_this_run, GameState.kills, GameState.run_seed % 100000
 	]
 	if player and is_instance_valid(player):
 		if player.has_method("get_ammo_text"):
@@ -92,6 +128,22 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 func on_health_changed(current: float, maximum: float) -> void:
 	hp_bar.max_value = maximum
 	hp_bar.value = current
+
+
+func on_buffs_changed(buffs: Dictionary) -> void:
+	if _buff_label == null:
+		return
+	if buffs.is_empty():
+		_buff_label.text = ""
+		return
+	var parts: PackedStringArray = []
+	for id in buffs.keys():
+		var entry: Dictionary = buffs[id]
+		var def: Dictionary = entry.get("def", {})
+		var name := str(def.get("name", id))
+		var t := int(ceil(float(entry.get("time_left", 0))))
+		parts.append("%s %ds" % [name, t])
+	_buff_label.text = " · ".join(parts)
 
 
 func show_toast(msg: String) -> void:

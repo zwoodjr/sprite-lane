@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 signal died
 signal health_changed(current: float, maximum: float)
+signal buffs_changed(buffs: Dictionary)
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
 
@@ -13,6 +14,7 @@ var hp: float = 100.0
 var damage_mult: float = 1.0
 var move_mult: float = 1.0
 var firerate_mult: float = 1.0
+var resist_mult: float = 1.0 ## damage taken multiplier (<1 = shield)
 
 var _fire_cd: float = 0.0
 var _reload_left: float = 0.0
@@ -26,10 +28,12 @@ var _char: Dictionary = {}
 var _weapon: Dictionary = {}
 var _mount: Dictionary = {}
 var _armor: Dictionary = {}
+## id -> {time_left, def}
+var _buffs: Dictionary = {}
 
-@onready var body: Polygon2D = $Body
-@onready var gun: Polygon2D = $Gun
-@onready var mount_visual: Polygon2D = $MountVisual
+@onready var body: Sprite2D = $Body
+@onready var gun: Node2D = $Gun
+@onready var mount_visual: Sprite2D = $MountVisual
 @onready var label: Label = $NameLabel
 
 
@@ -39,6 +43,7 @@ func _ready() -> void:
 	hp = max_hp
 	health_changed.emit(hp, max_hp)
 	mount_visual.visible = false
+	mount_visual.texture = load("res://assets/sprites/mounts/skateboard.png")
 
 
 func _apply_loadout() -> void:
@@ -51,21 +56,24 @@ func _apply_loadout() -> void:
 	move_mult = float(_char.get("move_speed_mult", 1.0))
 	_ammo = int(_weapon.get("mag_size", 24))
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
-	body.color = _char.get("color", Color.WHITE)
-	gun.color = _char.get("accent", Color.YELLOW)
+	var sprite_path := str(_char.get("sprite", "res://assets/sprites/characters/rook_vex.png"))
+	body.texture = load(sprite_path) as Texture2D
 	label.text = str(_char.get("display_name", "Wanderer"))
 
 
 func _physics_process(delta: float) -> void:
+	_tick_buffs(delta)
 	_fire_cd = maxf(0.0, _fire_cd - delta)
 	_reload_left = maxf(0.0, _reload_left - delta)
 	_heal_cd = maxf(0.0, _heal_cd - delta)
 	_post_heal_left = maxf(0.0, _post_heal_left - delta)
-	if _post_heal_left <= 0.0:
-		firerate_mult = 1.0
+	if _post_heal_left <= 0.0 and not _buffs.has("rapid"):
+		## character post-heal firerate only when no rapid buff
+		if not _buffs.has("rapid"):
+			pass
 
 	var dir := TouchInput.get_move()
-	var speed := base_speed * move_mult
+	var speed := base_speed * move_mult * _buff_move()
 	if _mounted and float(_mount.get("fuel", 0)) > 0.0:
 		speed *= float(_mount.get("speed_mult", 1.4))
 		_mount["fuel"] = float(_mount["fuel"]) - float(_mount.get("fuel_burn", 4.0)) * delta
@@ -74,10 +82,12 @@ func _physics_process(delta: float) -> void:
 			mount_visual.visible = false
 	velocity = dir * speed
 	move_and_slide()
+	_try_mount_ram()
 
 	var aim_dir := _aim_direction()
 	if aim_dir.length() > 0.01:
 		gun.rotation = aim_dir.angle()
+		body.flip_h = aim_dir.x < 0.0
 
 	if Input.is_action_just_pressed("mount_toggle") or TouchInput.consume_mount():
 		_toggle_mount()
@@ -88,7 +98,6 @@ func _physics_process(delta: float) -> void:
 	if _ammo <= 0 and _reload_left <= 0.0:
 		_start_reload()
 
-	## Out-of-combat armor regen stub
 	if velocity.length() < 10.0:
 		_oos_timer += delta
 	else:
@@ -96,6 +105,67 @@ func _physics_process(delta: float) -> void:
 	if _oos_timer > 1.5 and hp < max_hp:
 		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta)
 		health_changed.emit(hp, max_hp)
+
+
+func _buff_move() -> float:
+	return 1.35 if _buffs.has("speed") else 1.0
+
+
+func _buff_damage() -> float:
+	return 1.45 if _buffs.has("damage") else 1.0
+
+
+func _buff_firerate() -> float:
+	var f := firerate_mult
+	if _post_heal_left > 0.0:
+		f *= float(_char.get("post_heal_firerate_mult", 1.0))
+	if _buffs.has("rapid"):
+		f *= 1.75
+	return f
+
+
+func _tick_buffs(delta: float) -> void:
+	var changed := false
+	var keys: Array = _buffs.keys()
+	for id in keys:
+		_buffs[id]["time_left"] = float(_buffs[id]["time_left"]) - delta
+		if float(_buffs[id]["time_left"]) <= 0.0:
+			_buffs.erase(id)
+			changed = true
+	resist_mult = 0.55 if _buffs.has("shield") else 1.0
+	if changed:
+		buffs_changed.emit(_buffs)
+
+
+func apply_powerup(def: Dictionary) -> void:
+	var id := str(def.get("id", ""))
+	if id == "heal" or def.has("instant_heal"):
+		hp = minf(max_hp, hp + float(def.get("instant_heal", 35.0)))
+		health_changed.emit(hp, max_hp)
+		## Still show a brief icon
+	var dur := float(def.get("duration", 10.0))
+	if dur > 0.2:
+		_buffs[id] = {"time_left": dur, "def": def}
+	elif id == "heal":
+		_buffs[id] = {"time_left": 1.5, "def": def}
+	buffs_changed.emit(_buffs)
+	## Magnet: instant scrap tick
+	if id == "magnet":
+		GameState.scrap_found += randi_range(4, 8)
+
+
+func get_active_buffs() -> Dictionary:
+	return _buffs
+
+
+func _try_mount_ram() -> void:
+	if not _mounted:
+		return
+	for i in range(get_slide_collision_count()):
+		var col := get_slide_collision(i)
+		var collider := col.get_collider()
+		if collider and collider.is_in_group("breakables") and collider.has_method("take_damage"):
+			collider.take_damage(40.0)
 
 
 func _toggle_mount() -> void:
@@ -109,28 +179,24 @@ func _toggle_mount() -> void:
 
 
 func _try_ability() -> void:
-	## Sister Cinder Field Draught
 	if float(_char.get("heal_amount", 0)) <= 0.0:
 		return
 	if _heal_cd > 0.0:
 		return
 	hp = minf(max_hp, hp + float(_char["heal_amount"]))
 	_heal_cd = float(_char.get("heal_cd", 12.0))
-	firerate_mult = float(_char.get("post_heal_firerate_mult", 1.0))
+	firerate_mult = 1.0
 	_post_heal_left = float(_char.get("post_heal_duration", 0.0))
 	health_changed.emit(hp, max_hp)
 
 
 func _aim_direction() -> Vector2:
-	## Manual AIM stick wins.
 	if TouchInput.aim_vector.length() > 0.01:
 		return TouchInput.aim_vector
-	## Phone default: auto-aim nearest enemy while holding FIRE.
 	if TouchInput.auto_aim and TouchInput.is_firing():
 		var nearest := _nearest_enemy_dir()
 		if nearest.length() > 0.01:
 			return nearest
-	## Mouse aim (PC / editor); ignore while thumb-firing so last tap doesn't skew aim.
 	if not TouchInput.fire_held:
 		var to_mouse := get_global_mouse_position() - global_position
 		if to_mouse.length() > 1.0:
@@ -154,7 +220,7 @@ func _nearest_enemy_dir() -> Vector2:
 
 
 func _try_shoot() -> void:
-	var rate := float(_weapon.get("fire_rate", 8.0)) * firerate_mult
+	var rate := float(_weapon.get("fire_rate", 8.0)) * _buff_firerate()
 	var interval := 1.0 / maxf(0.1, rate)
 	if _fire_cd > 0.0:
 		return
@@ -166,16 +232,18 @@ func _try_shoot() -> void:
 	var bullet: Area2D = BulletScene.instantiate()
 	var aim := _aim_direction()
 	var spread := deg_to_rad(float(_weapon.get("spread_deg", 6.0)))
+	## Quiet footsteps: slightly tighter spread (soft)
+	if _buffs.has("quiet"):
+		spread *= 0.7
 	aim = aim.rotated(randf_range(-spread, spread))
 	bullet.setup(
-		global_position + aim * 18.0,
+		global_position + aim * 20.0,
 		aim,
 		float(_weapon.get("projectile_speed", 720.0)),
-		float(_weapon.get("damage", 12)) * damage_mult,
+		float(_weapon.get("damage", 12)) * damage_mult * _buff_damage(),
 		true
 	)
 	get_tree().current_scene.add_child(bullet)
-	## Weapon XP stub
 	GameState.weapon["weapon_xp"] = int(GameState.weapon.get("weapon_xp", 0)) + 1
 	if int(GameState.weapon["weapon_xp"]) >= 20 * int(GameState.weapon.get("weapon_level", 1)):
 		GameState.weapon["weapon_level"] = int(GameState.weapon.get("weapon_level", 1)) + 1
@@ -187,7 +255,7 @@ func _start_reload() -> void:
 
 
 func take_damage(amount: float) -> void:
-	hp -= amount
+	hp -= amount * resist_mult
 	if hp <= 0.0 and _last_stitch_available:
 		_last_stitch_available = false
 		hp = 1.0
