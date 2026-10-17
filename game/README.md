@@ -20,7 +20,7 @@ All buttons are true multi-touch. Settings: twin-stick (optional restore), auto-
 
 ## Camera / FOV
 
-Portrait **720×1280**, orthographic camera zoom **1.12** so the 48px player reads ~**1/13 of screen width** — matched to `docs/art-refs/fov-single-stick-ref.jpg` battlefield scale.
+Portrait **720×1280**, orthographic camera zoom **1.12** so the 48px player reads ~**1/13 of screen width** — matched to `docs/art-refs/fov-single-stick-ref.jpg` battlefield scale. Sprites are expressive chibi (thick outlines, personality accents) retuned for that FOV; regenerate with `python3 tools/gen_sprites.py`.
 
 ## What's in
 

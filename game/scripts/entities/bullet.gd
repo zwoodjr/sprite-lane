@@ -32,9 +32,9 @@ func _ready() -> void:
 		collision_mask = 1 | 4
 	else:
 		collision_mask = 1 | 2
-		## Bigger, glowier enemy shots so they read against the dust.
+		## Slightly larger enemy shots so they read against dust at survivor FOV.
 		if sprite:
-			sprite.scale = Vector2(1.6, 1.6)
+			sprite.scale = Vector2(1.25, 1.25)
 	if sprite:
 		sprite.modulate = col * 1.4
 	_trail = Line2D.new()

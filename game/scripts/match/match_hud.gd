@@ -110,7 +110,7 @@ func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
 		player.ability_used.connect(func(n: String) -> void: show_toast(n + "!", UiTheme.AMBER))
 	_minimap = Control.new()
 	_minimap.set_script(MinimapScript)
-	_minimap.custom_minimum_size = Vector2(150, 150)
+	_minimap.custom_minimum_size = Vector2(110, 110)
 	root.add_child(_minimap)
 	_minimap.call("setup", player, pads, landmarks)
 	_arrows = Control.new()
@@ -167,7 +167,7 @@ func _build() -> void:
 	_name_label = _label("WANDERER", 15, UiTheme.AMBER)
 	vb.add_child(_name_label)
 	var hp_row := Control.new()
-	hp_row.custom_minimum_size = Vector2(230, 24)
+	hp_row.custom_minimum_size = Vector2(200, 22)
 	hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(hp_row)
 	_hp_bar = ProgressBar.new()
@@ -183,7 +183,7 @@ func _build() -> void:
 	_ammo_label = _label("24 / 24", 16)
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
-	_reload_bar.custom_minimum_size = Vector2(230, 6)
+	_reload_bar.custom_minimum_size = Vector2(200, 6)
 	_reload_bar.show_percentage = false
 	_reload_bar.max_value = 1.0
 	_reload_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -192,7 +192,7 @@ func _build() -> void:
 	vb.add_child(_reload_bar)
 	_ability_label = _label("", 11, UiTheme.TEXT_DIM)
 	_ability_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_ability_label.custom_minimum_size = Vector2(230, 0)
+	_ability_label.custom_minimum_size = Vector2(200, 0)
 	vb.add_child(_ability_label)
 	_buff_row = HBoxContainer.new()
 	_buff_row.add_theme_constant_override("separation", 6)
@@ -201,7 +201,7 @@ func _build() -> void:
 	_run_level_label = _label("RUN Lv 1", 13, UiTheme.TEAL)
 	vb.add_child(_run_level_label)
 	_run_xp_bar = ProgressBar.new()
-	_run_xp_bar.custom_minimum_size = Vector2(230, 8)
+	_run_xp_bar.custom_minimum_size = Vector2(200, 8)
 	_run_xp_bar.show_percentage = false
 	_run_xp_bar.max_value = 1.0
 	_run_xp_bar.value = 0.0
@@ -301,10 +301,11 @@ func _layout() -> void:
 	var threat_w := minf(170.0, vp.x * 0.28)
 	_threat_panel.custom_minimum_size = Vector2(threat_w, 0)
 	_threat_panel.position = Vector2(right - maxf(tps.x, threat_w) - 74.0, m.position.y)
-	var map_s := 120.0 if vp.y > vp.x else 150.0
+	## Portrait: keep minimap compact so world art stays readable under HUD.
+	var map_s := 100.0 if vp.y > vp.x else 140.0
 	if _minimap:
 		_minimap.size = Vector2(map_s, map_s)
-		_minimap.position = Vector2(right - map_s, m.position.y + 84.0)
+		_minimap.position = Vector2(right - map_s, m.position.y + 78.0)
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)

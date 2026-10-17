@@ -2,8 +2,12 @@
 """Generate Dust Apothecary chunky-pixel sprites for Wanderer MVP.
 
 Style target (inspiration only — original art, not Crazy Gunner IP):
-  thick dark outlines, chibi proportions, 2–3 tone cell shading,
-  dust/scrap ochres + vial/apothecary accents.
+  thick dark outlines, expressive chibi proportions (big head, stubby body),
+  2–3 tone cell shading, dust/scrap ochres + vial/apothecary accents.
+
+Tuned for portrait survivor FOV (camera zoom ~1.12, player ~1/12–1/15
+screen width): strong silhouettes, low-noise ground, high-contrast accents
+that stay readable when small.
 
 Run from repo root or game/:
   python3 game/tools/gen_sprites.py
@@ -11,7 +15,6 @@ Run from repo root or game/:
 from __future__ import annotations
 
 import math
-import os
 import random
 from pathlib import Path
 
@@ -31,6 +34,7 @@ SCRAP_LT = (130, 126, 118, 255)
 SCRAP_DK = (52, 48, 46, 255)
 SKIN = (196, 150, 112, 255)
 SKIN_DK = (160, 118, 88, 255)
+SKIN_LT = (220, 180, 140, 255)
 VIAL = (64, 176, 128, 255)
 VIAL_LT = (140, 230, 180, 255)
 VIAL_DK = (36, 110, 80, 255)
@@ -39,6 +43,7 @@ AMBER_LT = (255, 220, 120, 255)
 AMBER_DK = (180, 120, 36, 255)
 GOLD = (220, 180, 70, 255)
 BONE = (228, 214, 186, 255)
+WHITE = (245, 240, 230, 255)
 SHADOW = (30, 20, 12, 90)
 
 
@@ -46,7 +51,7 @@ def save(img: Image.Image, rel: str) -> None:
     path = OUT / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, "PNG")
-    print("wrote", rel)
+    print("wrote", rel, img.size)
 
 
 def new(w: int, h: int) -> Image.Image:
@@ -86,7 +91,7 @@ def add_outline(img: Image.Image, color=INK, thickness: int = 1) -> Image.Image:
     out = img.copy()
     dst = out.load()
     opaque = [[src[x, y][3] > 20 for x in range(w)] for y in range(h)]
-    for t in range(thickness):
+    for _t in range(thickness):
         mark = []
         for y in range(h):
             for x in range(w):
@@ -114,259 +119,416 @@ def drop_shadow(img: Image.Image, cx: int, cy: int, rw: int, rh: int, a: int = 8
     d.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=(30, 20, 12, a))
 
 
+def eyes_pair(p, lx, rx, y, w, h, pupil=(30, 22, 18, 255), glow=None) -> None:
+    """Readable chibi eyes: white + pupil (+ optional glow accent)."""
+    for x0 in (lx, rx):
+        fill_rect(p, x0, y, x0 + 3, y + 3, WHITE, w, h)
+        px(p, x0 + 1, y + 1, pupil, w, h)
+        px(p, x0 + 2, y + 1, pupil, w, h)
+        if glow:
+            px(p, x0 + 1, y, glow, w, h)
+
+
 # ---------------------------------------------------------------------------
-# Characters — chibi, big head, stubby body, side gun
+# Characters — expressive chibi, big head, stubby body, side gun
 # ---------------------------------------------------------------------------
 
 def make_rook() -> Image.Image:
-    """Rook Vex — scrap scavenger, olive armor, amber vial strap, scrap SMG."""
+    """Rook Vex — scavenger: dust hood/scarf, scrap pouches, asymmetric SMG."""
     img = new(48, 48)
     p = img.load()
     w, h = 48, 48
-    drop_shadow(img, 24, 42, 12, 4, 95)
+    drop_shadow(img, 24, 43, 13, 4, 100)
 
-    # boots
-    fill_rect(p, 16, 36, 21, 40, SCRAP_DK, w, h)
-    fill_rect(p, 26, 36, 31, 40, SCRAP_DK, w, h)
-    fill_rect(p, 16, 36, 21, 37, SCRAP, w, h)
-    fill_rect(p, 26, 36, 31, 37, SCRAP, w, h)
+    olive = (86, 108, 68, 255)
+    olive_lt = (118, 148, 92, 255)
+    olive_dk = (58, 76, 44, 255)
+    scarf = (210, 96, 48, 255)  # rust-orange scarf — hero accent at FOV
+    scarf_dk = (160, 64, 32, 255)
+
+    # boots (chunky)
+    fill_rect(p, 15, 37, 21, 41, SCRAP_DK, w, h)
+    fill_rect(p, 26, 37, 32, 41, SCRAP_DK, w, h)
+    fill_rect(p, 15, 37, 21, 38, SCRAP, w, h)
+    fill_rect(p, 26, 37, 32, 38, SCRAP, w, h)
+    # toe scrap plate
+    fill_rect(p, 19, 39, 21, 41, SCRAP_LT, w, h)
+    fill_rect(p, 30, 39, 32, 41, SCRAP_LT, w, h)
 
     # legs
-    fill_rect(p, 17, 30, 22, 36, DUST_DK, w, h)
-    fill_rect(p, 25, 30, 30, 36, DUST_DK, w, h)
+    fill_rect(p, 16, 31, 22, 37, DUST_DK, w, h)
+    fill_rect(p, 25, 31, 31, 37, DUST_DK, w, h)
+    fill_rect(p, 16, 31, 22, 32, DUST, w, h)
+    fill_rect(p, 25, 31, 31, 32, DUST, w, h)
 
-    # torso (olive scrap)
-    body = (86, 108, 68, 255)
-    body_lt = (112, 138, 88, 255)
-    body_dk = (62, 80, 48, 255)
-    fill_rect(p, 14, 18, 33, 31, body, w, h)
-    fill_rect(p, 14, 18, 33, 21, body_lt, w, h)
-    fill_rect(p, 14, 28, 33, 31, body_dk, w, h)
-    # cloak flap left
-    fill_rect(p, 10, 18, 15, 30, (58, 74, 42, 255), w, h)
-    fill_rect(p, 10, 18, 15, 20, (78, 98, 56, 255), w, h)
+    # torso (olive scrap armor)
+    fill_rect(p, 13, 18, 34, 32, olive, w, h)
+    fill_rect(p, 13, 18, 34, 21, olive_lt, w, h)
+    fill_rect(p, 13, 29, 34, 32, olive_dk, w, h)
+    # rivet row
+    for x in (16, 22, 28):
+        px(p, x, 23, SCRAP_DK, w, h)
+    # left cloak flap / hood drape
+    fill_rect(p, 8, 16, 14, 31, olive_dk, w, h)
+    fill_rect(p, 8, 16, 14, 19, olive, w, h)
+    fill_rect(p, 8, 28, 11, 33, olive_dk, w, h)  # tattered tip
 
-    # amber vial on belt (readable scrap-apothecary accent)
-    fill_rect(p, 29, 22, 36, 31, AMBER_DK, w, h)
-    fill_rect(p, 30, 23, 35, 29, AMBER, w, h)
-    fill_rect(p, 30, 23, 35, 25, AMBER_LT, w, h)
-    fill_rect(p, 31, 21, 34, 22, SCRAP_LT, w, h)
+    # scrap pouches on hip (personality)
+    fill_rect(p, 11, 26, 17, 32, DUST_DK, w, h)
+    fill_rect(p, 11, 26, 17, 28, DUST, w, h)
+    px(p, 14, 29, AMBER, w, h)  # buckle
+    fill_rect(p, 30, 27, 36, 33, SCRAP_DK, w, h)
+    fill_rect(p, 30, 27, 36, 29, SCRAP, w, h)
+    fill_rect(p, 32, 25, 35, 28, AMBER_DK, w, h)  # belt vial
+    fill_rect(p, 32, 26, 35, 27, AMBER, w, h)
 
-    # head (big)
-    fill_rect(p, 15, 4, 32, 18, SKIN, w, h)
-    fill_rect(p, 15, 15, 32, 18, SKIN_DK, w, h)
-    # blonde messy hair / scrap helm band
-    fill_rect(p, 14, 2, 33, 8, GOLD, w, h)
-    fill_rect(p, 14, 2, 33, 4, AMBER_LT, w, h)
-    fill_rect(p, 14, 7, 33, 8, AMBER_DK, w, h)
-    # goggle strip
-    fill_rect(p, 17, 9, 30, 12, SCRAP_DK, w, h)
-    fill_rect(p, 18, 9, 22, 12, AMBER, w, h)
-    fill_rect(p, 25, 9, 29, 12, AMBER, w, h)
-    px(p, 19, 10, AMBER_LT, w, h)
-    px(p, 26, 10, AMBER_LT, w, h)
+    # belt
+    fill_rect(p, 13, 28, 34, 30, SCRAP_DK, w, h)
+    fill_rect(p, 22, 28, 25, 30, GOLD, w, h)
 
-    # scrap SMG (side profile, chunky)
-    fill_rect(p, 33, 20, 46, 25, SCRAP_DK, w, h)
-    fill_rect(p, 33, 20, 46, 22, SCRAP, w, h)
-    fill_rect(p, 36, 18, 40, 20, SCRAP_LT, w, h)  # mag
-    fill_rect(p, 44, 19, 47, 26, AMBER_DK, w, h)  # muzzle vial tip
-    fill_rect(p, 45, 20, 46, 24, AMBER, w, h)
-    fill_rect(p, 34, 25, 37, 28, (70, 50, 36, 255), w, h)  # grip
+    # scarf (wraps under chin — FOV-readable orange)
+    fill_rect(p, 14, 16, 33, 20, scarf, w, h)
+    fill_rect(p, 14, 16, 33, 17, shade(scarf, 1.2), w, h)
+    fill_rect(p, 32, 18, 37, 26, scarf_dk, w, h)  # trailing end
+    fill_rect(p, 32, 18, 37, 20, scarf, w, h)
+    px(p, 35, 24, scarf, w, h)
+
+    # head (big chibi)
+    fill_rect(p, 14, 4, 33, 17, SKIN, w, h)
+    fill_rect(p, 14, 14, 33, 17, SKIN_DK, w, h)
+    fill_rect(p, 15, 5, 20, 10, SKIN_LT, w, h)  # cheek highlight
+
+    # dust hood over hair
+    fill_rect(p, 12, 1, 35, 8, olive_dk, w, h)
+    fill_rect(p, 12, 1, 35, 4, olive, w, h)
+    fill_rect(p, 13, 2, 34, 3, olive_lt, w, h)
+    # hood peak / scrap band
+    fill_rect(p, 18, 0, 29, 2, SCRAP, w, h)
+    fill_rect(p, 20, 0, 27, 1, AMBER, w, h)
+    # messy blonde fringe under hood
+    fill_rect(p, 15, 6, 20, 8, GOLD, w, h)
+    fill_rect(p, 28, 6, 33, 8, GOLD, w, h)
+
+    # readable face
+    eyes_pair(p, 17, 26, 9, w, h, pupil=(28, 20, 16, 255), glow=AMBER_LT)
+    # small grit / freckle
+    px(p, 22, 14, SKIN_DK, w, h)
+    px(p, 24, 14, SKIN_DK, w, h)
+
+    # asymmetric scrap SMG (longer barrel + taped mag)
+    fill_rect(p, 34, 19, 47, 25, SCRAP_DK, w, h)
+    fill_rect(p, 34, 19, 47, 21, SCRAP, w, h)
+    fill_rect(p, 36, 17, 41, 19, SCRAP_LT, w, h)  # receiver
+    # taped magazine (asymmetric bulk)
+    fill_rect(p, 36, 24, 41, 31, SCRAP, w, h)
+    fill_rect(p, 36, 24, 41, 26, DUST, w, h)  # tape wrap
+    fill_rect(p, 37, 27, 40, 30, SCRAP_DK, w, h)
+    # muzzle vial tip (apothecary scrap)
+    fill_rect(p, 45, 18, 47, 26, AMBER_DK, w, h)
+    fill_rect(p, 45, 19, 46, 24, AMBER, w, h)
+    px(p, 46, 20, AMBER_LT, w, h)
+    # grip hand
+    fill_rect(p, 33, 24, 36, 28, SKIN, w, h)
+    fill_rect(p, 33, 26, 36, 28, SKIN_DK, w, h)
 
     return add_outline(img, thickness=2)
 
 
 def make_cinder() -> Image.Image:
-    """Sister Cinder — sawbones apothecary, terracotta cloak, teal vials."""
+    """Sister Cinder — sawbones apothecary: satchel, vials, medic cross."""
     img = new(48, 48)
     p = img.load()
     w, h = 48, 48
-    drop_shadow(img, 24, 42, 12, 4, 95)
+    drop_shadow(img, 24, 43, 13, 4, 100)
 
     cloak = (150, 62, 52, 255)
-    cloak_lt = (178, 84, 70, 255)
-    cloak_dk = (110, 42, 36, 255)
+    cloak_lt = (186, 88, 74, 255)
+    cloak_dk = (108, 40, 34, 255)
+    apron = (220, 200, 170, 255)
+    apron_lt = (240, 225, 200, 255)
     teal = VIAL
     teal_lt = VIAL_LT
 
     # boots
-    fill_rect(p, 16, 36, 21, 40, SCRAP_DK, w, h)
-    fill_rect(p, 26, 36, 31, 40, SCRAP_DK, w, h)
+    fill_rect(p, 15, 37, 21, 41, SCRAP_DK, w, h)
+    fill_rect(p, 26, 37, 32, 41, SCRAP_DK, w, h)
+    fill_rect(p, 15, 37, 21, 38, (120, 70, 60, 255), w, h)
+    fill_rect(p, 26, 37, 32, 38, (120, 70, 60, 255), w, h)
 
     # legs
-    fill_rect(p, 17, 30, 22, 36, (70, 48, 42, 255), w, h)
-    fill_rect(p, 25, 30, 30, 36, (70, 48, 42, 255), w, h)
+    fill_rect(p, 16, 31, 22, 37, (70, 48, 42, 255), w, h)
+    fill_rect(p, 25, 31, 31, 37, (70, 48, 42, 255), w, h)
 
-    # torso
-    fill_rect(p, 14, 18, 33, 31, cloak, w, h)
-    fill_rect(p, 14, 18, 33, 21, cloak_lt, w, h)
-    fill_rect(p, 14, 28, 33, 31, cloak_dk, w, h)
-    # apron / sash
-    fill_rect(p, 18, 24, 29, 28, (210, 190, 160, 255), w, h)
-    fill_rect(p, 18, 24, 29, 25, (235, 220, 195, 255), w, h)
+    # torso cloak
+    fill_rect(p, 13, 17, 34, 32, cloak, w, h)
+    fill_rect(p, 13, 17, 34, 20, cloak_lt, w, h)
+    fill_rect(p, 13, 29, 34, 32, cloak_dk, w, h)
+    # apron / sash with medic cross (FOV hero accent)
+    fill_rect(p, 17, 22, 30, 30, apron, w, h)
+    fill_rect(p, 17, 22, 30, 24, apron_lt, w, h)
+    fill_rect(p, 22, 24, 25, 29, (200, 60, 55, 255), w, h)  # cross stem
+    fill_rect(p, 19, 26, 28, 28, (200, 60, 55, 255), w, h)  # cross bar
 
-    # cloak flap right
-    fill_rect(p, 32, 17, 37, 32, cloak_dk, w, h)
-    fill_rect(p, 32, 17, 37, 20, cloak, w, h)
+    # right cloak flap (asymmetric silhouette vs Rook's left flap)
+    fill_rect(p, 33, 15, 39, 33, cloak_dk, w, h)
+    fill_rect(p, 33, 15, 39, 19, cloak, w, h)
+    fill_rect(p, 36, 30, 40, 35, cloak_dk, w, h)
 
-    # dual vials on belt
-    fill_rect(p, 15, 25, 19, 31, VIAL_DK, w, h)
-    fill_rect(p, 16, 26, 18, 29, teal, w, h)
-    px(p, 16, 27, teal_lt, w, h)
-    fill_rect(p, 28, 25, 32, 31, AMBER_DK, w, h)
-    fill_rect(p, 29, 26, 31, 29, AMBER, w, h)
+    # satchel over left hip
+    fill_rect(p, 8, 24, 16, 34, (96, 58, 40, 255), w, h)
+    fill_rect(p, 8, 24, 16, 27, (130, 82, 56, 255), w, h)
+    fill_rect(p, 10, 28, 14, 31, VIAL_DK, w, h)
+    fill_rect(p, 11, 29, 13, 30, teal, w, h)
+    # strap
+    fill_rect(p, 14, 17, 16, 25, (80, 50, 36, 255), w, h)
+
+    # dual belt vials (teal + amber)
+    fill_rect(p, 18, 28, 22, 34, VIAL_DK, w, h)
+    fill_rect(p, 19, 29, 21, 32, teal, w, h)
+    px(p, 19, 30, teal_lt, w, h)
+    fill_rect(p, 26, 28, 30, 34, AMBER_DK, w, h)
+    fill_rect(p, 27, 29, 29, 32, AMBER, w, h)
+    px(p, 27, 30, AMBER_LT, w, h)
 
     # head
-    fill_rect(p, 15, 4, 32, 18, SKIN, w, h)
-    fill_rect(p, 15, 15, 32, 18, SKIN_DK, w, h)
-    # teal hood / hair
-    fill_rect(p, 13, 2, 34, 9, (48, 150, 130, 255), w, h)
-    fill_rect(p, 13, 2, 34, 4, (90, 200, 170, 255), w, h)
-    fill_rect(p, 13, 8, 34, 10, (32, 110, 96, 255), w, h)
-    # hood sides
-    fill_rect(p, 12, 8, 15, 16, (40, 130, 112, 255), w, h)
-    fill_rect(p, 32, 8, 35, 16, (40, 130, 112, 255), w, h)
-    # eyes
-    fill_rect(p, 18, 10, 21, 12, SCRAP_DK, w, h)
-    fill_rect(p, 26, 10, 29, 12, SCRAP_DK, w, h)
-    px(p, 19, 10, (240, 240, 230, 255), w, h)
-    px(p, 27, 10, (240, 240, 230, 255), w, h)
+    fill_rect(p, 14, 4, 33, 17, SKIN, w, h)
+    fill_rect(p, 14, 14, 33, 17, SKIN_DK, w, h)
+    fill_rect(p, 16, 5, 21, 10, SKIN_LT, w, h)
 
-    # vial-blaster (apothecary gun)
-    fill_rect(p, 33, 19, 46, 25, SCRAP_DK, w, h)
-    fill_rect(p, 33, 19, 46, 21, SCRAP, w, h)
-    fill_rect(p, 38, 16, 44, 19, VIAL_DK, w, h)  # tank
-    fill_rect(p, 39, 17, 43, 18, teal, w, h)
-    px(p, 40, 17, teal_lt, w, h)
-    fill_rect(p, 44, 20, 47, 24, teal, w, h)  # muzzle drip
-    fill_rect(p, 34, 25, 37, 28, (90, 50, 44, 255), w, h)
+    # teal hood (distinct from Rook's olive hood)
+    hood = (40, 148, 128, 255)
+    hood_lt = (90, 200, 170, 255)
+    hood_dk = (28, 100, 88, 255)
+    fill_rect(p, 12, 1, 35, 9, hood, w, h)
+    fill_rect(p, 12, 1, 35, 4, hood_lt, w, h)
+    fill_rect(p, 12, 7, 35, 9, hood_dk, w, h)
+    # hood sides framing face
+    fill_rect(p, 11, 7, 15, 17, hood, w, h)
+    fill_rect(p, 32, 7, 36, 17, hood, w, h)
+    fill_rect(p, 11, 7, 15, 10, hood_lt, w, h)
+    fill_rect(p, 32, 7, 36, 10, hood_lt, w, h)
+    # soft hair fringe
+    fill_rect(p, 16, 7, 20, 9, (60, 160, 140, 255), w, h)
+    fill_rect(p, 27, 7, 31, 9, (60, 160, 140, 255), w, h)
+
+    # calm medic eyes
+    eyes_pair(p, 17, 26, 10, w, h, pupil=(40, 50, 60, 255), glow=VIAL_LT)
+    # soft smile hint
+    fill_rect(p, 20, 15, 27, 16, SKIN_DK, w, h)
+
+    # vial-blaster (apothecary gun with tank + drip muzzle)
+    fill_rect(p, 34, 18, 47, 25, SCRAP_DK, w, h)
+    fill_rect(p, 34, 18, 47, 20, SCRAP, w, h)
+    # tonic tank on top
+    fill_rect(p, 37, 13, 44, 19, VIAL_DK, w, h)
+    fill_rect(p, 38, 14, 43, 17, teal, w, h)
+    px(p, 39, 15, teal_lt, w, h)
+    fill_rect(p, 39, 12, 42, 13, SCRAP_LT, w, h)
+    # muzzle drip
+    fill_rect(p, 45, 19, 47, 25, teal, w, h)
+    px(p, 46, 20, teal_lt, w, h)
+    # grip hand
+    fill_rect(p, 33, 23, 36, 28, SKIN, w, h)
+    fill_rect(p, 33, 25, 36, 28, SKIN_DK, w, h)
 
     return add_outline(img, thickness=2)
 
 
 # ---------------------------------------------------------------------------
-# Enemies
+# Enemies — unique silhouettes at wide FOV
 # ---------------------------------------------------------------------------
 
 def make_raider() -> Image.Image:
-    img = new(40, 40)
+    """Scrappy ranged scavenger — tattered rag hood, rust plates, pistol."""
+    img = new(48, 48)
     p = img.load()
-    w, h = 40, 40
-    drop_shadow(img, 20, 35, 11, 3, 90)
+    w, h = 48, 48
+    drop_shadow(img, 24, 42, 12, 3, 95)
 
     # boots / legs
-    fill_rect(p, 13, 28, 17, 33, SCRAP_DK, w, h)
-    fill_rect(p, 22, 28, 26, 33, SCRAP_DK, w, h)
+    fill_rect(p, 15, 34, 20, 40, SCRAP_DK, w, h)
+    fill_rect(p, 27, 34, 32, 40, SCRAP_DK, w, h)
+    fill_rect(p, 15, 34, 20, 35, SCRAP, w, h)
+    fill_rect(p, 27, 34, 32, 35, SCRAP, w, h)
+    # wrapped puttees
+    fill_rect(p, 15, 36, 20, 37, DUST, w, h)
+    fill_rect(p, 27, 36, 32, 37, DUST, w, h)
 
-    # body rust scrap
-    fill_rect(p, 11, 14, 28, 29, RUST, w, h)
-    fill_rect(p, 11, 14, 28, 17, shade(RUST, 1.15), w, h)
-    fill_rect(p, 11, 25, 28, 29, RUST_DK, w, h)
+    # body rust scrap (asymmetric plate)
+    fill_rect(p, 13, 16, 34, 35, RUST, w, h)
+    fill_rect(p, 13, 16, 34, 20, shade(RUST, 1.18), w, h)
+    fill_rect(p, 13, 30, 34, 35, RUST_DK, w, h)
+    # torn rag flap on chest
+    fill_rect(p, 16, 18, 24, 26, DUST_DK, w, h)
+    fill_rect(p, 16, 18, 24, 20, DUST, w, h)
+    px(p, 22, 25, DUST_DK, w, h)
     # oil stain
-    fill_ellipse(p, 15, 19, 22, 25, (40, 30, 24, 220), w, h)
-    # shoulder plate
-    fill_rect(p, 9, 13, 14, 20, SCRAP, w, h)
-    fill_rect(p, 9, 13, 14, 15, SCRAP_LT, w, h)
+    fill_ellipse(p, 22, 24, 30, 32, (40, 28, 22, 200), w, h)
+    # shoulder plate (left — scrappy silhouette bump)
+    fill_rect(p, 8, 13, 15, 25, SCRAP, w, h)
+    fill_rect(p, 8, 13, 15, 16, SCRAP_LT, w, h)
+    fill_rect(p, 9, 17, 14, 20, RUST_DK, w, h)
+    px(p, 10, 12, SCRAP_LT, w, h)  # spike scrap
+    # ammo pouch + bone token
+    fill_rect(p, 28, 27, 36, 35, DUST_DK, w, h)
+    fill_rect(p, 28, 27, 36, 29, DUST, w, h)
+    fill_rect(p, 30, 30, 34, 33, BONE, w, h)
 
     # head
-    fill_rect(p, 13, 4, 26, 15, (168, 118, 90, 255), w, h)
-    fill_rect(p, 13, 12, 26, 15, (140, 96, 72, 255), w, h)
-    # rag wrap
-    fill_rect(p, 12, 3, 27, 7, DUST_DK, w, h)
-    fill_rect(p, 12, 3, 27, 4, DUST, w, h)
-    # eye slit
-    fill_rect(p, 16, 8, 23, 10, (40, 20, 16, 255), w, h)
-    px(p, 18, 8, (255, 90, 50, 255), w, h)
+    fill_rect(p, 15, 4, 32, 17, (168, 118, 90, 255), w, h)
+    fill_rect(p, 15, 13, 32, 17, (140, 96, 72, 255), w, h)
+    # tattered rag hood (scrappy silhouette)
+    fill_rect(p, 12, 1, 35, 8, DUST_DK, w, h)
+    fill_rect(p, 12, 1, 35, 4, DUST, w, h)
+    fill_rect(p, 12, 6, 16, 15, DUST_DK, w, h)  # cheek wrap
+    fill_rect(p, 33, 5, 36, 12, DUST_DK, w, h)  # trailing rag
+    px(p, 35, 11, DUST, w, h)
+    px(p, 14, 0, DUST, w, h)  # fray
+    px(p, 32, 0, DUST_DK, w, h)
+    # eye slit + hot coal eye (FOV accent)
+    fill_rect(p, 19, 9, 28, 12, (36, 18, 14, 255), w, h)
+    fill_rect(p, 21, 9, 25, 12, (255, 90, 45, 255), w, h)
+    px(p, 22, 10, AMBER_LT, w, h)
 
-    # rusty pistol
-    fill_rect(p, 27, 17, 38, 21, SCRAP_DK, w, h)
-    fill_rect(p, 27, 17, 38, 18, SCRAP, w, h)
-    fill_rect(p, 36, 16, 38, 22, RUST_DK, w, h)
+    # rusty pistol with taped slide
+    fill_rect(p, 33, 20, 46, 25, SCRAP_DK, w, h)
+    fill_rect(p, 33, 20, 46, 22, SCRAP, w, h)
+    fill_rect(p, 36, 21, 40, 23, DUST, w, h)  # tape
+    fill_rect(p, 42, 18, 46, 26, RUST_DK, w, h)
+    fill_rect(p, 34, 24, 38, 29, (70, 45, 34, 255), w, h)
+    fill_rect(p, 33, 23, 36, 27, (150, 110, 85, 255), w, h)  # hand
 
     return add_outline(img, thickness=2)
 
 
 def make_charger() -> Image.Image:
-    img = new(40, 40)
+    """Lean aggressive rusher — forward lean, amber goggles, long scrap blade."""
+    img = new(48, 48)
     p = img.load()
-    w, h = 40, 40
-    drop_shadow(img, 20, 35, 11, 3, 90)
+    w, h = 48, 48
+    drop_shadow(img, 24, 42, 11, 3, 95)
 
-    fill_rect(p, 14, 28, 18, 34, (50, 34, 24, 255), w, h)
-    fill_rect(p, 21, 28, 25, 34, (50, 34, 24, 255), w, h)
+    # legs planted / staggered lean
+    fill_rect(p, 12, 34, 18, 41, (48, 32, 22, 255), w, h)
+    fill_rect(p, 25, 32, 31, 41, (48, 32, 22, 255), w, h)
+    fill_rect(p, 12, 34, 18, 35, (70, 48, 32, 255), w, h)
+    fill_rect(p, 25, 32, 31, 33, (70, 48, 32, 255), w, h)
 
-    # lean body
-    fill_rect(p, 12, 15, 27, 29, (196, 112, 52, 255), w, h)
-    fill_rect(p, 12, 15, 27, 18, (220, 140, 70, 255), w, h)
-    fill_rect(p, 12, 25, 27, 29, (150, 80, 40, 255), w, h)
-    fill_rect(p, 13, 21, 26, 22, (150, 80, 40, 255), w, h)
+    # lean torso (narrower — distinct from raider box)
+    fill_rect(p, 14, 15, 30, 34, (196, 112, 52, 255), w, h)
+    fill_rect(p, 14, 15, 30, 19, (230, 145, 70, 255), w, h)
+    fill_rect(p, 14, 28, 30, 34, (150, 80, 40, 255), w, h)
+    # muscle / strap lines
+    fill_rect(p, 15, 22, 29, 23, (150, 80, 40, 255), w, h)
+    fill_rect(p, 19, 17, 24, 31, (170, 95, 45, 255), w, h)
+    # dual shoulder spikes (aggressive silhouette)
+    fill_rect(p, 10, 13, 15, 21, SCRAP_LT, w, h)
+    px(p, 11, 11, SCRAP_LT, w, h)
+    px(p, 12, 10, SCRAP, w, h)
+    px(p, 13, 9, SCRAP_LT, w, h)
+    fill_rect(p, 28, 14, 32, 20, SCRAP, w, h)
+    px(p, 30, 12, SCRAP_LT, w, h)
 
-    # head + goggles
-    fill_rect(p, 13, 4, 26, 16, (170, 128, 100, 255), w, h)
-    fill_rect(p, 13, 13, 26, 16, (140, 100, 78, 255), w, h)
-    fill_rect(p, 13, 8, 26, 12, SCRAP_DK, w, h)
-    fill_rect(p, 15, 8, 18, 12, AMBER, w, h)
-    fill_rect(p, 21, 8, 24, 12, AMBER, w, h)
-    px(p, 16, 9, AMBER_LT, w, h)
-    px(p, 22, 9, AMBER_LT, w, h)
+    # head + big amber goggles (FOV identity)
+    fill_rect(p, 15, 3, 32, 16, (170, 128, 100, 255), w, h)
+    fill_rect(p, 15, 12, 32, 16, (140, 100, 78, 255), w, h)
+    # wild spiked hair
+    fill_rect(p, 14, 1, 22, 5, (90, 50, 30, 255), w, h)
+    px(p, 16, 0, (110, 60, 35, 255), w, h)
+    px(p, 19, 0, (110, 60, 35, 255), w, h)
+    px(p, 22, 1, (90, 50, 30, 255), w, h)
+    px(p, 28, 1, (90, 50, 30, 255), w, h)
+    # goggle band — oversized lenses
+    fill_rect(p, 13, 6, 34, 13, SCRAP_DK, w, h)
+    fill_rect(p, 15, 6, 22, 13, AMBER, w, h)
+    fill_rect(p, 25, 6, 32, 13, AMBER, w, h)
+    fill_rect(p, 16, 7, 21, 11, AMBER_LT, w, h)
+    fill_rect(p, 26, 7, 31, 11, AMBER_LT, w, h)
+    px(p, 17, 8, WHITE, w, h)
+    px(p, 27, 8, WHITE, w, h)
+    # snarl mouth
+    fill_rect(p, 20, 14, 27, 15, (80, 40, 30, 255), w, h)
 
-    # scrap blade
-    fill_rect(p, 26, 17, 38, 20, SCRAP_LT, w, h)
-    fill_rect(p, 26, 17, 38, 18, (240, 240, 245, 255), w, h)
-    fill_rect(p, 36, 16, 38, 21, SCRAP, w, h)
+    # long scrap blade (horizontal reach = charger read)
+    fill_rect(p, 29, 17, 47, 22, SCRAP_LT, w, h)
+    fill_rect(p, 29, 17, 47, 18, (245, 245, 250, 255), w, h)
+    fill_rect(p, 43, 15, 47, 24, SCRAP, w, h)
+    px(p, 46, 16, WHITE, w, h)  # tip glint
     # vial wrap on hilt
-    fill_rect(p, 27, 19, 30, 22, VIAL_DK, w, h)
-    px(p, 28, 20, VIAL, w, h)
+    fill_rect(p, 30, 20, 35, 26, VIAL_DK, w, h)
+    fill_rect(p, 31, 21, 34, 24, VIAL, w, h)
+    fill_rect(p, 28, 20, 32, 26, (150, 110, 85, 255), w, h)  # hand
 
     return add_outline(img, thickness=2)
 
 
 def make_brute() -> Image.Image:
-    img = new(56, 56)
+    """Bulky armored tank — pauldrons, helm visor, scrap shotgun."""
+    img = new(64, 64)
     p = img.load()
-    w, h = 56, 56
-    drop_shadow(img, 28, 50, 16, 4, 100)
+    w, h = 64, 64
+    drop_shadow(img, 32, 58, 18, 5, 110)
+
+    armor = (88, 98, 120, 255)
+    armor_lt = (124, 136, 162, 255)
+    armor_dk = (56, 64, 82, 255)
 
     # boots
-    fill_rect(p, 16, 42, 24, 50, SCRAP_DK, w, h)
-    fill_rect(p, 32, 42, 40, 50, SCRAP_DK, w, h)
-    fill_rect(p, 16, 42, 24, 44, SCRAP, w, h)
-    fill_rect(p, 32, 42, 40, 44, SCRAP, w, h)
+    fill_rect(p, 16, 48, 26, 58, SCRAP_DK, w, h)
+    fill_rect(p, 38, 48, 48, 58, SCRAP_DK, w, h)
+    fill_rect(p, 16, 48, 26, 51, SCRAP, w, h)
+    fill_rect(p, 38, 48, 48, 51, SCRAP, w, h)
+    fill_rect(p, 22, 54, 26, 58, SCRAP_LT, w, h)
+    fill_rect(p, 44, 54, 48, 58, SCRAP_LT, w, h)
+
+    # heavy legs
+    fill_rect(p, 18, 42, 28, 50, armor_dk, w, h)
+    fill_rect(p, 36, 42, 46, 50, armor_dk, w, h)
 
     # heavy armor body
-    armor = (88, 98, 120, 255)
-    armor_lt = (118, 130, 156, 255)
-    armor_dk = (60, 68, 88, 255)
-    fill_rect(p, 12, 20, 43, 43, armor, w, h)
-    fill_rect(p, 12, 20, 43, 26, armor_lt, w, h)
-    fill_rect(p, 12, 38, 43, 43, armor_dk, w, h)
+    fill_rect(p, 12, 20, 51, 48, armor, w, h)
+    fill_rect(p, 12, 20, 51, 28, armor_lt, w, h)
+    fill_rect(p, 12, 42, 51, 48, armor_dk, w, h)
     # rivets
-    for x in (18, 28, 38):
-        px(p, x, 24, SCRAP_DK, w, h)
-        px(p, x, 32, SCRAP_DK, w, h)
-    # copper vial plate
-    fill_rect(p, 24, 28, 31, 36, VIAL_DK, w, h)
-    fill_rect(p, 25, 29, 30, 34, VIAL, w, h)
-    px(p, 26, 30, VIAL_LT, w, h)
+    for x in (18, 28, 38, 46):
+        px(p, x, 26, SCRAP_DK, w, h)
+        px(p, x, 36, SCRAP_DK, w, h)
+    # copper vial plate center (apothecary brand)
+    fill_rect(p, 26, 30, 37, 42, VIAL_DK, w, h)
+    fill_rect(p, 27, 31, 36, 40, VIAL, w, h)
+    fill_rect(p, 28, 32, 35, 35, VIAL_LT, w, h)
+    fill_rect(p, 30, 36, 33, 39, (20, 80, 60, 255), w, h)  # seal mark
 
-    # pauldrons
-    fill_rect(p, 6, 18, 14, 30, armor_dk, w, h)
-    fill_rect(p, 6, 18, 14, 21, armor, w, h)
-    fill_rect(p, 41, 18, 49, 30, armor_dk, w, h)
-    fill_rect(p, 41, 18, 49, 21, armor, w, h)
+    # huge pauldrons (bulky silhouette)
+    fill_rect(p, 4, 16, 16, 34, armor_dk, w, h)
+    fill_rect(p, 4, 16, 16, 22, armor, w, h)
+    fill_rect(p, 5, 17, 10, 20, armor_lt, w, h)
+    fill_rect(p, 48, 16, 60, 34, armor_dk, w, h)
+    fill_rect(p, 48, 16, 60, 22, armor, w, h)
+    fill_rect(p, 52, 17, 58, 20, armor_lt, w, h)
+    # pauldron spikes
+    px(p, 8, 14, SCRAP_LT, w, h)
+    px(p, 10, 13, SCRAP_LT, w, h)
+    px(p, 54, 14, SCRAP_LT, w, h)
+    px(p, 56, 13, SCRAP_LT, w, h)
 
     # helm
-    fill_rect(p, 18, 4, 37, 20, (70, 76, 92, 255), w, h)
-    fill_rect(p, 18, 4, 37, 8, (100, 108, 128, 255), w, h)
-    fill_rect(p, 20, 10, 35, 14, (230, 70, 50, 255), w, h)  # visor
-    fill_rect(p, 20, 10, 35, 11, (255, 140, 90, 255), w, h)
+    fill_rect(p, 20, 2, 43, 22, (70, 76, 92, 255), w, h)
+    fill_rect(p, 20, 2, 43, 8, (108, 116, 138, 255), w, h)
+    fill_rect(p, 22, 4, 28, 8, armor_lt, w, h)
+    # glowing red visor bar (FOV identity)
+    fill_rect(p, 22, 11, 41, 16, (230, 55, 40, 255), w, h)
+    fill_rect(p, 22, 11, 41, 12, (255, 150, 90, 255), w, h)
+    fill_rect(p, 24, 13, 28, 15, (255, 220, 180, 255), w, h)
+    # chin guard
+    fill_rect(p, 24, 17, 39, 22, armor_dk, w, h)
 
     # scrap shotgun
-    fill_rect(p, 42, 30, 54, 36, SCRAP_DK, w, h)
-    fill_rect(p, 42, 30, 54, 32, SCRAP, w, h)
-    fill_rect(p, 50, 28, 54, 38, SCRAP_LT, w, h)
-    fill_rect(p, 44, 36, 48, 40, (60, 40, 32, 255), w, h)
+    fill_rect(p, 48, 34, 62, 42, SCRAP_DK, w, h)
+    fill_rect(p, 48, 34, 62, 37, SCRAP, w, h)
+    fill_rect(p, 56, 30, 62, 44, SCRAP_LT, w, h)
+    fill_rect(p, 50, 41, 55, 47, (60, 40, 32, 255), w, h)
+    fill_rect(p, 46, 36, 50, 42, (150, 110, 85, 255), w, h)
 
     return add_outline(img, thickness=2)
 
@@ -376,75 +538,87 @@ def make_brute() -> Image.Image:
 # ---------------------------------------------------------------------------
 
 def make_skate() -> Image.Image:
+    """Scrap skateboard with vial strap + taped trucks."""
     img = new(48, 24)
     p = img.load()
     w, h = 48, 24
     # deck
-    fill_rect(p, 4, 8, 43, 15, (70, 50, 34, 255), w, h)
-    fill_rect(p, 4, 8, 43, 10, (160, 100, 48, 255), w, h)
-    fill_rect(p, 6, 6, 41, 9, (120, 78, 40, 255), w, h)
+    fill_rect(p, 3, 8, 44, 16, (70, 50, 34, 255), w, h)
+    fill_rect(p, 3, 8, 44, 11, (160, 100, 48, 255), w, h)
+    fill_rect(p, 5, 6, 42, 10, (120, 78, 40, 255), w, h)
+    # grip tape strip
+    fill_rect(p, 8, 9, 39, 11, SCRAP_DK, w, h)
+    # nose/tail kick
+    fill_rect(p, 2, 7, 5, 12, (140, 90, 48, 255), w, h)
+    fill_rect(p, 42, 7, 45, 12, (140, 90, 48, 255), w, h)
     # herb / vial strap
-    fill_rect(p, 18, 4, 29, 8, VIAL_DK, w, h)
-    fill_rect(p, 19, 5, 28, 7, VIAL, w, h)
-    px(p, 20, 5, VIAL_LT, w, h)
+    fill_rect(p, 17, 3, 30, 9, VIAL_DK, w, h)
+    fill_rect(p, 18, 4, 29, 8, VIAL, w, h)
+    px(p, 19, 5, VIAL_LT, w, h)
+    fill_rect(p, 21, 2, 26, 4, SCRAP, w, h)
     # trucks
-    fill_rect(p, 10, 14, 16, 17, SCRAP, w, h)
-    fill_rect(p, 31, 14, 37, 17, SCRAP, w, h)
+    fill_rect(p, 9, 14, 16, 18, SCRAP, w, h)
+    fill_rect(p, 31, 14, 38, 18, SCRAP, w, h)
+    fill_rect(p, 10, 14, 15, 15, DUST, w, h)  # tape
+    fill_rect(p, 32, 14, 37, 15, DUST, w, h)
     # wheels
-    fill_ellipse(p, 8, 15, 16, 22, SCRAP_DK, w, h)
-    fill_ellipse(p, 32, 15, 40, 22, SCRAP_DK, w, h)
-    fill_ellipse(p, 10, 17, 14, 20, SCRAP, w, h)
-    fill_ellipse(p, 34, 17, 38, 20, SCRAP, w, h)
+    fill_ellipse(p, 7, 15, 16, 22, SCRAP_DK, w, h)
+    fill_ellipse(p, 31, 15, 40, 22, SCRAP_DK, w, h)
+    fill_ellipse(p, 9, 17, 14, 20, AMBER_DK, w, h)
+    fill_ellipse(p, 33, 17, 38, 20, AMBER_DK, w, h)
     return add_outline(img, thickness=2)
 
 
 # ---------------------------------------------------------------------------
-# Extract pads
+# Extract pads — thick rings that pop at wide FOV
 # ---------------------------------------------------------------------------
 
 def make_pad(open_state: bool) -> Image.Image:
     img = new(96, 96)
     p = img.load()
     w, h = 96, 96
-    ring = AMBER if open_state else (90, 80, 70, 255)
-    ring_lt = AMBER_LT if open_state else (120, 110, 100, 255)
-    fill_c = (200, 140, 40, 100) if open_state else (50, 45, 40, 80)
+    ring = AMBER if open_state else (100, 88, 76, 255)
+    ring_lt = AMBER_LT if open_state else (130, 118, 105, 255)
+    ring_dk = AMBER_DK if open_state else (70, 62, 54, 255)
+    fill_c = (210, 150, 45, 140) if open_state else (48, 42, 36, 110)
 
-    # outer disc
-    fill_ellipse(p, 10, 10, 85, 85, fill_c, w, h)
-    # ring pixels (chunky)
+    # outer disc (solid enough to find at distance)
+    fill_ellipse(p, 8, 8, 87, 87, fill_c, w, h)
+    # chunky ring (4–5 px) — FOV readability
+    for ang in range(0, 360, 2):
+        rad = math.radians(ang)
+        for r in range(34, 40):
+            x = int(48 + math.cos(rad) * r)
+            y = int(48 + math.sin(rad) * r)
+            col = ring_lt if r in (35, 36) and open_state else (ring_dk if r >= 38 else ring)
+            px(p, x, y, col, w, h)
+    # inner ring
     for ang in range(0, 360, 3):
         rad = math.radians(ang)
-        for r in (36, 37, 38):
+        for r in (16, 17, 18):
             x = int(48 + math.cos(rad) * r)
             y = int(48 + math.sin(rad) * r)
             px(p, x, y, ring, w, h)
-        for r in (34, 35):
-            x = int(48 + math.cos(rad) * r)
-            y = int(48 + math.sin(rad) * r)
-            px(p, x, y, ring_lt if open_state else ring, w, h)
-    # inner ring
-    for ang in range(0, 360, 4):
-        rad = math.radians(ang)
-        x = int(48 + math.cos(rad) * 18)
-        y = int(48 + math.sin(rad) * 18)
-        px(p, x, y, ring, w, h)
 
     # beacon post
-    fill_rect(p, 45, 14, 50, 48, SCRAP_DK, w, h)
-    fill_rect(p, 45, 14, 50, 18, SCRAP, w, h)
-    lamp = AMBER_LT if open_state else SCRAP
-    fill_ellipse(p, 40, 6, 55, 18, lamp, w, h)
+    fill_rect(p, 44, 12, 51, 50, SCRAP_DK, w, h)
+    fill_rect(p, 44, 12, 51, 18, SCRAP, w, h)
+    fill_rect(p, 45, 20, 50, 48, SCRAP, w, h)
+    lamp = AMBER_LT if open_state else SCRAP_LT
+    fill_ellipse(p, 38, 4, 57, 20, lamp, w, h)
     if open_state:
-        fill_ellipse(p, 43, 9, 52, 15, (255, 250, 200, 255), w, h)
+        fill_ellipse(p, 42, 8, 53, 16, (255, 250, 200, 255), w, h)
+        # glow rays (chunky, few)
+        for dx, dy in ((-10, 2), (10, 2), (0, -8), (-7, -5), (7, -5)):
+            px(p, 48 + dx, 10 + dy, AMBER_LT, w, h)
 
-    # vial markers
-    fill_rect(p, 20, 50, 28, 62, VIAL_DK, w, h)
-    fill_rect(p, 21, 51, 27, 59, VIAL if open_state else SCRAP, w, h)
-    fill_rect(p, 68, 50, 76, 62, VIAL_DK, w, h)
-    fill_rect(p, 69, 51, 75, 59, VIAL if open_state else SCRAP, w, h)
-    fill_rect(p, 22, 48, 26, 50, SCRAP, w, h)
-    fill_rect(p, 70, 48, 74, 50, SCRAP, w, h)
+    # vial markers (larger for FOV)
+    for bx in (18, 68):
+        fill_rect(p, bx, 48, bx + 10, 64, VIAL_DK, w, h)
+        fill_rect(p, bx + 1, 49, bx + 9, 60, VIAL if open_state else SCRAP, w, h)
+        if open_state:
+            fill_rect(p, bx + 2, 50, bx + 5, 56, VIAL_LT, w, h)
+        fill_rect(p, bx + 2, 46, bx + 8, 48, SCRAP, w, h)
 
     return add_outline(img, thickness=2)
 
@@ -458,23 +632,16 @@ def make_wreck() -> Image.Image:
     p = img.load()
     w, h = 64, 48
     drop_shadow(img, 32, 42, 22, 4, 80)
-    # chassis
-    pts_fill = [
-        (6, 34), (18, 14), (50, 12), (58, 32), (46, 38), (12, 40),
-    ]
     d = ImageDraw.Draw(img)
-    d.polygon(pts_fill, fill=RUST_DK)
+    d.polygon([(6, 34), (18, 14), (50, 12), (58, 32), (46, 38), (12, 40)], fill=RUST_DK)
     fill_rect(p, 8, 28, 54, 38, RUST, w, h)
     fill_rect(p, 8, 28, 54, 30, shade(RUST, 1.2), w, h)
-    # window
     fill_rect(p, 22, 16, 40, 26, (40, 50, 55, 255), w, h)
     fill_rect(p, 24, 17, 30, 22, (70, 90, 100, 200), w, h)
-    # wheels
     fill_ellipse(p, 12, 30, 24, 42, SCRAP_DK, w, h)
     fill_ellipse(p, 44, 28, 56, 40, SCRAP_DK, w, h)
     fill_ellipse(p, 15, 33, 21, 39, SCRAP, w, h)
     fill_ellipse(p, 47, 31, 53, 37, SCRAP, w, h)
-    # tonic strapped
     fill_rect(p, 30, 8, 36, 16, VIAL_DK, w, h)
     fill_rect(p, 31, 9, 35, 14, VIAL, w, h)
     px(p, 32, 10, VIAL_LT, w, h)
@@ -482,78 +649,74 @@ def make_wreck() -> Image.Image:
 
 
 def make_herb_crate() -> Image.Image:
-    img = new(32, 32)
+    """Breakable — chunky wood + bright vial lid (FOV pop)."""
+    img = new(40, 40)
     p = img.load()
-    w, h = 32, 32
-    drop_shadow(img, 16, 28, 10, 3, 70)
-    fill_rect(p, 4, 10, 27, 27, (118, 78, 42, 255), w, h)
-    fill_rect(p, 4, 10, 27, 13, (150, 105, 60, 255), w, h)
-    fill_rect(p, 4, 24, 27, 27, (86, 56, 30, 255), w, h)
-    # plank lines
-    fill_rect(p, 4, 16, 27, 17, (70, 46, 24, 255), w, h)
-    fill_rect(p, 4, 21, 27, 22, (70, 46, 24, 255), w, h)
-    # sealed vial on top
-    fill_rect(p, 12, 3, 19, 12, VIAL_DK, w, h)
-    fill_rect(p, 13, 4, 18, 10, VIAL, w, h)
-    px(p, 14, 5, VIAL_LT, w, h)
-    fill_rect(p, 13, 2, 18, 3, SCRAP, w, h)
-    fill_rect(p, 14, 1, 17, 2, SCRAP_LT, w, h)
+    w, h = 40, 40
+    drop_shadow(img, 20, 35, 12, 3, 75)
+    fill_rect(p, 5, 12, 34, 34, (118, 78, 42, 255), w, h)
+    fill_rect(p, 5, 12, 34, 16, (158, 110, 62, 255), w, h)
+    fill_rect(p, 5, 30, 34, 34, (86, 56, 30, 255), w, h)
+    fill_rect(p, 5, 20, 34, 21, (70, 46, 24, 255), w, h)
+    fill_rect(p, 5, 26, 34, 27, (70, 46, 24, 255), w, h)
+    # sealed vial on top — tall for silhouette
+    fill_rect(p, 14, 2, 25, 14, VIAL_DK, w, h)
+    fill_rect(p, 15, 3, 24, 12, VIAL, w, h)
+    fill_rect(p, 16, 4, 20, 9, VIAL_LT, w, h)
+    fill_rect(p, 15, 1, 24, 3, SCRAP, w, h)
+    fill_rect(p, 17, 0, 22, 2, SCRAP_LT, w, h)
     return add_outline(img, thickness=2)
 
 
 def make_vial_crate() -> Image.Image:
-    img = new(36, 36)
+    img = new(40, 40)
     p = img.load()
-    w, h = 36, 36
-    drop_shadow(img, 18, 31, 12, 3, 70)
-    fill_rect(p, 5, 14, 30, 30, SCRAP, w, h)
-    fill_rect(p, 5, 14, 30, 17, SCRAP_LT, w, h)
-    fill_rect(p, 5, 26, 30, 30, SCRAP_DK, w, h)
-    # three vials
+    w, h = 40, 40
+    drop_shadow(img, 20, 35, 13, 3, 75)
+    fill_rect(p, 5, 16, 34, 34, SCRAP, w, h)
+    fill_rect(p, 5, 16, 34, 20, SCRAP_LT, w, h)
+    fill_rect(p, 5, 30, 34, 34, SCRAP_DK, w, h)
     for i, col in enumerate([VIAL, AMBER, (90, 140, 210, 255)]):
-        x = 8 + i * 8
-        fill_rect(p, x, 4, x + 5, 16, shade(col, 0.65), w, h)
-        fill_rect(p, x + 1, 5, x + 4, 14, col, w, h)
+        x = 8 + i * 9
+        fill_rect(p, x, 4, x + 6, 18, shade(col, 0.65), w, h)
+        fill_rect(p, x + 1, 5, x + 5, 16, col, w, h)
         px(p, x + 1, 6, shade(col, 1.35), w, h)
-        fill_rect(p, x + 1, 3, x + 4, 4, SCRAP_LT, w, h)
+        fill_rect(p, x + 1, 3, x + 5, 5, SCRAP_LT, w, h)
     return add_outline(img, thickness=2)
 
 
 def make_apothecary_chest() -> Image.Image:
-    img = new(40, 32)
+    img = new(48, 36)
     p = img.load()
-    w, h = 40, 32
-    drop_shadow(img, 20, 28, 14, 3, 70)
-    fill_rect(p, 4, 10, 35, 27, (96, 58, 36, 255), w, h)
-    fill_rect(p, 4, 10, 35, 14, (130, 82, 50, 255), w, h)
-    fill_rect(p, 4, 22, 35, 27, (70, 42, 26, 255), w, h)
-    # lid seam
-    fill_rect(p, 4, 16, 35, 17, (50, 30, 18, 255), w, h)
-    # brass lock + vial gem
-    fill_rect(p, 17, 15, 22, 20, GOLD, w, h)
-    fill_rect(p, 18, 16, 21, 19, AMBER, w, h)
-    fill_rect(p, 28, 4, 34, 12, VIAL_DK, w, h)
-    fill_rect(p, 29, 5, 33, 10, VIAL, w, h)
-    px(p, 30, 6, VIAL_LT, w, h)
+    w, h = 48, 36
+    drop_shadow(img, 24, 32, 16, 3, 75)
+    fill_rect(p, 4, 12, 43, 32, (96, 58, 36, 255), w, h)
+    fill_rect(p, 4, 12, 43, 16, (138, 86, 52, 255), w, h)
+    fill_rect(p, 4, 26, 43, 32, (70, 42, 26, 255), w, h)
+    fill_rect(p, 4, 18, 43, 19, (50, 30, 18, 255), w, h)
+    fill_rect(p, 20, 17, 27, 24, GOLD, w, h)
+    fill_rect(p, 21, 18, 26, 22, AMBER, w, h)
+    fill_rect(p, 34, 3, 42, 14, VIAL_DK, w, h)
+    fill_rect(p, 35, 4, 41, 12, VIAL, w, h)
+    px(p, 36, 5, VIAL_LT, w, h)
     return add_outline(img, thickness=2)
 
 
 def make_scrap_drum() -> Image.Image:
-    img = new(36, 44)
+    img = new(40, 48)
     p = img.load()
-    w, h = 36, 44
-    drop_shadow(img, 18, 40, 12, 3, 70)
-    fill_rect(p, 8, 8, 27, 38, RUST, w, h)
-    fill_rect(p, 8, 8, 27, 12, shade(RUST, 1.2), w, h)
-    fill_rect(p, 8, 32, 27, 38, RUST_DK, w, h)
-    # ridges
-    for y in (16, 24):
-        fill_rect(p, 8, y, 27, y + 1, RUST_DK, w, h)
-    # toxic drip mark
-    fill_rect(p, 14, 2, 21, 10, VIAL_DK, w, h)
-    fill_rect(p, 15, 3, 20, 8, VIAL, w, h)
-    px(p, 16, 12, VIAL, w, h)
-    px(p, 16, 14, VIAL_DK, w, h)
+    w, h = 40, 48
+    drop_shadow(img, 20, 44, 13, 3, 75)
+    fill_rect(p, 8, 10, 31, 42, RUST, w, h)
+    fill_rect(p, 8, 10, 31, 15, shade(RUST, 1.2), w, h)
+    fill_rect(p, 8, 36, 31, 42, RUST_DK, w, h)
+    for y in (18, 26, 32):
+        fill_rect(p, 8, y, 31, y + 1, RUST_DK, w, h)
+    fill_rect(p, 14, 2, 25, 12, VIAL_DK, w, h)
+    fill_rect(p, 15, 3, 24, 10, VIAL, w, h)
+    px(p, 16, 4, VIAL_LT, w, h)
+    px(p, 18, 14, VIAL, w, h)
+    px(p, 18, 16, VIAL_DK, w, h)
     return add_outline(img, thickness=2)
 
 
@@ -581,27 +744,26 @@ def make_tower() -> Image.Image:
     fill_rect(p, 12, 22, 27, 68, SCRAP, w, h)
     fill_rect(p, 12, 22, 27, 28, SCRAP_LT, w, h)
     fill_rect(p, 12, 58, 27, 68, SCRAP_DK, w, h)
-    # lattice
     for y in range(30, 56, 6):
         fill_rect(p, 12, y, 27, y, SCRAP_DK, w, h)
     d = ImageDraw.Draw(img)
     d.polygon([(8, 26), (20, 4), (32, 26)], fill=RUST)
     fill_rect(p, 16, 8, 24, 16, AMBER, w, h)
     fill_rect(p, 17, 9, 23, 14, AMBER_LT, w, h)
-    # antenna vial tip
     fill_rect(p, 18, 1, 22, 6, VIAL, w, h)
     return add_outline(img, thickness=2)
 
 
 def make_bullet() -> Image.Image:
-    img = new(12, 6)
+    """Slightly larger amber→vial slug for FOV visibility."""
+    img = new(14, 8)
     p = img.load()
-    w, h = 12, 6
-    fill_rect(p, 1, 1, 8, 4, AMBER, w, h)
-    fill_rect(p, 1, 1, 8, 2, AMBER_LT, w, h)
-    fill_rect(p, 8, 1, 10, 4, VIAL, w, h)
-    px(p, 10, 2, VIAL_LT, w, h)
-    px(p, 10, 3, VIAL, w, h)
+    w, h = 14, 8
+    fill_rect(p, 1, 2, 9, 5, AMBER, w, h)
+    fill_rect(p, 1, 2, 9, 3, AMBER_LT, w, h)
+    fill_rect(p, 9, 2, 12, 5, VIAL, w, h)
+    px(p, 12, 3, VIAL_LT, w, h)
+    px(p, 12, 4, VIAL, w, h)
     return add_outline(img, thickness=1)
 
 
@@ -693,54 +855,68 @@ def make_sign() -> Image.Image:
     d = ImageDraw.Draw(img)
     d.polygon([(3, 8), (21, 6), (23, 13), (5, 16)], fill=(150, 112, 70, 255))
     fill_rect(p, 7, 9, 17, 10, (90, 50, 35, 255), w, h)
-    # scrap X mark
     px(p, 10, 11, RUST, w, h)
     px(p, 14, 11, RUST, w, h)
     return add_outline(img, thickness=1)
 
 
 # ---------------------------------------------------------------------------
-# Ground tiles
+# Ground tiles — low-frequency soft patches (readable, not noisy at FOV)
 # ---------------------------------------------------------------------------
 
+def _soft_blob(d: ImageDraw.ImageDraw, cx: int, cy: int, rw: int, rh: int, col) -> None:
+    d.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=col)
+
+
 def ground_tile(seed: int, kind: str = "plain") -> Image.Image:
+    """Wide-FOV ground: soft value patches, sparse mid-scale grit — no specklemush."""
     rnd = random.Random(seed)
     base = DUST[:3]
     img = Image.new("RGBA", (64, 64), base + (255,))
     d = ImageDraw.Draw(img)
-    for _ in range(160):
-        x, y = rnd.randrange(64), rnd.randrange(64)
-        k = rnd.choice([0.90, 0.94, 0.97, 1.04, 1.08])
-        d.point((x, y), fill=shade(base + (255,), k))
-    # sparse scrap / grit chunks (pixel blocks)
-    for _ in range(5):
-        x, y = rnd.randrange(2, 60), rnd.randrange(2, 60)
-        c = rnd.choice([DUST_DK, SCRAP_DK, RUST_DK, (140, 100, 60, 255)])
-        d.rectangle([x, y, x + rnd.randint(1, 3), y + rnd.randint(0, 2)], fill=c)
+
+    # large soft value patches (read as terrain when zoomed out)
+    for _ in range(4):
+        cx, cy = rnd.randrange(8, 56), rnd.randrange(8, 56)
+        rw, rh = rnd.randint(6, 14), rnd.randint(4, 10)
+        k = rnd.choice([0.88, 0.92, 1.06, 1.10])
+        _soft_blob(d, cx, cy, rw, rh, shade(base + (255,), k))
+
+    # sparse mid-scale grit blocks (not 160 single pixels)
+    for _ in range(6):
+        x, y = rnd.randrange(2, 58), rnd.randrange(2, 58)
+        c = rnd.choice([DUST_DK, shade(DUST + (255,), 0.85), (140, 100, 60, 255)])
+        bw, bh = rnd.randint(2, 4), rnd.randint(1, 3)
+        d.rectangle([x, y, x + bw, y + bh], fill=c)
+
     if kind == "pebbles":
-        for _ in range(8):
-            x, y = rnd.randrange(2, 60), rnd.randrange(2, 60)
-            r = rnd.choice([1, 1, 2])
-            d.ellipse([x, y, x + r * 2, y + r], fill=shade(base + (255,), 0.75))
+        for _ in range(5):
+            x, y = rnd.randrange(4, 56), rnd.randrange(4, 56)
+            r = rnd.choice([2, 2, 3])
+            d.ellipse([x, y, x + r * 2, y + r], fill=shade(base + (255,), 0.78))
+            d.ellipse([x + 1, y, x + r, y + r - 1], fill=shade(base + (255,), 0.95))
     elif kind == "cracks":
         for _ in range(2):
-            x, y = rnd.randrange(64), rnd.randrange(64)
-            for _ in range(12):
-                nx = max(0, min(63, x + rnd.randint(-4, 4)))
-                ny = max(0, min(63, y + rnd.randint(-4, 4)))
-                d.line([x, y, nx, ny], fill=shade(base + (255,), 0.72), width=1)
+            x, y = rnd.randrange(8, 56), rnd.randrange(8, 56)
+            for _step in range(8):
+                nx = max(2, min(61, x + rnd.randint(-5, 5)))
+                ny = max(2, min(61, y + rnd.randint(-5, 5)))
+                d.line([x, y, nx, ny], fill=shade(base + (255,), 0.70), width=2)
                 x, y = nx, ny
     elif kind == "ripples":
-        for row in range(6, 64, 11):
-            off = rnd.randint(0, 8)
-            for x in range(0, 64, 2):
-                yy = row + int(2 * ((x + off) % 16 > 8))
-                d.point((x, yy % 64), fill=shade(base + (255,), 1.1))
+        for row in range(10, 58, 14):
+            off = rnd.randint(0, 6)
+            for x in range(4, 60, 3):
+                yy = row + int(2 * ((x + off) % 18 > 9))
+                d.rectangle([x, yy % 64, x + 1, (yy % 64) + 1], fill=shade(base + (255,), 1.08))
     elif kind == "vial_glint":
-        for _ in range(3):
-            x, y = rnd.randrange(4, 58), rnd.randrange(4, 58)
-            d.point((x, y), fill=VIAL[:3] + (180,))
-            d.point((x + 1, y), fill=VIAL_LT[:3] + (120,))
+        # rare larger glint (not sparkle noise)
+        for _ in range(2):
+            x, y = rnd.randrange(8, 52), rnd.randrange(8, 52)
+            d.rectangle([x, y, x + 2, y + 1], fill=VIAL[:3] + (160,))
+            d.point((x, y), fill=VIAL_LT[:3] + (200,))
+    # plain / default: already has soft patches
+
     return img
 
 
@@ -749,60 +925,61 @@ def dust_tile(seed: int) -> Image.Image:
 
 
 # ---------------------------------------------------------------------------
-# Pickups — chunky vial / scrap icons
+# Pickups — chunky vials that pop on dust
 # ---------------------------------------------------------------------------
 
 def pickup_base(accent, symbol_fn) -> Image.Image:
-    img = new(40, 40)
+    img = new(48, 48)
     p = img.load()
-    w, h = 40, 40
-    # bottle body
-    fill_rect(p, 12, 10, 27, 34, shade(accent, 0.7), w, h)
-    fill_rect(p, 13, 11, 26, 28, accent, w, h)
-    fill_rect(p, 13, 11, 26, 16, shade(accent, 1.25), w, h)
-    fill_rect(p, 13, 28, 26, 33, shade(accent, 0.55), w, h)
+    w, h = 48, 48
+    drop_shadow(img, 24, 42, 10, 3, 70)
+    # bottle body (taller / brighter for FOV)
+    fill_rect(p, 14, 12, 33, 40, shade(accent, 0.65), w, h)
+    fill_rect(p, 15, 13, 32, 32, accent, w, h)
+    fill_rect(p, 15, 13, 32, 18, shade(accent, 1.28), w, h)
+    fill_rect(p, 15, 34, 32, 39, shade(accent, 0.52), w, h)
     # neck + cork
-    fill_rect(p, 16, 4, 23, 11, SCRAP, w, h)
-    fill_rect(p, 16, 4, 23, 6, SCRAP_LT, w, h)
-    fill_rect(p, 17, 2, 22, 4, (90, 60, 40, 255), w, h)
+    fill_rect(p, 19, 5, 28, 13, SCRAP, w, h)
+    fill_rect(p, 19, 5, 28, 8, SCRAP_LT, w, h)
+    fill_rect(p, 20, 2, 27, 5, (90, 60, 40, 255), w, h)
     # glint
-    fill_rect(p, 14, 13, 16, 22, (255, 255, 255, 90), w, h)
+    fill_rect(p, 16, 15, 19, 26, (255, 255, 255, 100), w, h)
     symbol_fn(p, w, h)
     return add_outline(img, thickness=2)
 
 
 def make_pickups() -> None:
     def cross(p, w, h):
-        fill_rect(p, 18, 16, 21, 26, (250, 250, 240, 255), w, h)
-        fill_rect(p, 15, 19, 24, 22, (250, 250, 240, 255), w, h)
+        fill_rect(p, 21, 18, 26, 32, WHITE, w, h)
+        fill_rect(p, 17, 22, 30, 27, WHITE, w, h)
 
     def bolt(p, w, h):
-        fill_rect(p, 17, 14, 22, 18, AMBER_LT, w, h)
-        fill_rect(p, 19, 18, 24, 22, AMBER_LT, w, h)
-        fill_rect(p, 16, 22, 21, 28, AMBER_LT, w, h)
+        fill_rect(p, 20, 16, 27, 21, AMBER_LT, w, h)
+        fill_rect(p, 22, 21, 29, 26, AMBER_LT, w, h)
+        fill_rect(p, 18, 26, 25, 34, AMBER_LT, w, h)
 
     def shield(p, w, h):
-        fill_ellipse(p, 15, 15, 24, 28, (220, 230, 255, 255), w, h)
-        fill_ellipse(p, 17, 17, 22, 25, (100, 140, 220, 255), w, h)
+        fill_ellipse(p, 17, 17, 30, 34, (220, 230, 255, 255), w, h)
+        fill_ellipse(p, 19, 19, 28, 31, (100, 140, 220, 255), w, h)
 
     def wing(p, w, h):
-        fill_rect(p, 14, 18, 25, 21, (250, 250, 240, 255), w, h)
-        fill_rect(p, 12, 16, 15, 23, (250, 250, 240, 255), w, h)
-        fill_rect(p, 24, 16, 27, 23, (250, 250, 240, 255), w, h)
+        fill_rect(p, 16, 22, 31, 26, WHITE, w, h)
+        fill_rect(p, 14, 18, 18, 30, WHITE, w, h)
+        fill_rect(p, 29, 18, 33, 30, WHITE, w, h)
 
     def magnet(p, w, h):
-        fill_rect(p, 14, 14, 18, 28, (220, 70, 60, 255), w, h)
-        fill_rect(p, 21, 14, 25, 28, (80, 120, 220, 255), w, h)
-        fill_rect(p, 14, 14, 25, 18, SCRAP_LT, w, h)
+        fill_rect(p, 16, 16, 21, 34, (220, 70, 60, 255), w, h)
+        fill_rect(p, 26, 16, 31, 34, (80, 120, 220, 255), w, h)
+        fill_rect(p, 16, 16, 31, 21, SCRAP_LT, w, h)
 
     def quiet(p, w, h):
-        fill_ellipse(p, 15, 16, 24, 26, (200, 200, 210, 255), w, h)
-        fill_rect(p, 18, 20, 21, 22, SCRAP_DK, w, h)
+        fill_ellipse(p, 17, 18, 30, 32, (200, 200, 210, 255), w, h)
+        fill_rect(p, 21, 23, 26, 26, SCRAP_DK, w, h)
 
     def rapid(p, w, h):
-        fill_rect(p, 15, 16, 18, 28, AMBER, w, h)
-        fill_rect(p, 20, 14, 23, 28, AMBER_LT, w, h)
-        fill_rect(p, 25, 17, 27, 28, AMBER, w, h)
+        fill_rect(p, 17, 18, 21, 34, AMBER, w, h)
+        fill_rect(p, 23, 16, 27, 34, AMBER_LT, w, h)
+        fill_rect(p, 29, 19, 32, 34, AMBER, w, h)
 
     save(pickup_base(VIAL, cross), "pickups/heal.png")
     save(pickup_base(RUST, bolt), "pickups/damage.png")
@@ -831,7 +1008,6 @@ def make_ui() -> None:
 
     img = new(32, 32)
     p = img.load()
-    # chunky arrow
     for y in range(2, 28):
         width = max(2, 14 - abs(y - 8) // 2) if y < 18 else max(2, 6)
         x0 = 16 - width
@@ -887,7 +1063,7 @@ def main() -> None:
 
     make_pickups()
     make_ui()
-    print("DONE — Dust Apothecary chunky pixel set written to", OUT)
+    print("DONE — FOV + personality Dust Apothecary set →", OUT)
 
 
 if __name__ == "__main__":

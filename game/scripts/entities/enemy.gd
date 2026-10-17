@@ -109,8 +109,9 @@ func _style_bar() -> void:
 	fill.set_corner_radius_all(3)
 	hp_bar.add_theme_stylebox_override("background", bg)
 	hp_bar.add_theme_stylebox_override("fill", fill)
-	hp_bar.offset_top = -30.0
-	hp_bar.offset_bottom = -25.0
+	## Sit above chunky 48–64px silhouettes at survivor FOV.
+	hp_bar.offset_top = -34.0
+	hp_bar.offset_bottom = -28.0
 	hp_bar.visible = false  ## only shown once damaged
 
 
