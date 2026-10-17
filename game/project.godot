@@ -6,21 +6,31 @@ config_version=5
 [application]
 
 config/name="Wanderer"
-config/description="Solo top-down extraction survival — MVP vertical slice"
+config/description="Solo top-down extraction survival — iPhone-first MVP vertical slice"
 run/main_scene="res://scenes/ui/main_menu.tscn"
-config/features=PackedStringArray("4.3", "Forward Plus")
+config/features=PackedStringArray("4.3", "Mobile")
 config/icon="res://icon.svg"
 
 [autoload]
 
 GameState="*res://scripts/autoload/game_state.gd"
+TouchInput="*res://scripts/autoload/touch_input.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+; 0 = landscape (iPhone primary — dual sticks need width)
+window/handheld/orientation=0
+window/ios/hide_home_indicator=true
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
 
 [input]
 
@@ -84,5 +94,6 @@ pause_menu={
 
 [rendering]
 
+renderer/rendering_method="mobile"
 textures/canvas_textures/default_texture_filter=0
 environment/defaults/default_clear_color=Color(0.22, 0.16, 0.12, 1)

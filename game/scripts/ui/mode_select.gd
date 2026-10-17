@@ -1,14 +1,22 @@
 extends Control
 
 const ModeDefs = preload("res://scripts/data/mode_defs.gd")
+const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 
 @onready var easy_btn: Button = %EasyButton
 @onready var medium_btn: Button = %MediumButton
 @onready var details: Label = %Details
 @onready var fast_check: CheckBox = %FastTimers
+@onready var next_btn: Button = $Center/Row/NextButton
+@onready var back_btn: Button = $Center/Row/BackButton
+@onready var title: Label = $Center/Title
 
 
 func _ready() -> void:
+	MobileLayout.polish_menu(self, [easy_btn, medium_btn, next_btn, back_btn], title)
+	MobileLayout.bump_label(details, 15)
+	fast_check.add_theme_font_size_override("font_size", 16)
+	fast_check.custom_minimum_size = Vector2(0, 44)
 	fast_check.button_pressed = GameState.fast_timers
 	_refresh()
 
@@ -31,9 +39,6 @@ func _refresh() -> void:
 		float(mode["tl_step_size"]),
 		"\n(Fast timers ON — ~%.0fs total)" % total if GameState.fast_timers else "",
 	]
-	easy_btn.disabled = GameState.selected_mode_id == ModeDefs.EASY_ID
-	medium_btn.disabled = GameState.selected_mode_id == ModeDefs.MEDIUM_ID
-	## Visual selection
 	easy_btn.text = "Easy (5 min)" + (" ✓" if GameState.selected_mode_id == ModeDefs.EASY_ID else "")
 	medium_btn.text = "Medium (10 min)" + (" ✓" if GameState.selected_mode_id == ModeDefs.MEDIUM_ID else "")
 

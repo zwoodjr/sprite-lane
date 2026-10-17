@@ -37,10 +37,19 @@ func _ready() -> void:
 	for pad in pads_root.get_children():
 		if pad.has_signal("extract_requested"):
 			pad.extract_requested.connect(_on_extract_requested)
+	TouchInput.extract_pressed.connect(_on_touch_extract)
 	hud.setup(self)
 	## Rook Second Glance stub on first window later
 	if GameState.selected_character_id == CharacterDefs.ROOK_ID:
 		hud.show_toast("Rook: Pocket Rattle active — Stay Bonus boosts scrap weight.")
+
+
+func _on_touch_extract() -> void:
+	if _ended or not _extract_open:
+		return
+	for pad in pads_root.get_children():
+		if pad.has_method("try_touch_extract") and pad.try_touch_extract():
+			return
 
 
 func _process(delta: float) -> void:

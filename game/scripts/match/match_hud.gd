@@ -1,5 +1,11 @@
 extends CanvasLayer
 
+const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
+const TouchControlsScene := preload("res://scenes/ui/touch_controls.tscn")
+
+@onready var root: Control = $Root
+@onready var top_bar: HBoxContainer = $Root/Top
+@onready var bottom_bar: VBoxContainer = $Root/Bottom
 @onready var phase_label: Label = $Root/Top/PhaseLabel
 @onready var timer_label: Label = $Root/Top/TimerLabel
 @onready var tl_label: Label = $Root/Top/TLLabel
@@ -12,12 +18,43 @@ extends CanvasLayer
 
 var _toast_time: float = 0.0
 var _match: Node = null
+var _touch_controls: CanvasLayer = null
 
 
 func setup(match_node: Node) -> void:
 	_match = match_node
-	hint_label.text = "WASD move · Mouse aim · LMB shoot · E extract · Q ability · F mount · Esc menu"
+	_apply_mobile_hud()
+	_touch_controls = TouchControlsScene.instantiate()
+	add_child(_touch_controls)
+	hint_label.text = "Left stick move · Right stick aim+fire · EXTRACT / ABILITY / MOUNT · PAUSE"
+	if not TouchInput.touch_primary:
+		hint_label.text += "  |  WASD · Mouse · E/Q/F · Esc"
 	toast_label.text = ""
+
+
+func _apply_mobile_hud() -> void:
+	var win := DisplayServer.window_get_size()
+	var m := MobileLayout.safe_margin()
+	root.offset_left = m.position.x
+	root.offset_top = m.position.y
+	root.offset_right = -(win.x - (m.position.x + m.size.x))
+	root.offset_bottom = -(win.y - (m.position.y + m.size.y))
+	## Bigger type for phone readability
+	MobileLayout.bump_label(phase_label, 22)
+	MobileLayout.bump_label(timer_label, 36)
+	MobileLayout.bump_label(tl_label, 22)
+	MobileLayout.bump_label(ammo_label, 18)
+	MobileLayout.bump_label(mount_label, 16)
+	MobileLayout.bump_label(stay_label, 15)
+	MobileLayout.bump_label(toast_label, 24)
+	hp_bar.custom_minimum_size = Vector2(0, 26)
+	## Keep bottom stats above virtual sticks / action row
+	bottom_bar.offset_top = -200.0
+	bottom_bar.offset_bottom = -110.0
+	hint_label.offset_top = -250.0
+	hint_label.offset_bottom = -226.0
+	top_bar.offset_top = 4.0
+	top_bar.offset_bottom = 52.0
 
 
 func _process(delta: float) -> void:
@@ -25,7 +62,7 @@ func _process(delta: float) -> void:
 		_toast_time -= delta
 		if _toast_time <= 0.0:
 			toast_label.text = ""
-	if Input.is_action_just_pressed("pause_menu"):
+	if Input.is_action_just_pressed("pause_menu") or TouchInput.consume_pause():
 		GameState.go_main_menu()
 
 

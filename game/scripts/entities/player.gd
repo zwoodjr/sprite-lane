@@ -64,7 +64,7 @@ func _physics_process(delta: float) -> void:
 	if _post_heal_left <= 0.0:
 		firerate_mult = 1.0
 
-	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var dir := TouchInput.get_move()
 	var speed := base_speed * move_mult
 	if _mounted and float(_mount.get("fuel", 0)) > 0.0:
 		speed *= float(_mount.get("speed_mult", 1.4))
@@ -75,14 +75,15 @@ func _physics_process(delta: float) -> void:
 	velocity = dir * speed
 	move_and_slide()
 
-	var mouse := get_global_mouse_position()
-	gun.rotation = (mouse - global_position).angle()
+	var aim_dir := _aim_direction()
+	if aim_dir.length() > 0.01:
+		gun.rotation = aim_dir.angle()
 
-	if Input.is_action_just_pressed("mount_toggle"):
+	if Input.is_action_just_pressed("mount_toggle") or TouchInput.consume_mount():
 		_toggle_mount()
-	if Input.is_action_just_pressed("ability"):
+	if Input.is_action_just_pressed("ability") or TouchInput.consume_ability():
 		_try_ability()
-	if Input.is_action_pressed("shoot") and _reload_left <= 0.0:
+	if TouchInput.is_firing() and _reload_left <= 0.0:
 		_try_shoot()
 	if _ammo <= 0 and _reload_left <= 0.0:
 		_start_reload()
@@ -120,6 +121,15 @@ func _try_ability() -> void:
 	health_changed.emit(hp, max_hp)
 
 
+func _aim_direction() -> Vector2:
+	if TouchInput.aim_vector.length() > 0.01:
+		return TouchInput.aim_vector
+	var to_mouse := get_global_mouse_position() - global_position
+	if to_mouse.length() > 1.0:
+		return to_mouse.normalized()
+	return Vector2.RIGHT.rotated(gun.rotation)
+
+
 func _try_shoot() -> void:
 	var rate := float(_weapon.get("fire_rate", 8.0)) * firerate_mult
 	var interval := 1.0 / maxf(0.1, rate)
@@ -131,7 +141,7 @@ func _try_shoot() -> void:
 	_fire_cd = interval
 	_ammo -= 1
 	var bullet: Area2D = BulletScene.instantiate()
-	var aim := (get_global_mouse_position() - global_position).normalized()
+	var aim := _aim_direction()
 	var spread := deg_to_rad(float(_weapon.get("spread_deg", 6.0)))
 	aim = aim.rotated(randf_range(-spread, spread))
 	bullet.setup(

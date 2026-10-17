@@ -36,6 +36,13 @@ func _process(_delta: float) -> void:
 		extract_requested.emit()
 
 
+func try_touch_extract() -> bool:
+	if open and player_inside:
+		extract_requested.emit()
+		return true
+	return false
+
+
 func _on_body_entered(body: Node2D) -> void:
 	if body.is_in_group("player"):
 		player_inside = true
