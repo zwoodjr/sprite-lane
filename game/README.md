@@ -38,4 +38,4 @@ Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, meta progres
 
 - `tools/test_runner.tscn` — headless bot playtest: `godot --headless --path game res://tools/test_runner.tscn`
 - `tools/screenshot.tscn` — renders every screen to PNG (needs a display / xvfb)
-- `tools/gen_sfx.py`, `tools/gen_sprites_v2.py` — regenerate original audio/art
+- `tools/gen_sfx.py`, `tools/gen_sprites.py` — regenerate original audio / Dust Apothecary chunky-pixel art (`gen_sprites_v2.py` wraps the same generator)

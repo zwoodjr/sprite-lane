@@ -1,3 +1,3 @@
 # MVP status (repo mirror)
 
-**Latest:** controls + feel + onboarding pass — multi-touch buttons, aim-stick fire, dash, aim assist, SFX/juice, 3 enemy types, tutorial, pause/settings, rebuilt menus, terrain art. See game/README.md.
+**Latest:** Dust Apothecary **chunky pixel** sprite reskin (Crazy Gunner–inspired style, original art) + prior feel/onboarding pass. See `assets/ATTRIBUTION.md`, regenerate via `tools/gen_sprites.py`. Full notes: project store `docs/mvp-status.md`.
