@@ -1,0 +1,41 @@
+[gd_scene load_steps=3 format=3 uid="uid://wanderer_player"]
+
+[ext_resource type="Script" path="res://scripts/entities/player.gd" id="1_player"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_1"]
+radius = 12.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="MountVisual" type="Polygon2D" parent="."]
+visible = false
+z_index = -1
+color = Color(0.45, 0.4, 0.32, 1)
+polygon = PackedVector2Array(-18, 8, 18, 8, 14, 16, -14, 16)
+
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0.55, 0.62, 0.45, 1)
+polygon = PackedVector2Array(-10, -12, 10, -12, 12, 12, -12, 12)
+
+[node name="Gun" type="Polygon2D" parent="."]
+color = Color(0.9, 0.72, 0.28, 1)
+polygon = PackedVector2Array(4, -3, 22, -2, 22, 2, 4, 3)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_1")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="NameLabel" type="Label" parent="."]
+offset_left = -50.0
+offset_top = -34.0
+offset_right = 50.0
+offset_bottom = -14.0
+theme_override_font_sizes/font_size = 11
+text = "Wanderer"
+horizontal_alignment = 1

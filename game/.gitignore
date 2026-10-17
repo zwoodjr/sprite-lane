@@ -1,0 +1,13 @@
+.godot/
+*.translation
+export_presets.cfg
+*.apk
+*.aab
+*.zip
+*.pck
+*.exe
+*.x86_64
+*.app
+.mono/
+data_*/
+android/

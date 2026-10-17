@@ -1,0 +1,88 @@
+[gd_scene load_steps=2 format=3 uid="uid://wanderer_mode_select"]
+
+[ext_resource type="Script" path="res://scripts/ui/mode_select.gd" id="1_mode"]
+
+[node name="ModeSelect" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_mode")
+
+[node name="Bg" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.14, 0.1, 0.08, 1)
+
+[node name="Center" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -200.0
+offset_right = 320.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Center"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.78, 0.4, 1)
+theme_override_font_sizes/font_size = 32
+text = "Select Difficulty"
+horizontal_alignment = 1
+
+[node name="EasyButton" type="Button" parent="Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Easy (5 min)"
+
+[node name="MediumButton" type="Button" parent="Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Medium (10 min)"
+
+[node name="Details" type="Label" parent="Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.72, 0.58, 1)
+autowrap_mode = 3
+
+[node name="FastTimers" type="CheckBox" parent="Center"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fast timers (dev) — compress phases for quick tests"
+
+[node name="Row" type="HBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="BackButton" type="Button" parent="Center/Row"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Back"
+
+[node name="NextButton" type="Button" parent="Center/Row"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+text = "Next: Character"
+
+[connection signal="pressed" from="Center/EasyButton" to="." method="_on_easy_pressed"]
+[connection signal="pressed" from="Center/MediumButton" to="." method="_on_medium_pressed"]
+[connection signal="toggled" from="Center/FastTimers" to="." method="_on_fast_toggled"]
+[connection signal="pressed" from="Center/Row/BackButton" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="Center/Row/NextButton" to="." method="_on_next_pressed"]
