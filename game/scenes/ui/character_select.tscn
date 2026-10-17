@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://wanderer_char_select"]
 
-[ext_resource type="Script" path="res://scripts/ui/character_select.gd" id="1_char"]
+[ext_resource type="Script" path="res://scripts/ui/character_select.gd" id="1_s"]
 
 [node name="CharacterSelect" type="Control"]
 layout_mode = 3
@@ -9,86 +9,4 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_char")
-
-[node name="Bg" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.14, 0.1, 0.08, 1)
-
-[node name="Center" type="VBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -360.0
-offset_top = -240.0
-offset_right = 360.0
-offset_bottom = 240.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Center"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.78, 0.4, 1)
-theme_override_font_sizes/font_size = 32
-text = "Choose Wanderer"
-horizontal_alignment = 1
-
-[node name="Buttons" type="HBoxContainer" parent="Center"]
-layout_mode = 2
-theme_override_constants/separation = 16
-alignment = 1
-
-[node name="RookButton" type="Button" parent="Center/Buttons"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 48)
-layout_mode = 2
-text = "Rook Vex"
-
-[node name="CinderButton" type="Button" parent="Center/Buttons"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 48)
-layout_mode = 2
-text = "Sister Cinder"
-
-[node name="Details" type="RichTextLabel" parent="Center"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 180)
-layout_mode = 2
-bbcode_enabled = true
-fit_content = true
-
-[node name="LoadoutLabel" type="Label" parent="Center"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.65, 0.55, 1)
-theme_override_font_sizes/font_size = 12
-autowrap_mode = 3
-
-[node name="Row" type="HBoxContainer" parent="Center"]
-layout_mode = 2
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="BackButton" type="Button" parent="Center/Row"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
-text = "Back"
-
-[node name="DeployButton" type="Button" parent="Center/Row"]
-custom_minimum_size = Vector2(160, 40)
-layout_mode = 2
-text = "Deploy"
-
-[connection signal="pressed" from="Center/Buttons/RookButton" to="." method="_on_rook_pressed"]
-[connection signal="pressed" from="Center/Buttons/CinderButton" to="." method="_on_cinder_pressed"]
-[connection signal="pressed" from="Center/Row/BackButton" to="." method="_on_back_pressed"]
-[connection signal="pressed" from="Center/Row/DeployButton" to="." method="_on_deploy_pressed"]
+script = ExtResource("1_s")

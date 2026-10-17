@@ -23,6 +23,7 @@ var _ended: bool = false
 var _mode: Dictionary = {}
 var _ping_done_for_window: bool = false
 var _pads: Array = []
+var _match_time: float = 0.0
 
 
 func _ready() -> void:
@@ -49,9 +50,11 @@ func _ready() -> void:
 
 	_phase_index = 0
 	_start_phase(0)
-	if GameState.selected_character_id == CharacterDefs.ROOK_ID:
-		hud.show_toast("Rook: Pocket Rattle active — Stay Bonus boosts scrap weight.")
-	hud.show_toast("Wasteland stretches forever — follow extract arrows.")
+	hud.show_banner("DROP IN", "%s · %s" % [
+		str(GameState.get_character().get("display_name", "")),
+		str(_mode.get("display_name", "")),
+	])
+	_match_time = 0.0
 
 
 func _roll_extracts() -> void:
@@ -83,6 +86,7 @@ func _process(delta: float) -> void:
 	if _ended:
 		return
 	_phase_time_left -= delta
+	_match_time += delta
 	_update_spawns(delta)
 	_update_stay_bonus(delta)
 	hud.update_match(
@@ -110,17 +114,31 @@ func _start_phase(index: int) -> void:
 	if _extract_open:
 		GameState.extract_windows_seen += 1
 		_spawn_ambush()
+		Juice.sfx("extract_open")
+		Juice.haptic(40)
+		if bool(phase.get("is_last", false)):
+			hud.show_banner("LAST EXTRACT", "Get to a gold pad or lose your gear", UiTheme.DANGER)
+		else:
+			hud.show_banner("EXTRACT OPEN", "Stand on a gold pad to leave — or stay for more", Color(0.55, 1.0, 0.6))
 		if GameState.selected_character_id == CharacterDefs.ROOK_ID and not _ping_done_for_window:
 			_ping_done_for_window = true
-			hud.show_toast("Second Glance: nearby loot crates pinged (stub).")
+			hud.show_toast("Second Glance: +2 scrap", UiTheme.AMBER)
 			GameState.scrap_found += 2
-	hud.show_toast(str(phase["label"]))
+		if hud.tutorial and is_instance_valid(hud.tutorial):
+			hud.tutorial.call("event", "extract_open")
+	elif index > 0:
+		Juice.sfx("seal")
+		hud.show_banner("SEALED", str(phase["label"]), UiTheme.AMBER)
 
 
 func _advance_phase() -> void:
 	if _current_window_was_open and not bool(_phases[_phase_index].get("is_last", false)):
 		GameState.on_window_skipped()
-		hud.show_toast("Window skipped — Threat Level %d" % GameState.threat_level)
+		Juice.sfx("threat_up")
+		Juice.shake(0.2)
+		var tl := ModeDefs.tl_table(GameState.threat_level)
+		hud.show_toast("Window skipped → THREAT %d: tougher enemies, payout ×%.2f" % [
+			GameState.threat_level, float(tl["payout"])], UiTheme.RUST)
 	if bool(_phases[_phase_index].get("is_last", false)):
 		_finish_wipe("Last Extract closed. You didn't make it out.")
 		return
@@ -156,16 +174,35 @@ func _spawn_enemy() -> void:
 	var live := get_tree().get_nodes_in_group("enemies")
 	if live.size() >= 16:
 		return
+	## Spawn just outside the visible area so enemies walk in, biased toward
+	## where the player is heading (so you meet them instead of being chased).
 	var ang := randf() * TAU
-	var dist := randf_range(320.0, 520.0)
+	var heading: Vector2 = player.velocity
+	if heading.length() > 40.0 and randf() < 0.6:
+		ang = heading.angle() + randf_range(-1.1, 1.1)
+	var dist := randf_range(620.0, 780.0)
 	var spot := player.global_position + Vector2(cos(ang), sin(ang)) * dist
 	var tl := ModeDefs.tl_table(GameState.threat_level)
 	var step := float(_mode.get("tl_step_size", 1.0))
 	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
 	var dmg_m := (1.0 + (float(tl["damage"]) - 1.0) * step) * float(_mode.get("enemy_damage", 1.0))
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	enemy.setup(spot, hp_m, dmg_m, 1.0, _roll_enemy_kind())
 	world.add_child(enemy)
-	enemy.setup(spot, hp_m, dmg_m)
+
+
+## Mix shifts toward chargers/brutes as the match runs and Threat rises.
+func _roll_enemy_kind() -> String:
+	var progress := clampf(_match_time / 240.0, 0.0, 1.0)
+	var tl := float(GameState.threat_level)
+	var w_brute := 0.04 + 0.12 * progress + 0.06 * tl
+	var w_charger := 0.10 + 0.20 * progress + 0.05 * tl
+	var r := randf()
+	if r < w_brute:
+		return "brute"
+	if r < w_brute + w_charger:
+		return "charger"
+	return "raider"
 
 
 func _spawn_ambush() -> void:
@@ -190,8 +227,14 @@ func _on_extract_requested() -> void:
 		return
 	_ended = true
 	GameState.on_extract_success()
-	hud.show_toast("Extracting…")
-	await get_tree().create_timer(0.6).timeout
+	Juice.sfx("extract_win")
+	Juice.haptic(60)
+	hud.show_banner("EXTRACTED", "Payout %d scrap" % GameState.payout_this_run, Color(0.55, 1.0, 0.6))
+	if is_instance_valid(player):
+		Juice.burst(player.global_position, Color(1, 0.85, 0.4), 40, 260.0, 0.9, 1.4)
+		var tw := player.create_tween()
+		tw.tween_property(player, "modulate:a", 0.0, 0.8)
+	await get_tree().create_timer(1.6).timeout
 	GameState.go_result()
 
 
@@ -205,7 +248,9 @@ func _finish_wipe(reason: String) -> void:
 	_ended = true
 	GameState.on_wipe()
 	GameState.result_summary = reason + "\n" + GameState.result_summary
-	await get_tree().create_timer(0.8).timeout
+	Juice.sfx("wipe")
+	hud.show_banner("WIPED", reason, UiTheme.DANGER)
+	await get_tree().create_timer(1.8).timeout
 	GameState.go_result()
 
 

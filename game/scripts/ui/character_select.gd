@@ -1,67 +1,155 @@
-extends Control
+extends "res://scripts/ui/menu_base.gd"
 
 const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 
-@onready var rook_btn: Button = %RookButton
-@onready var cinder_btn: Button = %CinderButton
-@onready var details: RichTextLabel = %Details
-@onready var loadout_label: Label = %LoadoutLabel
-@onready var deploy_btn: Button = $Center/Row/DeployButton
-@onready var back_btn: Button = $Center/Row/BackButton
-@onready var title: Label = $Center/Title
+var _tabs: Dictionary = {}
+var _portrait: TextureRect
+var _name: Label
+var _fantasy: Label
+var _ability: Label
+var _perks: VBoxContainer
+var _stats: VBoxContainer
+var _loadout: Label
 
 
-func _ready() -> void:
-	MobileLayout.polish_menu(self, [rook_btn, cinder_btn, deploy_btn, back_btn], title)
-	MobileLayout.bump_label(loadout_label, 13)
-	details.add_theme_font_size_override("normal_font_size", 15)
-	details.custom_minimum_size = Vector2(0, 160)
+func build(c: VBoxContainer) -> void:
+	c.add_child(header("CHOOSE YOUR WANDERER", GameState.go_mode_select))
+
+	## Roster strip: playable + locked silhouettes
+	var strip := HBoxContainer.new()
+	strip.add_theme_constant_override("separation", 10)
+	c.add_child(strip)
+	for id in CharacterDefs.all_known_ids():
+		strip.add_child(_roster_tile(id))
+
+	var row := HBoxContainer.new()
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 18)
+	c.add_child(row)
+
+	## Portrait card
+	var pc := card(UiTheme.LINE)
+	pc.custom_minimum_size = Vector2(250, 0)
+	row.add_child(pc)
+	var pv := VBoxContainer.new()
+	pv.alignment = BoxContainer.ALIGNMENT_CENTER
+	pc.add_child(pv)
+	_portrait = TextureRect.new()
+	_portrait.custom_minimum_size = Vector2(200, 200)
+	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pv.add_child(_portrait)
+	_name = UiTheme.title_label("", 28)
+	pv.add_child(_name)
+	_fantasy = UiTheme.body_label("", 14, UiTheme.TEXT_DIM)
+	_fantasy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pv.add_child(_fantasy)
+
+	## Details
+	var dc := card(UiTheme.LINE)
+	dc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(dc)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	dc.add_child(scroll)
+	var dv := VBoxContainer.new()
+	dv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dv.add_theme_constant_override("separation", 8)
+	scroll.add_child(dv)
+	dv.add_child(UiTheme.body_label("ABILITY  (the gold button)", 13, UiTheme.AMBER))
+	_ability = UiTheme.body_label("", 17)
+	dv.add_child(_ability)
+	dv.add_child(UiTheme.body_label("PERKS  (always on)", 13, UiTheme.AMBER))
+	_perks = VBoxContainer.new()
+	dv.add_child(_perks)
+	dv.add_child(UiTheme.body_label("STATS", 13, UiTheme.AMBER))
+	_stats = VBoxContainer.new()
+	dv.add_child(_stats)
+	_loadout = UiTheme.body_label("", 13, UiTheme.TEXT_DIM)
+	dv.add_child(_loadout)
+
+	var bottom := HBoxContainer.new()
+	c.add_child(bottom)
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(sp)
+	var deploy := UiTheme.big_button("DEPLOY ›", UiTheme.AMBER, 70, 28)
+	deploy.custom_minimum_size.x = 300
+	deploy.pressed.connect(GameState.go_match)
+	bottom.add_child(deploy)
 	_refresh()
+
+
+func _roster_tile(id: String) -> Control:
+	var def := CharacterDefs.get_character(id)
+	var playable := CharacterDefs.is_playable(id)
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(64, 64)
+	b.icon = load(str(def["sprite"])) if playable else null
+	b.expand_icon = true
+	b.text = "" if playable else "?"
+	b.tooltip_text = str(def["display_name"])
+	b.disabled = not playable
+	if playable:
+		b.pressed.connect(func() -> void:
+			GameState.selected_character_id = id
+			GameState.save_profile()
+			Juice.sfx("ui_tap")
+			_refresh()
+		)
+	_tabs[id] = b
+	return b
 
 
 func _refresh() -> void:
 	var c := GameState.get_character()
-	var perk_lines := ""
+	for id in _tabs.keys():
+		var b: Button = _tabs[id]
+		var on: bool = id == GameState.selected_character_id
+		if CharacterDefs.is_playable(id):
+			var col: Color = (c["accent"] as Color) if on else UiTheme.LINE
+			for s in ["normal", "hover", "pressed", "hover_pressed"]:
+				b.add_theme_stylebox_override(s, UiTheme.box(Color(0.2, 0.15, 0.1), col, 12, 4 if on else 2, 6))
+	_portrait.texture = load(str(c["sprite"]))
+	_name.text = str(c["display_name"])
+	_name.add_theme_color_override("font_color", c.get("accent", UiTheme.AMBER))
+	_fantasy.text = str(c["fantasy"])
+	var ab: Dictionary = c.get("ability", {})
+	_ability.text = "%s — %s  (%ds cooldown)" % [ab.get("name", "—"), ab.get("desc", ""), int(float(ab.get("cooldown", 0)))] if not ab.is_empty() else "None"
+	for ch in _perks.get_children():
+		ch.queue_free()
 	for p in c["perks"]:
-		perk_lines += "• [b]%s[/b] — %s\n" % [p["name"], p["desc"]]
-	details.clear()
-	details.append_text("[b]%s[/b]\n%s\n\n%s\nStat tweaks: move ×%.2f · dmg ×%.2f · HP +%d" % [
-		c["display_name"],
-		c["fantasy"],
-		perk_lines,
-		float(c["move_speed_mult"]),
-		float(c["damage_mult"]),
-		int(c["max_hp_bonus"]),
-	])
-	rook_btn.text = "Rook Vex" + (" ✓" if GameState.selected_character_id == CharacterDefs.ROOK_ID else "")
-	cinder_btn.text = "Sister Cinder" + (" ✓" if GameState.selected_character_id == CharacterDefs.CINDER_ID else "")
-	var mount := LoadoutStubs.default_mount(GameState.mount_unlock_tier)
-	var tank := LoadoutStubs.tank_entry()
-	loadout_label.text = "Loadout stubs → Armor: %s · Weapon: %s · Pet: %s · Mount: %s\nTank: %s (players locked; flag=%s)" % [
-		GameState.armor.get("set_name", "—") if not GameState.armor.is_empty() else LoadoutStubs.default_armor()["set_name"],
+		_perks.add_child(UiTheme.body_label("• %s — %s" % [p["name"], p["desc"]], 15))
+	for ch in _stats.get_children():
+		ch.queue_free()
+	_stat_bar("Speed", float(c["move_speed_mult"]), 0.85, 1.15)
+	_stat_bar("Damage", float(c["damage_mult"]), 0.85, 1.15)
+	_stat_bar("Health", 100.0 + float(c["max_hp_bonus"]), 90.0, 130.0)
+	_loadout.text = "Loadout: %s · %s · Pet: %s · Mount: %s" % [
 		LoadoutStubs.default_weapon()["name"],
+		LoadoutStubs.default_armor()["set_name"],
 		LoadoutStubs.default_pet()["name"],
-		mount["name"],
-		tank["name"],
-		str(GameState.tank_dev_flag),
+		LoadoutStubs.default_mount(GameState.mount_unlock_tier)["name"],
 	]
 
 
-func _on_rook_pressed() -> void:
-	GameState.selected_character_id = CharacterDefs.ROOK_ID
-	_refresh()
-
-
-func _on_cinder_pressed() -> void:
-	GameState.selected_character_id = CharacterDefs.CINDER_ID
-	_refresh()
-
-
-func _on_deploy_pressed() -> void:
-	GameState.go_match()
-
-
-func _on_back_pressed() -> void:
-	GameState.go_mode_select()
+func _stat_bar(label: String, v: float, lo: float, hi: float) -> void:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	var l := UiTheme.body_label(label, 15, UiTheme.TEXT_DIM)
+	l.custom_minimum_size = Vector2(80, 0)
+	h.add_child(l)
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 14)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = clampf((v - lo) / (hi - lo), 0.05, 1.0)
+	bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.AMBER, Color(0, 0, 0, 0), 4, 0, 0))
+	h.add_child(bar)
+	_stats.add_child(h)

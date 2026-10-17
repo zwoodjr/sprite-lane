@@ -1,33 +1,41 @@
-# Wanderer (Godot 4) — iPhone / Xogot first
+# Wanderer (Godot 4.3) — iPhone / Xogot first
 
-Endless top-down extraction MVP. Landscape. PC WASD/mouse still work.
+Solo top-down extraction shooter. Landscape. PC keyboard/mouse also works.
 
-## Controls (floating sticks)
+## Controls (phone)
 
-| Touch | Action |
+| Input | Action |
 |-------|--------|
-| Press + drag on **left half** | MOVE stick under finger |
-| Press + drag on **right half** | AIM stick under finger |
-| Lift | Stick hides / resets |
-| Hold **FIRE** | Shoot (auto-aim ON by default) |
-| EXTRACT / ABILITY / MOUNT | Fixed buttons |
-| PAUSE / AUTO-AIM / FILL | Top buttons |
+| Left thumb, anywhere on left half | MOVE (stick appears under your thumb and follows it) |
+| Right thumb, anywhere on right half | AIM — push past the inner ring to FIRE |
+| FIRE button | Shoot the nearest enemy (auto-aim) |
+| DASH | Burst + brief invincibility (dash through bullets) |
+| Gold ability button | Character ability (Rook: RUSH, Cinder: HEAL) |
+| RIDE | Hop on/off mount |
+| II (top-right) | Pause · How to play · Settings · Abandon run |
+| Stand on an open gold pad | Extract (ring fills in 1.5s) |
 
-No fixed stick wells — classic mobile twin-stick. Multi-touch OK; buttons still tappable.
+All buttons are true multi-touch (old Godot Buttons only saw the first finger).
+Settings: aim-stick firing, auto-aim, aim assist, stick size, left-handed, hints, sound, vibration, shake.
 
-Camera is zoomed in ~20% for tighter arcade readability.
+**PC:** WASD · mouse aim/click · Space or right-click dash · Q ability · F mount · R reload · E extract · Esc pause.
 
-## Fullscreen
+## What's in
 
-**Xogot Play chrome cannot be removed from game code.** The game fills the Play viewport; use any host fullscreen option in Xogot if present. In-game **FILL** only helps when the OS allows it.
+- First-run interactive tutorial (waits for you to actually move/shoot/dash); replay from Settings
+- How to Play pages (menu + pause)
+- 3 enemy types with visible wind-up warnings: raider, charger, brute
+- Juice: SFX, screen shake, hitstop, hit flashes, damage numbers, particles, recoil, muzzle flash, dash afterimages, low-HP vignette
+- HUD explains itself: phase card says what to do now; Threat badge shows the cost/reward
+- Save file (`user://wanderer_save.json`): settings, XP, extracts, best payout, unlocks
+- Endless chunk map with terrain variation, varied decor, extract beams + arrows + minimap
 
-## Content
+## Not in yet (waiting on design doc)
 
-- Endless chunk map · minimap + extract arrows · per-run extracts
-- **Rare** breakable drops (Speed / Damage / Shield / Heal)
-- Rook + Cinder; sprites (Dust Apothecary)
+Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, meta progression/shop.
 
-## Run on iPhone (Xogot)
+## Tools
 
-1. Sync branch `cursor/wanderer-godot-mvp-83de` — open `game/project.godot`.
-2. Play (landscape). Touch left to move, right to aim, hold FIRE.
+- `tools/test_runner.tscn` — headless bot playtest: `godot --headless --path game res://tools/test_runner.tscn`
+- `tools/screenshot.tscn` — renders every screen to PNG (needs a display / xvfb)
+- `tools/gen_sfx.py`, `tools/gen_sprites_v2.py` — regenerate original audio/art

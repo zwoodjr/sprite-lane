@@ -67,6 +67,11 @@ static func _table() -> Dictionary:
 				{"id": "second_glance", "name": "Second Glance", "desc": "Free crate ping each extract window."},
 			],
 			"equipment_unlocks": [], ## specialized gear hooks later
+			"ability": {
+				"id": "rattle_rush", "name": "Rattle Rush", "short": "RUSH",
+				"desc": "3s sprint burst + pings every crate within 90m.",
+				"cooldown": 14.0, "duration": 3.0, "speed_mult": 1.45,
+			},
 			"move_speed_mult": 1.06,
 			"max_hp_bonus": 0,
 			"damage_mult": 1.05,
@@ -92,6 +97,11 @@ static func _table() -> Dictionary:
 				{"id": "last_stitch", "name": "Last Stitch", "desc": "Once/run: survive a lethal hit at 1 HP."},
 			],
 			"equipment_unlocks": [],
+			"ability": {
+				"id": "field_draught", "name": "Field Draught", "short": "HEAL",
+				"desc": "Drink a tonic: +28 HP, then fire 25% faster for 3s.",
+				"cooldown": 12.0, "heal": 28.0,
+			},
 			"move_speed_mult": 0.98,
 			"max_hp_bonus": 15,
 			"damage_mult": 0.95,
