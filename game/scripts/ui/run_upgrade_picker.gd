@@ -53,7 +53,7 @@ func open(new_level: int, choices: Array) -> void:
 	_root.add_child(center)
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", UiTheme.box(Color(0.14, 0.1, 0.07, 0.96), UiTheme.AMBER, 20, 3, 22))
-	card.custom_minimum_size = Vector2(720, 0)
+	card.custom_minimum_size = Vector2(560, 0)
 	center.add_child(card)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
@@ -78,7 +78,7 @@ func open(new_level: int, choices: Array) -> void:
 func _choice_btn(upgrade: Dictionary) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(300, 120)
+	b.custom_minimum_size = Vector2(240, 120)
 	b.text = "%s\n%s" % [str(upgrade.get("name", "?")), str(upgrade.get("desc", ""))]
 	b.add_theme_font_size_override("font_size", 20)
 	b.add_theme_stylebox_override("normal", UiTheme.box(UiTheme.PANEL_LIGHT, UiTheme.TEAL, 16, 3))

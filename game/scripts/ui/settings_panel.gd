@@ -6,12 +6,14 @@ extends VBoxContainer
 signal changed
 
 const ROWS := [
-	{"key": "aim_autofire", "type": "toggle", "label": "Aim stick fires", "desc": "Push the right stick past the ring to shoot. Off = use the FIRE button only."},
-	{"key": "auto_aim", "type": "toggle", "label": "FIRE button auto-aims", "desc": "Holding FIRE shoots the nearest enemy."},
-	{"key": "aim_assist", "type": "slider", "label": "Aim assist", "desc": "How strongly stick aim bends toward enemies near your aim line.", "min": 0.0, "max": 1.0, "step": 0.1},
+	{"key": "twin_stick", "type": "toggle", "label": "Twin-stick aim", "desc": "Off (default): one move stick — run direction aims and auto-fires. On: classic left-move / right-aim sticks."},
+	{"key": "auto_fire", "type": "toggle", "label": "Auto-fire while moving", "desc": "Single-stick: shoot along your run direction. Off = hold FIRE to shoot."},
+	{"key": "aim_autofire", "type": "toggle", "label": "Aim stick fires", "desc": "Twin-stick only: push the right stick past the ring to shoot."},
+	{"key": "auto_aim", "type": "toggle", "label": "FIRE idle auto-aim", "desc": "Holding FIRE while standing still shoots the nearest enemy."},
+	{"key": "aim_assist", "type": "slider", "label": "Aim assist", "desc": "Twin-stick: how strongly stick aim bends toward enemies near your aim line.", "min": 0.0, "max": 1.0, "step": 0.1},
 	{"key": "stick_scale", "type": "slider", "label": "Stick size", "desc": "Bigger = finer control, more thumb travel.", "min": 0.75, "max": 1.4, "step": 0.05},
-	{"key": "left_handed", "type": "toggle", "label": "Left-handed layout", "desc": "Swap move/aim sides and mirror the buttons."},
-	{"key": "show_hints", "type": "toggle", "label": "Show hints", "desc": "Ghost sticks and rotating tips."},
+	{"key": "left_handed", "type": "toggle", "label": "Left-handed layout", "desc": "Mirror action buttons (and swap stick halves in twin-stick mode)."},
+	{"key": "show_hints", "type": "toggle", "label": "Show hints", "desc": "Ghost stick and rotating tips."},
 	{"key": "sfx", "type": "toggle", "label": "Sound effects", "desc": ""},
 	{"key": "haptics", "type": "toggle", "label": "Vibration", "desc": ""},
 	{"key": "screen_shake", "type": "toggle", "label": "Screen shake", "desc": ""},

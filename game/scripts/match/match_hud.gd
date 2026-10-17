@@ -291,27 +291,31 @@ func _layout() -> void:
 	_phase_card.reset_size()
 	var pcs := _phase_card.get_combined_minimum_size()
 	_phase_card.position = Vector2(vp.x * 0.5 - maxf(pcs.x, 340.0) * 0.5, m.position.y)
-	_phase_card.custom_minimum_size = Vector2(340, 0)
+	var phase_w := minf(vp.x - 48.0, 340.0)
+	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
 	## Right column: pause button sits at the very corner (touch layer), so
 	## the threat panel goes to its left and the minimap below.
 	var right := m.position.x + m.size.x
 	_threat_panel.reset_size()
 	var tps := _threat_panel.get_combined_minimum_size()
-	_threat_panel.custom_minimum_size = Vector2(170, 0)
-	_threat_panel.position = Vector2(right - maxf(tps.x, 170.0) - 74.0, m.position.y)
+	var threat_w := minf(170.0, vp.x * 0.28)
+	_threat_panel.custom_minimum_size = Vector2(threat_w, 0)
+	_threat_panel.position = Vector2(right - maxf(tps.x, threat_w) - 74.0, m.position.y)
+	var map_s := 120.0 if vp.y > vp.x else 150.0
 	if _minimap:
-		_minimap.size = Vector2(150, 150)
-		_minimap.position = Vector2(right - 150.0, m.position.y + 84.0)
+		_minimap.size = Vector2(map_s, map_s)
+		_minimap.position = Vector2(right - map_s, m.position.y + 84.0)
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)
 	_banner_sub.size = Vector2(vp.x, 30)
-	_toast_box.position = Vector2(vp.x * 0.5 - 260, m.position.y + 104)
-	_toast_box.size = Vector2(520, 120)
-	_extract_prompt.position = Vector2(0, vp.y * 0.62)
+	var toast_w := minf(520.0, vp.x - 40.0)
+	_toast_box.position = Vector2(vp.x * 0.5 - toast_w * 0.5, m.position.y + 104)
+	_toast_box.size = Vector2(toast_w, 120)
+	_extract_prompt.position = Vector2(0, vp.y * 0.58)
 	_extract_prompt.size = Vector2(vp.x, 34)
-	_hint_label.position = Vector2(vp.x * 0.25, m.position.y + m.size.y - 22)
-	_hint_label.size = Vector2(vp.x * 0.5, 20)
+	_hint_label.position = Vector2(vp.x * 0.1, m.position.y + m.size.y - 22)
+	_hint_label.size = Vector2(vp.x * 0.8, 20)
 
 
 func _open_pause() -> void:

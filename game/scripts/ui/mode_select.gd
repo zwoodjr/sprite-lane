@@ -1,23 +1,25 @@
 extends "res://scripts/ui/menu_base.gd"
 
 const ModeDefs = preload("res://scripts/data/mode_defs.gd")
+const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 
 var _cards: Dictionary = {}
 var _fast: Button
 
 
 func build(c: VBoxContainer) -> void:
+	var portrait := MobileLayout.is_portrait()
 	c.add_child(header("CHOOSE A RUN", GameState.go_main_menu))
-	c.add_child(UiTheme.body_label("Pick how long and how dangerous. Longer runs pay more per extract and give more chances to get greedy.", 16, UiTheme.TEXT_DIM))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
+	c.add_child(UiTheme.body_label("Pick how long and how dangerous. Longer runs pay more per extract and give more chances to get greedy.", 15 if portrait else 16, UiTheme.TEXT_DIM))
+	var row: BoxContainer = VBoxContainer.new() if portrait else HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14 if portrait else 20)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	c.add_child(row)
 	for mode in ModeDefs.all_modes():
-		row.add_child(_mode_card(mode))
+		row.add_child(_mode_card(mode, portrait))
 	## Locked tiers preview (designed, not built yet)
 	var locked := card(Color(0.3, 0.25, 0.2), Color(0.1, 0.08, 0.06, 0.7))
-	locked.custom_minimum_size = Vector2(190, 0)
+	locked.custom_minimum_size = Vector2(0 if portrait else 190, 120 if portrait else 0)
 	var lv := VBoxContainer.new()
 	lv.alignment = BoxContainer.ALIGNMENT_CENTER
 	locked.add_child(lv)
@@ -45,18 +47,20 @@ func build(c: VBoxContainer) -> void:
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(sp)
 	var next := UiTheme.big_button("CHOOSE CHARACTER ›", UiTheme.AMBER, 64, 22)
-	next.custom_minimum_size.x = 320
+	next.custom_minimum_size.x = 240 if portrait else 320
 	next.pressed.connect(GameState.go_character_select)
 	bottom.add_child(next)
 	_refresh()
 
 
-func _mode_card(mode: Dictionary) -> Control:
+func _mode_card(mode: Dictionary, portrait: bool = false) -> Control:
 	var id := str(mode["id"])
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if portrait:
+		b.custom_minimum_size = Vector2(0, 200)
 	b.pressed.connect(func() -> void:
 		GameState.selected_mode_id = id
 		GameState.save_profile()

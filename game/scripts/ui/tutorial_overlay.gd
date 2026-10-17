@@ -7,8 +7,8 @@ extends Control
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 
 const STEPS := [
-	{"id": "move", "text": "Put your LEFT thumb anywhere on the left side and drag to MOVE.", "target": "left"},
-	{"id": "shoot", "text": "Put your RIGHT thumb on the right side and drag to AIM. Push past the inner ring to SHOOT.", "target": "right"},
+	{"id": "move", "text": "Drag on the lower half of the screen to MOVE. The stick appears under your thumb.", "target": "left"},
+	{"id": "shoot", "text": "Keep moving — you aim and shoot in the direction you run. Hold FIRE while standing still to hit the nearest enemy.", "target": "left"},
 	{"id": "dash", "text": "Tap DASH to dodge. You're invincible for a split second — dash through bullets!", "target": "dash"},
 	{"id": "fight", "text": "A red wedge means an enemy is about to attack. Take one down!", "target": ""},
 	{"id": "nav", "text": "Gold arrows at the screen edge point to extract pads. They open when the top timer hits 0.", "target": "timer"},
@@ -46,7 +46,7 @@ func setup(hud: Node) -> void:
 	v.add_child(_counter)
 	_text = UiTheme.body_label("", 17)
 	_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_text.custom_minimum_size = Vector2(440, 0)
+	_text.custom_minimum_size = Vector2(320, 0)
 	v.add_child(_text)
 	_bar = ProgressBar.new()
 	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -149,18 +149,19 @@ func _draw() -> void:
 	var r := 70.0
 	match target:
 		"left":
-			pos = Vector2(vp.x * 0.16, vp.y * 0.70)
+			## Single-stick ghost lives bottom-center (matches touch_controls).
+			pos = Vector2(vp.x * 0.5, vp.y * 0.78)
 			r = 100.0
 		"right":
-			pos = Vector2(vp.x * 0.62, vp.y * 0.62)
+			pos = Vector2(vp.x * 0.72, vp.y * 0.72)
 			r = 100.0
 		"dash":
-			pos = m.position + Vector2(m.size.x - 222, m.size.y - 58)
+			pos = m.position + Vector2(m.size.x - 92, m.size.y - 96)
 			r = 58.0
 		"timer":
 			pos = Vector2(vp.x * 0.5, m.position.y + 40)
 			r = 70.0
-	if lh and target in ["left", "right", "dash"]:
+	if lh and target in ["right", "dash"]:
 		pos.x = vp.x - pos.x
 	var k := 0.5 + 0.5 * sin(_t * 5.0)
 	draw_arc(pos, r + k * 10.0, 0.0, TAU, 48, Color(1, 0.8, 0.35, 0.5 + 0.4 * k), 4.0, true)

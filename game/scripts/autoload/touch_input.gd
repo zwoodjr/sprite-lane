@@ -2,10 +2,10 @@ extends Node
 
 ## Shared touch / virtual-control state. Keyboard/mouse still work via InputMap.
 ##
-## Firing model (phone):
-##   - Push the AIM stick past AIM_FIRE_THRESHOLD → you aim AND fire (classic twin-stick).
-##   - Or hold the FIRE button → fires at the nearest enemy (auto-aim) without aiming.
-## Both can be turned off/on in Settings.
+## Default phone scheme (single stick / survivor):
+##   - One MOVE stick. While moving, aim + auto-fire along the move vector.
+##   - Idle: keep last facing; nearest-enemy auto-aim only as idle fallback / FIRE hold.
+## Optional twin_stick setting restores classic left-move / right-aim sticks.
 
 signal extract_pressed
 signal ability_pressed
@@ -14,6 +14,8 @@ signal pause_pressed
 signal dash_pressed
 
 const AIM_FIRE_THRESHOLD := 0.35
+## Move stick must push at least this hard to count as "running = aiming that way".
+const MOVE_FIRE_THRESHOLD := 0.18
 
 var move_vector: Vector2 = Vector2.ZERO
 var aim_vector: Vector2 = Vector2.ZERO
@@ -45,6 +47,14 @@ func _detect_touch_primary() -> bool:
 	if OS.has_feature("mobile") or OS.has_feature("ios") or OS.has_feature("android"):
 		return true
 	return DisplayServer.is_touchscreen_available()
+
+
+func is_single_stick() -> bool:
+	return not bool(GameState.settings.get("twin_stick", false))
+
+
+func is_auto_fire() -> bool:
+	return bool(GameState.settings.get("auto_fire", true))
 
 
 func set_move(v: Vector2) -> void:
@@ -137,11 +147,21 @@ func get_move() -> Vector2:
 	return move_vector
 
 
+## True when the move stick/keys are pushed hard enough to drive run-aim.
+func is_move_aiming() -> bool:
+	return get_move().length() >= MOVE_FIRE_THRESHOLD
+
+
 func is_firing() -> bool:
-	return fire_held or aim_stick_firing or Input.is_action_pressed("shoot")
+	if fire_held or aim_stick_firing or Input.is_action_pressed("shoot"):
+		return true
+	## Single-stick: auto-fire while running (aim = move direction).
+	if is_single_stick() and is_auto_fire() and is_move_aiming():
+		return true
+	return false
 
 
 ## True when the player is shooting via the FIRE button only (no stick aim),
-## which is when auto-aim should pick a target.
+## which is when idle auto-aim should pick a target.
 func is_button_firing() -> bool:
-	return fire_held and not aim_stick_firing
+	return fire_held and not aim_stick_firing and not is_move_aiming()

@@ -2,6 +2,12 @@ extends Camera2D
 
 ## Follow camera with look-ahead (toward aim when shooting, toward movement
 ## otherwise) plus screen-shake offset fed by Juice.
+##
+## FOV targets the survivor phone ref (docs/art-refs/fov-single-stick-ref.jpg):
+## portrait 720×1280, 48px player ≈ 1/13 of screen width → zoom ≈ 1.12.
+## (Ref character measured ~1/12.7 of image width.)
+
+const SURVIVOR_ZOOM := 1.12
 
 var shake_offset: Vector2 = Vector2.ZERO
 var _look: Vector2 = Vector2.ZERO
@@ -13,6 +19,7 @@ func set_target(t: Node2D) -> void:
 
 
 func _ready() -> void:
+	zoom = Vector2(SURVIVOR_ZOOM, SURVIVOR_ZOOM)
 	make_current()
 	_add_ambient_dust()
 
@@ -24,7 +31,7 @@ func _add_ambient_dust() -> void:
 	p.lifetime = 7.0
 	p.preprocess = 7.0
 	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	p.emission_rect_extents = Vector2(900, 500)
+	p.emission_rect_extents = Vector2(520, 900)
 	p.direction = Vector2(1, 0.15)
 	p.spread = 12.0
 	p.gravity = Vector2.ZERO
@@ -49,10 +56,12 @@ func _process(delta: float) -> void:
 	var want := Vector2.ZERO
 	if _target and is_instance_valid(_target):
 		var aim := TouchInput.aim_vector
-		if aim.length() > 0.01:
-			want = aim * 90.0
+		## Pulled-out survivor FOV — lighter look-ahead so the battlefield stays readable.
+		var look_scale := 55.0 if TouchInput.is_single_stick() else 90.0
+		if aim.length() > 0.01 and not TouchInput.is_single_stick():
+			want = aim * look_scale
 		else:
 			var v: Vector2 = _target.get("velocity") if "velocity" in _target else Vector2.ZERO
-			want = v.limit_length(300.0) * 0.22
+			want = v.limit_length(280.0) * (0.16 if TouchInput.is_single_stick() else 0.22)
 	_look = _look.lerp(want, clampf(delta * 3.5, 0.0, 1.0))
 	offset = _look + shake_offset

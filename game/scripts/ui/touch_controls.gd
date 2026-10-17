@@ -1,10 +1,10 @@
 extends CanvasLayer
 
 ## Phone controls. All touches are routed here (true multi-touch):
-##   1. A touch that lands on a round action button → that button.
-##   2. Otherwise left half → floating MOVE stick, right half → floating AIM stick.
-##      Pushing the AIM stick past ~⅓ also fires (classic twin-stick).
-## Left-handed mode mirrors halves and the button cluster.
+##   Default (single stick): one floating MOVE stick (bottom zone / under thumb).
+##     Run direction = aim + auto-fire. FIRE hold still works while idle.
+##   Optional twin_stick: left half MOVE, right half AIM (push past ~⅓ to fire).
+## Left-handed mode mirrors the button cluster (and stick halves in twin mode).
 
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const ActionButton = preload("res://scripts/ui/action_button.gd")
@@ -13,6 +13,8 @@ const BASE_STICK_RADIUS := 92.0
 const KNOB_RADIUS := 38.0
 const MOVE_DEADZONE := 0.08
 const AIM_DEADZONE := 0.12
+## Single-stick: ignore stick starts in the top HUD band.
+const SINGLE_STICK_TOP_FRAC := 0.32
 
 @onready var root: Control = $Root
 @onready var stick_draw: Control = $Root/StickDraw
@@ -38,6 +40,7 @@ var _aim_active: bool = false
 var _aim_vec: Vector2 = Vector2.ZERO
 
 var _left_handed: bool = false
+var _twin: bool = false
 var _idle_t: float = 0.0
 var _player: Node = null
 
@@ -50,9 +53,10 @@ func _ready() -> void:
 	stick_draw.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	stick_draw.set("host", self)
 	_left_handed = bool(GameState.settings.get("left_handed", false))
+	_twin = bool(GameState.settings.get("twin_stick", false))
 	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
 
-	btn_fire = _make_button("FIRE", "auto-aim", 64.0, UiTheme.RUST)
+	btn_fire = _make_button("FIRE", "hold", 56.0, UiTheme.RUST)
 	btn_dash = _make_button("DASH", "", 46.0, UiTheme.TEAL)
 	btn_ability = _make_button("ABILITY", "", 46.0, UiTheme.AMBER)
 	btn_mount = _make_button("MOUNT", "", 36.0, Color(0.6, 0.6, 0.75))
@@ -99,11 +103,12 @@ func _layout() -> void:
 	root.offset_bottom = -(win.y - (m.position.y + m.size.y))
 	var w := m.size.x
 	var h := m.size.y
-	## Offsets from bottom-right corner (mirrored when left-handed).
-	_place(btn_fire, Vector2(w - 92, h - 96))
-	_place(btn_dash, Vector2(w - 222, h - 58))
-	_place(btn_ability, Vector2(w - 206, h - 182))
-	_place(btn_mount, Vector2(w - 70, h - 226))
+	## Portrait-friendly cluster: bottom-right (mirrored when left-handed).
+	## FIRE stays available for idle hold; smaller so it doesn't crowd DASH/ABILITY.
+	_place(btn_fire, Vector2(w - 78, h - 210))
+	_place(btn_dash, Vector2(w - 92, h - 96))
+	_place(btn_ability, Vector2(w - 200, h - 78))
+	_place(btn_mount, Vector2(w - 188, h - 188))
 	_place(btn_pause, Vector2(w - 34, 36), false)
 
 
@@ -149,6 +154,29 @@ func _begin_touch(index: int, pos: Vector2) -> bool:
 		return true
 	if not TouchInput.touch_primary:
 		return false  ## desktop mouse emulation: don't spawn sticks
+
+	if _twin:
+		return _begin_twin(index, pos)
+	return _begin_single(index, pos)
+
+
+func _begin_single(index: int, pos: Vector2) -> bool:
+	var vp := get_viewport().get_visible_rect().size
+	## Keep top HUD clear; stick lives in the lower play field (survivor-style).
+	if pos.y < vp.y * SINGLE_STICK_TOP_FRAC:
+		return false
+	if _move_id >= 0:
+		return false
+	_move_id = index
+	_move_origin = pos
+	_move_knob = pos
+	_move_active = true
+	TouchInput.set_move(Vector2.ZERO)
+	stick_draw.queue_redraw()
+	return true
+
+
+func _begin_twin(index: int, pos: Vector2) -> bool:
 	var half := get_viewport().get_visible_rect().size.x * 0.5
 	var on_move_side := pos.x < half
 	if _left_handed:
@@ -253,7 +281,10 @@ func _process(delta: float) -> void:
 		var mount_ok: bool = bool(_player.call("can_mount"))
 		btn_mount.set("disabled", not mount_ok)
 		btn_mount.set("label_text", "RIDE" if not _player.call("is_mounted") else "HOP OFF")
-		btn_fire.set("sub_text", "auto-aim" if GameState.settings.get("auto_aim", true) else "")
+		if _twin:
+			btn_fire.set("sub_text", "auto-aim" if GameState.settings.get("auto_aim", true) else "")
+		else:
+			btn_fire.set("sub_text", "idle" if GameState.settings.get("auto_fire", true) else "hold")
 	if not _move_active and not _aim_active:
 		stick_draw.queue_redraw()
 
@@ -266,22 +297,26 @@ func paint_sticks(c: Control) -> void:
 	if _move_active:
 		_paint_one(c, _move_origin - o, _move_knob - o, move_tint, 0.95)
 	elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
-		_paint_ghost(c, _ghost_pos(true) - o, move_tint, "MOVE")
-	if _aim_active:
-		var firing := TouchInput.aim_stick_firing
-		_paint_one(c, _aim_origin - o, _aim_knob - o, aim_tint, 0.95)
-		## Fire threshold ring — shows how far to push to start shooting.
-		if GameState.settings.get("aim_autofire", true):
-			var ring_r := stick_radius * TouchInput.AIM_FIRE_THRESHOLD
-			c.draw_arc(_aim_origin - o, ring_r, 0.0, TAU, 40, Color(1, 0.4, 0.2, 0.9 if firing else 0.35), 2.0, true)
-	elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
-		_paint_ghost(c, _ghost_pos(false) - o, aim_tint, "AIM + SHOOT" if GameState.settings.get("aim_autofire", true) else "AIM")
+		var ghost := "MOVE · AIM" if not _twin else "MOVE"
+		_paint_ghost(c, _ghost_pos(true) - o, move_tint, ghost)
+	if _twin:
+		if _aim_active:
+			var firing := TouchInput.aim_stick_firing
+			_paint_one(c, _aim_origin - o, _aim_knob - o, aim_tint, 0.95)
+			if GameState.settings.get("aim_autofire", true):
+				var ring_r := stick_radius * TouchInput.AIM_FIRE_THRESHOLD
+				c.draw_arc(_aim_origin - o, ring_r, 0.0, TAU, 40, Color(1, 0.4, 0.2, 0.9 if firing else 0.35), 2.0, true)
+		elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
+			_paint_ghost(c, _ghost_pos(false) - o, aim_tint, "AIM + SHOOT" if GameState.settings.get("aim_autofire", true) else "AIM")
 
 
 func _ghost_pos(move_side: bool) -> Vector2:
 	var vp := c_vp()
-	var left := Vector2(vp.x * 0.16, vp.y * 0.70)
-	var right := Vector2(vp.x * 0.62, vp.y * 0.62)
+	if not _twin:
+		## Single stick: bottom-center, like the survivor ref.
+		return Vector2(vp.x * 0.5, vp.y * 0.78)
+	var left := Vector2(vp.x * 0.22, vp.y * 0.72)
+	var right := Vector2(vp.x * 0.72, vp.y * 0.72)
 	if _left_handed:
 		left.x = vp.x - left.x
 		right.x = vp.x - right.x

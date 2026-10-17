@@ -46,6 +46,9 @@ var settings: Dictionary = {
 	"sfx": true,
 	"haptics": true,
 	"screen_shake": true,
+	## Default: survivor single move-stick. twin_stick restores classic dual sticks.
+	"twin_stick": false,
+	"auto_fire": true,
 	"auto_aim": true,
 	"aim_autofire": true,
 	"aim_assist": 0.6,

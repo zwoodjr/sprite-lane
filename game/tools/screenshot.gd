@@ -56,18 +56,19 @@ func _run() -> void:
 	for f in range(60):
 		await get_tree().process_frame
 	await _snap("06_match_start_tutorial")
-	## Simulate thumbs on both sticks so they render
+	## Simulate single move stick (run = aim); twin optional
 	var vp := get_viewport().get_visible_rect().size
 	if tc:
-		tc.call("_begin_touch", 0, Vector2(vp.x * 0.15, vp.y * 0.7))
-		tc.call("_drag_touch", 0, Vector2(vp.x * 0.15 + 60, vp.y * 0.7 - 30))
-		tc.call("_begin_touch", 1, Vector2(vp.x * 0.62, vp.y * 0.55))
-		tc.call("_drag_touch", 1, Vector2(vp.x * 0.62 + 70, vp.y * 0.55 - 10))
+		tc.call("_begin_touch", 0, Vector2(vp.x * 0.5, vp.y * 0.78))
+		tc.call("_drag_touch", 0, Vector2(vp.x * 0.5 + 60, vp.y * 0.78 - 40))
+		if bool(GameState.settings.get("twin_stick", false)):
+			tc.call("_begin_touch", 1, Vector2(vp.x * 0.72, vp.y * 0.72))
+			tc.call("_drag_touch", 1, Vector2(vp.x * 0.72 + 70, vp.y * 0.72 - 10))
 	for f in range(240):
 		var en := get_tree().get_nodes_in_group("enemies")
 		if en.size() > 0 and tc:
 			var d := ((en[0] as Node2D).global_position - player.global_position).normalized()
-			tc.call("_drag_touch", 1, Vector2(vp.x * 0.62, vp.y * 0.55) + d * 70.0)
+			tc.call("_drag_touch", 0, Vector2(vp.x * 0.5, vp.y * 0.78) + d * 70.0)
 		await get_tree().process_frame
 	await _snap("07_match_combat")
 	## Hurt the player to show low-HP vignette and jump to an open window

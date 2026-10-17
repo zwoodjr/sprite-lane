@@ -64,13 +64,14 @@ func _run() -> void:
 			var dt := get_process_delta_time()
 			t += dt
 			frames += 1
-			## Bot: circle-strafe, aim at nearest enemy via stick, dash every ~2s.
-			TouchInput.set_move(Vector2(cos(t * 0.7), sin(t * 0.9)).normalized())
-			var target := Vector2.RIGHT
+			## Bot: circle-strafe; single-stick run-aim toward nearest enemy.
+			var target := Vector2(cos(t * 0.7), sin(t * 0.9)).normalized()
 			var en := get_tree().get_nodes_in_group("enemies")
 			if en.size() > 0 and is_instance_valid(player):
 				target = ((en[0] as Node2D).global_position - player.global_position).normalized()
-			TouchInput.set_aim(target * 0.9)
+			TouchInput.set_move(target)
+			if bool(GameState.settings.get("twin_stick", false)):
+				TouchInput.set_aim(target * 0.9)
 			if frames % 120 == 0:
 				TouchInput.pulse_dash()
 			if frames % 400 == 0:

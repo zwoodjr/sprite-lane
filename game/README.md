@@ -1,28 +1,30 @@
 # Wanderer (Godot 4.3) — iPhone / Xogot first
 
-Solo top-down extraction shooter. Landscape. PC keyboard/mouse also works.
+Solo top-down extraction shooter. **Portrait** (survivor FOV). PC keyboard/mouse also works.
 
 ## Controls (phone)
 
 | Input | Action |
 |-------|--------|
-| Left thumb, anywhere on left half | MOVE (stick appears under your thumb and follows it) |
-| Right thumb, anywhere on right half | AIM — push past the inner ring to FIRE |
-| FIRE button | Shoot the nearest enemy (auto-aim) |
+| Thumb on lower half | MOVE (stick under thumb). **Aim + auto-fire follow run direction** |
+| FIRE (hold) | While idle: shoot nearest enemy |
 | DASH | Burst + brief invincibility (dash through bullets) |
 | Gold ability button | Character ability (Rook: RUSH, Cinder: HEAL) |
 | RIDE | Hop on/off mount |
 | II (top-right) | Pause · How to play · Settings · Abandon run |
 | Stand on an open gold pad | Extract (ring fills in 1.5s) |
 
-All buttons are true multi-touch (old Godot Buttons only saw the first finger).
-Settings: aim-stick firing, auto-aim, aim assist, stick size, left-handed, hints, sound, vibration, shake.
+All buttons are true multi-touch. Settings: twin-stick (optional restore), auto-fire while moving, idle auto-aim, aim assist, stick size, left-handed, hints, sound, vibration, shake.
 
-**PC:** WASD · mouse aim/click · Space or right-click dash · Q ability · F mount · R reload · E extract · Esc pause.
+**PC:** WASD move (run = aim + auto-fire) · mouse aim/click while idle · Space or right-click dash · Q ability · F mount · R reload · E extract · Esc pause.
+
+## Camera / FOV
+
+Portrait **720×1280**, orthographic camera zoom **1.12** so the 48px player reads ~**1/13 of screen width** — matched to `docs/art-refs/fov-single-stick-ref.jpg` battlefield scale.
 
 ## What's in
 
-- First-run interactive tutorial (waits for you to actually move/shoot/dash); replay from Settings
+- First-run interactive tutorial (move → run-and-shoot → dash); replay from Settings
 - How to Play pages (menu + pause)
 - 3 enemy types with visible wind-up warnings: raider, charger, brute
 - Juice: SFX, screen shake, hitstop, hit flashes, damage numbers, particles, recoil, muzzle flash, dash afterimages, low-HP vignette

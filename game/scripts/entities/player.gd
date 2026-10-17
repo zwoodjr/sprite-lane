@@ -230,7 +230,11 @@ func _update_aim_and_fire(_delta: float) -> void:
 	gun.rotation = lerp_angle(gun.rotation, _last_aim.angle(), 0.55)
 	body.flip_h = _last_aim.x < 0.0
 	gun.z_index = -1 if _last_aim.y < -0.3 else 1
-	_aim_line.visible = TouchInput.aim_vector.length() > 0.01
+	## Show aim guide while twin-stick aiming, or while single-stick run-firing.
+	var show_guide := TouchInput.aim_vector.length() > 0.01
+	if TouchInput.is_single_stick() and TouchInput.is_move_aiming() and TouchInput.is_auto_fire():
+		show_guide = true
+	_aim_line.visible = show_guide
 	if TouchInput.is_firing() and _reload_left <= 0.0 and _dash_left <= 0.0:
 		_try_shoot()
 	if Input.is_action_just_pressed("reload") and _ammo < _mag_size() and _reload_left <= 0.0:
@@ -461,19 +465,42 @@ func _try_ability() -> void:
 ## Aiming & shooting
 
 func _aim_direction() -> Vector2:
+	## Single-stick survivor: run direction IS aim + fire vector (primary).
+	if TouchInput.is_single_stick():
+		var move := TouchInput.get_move()
+		if move.length() >= TouchInput.MOVE_FIRE_THRESHOLD:
+			return move.normalized()
+		## Idle: keep last facing after you stop. Nearest-enemy only when
+		## holding FIRE (or at spawn with no facing yet).
+		if TouchInput.is_button_firing() and GameState.settings.get("auto_aim", true):
+			var nearest := _nearest_enemy_dir(720.0)
+			if nearest.length() > 0.01:
+				return nearest
+		if _last_aim.length() < 0.01 and GameState.settings.get("auto_aim", true):
+			var spawn_aim := _nearest_enemy_dir(720.0)
+			if spawn_aim.length() > 0.01:
+				return spawn_aim
+		## Desktop: mouse aim while idle + clicking
+		if not TouchInput.touch_primary and TouchInput.is_firing():
+			var to_mouse := get_global_mouse_position() - global_position
+			if to_mouse.length() > 1.0:
+				return to_mouse.normalized()
+		return _last_aim
+
+	## Twin-stick / legacy:
 	## 1) Aim stick (with optional assist toward enemies near the aim line)
 	if TouchInput.aim_vector.length() > 0.01:
 		return _assisted(TouchInput.aim_vector)
 	## 2) FIRE button → nearest enemy
 	if TouchInput.is_button_firing() and GameState.settings.get("auto_aim", true):
-		var nearest := _nearest_enemy_dir(560.0)
-		if nearest.length() > 0.01:
-			return nearest
+		var nearest2 := _nearest_enemy_dir(720.0)
+		if nearest2.length() > 0.01:
+			return nearest2
 	## 3) Desktop mouse
 	if not TouchInput.touch_primary:
-		var to_mouse := get_global_mouse_position() - global_position
-		if to_mouse.length() > 1.0:
-			return to_mouse.normalized()
+		var to_mouse2 := get_global_mouse_position() - global_position
+		if to_mouse2.length() > 1.0:
+			return to_mouse2.normalized()
 	## 4) Otherwise face where you're moving
 	if velocity.length() > 30.0 and not TouchInput.is_firing():
 		return velocity.normalized()

@@ -1,55 +1,67 @@
 extends "res://scripts/ui/menu_base.gd"
 
+const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
+
 
 func build(c: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
+	var portrait := MobileLayout.is_portrait()
+	var row: BoxContainer
+	if portrait:
+		row = VBoxContainer.new()
+	else:
+		row = HBoxContainer.new()
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 36)
+	row.add_theme_constant_override("separation", 24 if portrait else 36)
 	c.add_child(row)
 
-	## Left: title + actions
+	## Title + actions
 	var left := VBoxContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.add_theme_constant_override("separation", 12)
 	row.add_child(left)
-	left.add_child(spacer())
-	var title := UiTheme.title_label("WANDERER", 84)
+	if not portrait:
+		left.add_child(spacer())
+	var title := UiTheme.title_label("WANDERER", 72 if portrait else 84)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	left.add_child(title)
-	var tag := UiTheme.body_label("Drop in. Grab what you can. Get out before the dust takes you.", 19, UiTheme.TEXT)
+	var tag := UiTheme.body_label("Drop in. Grab what you can. Get out before the dust takes you.", 17 if portrait else 19, UiTheme.TEXT)
 	left.add_child(tag)
-	left.add_child(spacer(false, 10))
+	left.add_child(spacer(false, 8))
 	var first := not GameState.tutorial_done
 	var play := UiTheme.big_button("PLAY" if not first else "PLAY  ·  tutorial on", UiTheme.AMBER, 84, 32)
-	play.custom_minimum_size.x = 380
-	play.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	play.custom_minimum_size.x = 280 if portrait else 380
+	play.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if not portrait else Control.SIZE_EXPAND_FILL
 	play.pressed.connect(GameState.go_mode_select)
 	left.add_child(play)
 	_pulse(play)
 	var sub := HBoxContainer.new()
-	sub.add_theme_constant_override("separation", 12)
+	sub.add_theme_constant_override("separation", 10)
 	left.add_child(sub)
-	var hangar := UiTheme.big_button("HANGAR", UiTheme.TEAL, 60, 19)
+	var hangar := UiTheme.big_button("HANGAR", UiTheme.TEAL, 56, 18)
 	hangar.pressed.connect(GameState.go_hangar)
 	sub.add_child(hangar)
-	var how := UiTheme.big_button("HOW TO PLAY", UiTheme.LINE, 60, 19)
+	var how := UiTheme.big_button("HOW TO PLAY", UiTheme.LINE, 56, 18)
 	how.pressed.connect(GameState.go_how_to_play)
 	sub.add_child(how)
-	var set_b := UiTheme.big_button("SETTINGS", UiTheme.LINE, 60, 19)
+	var set_b := UiTheme.big_button("SETTINGS", UiTheme.LINE, 56, 18)
 	set_b.pressed.connect(GameState.go_settings)
 	sub.add_child(set_b)
 	if not OS.has_feature("mobile"):
-		var quit := UiTheme.big_button("QUIT", UiTheme.LINE, 60, 19)
-		quit.custom_minimum_size.x = 110
+		var quit := UiTheme.big_button("QUIT", UiTheme.LINE, 56, 18)
+		quit.custom_minimum_size.x = 100
 		quit.pressed.connect(func() -> void: get_tree().quit())
 		sub.add_child(quit)
-	left.add_child(spacer())
+	if not portrait:
+		left.add_child(spacer())
 
-	## Right: progression card
+	## Progression card
 	var right := VBoxContainer.new()
-	right.custom_minimum_size = Vector2(320, 0)
+	if not portrait:
+		right.custom_minimum_size = Vector2(320, 0)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(right)
-	right.add_child(spacer())
+	if not portrait:
+		right.add_child(spacer())
 	var pc := card(UiTheme.LINE, Color(0.1, 0.075, 0.055, 0.86))
 	right.add_child(pc)
 	var pv := VBoxContainer.new()
@@ -57,10 +69,8 @@ func build(c: VBoxContainer) -> void:
 	pc.add_child(pv)
 	pv.add_child(UiTheme.body_label("YOUR WANDERER", 14, UiTheme.AMBER))
 
-	## Scrap — primary meta currency
 	_stat(pv, "Banked scrap", str(GameState.account_scrap))
 
-	## Soft account prestige bar
 	var ab: Dictionary = GameState.account_bar_state()
 	_stat(pv, "Account level", "Lv %d (prestige)" % int(ab["level"]))
 	var xp_row := VBoxContainer.new()
@@ -83,7 +93,6 @@ func build(c: VBoxContainer) -> void:
 	_stat(pv, "Successful extracts", str(GameState.successful_extracts))
 	_stat(pv, "Best payout", "%d scrap" % GameState.best_payout)
 
-	## Meta ranks summary
 	var ranks: PackedStringArray = PackedStringArray()
 	for id in GameState.meta_upgrades.keys():
 		ranks.append("%s %d" % [str(id).replace("_", " "), int(GameState.meta_upgrades[id])])
@@ -99,7 +108,8 @@ func build(c: VBoxContainer) -> void:
 			"Scooter unlocks after %d more extract(s)." % maxi(0, 3 - GameState.successful_extracts),
 			12, UiTheme.TEXT_DIM
 		))
-	right.add_child(spacer())
+	if not portrait:
+		right.add_child(spacer())
 
 
 func _stat(parent: Control, k: String, v: String) -> void:

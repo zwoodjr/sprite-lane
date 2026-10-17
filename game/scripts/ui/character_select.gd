@@ -2,6 +2,7 @@ extends "res://scripts/ui/menu_base.gd"
 
 const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
+const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 
 var _tabs: Dictionary = {}
 var _portrait: TextureRect
@@ -14,6 +15,7 @@ var _loadout: Label
 
 
 func build(c: VBoxContainer) -> void:
+	var portrait := MobileLayout.is_portrait()
 	c.add_child(header("CHOOSE YOUR WANDERER", GameState.go_mode_select))
 
 	## Roster strip: playable + locked silhouettes
@@ -23,33 +25,34 @@ func build(c: VBoxContainer) -> void:
 	for id in CharacterDefs.all_known_ids():
 		strip.add_child(_roster_tile(id))
 
-	var row := HBoxContainer.new()
+	var row: BoxContainer = VBoxContainer.new() if portrait else HBoxContainer.new()
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 18)
+	row.add_theme_constant_override("separation", 14 if portrait else 18)
 	c.add_child(row)
 
 	## Portrait card
 	var pc := card(UiTheme.LINE)
-	pc.custom_minimum_size = Vector2(250, 0)
+	pc.custom_minimum_size = Vector2(0 if portrait else 250, 0)
 	row.add_child(pc)
 	var pv := VBoxContainer.new()
 	pv.alignment = BoxContainer.ALIGNMENT_CENTER
 	pc.add_child(pv)
 	_portrait = TextureRect.new()
-	_portrait.custom_minimum_size = Vector2(200, 200)
+	_portrait.custom_minimum_size = Vector2(140 if portrait else 200, 140 if portrait else 200)
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	pv.add_child(_portrait)
-	_name = UiTheme.title_label("", 28)
+	_name = UiTheme.title_label("", 26 if portrait else 28)
 	pv.add_child(_name)
-	_fantasy = UiTheme.body_label("", 14, UiTheme.TEXT_DIM)
+	_fantasy = UiTheme.body_label("", 13 if portrait else 14, UiTheme.TEXT_DIM)
 	_fantasy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pv.add_child(_fantasy)
 
 	## Details
 	var dc := card(UiTheme.LINE)
 	dc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_child(dc)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -76,7 +79,7 @@ func build(c: VBoxContainer) -> void:
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(sp)
 	var deploy := UiTheme.big_button("DEPLOY ›", UiTheme.AMBER, 70, 28)
-	deploy.custom_minimum_size.x = 300
+	deploy.custom_minimum_size.x = 240 if MobileLayout.is_portrait() else 300
 	deploy.pressed.connect(GameState.go_match)
 	bottom.add_child(deploy)
 	_refresh()
