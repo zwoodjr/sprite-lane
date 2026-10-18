@@ -15,9 +15,11 @@ const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const ModeDefs = preload("res://scripts/data/mode_defs.gd")
 const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
 const Progression = preload("res://scripts/data/progression.gd")
+const PetDefs = preload("res://scripts/data/pet_defs.gd")
 
 var selected_mode_id: String = ModeDefs.EASY_ID
 var selected_character_id: String = CharacterDefs.ROOK_ID
+var selected_pet_id: String = PetDefs.NOEL_ID
 
 ## Dev-only: compress phase timers for quick playtests (default off).
 var fast_timers: bool = false
@@ -134,6 +136,7 @@ func save_profile() -> void:
 		"total_runs": total_runs,
 		"selected_mode_id": selected_mode_id,
 		"selected_character_id": selected_character_id,
+		"selected_pet_id": selected_pet_id,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -179,6 +182,9 @@ func load_profile() -> void:
 	var char_id := str(d.get("selected_character_id", selected_character_id))
 	if CharacterDefs.is_playable(char_id):
 		selected_character_id = char_id
+	var pet_id := str(d.get("selected_pet_id", selected_pet_id))
+	if PetDefs.is_equipable(pet_id):
+		selected_pet_id = pet_id
 
 
 func _sync_account_level() -> void:
@@ -244,7 +250,7 @@ func get_character() -> Dictionary:
 func reset_loadout_to_defaults() -> void:
 	armor = LoadoutStubs.default_armor()
 	weapon = LoadoutStubs.default_weapon()
-	pet = LoadoutStubs.default_pet()
+	pet = LoadoutStubs.default_pet(selected_pet_id)
 	mount = LoadoutStubs.default_mount(mount_unlock_tier)
 	insured_slots.clear()
 	var slots: int = int(get_mode().get("insurance_slots", 2)) + insurance_bonus_slots()

@@ -11,6 +11,10 @@ Tuned for portrait survivor FOV (camera zoom ~1.12, player ~1/12–1/15
 screen width). Heroes authored at 96×96 so limbs have room; in-match
 scale keeps ~48px footprint via player.gd.
 
+Detail bar: match the approved 64×64 dog-face pixelation density —
+deliberate chunky blocks, clean thick outlines, no thumb blobs, no
+uncanny face detail. Pets (Noel) authored at 64×64 with the same craft.
+
 Run from repo root or game/:
   python3 game/tools/gen_sprites.py
 """
@@ -24,6 +28,7 @@ from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / "assets" / "sprites"
 HERO_SIZE = 96  # room for arm/leg gaps; FOV scale handles on-screen size
+PET_SIZE = 64   # native 64×64 detail target (Noel face density)
 
 # Palette — Dust Apothecary
 INK = (18, 14, 12, 255)
@@ -265,8 +270,15 @@ def make_rook() -> Image.Image:
         fill_rect(p, 18, 0, 22, 3, hair_lt, w, h)
         fill_rect(p, 26, 0, 30, 3, hair, w, h)
         fill_rect(p, 34, 0, 38, 3, hair_lt, w, h)
-        # 2-dot eyes on clear skin
+        # 2-dot eyes on clear skin (64px-density: clean dots, no face noise)
         eyes_dots(p, 16, 35, 26, w, h, INK, size=3)
+        # cheek shade + ear tip (64×64 craft density without uncanny features)
+        fill_rect(p, 10, 32, 14, 36, SKIN_DK, w, h)
+        fill_rect(p, 39, 32, 43, 36, SKIN_DK, w, h)
+        px(p, 18, 30, SKIN_LT, w, h)
+        px(p, 37, 30, SKIN_LT, w, h)
+        # scarf knot pixel + vial glint on belt buckle shadow
+        fill_rect(p, 22, 38, 30, 42, scarf, w, h)
 
     # Layout (air gaps intentional — anti-thumb):
     #   head ~x22-74  torso ~x34-62  legs 28/54  arms 10 / 62+gun
@@ -389,6 +401,10 @@ def make_cinder() -> Image.Image:
         fill_rect(p, 4, 12, 10, 28, hair, w, h)
         fill_rect(p, 45, 12, 51, 28, hair, w, h)
         eyes_dots(p, 17, 37, 26, w, h, INK, size=3)
+        fill_rect(p, 11, 32, 15, 36, SKIN_DK, w, h)
+        fill_rect(p, 42, 32, 46, 36, SKIN_DK, w, h)
+        px(p, 19, 30, SKIN_LT, w, h)
+        px(p, 39, 30, SKIN_LT, w, h)
 
     _stamp(img, _outlined_part(16, 20, paint_leg), 26, 66)
     _stamp(img, _outlined_part(16, 20, paint_leg), 54, 66)
@@ -397,6 +413,165 @@ def make_cinder() -> Image.Image:
     _stamp(img, _outlined_part(30, 28, paint_torso), 33, 44)
     _stamp(img, _outlined_part(56, 46, paint_head), 20, 4)
 
+    return img
+
+
+# ---------------------------------------------------------------------------
+# Pets — Noel (64×64, face markings from approved pixelate/face_pixel_64)
+# ---------------------------------------------------------------------------
+
+# Noel fur palette (cream fluff + dark eye-mask + black nose — Dust Apothecary)
+NOEL_CREAM = (232, 224, 210, 255)
+NOEL_CREAM_LT = (246, 240, 230, 255)
+NOEL_CREAM_DK = (198, 186, 168, 255)
+NOEL_TAN = (188, 168, 140, 255)
+NOEL_MASK = (42, 34, 32, 255)
+NOEL_MASK_LT = (68, 56, 52, 255)
+NOEL_NOSE = (22, 16, 14, 255)
+NOEL_COLLAR = (156, 72, 42, 255)
+NOEL_TAG = (220, 180, 70, 255)
+
+
+def make_noel(rampage: bool = False) -> Image.Image:
+    """Noel — territorial fluff-mask terrier OC.
+
+    Face grammar from approved 64×64 dog pixelation: cream curly mass,
+    dark patch around eyes, big black nose, light muzzle. Body is chibi
+    with separated head / torso / legs / tail (anti-thumb).
+    """
+    S = PET_SIZE
+    img = new(S, S)
+    drop_shadow(img, 32, 58, 16, 4, 90)
+
+    fur = NOEL_CREAM
+    fur_lt = NOEL_CREAM_LT
+    fur_dk = NOEL_CREAM_DK
+    if rampage:
+        ## Rust-tinted enrage tint on the cream (readable rampage state).
+        fur = (236, 190, 170, 255)
+        fur_lt = (250, 214, 196, 255)
+        fur_dk = (190, 130, 110, 255)
+
+    def paint_leg(p, w, h):
+        fill_rect(p, 1, 0, 7, 10, fur_dk, w, h)
+        fill_rect(p, 1, 0, 7, 3, fur, w, h)
+        fill_rect(p, 0, 8, 8, 12, NOEL_MASK, w, h)
+        fill_rect(p, 0, 8, 8, 9, NOEL_MASK_LT, w, h)
+
+    def paint_tail(p, w, h):
+        ## Fluffy curl up and right
+        fill_rect(p, 2, 6, 10, 14, fur, w, h)
+        fill_rect(p, 4, 2, 12, 10, fur_lt, w, h)
+        fill_rect(p, 6, 0, 13, 5, fur, w, h)
+        fill_rect(p, 8, 0, 13, 2, fur_lt, w, h)
+        fill_rect(p, 2, 10, 6, 14, fur_dk, w, h)
+
+    def paint_body(p, w, h):
+        fill_ellipse(p, 2, 2, 25, 22, fur, w, h)
+        fill_ellipse(p, 4, 4, 23, 14, fur_lt, w, h)
+        fill_ellipse(p, 4, 14, 23, 22, fur_dk, w, h)
+        ## curly fluff bumps (64px density)
+        for cx, cy in ((4, 6), (8, 3), (14, 2), (20, 4), (24, 8), (6, 16), (22, 16)):
+            fill_rect(p, cx, cy, cx + 2, cy + 2, fur_lt, w, h)
+        ## collar + gold tag
+        fill_rect(p, 6, 16, 21, 20, NOEL_COLLAR if not rampage else RUST, w, h)
+        fill_rect(p, 6, 16, 21, 17, shade(NOEL_COLLAR if not rampage else RUST, 1.2), w, h)
+        fill_rect(p, 12, 18, 16, 23, NOEL_TAG, w, h)
+        fill_rect(p, 13, 19, 15, 21, AMBER_LT, w, h)
+
+    def paint_head(p, w, h):
+        ## Big round cream head — dominant silhouette mass (64px density)
+        fill_ellipse(p, 4, 8, 35, 36, fur, w, h)
+        fill_ellipse(p, 6, 10, 33, 24, fur_lt, w, h)
+        fill_ellipse(p, 8, 26, 31, 36, fur_dk, w, h)
+        ## Wiry/curly top — stair blocks matching face_pixel_64 fluff
+        hair_mass(p, [
+            (10, 2, 16, 10, fur_lt),
+            (16, 0, 24, 9, fur),
+            (22, 2, 30, 10, fur_lt),
+            (8, 6, 12, 14, fur),
+            (28, 6, 34, 14, fur),
+            (12, 4, 18, 8, fur_lt),
+            (20, 1, 26, 6, fur_lt),
+            (14, 0, 18, 3, fur_lt),
+            (24, 0, 28, 3, fur),
+            (9, 8, 13, 12, NOEL_TAN if not rampage else fur_dk),
+            (27, 8, 31, 12, NOEL_TAN if not rampage else fur_dk),
+        ], w, h)
+        ## floppy ears (side masses)
+        fill_ellipse(p, 0, 10, 10, 26, fur_dk, w, h)
+        fill_ellipse(p, 1, 12, 8, 22, fur, w, h)
+        fill_ellipse(p, 2, 14, 6, 20, fur_lt, w, h)
+        fill_ellipse(p, 30, 10, 39, 26, fur_dk, w, h)
+        fill_ellipse(p, 32, 12, 38, 22, fur, w, h)
+        fill_ellipse(p, 33, 14, 37, 20, fur_lt, w, h)
+        ## Asymmetric dark eye-mask (ref: heavier patch on viewer's left)
+        fill_ellipse(p, 7, 15, 19, 27, NOEL_MASK, w, h)
+        fill_ellipse(p, 21, 16, 31, 26, NOEL_MASK_LT, w, h)
+        fill_ellipse(p, 9, 16, 17, 23, NOEL_MASK_LT, w, h)
+        fill_ellipse(p, 23, 17, 29, 23, shade(NOEL_MASK_LT, 1.15), w, h)
+        ## Cream muzzle — high contrast vs mask (face_pixel_64 grammar)
+        fill_ellipse(p, 11, 23, 29, 35, NOEL_CREAM_LT, w, h)
+        fill_ellipse(p, 13, 25, 27, 33, WHITE, w, h)
+        fill_rect(p, 14, 28, 18, 32, shade(WHITE, 0.92), w, h)
+        fill_rect(p, 22, 28, 26, 32, shade(WHITE, 0.92), w, h)
+        ## eyes — clean dark dots (cute, not uncanny)
+        eye_c = INK if not rampage else (200, 40, 30, 255)
+        eyes_dots(p, 11, 25, 18, w, h, eye_c, size=3)
+        if rampage:
+            px(p, 12, 18, AMBER_LT, w, h)
+            px(p, 26, 18, AMBER_LT, w, h)
+        ## big black nose low on muzzle
+        fill_ellipse(p, 16, 26, 24, 32, NOEL_NOSE, w, h)
+        fill_rect(p, 18, 27, 20, 28, SCRAP_LT, w, h)
+
+    # Layout: legs with crotch gap · body · head on top · tail out back
+    _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 18, 46)
+    _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 36, 46)
+    _stamp(img, _outlined_part(16, 16, paint_tail, thickness=2), 44, 34)
+    _stamp(img, _outlined_part(28, 26, paint_body, thickness=2), 18, 30)
+    _stamp(img, _outlined_part(40, 40, paint_head, thickness=2), 12, 2)
+
+    return img
+
+
+def make_dust_hound() -> Image.Image:
+    """Dust Hound — scrap-mutt filler pet (Hunt stub). Leaner, dust-brown."""
+    S = PET_SIZE
+    img = new(S, S)
+    drop_shadow(img, 32, 58, 15, 4, 90)
+    coat = DUST
+    coat_lt = DUST_LT
+    coat_dk = DUST_DK
+
+    def paint_leg(p, w, h):
+        fill_rect(p, 1, 0, 6, 10, coat_dk, w, h)
+        fill_rect(p, 0, 8, 7, 12, SCRAP_DK, w, h)
+
+    def paint_body(p, w, h):
+        fill_ellipse(p, 2, 2, 22, 18, coat, w, h)
+        fill_ellipse(p, 4, 3, 20, 10, coat_lt, w, h)
+        fill_rect(p, 6, 12, 18, 16, SCRAP_DK, w, h)
+        fill_rect(p, 10, 13, 14, 17, VIAL, w, h)
+
+    def paint_head(p, w, h):
+        fill_ellipse(p, 4, 8, 28, 30, coat, w, h)
+        fill_ellipse(p, 6, 10, 26, 20, coat_lt, w, h)
+        fill_rect(p, 0, 10, 8, 22, coat_dk, w, h)
+        fill_rect(p, 24, 10, 32, 22, coat_dk, w, h)
+        fill_ellipse(p, 10, 20, 22, 28, (210, 190, 160, 255), w, h)
+        eyes_dots(p, 10, 20, 15, w, h, INK, size=2)
+        fill_ellipse(p, 13, 22, 19, 26, NOEL_NOSE, w, h)
+
+    def paint_tail(p, w, h):
+        fill_rect(p, 0, 4, 8, 10, coat, w, h)
+        fill_rect(p, 4, 0, 10, 6, coat_lt, w, h)
+
+    _stamp(img, _outlined_part(9, 14, paint_leg, thickness=2), 18, 46)
+    _stamp(img, _outlined_part(9, 14, paint_leg, thickness=2), 34, 46)
+    _stamp(img, _outlined_part(12, 12, paint_tail, thickness=2), 42, 34)
+    _stamp(img, _outlined_part(26, 22, paint_body, thickness=2), 18, 32)
+    _stamp(img, _outlined_part(34, 34, paint_head, thickness=2), 14, 4)
     return img
 
 
@@ -1073,11 +1248,67 @@ def make_ui() -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def write_noel_previews(preview_dir: Path) -> None:
+    """Export magnified previews for store media/noel-pet/ comparison."""
+    preview_dir.mkdir(parents=True, exist_ok=True)
+
+    def magnify(img: Image.Image, scale: int = 8) -> Image.Image:
+        return img.resize((img.width * scale, img.height * scale), Image.NEAREST)
+
+    noel = make_noel(False)
+    noel_r = make_noel(True)
+    rook = make_rook()
+    cinder = make_cinder()
+    hound = make_dust_hound()
+
+    noel.save(preview_dir / "noel.png")
+    noel_r.save(preview_dir / "noel_rampage.png")
+    magnify(noel, 8).save(preview_dir / "noel_8x.png")
+    magnify(noel_r, 8).save(preview_dir / "noel_rampage_8x.png")
+    magnify(hound, 8).save(preview_dir / "dust_hound_8x.png")
+    magnify(rook, 6).save(preview_dir / "rook_vex_6x.png")
+    magnify(cinder, 6).save(preview_dir / "sister_cinder_6x.png")
+
+    ## Sheet: Noel idle | rampage | face ref strip | heroes
+    sheet = Image.new("RGBA", (640, 320), (48, 36, 28, 255))
+    sheet.paste(magnify(noel, 4), (16, 40))
+    sheet.paste(magnify(noel_r, 4), (290, 40))
+    sheet.paste(magnify(rook, 2), (16, 200))
+    sheet.paste(magnify(cinder, 2), (220, 200))
+    sheet.paste(magnify(hound, 2), (424, 200))
+    d = ImageDraw.Draw(sheet)
+    d.text((16, 12), "Noel idle 64px", fill=(240, 220, 180, 255))
+    d.text((290, 12), "Noel RAMPAGE", fill=(240, 120, 80, 255))
+    d.text((16, 176), "Rook / Cinder / Dust Hound (heroes 96 · pets 64)", fill=(200, 180, 140, 255))
+    sheet.save(preview_dir / "noel_sheet.png")
+
+    ## Side-by-side vs approved face pixelation if present
+    face_ref = Path("/cursor/stores/bc-01a1472d-6408-7edd-b9ed-fb76363c6b5e/media/pixelate/face_pixel_64.png")
+    if face_ref.exists():
+        face = Image.open(face_ref).convert("RGBA")
+        ## Display face as ~256 so both columns match
+        face_s = face.resize((256, 256), Image.NEAREST)
+        noel_face = magnify(noel.crop((12, 2, 52, 42)), 6)  # head crop ~40 → 240
+        cmp = Image.new("RGBA", (560, 300), (40, 30, 24, 255))
+        cmp.paste(face_s, (16, 28))
+        cmp.paste(noel_face, (290, 28))
+        dc = ImageDraw.Draw(cmp)
+        dc.text((16, 8), "Approved face_pixel_64 (detail bar)", fill=(220, 200, 160, 255))
+        dc.text((290, 8), "Noel sprite head (64 craft)", fill=(220, 200, 160, 255))
+        cmp.save(preview_dir / "noel_vs_face_ref.png")
+
+    print("wrote previews →", preview_dir)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
     save(make_rook(), "characters/rook_vex.png")
     save(make_cinder(), "characters/sister_cinder.png")
+
+    save(make_noel(False), "pets/noel.png")
+    save(make_noel(True), "pets/noel_rampage.png")
+    save(make_dust_hound(), "pets/dust_hound.png")
 
     save(make_raider(), "enemies/raider.png")
     save(make_charger(), "enemies/charger.png")
@@ -1112,7 +1343,10 @@ def main() -> None:
 
     make_pickups()
     make_ui()
-    print("DONE — anti-thumb chibi Dust Apothecary set →", OUT)
+
+    preview = Path("/cursor/stores/bc-01a1472d-6408-7edd-b9ed-fb76363c6b5e/media/noel-pet")
+    write_noel_previews(preview)
+    print("DONE — 64-detail Noel + anti-thumb heroes →", OUT)
 
 
 if __name__ == "__main__":

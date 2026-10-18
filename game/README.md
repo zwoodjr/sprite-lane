@@ -35,7 +35,7 @@ Portrait **720×1280**, orthographic camera zoom **1.12** so the player reads ~*
 
 ## Not in yet (waiting on design doc)
 
-Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill trees.
+Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill trees. MVP pets: **Noel** (Territorial Rampage) + Dust Hound.
 
 ## Tools
 

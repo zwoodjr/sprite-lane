@@ -7,6 +7,7 @@ const ModeDefs = preload("res://scripts/data/mode_defs.gd")
 const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
 const Progression = preload("res://scripts/data/progression.gd")
+const PetDefs = preload("res://scripts/data/pet_defs.gd")
 
 
 func _init() -> void:
@@ -21,11 +22,15 @@ func _init() -> void:
 	assert(Progression.hangar_catalog().size() >= 4)
 	assert(Progression.roll_run_choices(2).size() == 2)
 	assert(Progression.account_level_from_xp(0) == 1)
+	assert(PetDefs.all_pets().size() >= 2)
+	assert(PetDefs.get_pet(PetDefs.NOEL_ID)["ability_id"] == "territorial_rampage")
+	assert(str(LoadoutStubs.default_pet(PetDefs.NOEL_ID)["name"]) == "Noel")
 	## Scene loads need GameState autoload — use:
 	##   godot4 --headless --path game --quit-after 3
 	## for full project boot. This script only validates data stubs.
-	print("SMOKE_OK phases_easy=%d phases_medium=%d mounts=%d hangar=%d" % [
+	print("SMOKE_OK phases_easy=%d phases_medium=%d mounts=%d hangar=%d pets=%d noel=%s" % [
 		easy["phases"].size(), med["phases"].size(), LoadoutStubs.mount_ladder().size(),
-		Progression.hangar_catalog().size(),
+		Progression.hangar_catalog().size(), PetDefs.all_pets().size(),
+		str(PetDefs.get_pet(PetDefs.NOEL_ID)["ability_name"]),
 	])
 	quit(0)

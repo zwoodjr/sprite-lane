@@ -153,10 +153,10 @@ func _physics_process(delta: float) -> void:
 		for i in range(get_slide_collision_count()):
 			var col := get_slide_collision(i).get_collider()
 			if col and col.is_in_group("player") and col.has_method("take_damage"):
-				col.take_damage(damage)
+				col.take_damage(damage, self)
 				_lunge_left = 0.0
 		if dist < 26.0 and _player.has_method("take_damage"):
-			_player.take_damage(damage)
+			_player.take_damage(damage, self)
 			_lunge_left = 0.0
 		return
 
@@ -215,7 +215,7 @@ func _attack(dir: Vector2) -> void:
 
 func _fire(dir: Vector2, spd: float) -> void:
 	var bullet: Area2D = BulletScene.instantiate()
-	bullet.setup(global_position + dir * 18.0, dir, spd, damage, false)
+	bullet.setup(global_position + dir * 18.0, dir, spd, damage, false, self)
 	get_tree().current_scene.add_child(bullet)
 
 

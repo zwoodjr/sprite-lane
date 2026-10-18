@@ -5,6 +5,7 @@ const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const ExtractScatter = preload("res://scripts/world/extract_scatter.gd")
 const EnemyScene := preload("res://scenes/entities/enemy.tscn")
 const ExtractPadScene := preload("res://scenes/entities/extract_pad.tscn")
+const PetScene := preload("res://scenes/entities/pet.tscn")
 
 @onready var player: CharacterBody2D = $World/Player
 @onready var world: Node2D = $World
@@ -56,6 +57,7 @@ func _ready() -> void:
 			hud.show_toast(str(u.get("name", "Upgrade")) + "!", UiTheme.TEAL)
 	)
 
+	_spawn_pet()
 	_phase_index = 0
 	_start_phase(0)
 	hud.show_banner("DROP IN", "%s · %s" % [
@@ -63,6 +65,22 @@ func _ready() -> void:
 		str(_mode.get("display_name", "")),
 	])
 	_match_time = 0.0
+
+
+func _spawn_pet() -> void:
+	if not is_instance_valid(player):
+		return
+	if not bool(GameState.pet.get("active", false)):
+		return
+	var pet: CharacterBody2D = PetScene.instantiate()
+	world.add_child(pet)
+	pet.global_position = player.global_position + Vector2(-28, 20)
+	if pet.has_method("setup"):
+		pet.call("setup", player, GameState.pet)
+	var pname := str(GameState.pet.get("name", "Pet"))
+	var ability := str(GameState.pet.get("ability_name", ""))
+	if ability != "":
+		hud.show_toast("%s ready — %s" % [pname, ability], UiTheme.AMBER)
 
 
 func _roll_extracts() -> void:

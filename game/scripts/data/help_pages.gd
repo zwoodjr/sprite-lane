@@ -47,6 +47,11 @@ static func pages() -> Array[Dictionary]:
 			"body": "Shoot crates open for scrap and the occasional timed buff (speed, damage, shield, heal).\n\nYour character's ABILITY button is unique — check the character screen for what it does.\n\nRIDE hops on your mount for speed (it burns fuel). Riding into crates smashes them.",
 		},
 		{
+			"title": "Your pet",
+			"icon": "🐾",
+			"body": "Equip a pet on the character screen (default: Noel).\n\nNoel is super territorial. When an enemy hits YOU, Noel enrages and AOE-rampages until THAT attacker dies — then settles.\n\nDust Hound is a lighter Hunt pet (follows and bites, no rampage).",
+		},
+		{
 			"title": "Two progress tracks",
 			"icon": "◆",
 			"body": "IN-RUN: kills and staying near open extracts fill your RUN level bar. Each level lets you pick a temporary boost (damage, HP, speed…). Gone when the run ends.\n\nMETA: extracted scrap banks permanently. Spend it in the Hangar (main menu) for starting HP, scrap find, damage, extra insurance. Account level only soft-gates higher Hangar tiers.",

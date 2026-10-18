@@ -6,6 +6,8 @@ signal buffs_changed(buffs: Dictionary)
 signal ammo_changed(ammo: int, mag: int, reloading: bool)
 signal dashed
 signal ability_used(name: String)
+## Fired when this player actually loses HP to an enemy (pets listen — Noel enrages).
+signal attacked(attacker: Node)
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
 
@@ -621,12 +623,14 @@ func get_reload_ratio() -> float:
 ## =============================================================================
 ## Damage
 
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, attacker: Node = null) -> void:
 	if _iframes > 0.0 or hp <= 0.0:
 		return
 	var dmg := amount * resist_mult
 	hp -= dmg
 	_iframes = 0.12
+	if attacker != null and is_instance_valid(attacker):
+		attacked.emit(attacker)
 	Juice.sfx("hurt")
 	Juice.shake(0.28)
 	Juice.haptic(30)

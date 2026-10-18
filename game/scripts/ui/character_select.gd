@@ -2,9 +2,11 @@ extends "res://scripts/ui/menu_base.gd"
 
 const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
+const PetDefs = preload("res://scripts/data/pet_defs.gd")
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 
 var _tabs: Dictionary = {}
+var _pet_tabs: Dictionary = {}
 var _portrait: TextureRect
 var _name: Label
 var _fantasy: Label
@@ -12,6 +14,7 @@ var _ability: Label
 var _perks: VBoxContainer
 var _stats: VBoxContainer
 var _loadout: Label
+var _pet_blurb: Label
 
 
 func build(c: VBoxContainer) -> void:
@@ -72,6 +75,14 @@ func build(c: VBoxContainer) -> void:
 	dv.add_child(_stats)
 	_loadout = UiTheme.body_label("", 13, UiTheme.TEXT_DIM)
 	dv.add_child(_loadout)
+	dv.add_child(UiTheme.body_label("PET  (equip one)", 13, UiTheme.AMBER))
+	var pet_row := HBoxContainer.new()
+	pet_row.add_theme_constant_override("separation", 8)
+	dv.add_child(pet_row)
+	for pdef in PetDefs.all_pets():
+		pet_row.add_child(_pet_tile(pdef))
+	_pet_blurb = UiTheme.body_label("", 14)
+	dv.add_child(_pet_blurb)
 
 	var bottom := HBoxContainer.new()
 	c.add_child(bottom)
@@ -83,6 +94,25 @@ func build(c: VBoxContainer) -> void:
 	deploy.pressed.connect(GameState.go_match)
 	bottom.add_child(deploy)
 	_refresh()
+
+
+func _pet_tile(def: Dictionary) -> Control:
+	var id := str(def["id"])
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(72, 72)
+	b.expand_icon = true
+	b.icon = load(str(def.get("sprite", ""))) as Texture2D
+	b.tooltip_text = str(def.get("name", "Pet"))
+	b.pressed.connect(func() -> void:
+		GameState.selected_pet_id = id
+		GameState.reset_loadout_to_defaults()
+		GameState.save_profile()
+		Juice.sfx("ui_tap")
+		_refresh()
+	)
+	_pet_tabs[id] = b
+	return b
 
 
 func _roster_tile(id: String) -> Control:
@@ -131,12 +161,20 @@ func _refresh() -> void:
 	_stat_bar("Speed", float(c["move_speed_mult"]), 0.85, 1.15)
 	_stat_bar("Damage", float(c["damage_mult"]), 0.85, 1.15)
 	_stat_bar("Health", 100.0 + float(c["max_hp_bonus"]), 90.0, 130.0)
+	var pet := PetDefs.get_pet(GameState.selected_pet_id)
 	_loadout.text = "Loadout: %s · %s · Pet: %s · Mount: %s" % [
 		LoadoutStubs.default_weapon()["name"],
 		LoadoutStubs.default_armor()["set_name"],
-		LoadoutStubs.default_pet()["name"],
+		pet["name"],
 		LoadoutStubs.default_mount(GameState.mount_unlock_tier)["name"],
 	]
+	for pid in _pet_tabs.keys():
+		var pb: Button = _pet_tabs[pid]
+		var on: bool = pid == GameState.selected_pet_id
+		var col: Color = UiTheme.AMBER if on else UiTheme.LINE
+		for s in ["normal", "hover", "pressed", "hover_pressed"]:
+			pb.add_theme_stylebox_override(s, UiTheme.box(Color(0.2, 0.15, 0.1), col, 12, 4 if on else 2, 6))
+	_pet_blurb.text = "%s — %s" % [pet.get("ability_name", ""), pet.get("ability_desc", "")]
 
 
 func _stat_bar(label: String, v: float, lo: float, hi: float) -> void:

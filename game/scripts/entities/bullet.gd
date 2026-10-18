@@ -5,6 +5,8 @@ var speed: float = 700.0
 var damage: float = 10.0
 var from_player: bool = true
 var lifetime: float = 1.1
+## Who fired (enemies only) — pets use this to enrage on the right unit.
+var source: Node = null
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -12,12 +14,13 @@ var _trail: Line2D
 var _hit: bool = false
 
 
-func setup(origin: Vector2, dir: Vector2, spd: float, dmg: float, player_shot: bool) -> void:
+func setup(origin: Vector2, dir: Vector2, spd: float, dmg: float, player_shot: bool, src: Node = null) -> void:
 	global_position = origin
 	direction = dir.normalized()
 	speed = spd
 	damage = dmg
 	from_player = player_shot
+	source = src
 	rotation = direction.angle()
 	## Enemy bullets live longer but are slower — readable and dodgeable.
 	lifetime = 1.0 if player_shot else 1.8
@@ -76,7 +79,7 @@ func _on_body_entered(body: Node2D) -> void:
 		if body.has_method("is_dashing") and body.is_dashing():
 			return  ## dashed through it
 		if body.has_method("take_damage"):
-			body.take_damage(damage)
+			body.take_damage(damage, source)
 		_impact(Color(1, 0.35, 0.25))
 	elif body is StaticBody2D or body is TileMap:
 		_impact(Color(0.8, 0.7, 0.55))
