@@ -54,6 +54,6 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "Two progress tracks",
 			"icon": "◆",
-			"body": "IN-RUN: kills and staying near open extracts fill your RUN level bar. Each level lets you pick a temporary boost (damage, HP, speed…). Gone when the run ends.\n\nMETA: extracted scrap banks permanently. Spend it in the Hangar (main menu) for starting HP, scrap find, damage, dash, and extract payout. Account level soft-gates higher tiers. (Loadout insurance UI comes later.)",
+			"body": "IN-RUN: kills and staying near open extracts fill your RUN level bar. Each level lets you pick a temporary boost (damage, HP, speed…). Gone when the run ends.\n\nMETA: extracted scrap banks permanently. Spend it in the Hangar for HP, endurance, scrap find, loot quality, damage, crits, AoE, dodge/block, speed, pickup reach, pet power, dash, extract grace, and payout. Account level soft-gates higher tiers. (Loadout insurance UI comes later — no fake insurance buy in the Hangar yet.)",
 		},
 	]

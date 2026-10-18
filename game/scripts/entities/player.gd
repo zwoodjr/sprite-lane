@@ -148,7 +148,9 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 	damage_mult = float(_char.get("damage_mult", 1.0)) \
 		* (1.0 + GameState.starting_damage_bonus()) \
 		* (1.0 + float(rm.get("damage", 0.0)))
-	move_mult = float(_char.get("move_speed_mult", 1.0)) * (1.0 + float(rm.get("move", 0.0)))
+	move_mult = float(_char.get("move_speed_mult", 1.0)) \
+		* (1.0 + float(rm.get("move", 0.0))) \
+		* (1.0 + GameState.move_speed_bonus())
 	firerate_mult = 1.0 + float(rm.get("firerate", 0.0))
 	if reset_ammo:
 		_ammo = _mag_size()
@@ -373,7 +375,8 @@ func _try_dash() -> void:
 	_dash_dir = dir.normalized()
 	_dash_left = DASH_TIME
 	_dash_cd = DASH_COOLDOWN * GameState.dash_cooldown_mult()
-	_iframes = maxf(_iframes, DASH_IFRAMES)
+	## Dust Lungs (endurance stub) stretches dash i-frames modestly.
+	_iframes = maxf(_iframes, DASH_IFRAMES * GameState.endurance_iframe_mult())
 	Juice.sfx("dash")
 	Juice.dust_puff(global_position + Vector2(0, 16), 8)
 	dashed.emit()
@@ -573,12 +576,17 @@ func _try_shoot() -> void:
 	if velocity.length() < 30.0:
 		spread *= 0.6
 	aim = aim.rotated(randf_range(-spread, spread))
+	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage()
+	var crit := false
+	if randf() < GameState.crit_chance():
+		crit = true
+		dmg *= 1.5 + GameState.crit_damage_bonus()
 	var bullet: Area2D = BulletScene.instantiate()
 	bullet.setup(
 		global_position + aim * 28.0,
 		aim,
 		float(_weapon.get("projectile_speed", 720.0)),
-		float(_weapon.get("damage", 12)) * damage_mult * _buff_damage(),
+		dmg,
 		true,
 		self
 	)
@@ -587,7 +595,9 @@ func _try_shoot() -> void:
 	_flash_left = 0.045
 	_attack_flash = 0.12
 	Juice.sfx("shot", -4.0)
-	Juice.shake(0.035)
+	Juice.shake(0.05 if crit else 0.035)
+	if crit:
+		Juice.float_text(global_position + aim * 40.0, "CRIT", UiTheme.AMBER, 14)
 	ammo_changed.emit(_ammo, _mag_size(), false)
 	GameState.weapon["weapon_xp"] = int(GameState.weapon.get("weapon_xp", 0)) + 1
 	if int(GameState.weapon["weapon_xp"]) >= 20 * int(GameState.weapon.get("weapon_level", 1)):
@@ -612,7 +622,17 @@ func get_reload_ratio() -> float:
 func take_damage(amount: float, attacker: Node = null) -> void:
 	if _iframes > 0.0 or hp <= 0.0:
 		return
+	## Dust Sidestep — full avoid (soft-capped in GameState).
+	if randf() < GameState.dodge_chance():
+		_iframes = 0.08
+		Juice.float_text(global_position + Vector2(0, -30), "DODGE", UiTheme.TEAL, 16)
+		Juice.sfx("dash", -8.0)
+		return
 	var dmg := float(amount) * resist_mult
+	## Brace Plate — half damage on proc (full rate with block_affinity kits).
+	if randf() < GameState.block_chance():
+		dmg *= 0.5
+		Juice.float_text(global_position + Vector2(0, -42), "BLOCK", UiTheme.AMBER, 14)
 	hp -= dmg
 	_iframes = 0.12
 	if attacker != null and is_instance_valid(attacker) and attacker != self:

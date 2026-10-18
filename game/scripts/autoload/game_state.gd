@@ -210,6 +210,48 @@ func dash_cooldown_mult() -> float:
 func extract_payout_mult() -> float:
 	return 1.0 + Progression.meta_bonus(meta_upgrades, "extract_payout")
 
+## Dust Lungs — stamina stub: stretches dash i-frames until a real stamina bar exists.
+func endurance_iframe_mult() -> float:
+	return 1.0 + Progression.meta_bonus(meta_upgrades, "endurance")
+
+func crit_chance() -> float:
+	## Soft cap so meta never guarantees crits.
+	return clampf(Progression.meta_bonus(meta_upgrades, "crit_chance"), 0.0, 0.35)
+
+func crit_damage_bonus() -> float:
+	## Added on top of base crit multiplier (1.5).
+	return Progression.meta_bonus(meta_upgrades, "crit_damage")
+
+func aoe_damage_mult() -> float:
+	return 1.0 + Progression.meta_bonus(meta_upgrades, "aoe_damage")
+
+func dodge_chance() -> float:
+	return clampf(Progression.meta_bonus(meta_upgrades, "dodge"), 0.0, 0.20)
+
+func block_chance() -> float:
+	## Half strength without Bastion / block_affinity characters.
+	var raw := Progression.meta_bonus(meta_upgrades, "block")
+	var affinity := bool(get_character().get("block_affinity", false))
+	var scale := 1.0 if affinity else 0.5
+	return clampf(raw * scale, 0.0, 0.25)
+
+func move_speed_bonus() -> float:
+	## Modest — TL and enemies still catch up.
+	return clampf(Progression.meta_bonus(meta_upgrades, "move_speed"), 0.0, 0.15)
+
+func pickup_radius_bonus() -> float:
+	return Progression.meta_bonus(meta_upgrades, "pickup_radius")
+
+func pet_power_mult() -> float:
+	return 1.0 + Progression.meta_bonus(meta_upgrades, "pet_power")
+
+func loot_quality_bonus() -> float:
+	## Added to crate power-up chance; still capped in breakable.
+	return Progression.meta_bonus(meta_upgrades, "loot_quality")
+
+func extract_grace_sec() -> float:
+	return Progression.meta_bonus(meta_upgrades, "extract_grace")
+
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
 	save_profile()

@@ -30,7 +30,8 @@ Portrait **720×1280**, orthographic camera zoom **1.12** so the player reads ~*
 - Juice: SFX, screen shake, hitstop, hit flashes, damage numbers, particles, recoil, muzzle flash, dash afterimages, low-HP vignette
 - HUD explains itself: phase card says what to do now; Threat badge shows the cost/reward
 - Save file (`user://wanderer_save.json`): settings, banked scrap, Hangar ranks, account prestige, extracts, unlocks
-- Dual-track progression: **run levels** (temporary loadout picks mid-match) + **Hangar scrap** (permanent between runs)
+- Dual-track progression: **run levels** (temporary loadout picks mid-match) + **Hangar scrap** (permanent between runs — stretched costs; insurance buy hidden until loadout UI)
+- Event stubs: `EventDefs` radio/world/extract_side catalog + one mid-run radio toast (no quest log)
 - Endless chunk map with terrain variation, varied decor, extract beams + arrows + minimap
 
 ## Not in yet (waiting on design doc)

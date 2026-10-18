@@ -28,6 +28,12 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	collision_layer = 0
 	collision_mask = 2
+	## Hangar Long Reach — modest magnet radius on pickups.
+	var shape_node := get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if shape_node and shape_node.shape is CircleShape2D:
+		var circle := (shape_node.shape as CircleShape2D).duplicate() as CircleShape2D
+		circle.radius = 18.0 + GameState.pickup_radius_bonus()
+		shape_node.shape = circle
 
 
 func _start_bob() -> void:

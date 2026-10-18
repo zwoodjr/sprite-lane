@@ -23,6 +23,8 @@ var _mode: Dictionary = {}
 var _ping_done_for_window: bool = false
 var _pads: Array = []
 var _match_time: float = 0.0
+var _radio_ping_at: float = -1.0
+var _radio_ping_done: bool = false
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -62,6 +64,11 @@ func _ready() -> void:
 		str(_mode.get("display_name", "")),
 	])
 	_match_time = 0.0
+	## Cheap event stub: one radio toast mid-lockout (no quest log).
+	_radio_ping_done = false
+	_radio_ping_at = 18.0 * GameState.timer_scale()
+	if GameState.fast_timers:
+		_radio_ping_at = 1.2
 
 func _spawn_pet() -> void:
 	if not is_instance_valid(player):
@@ -106,6 +113,7 @@ func _process(delta: float) -> void:
 		return
 	_phase_time_left -= delta
 	_match_time += delta
+	_maybe_radio_stub()
 	_update_spawns(delta)
 	_update_stay_bonus(delta)
 	hud.update_match(
@@ -119,11 +127,25 @@ func _process(delta: float) -> void:
 	if _phase_time_left <= 0.0:
 		_advance_phase()
 
+func _maybe_radio_stub() -> void:
+	if _radio_ping_done or _radio_ping_at < 0.0:
+		return
+	if _match_time < _radio_ping_at:
+		return
+	_radio_ping_done = true
+	var ping := EventDefs.debug_radio_ping()
+	if ping.is_empty():
+		return
+	hud.show_toast(str(ping.get("toast", "Radio static…")), UiTheme.AMBER)
+
 func _start_phase(index: int) -> void:
 	_phase_index = index
 	var phase: Dictionary = _phases[index]
 	_phase_time_left = float(phase["duration"])
 	_extract_open = bool(phase["extract_open"])
+	## Hangar Pad Linger — modest extra open time (does not skip TL for free).
+	if _extract_open:
+		_phase_time_left += GameState.extract_grace_sec() * GameState.timer_scale()
 	_current_window_was_open = _extract_open
 	_ping_done_for_window = false
 	GameState.last_phase_label = str(phase["label"])

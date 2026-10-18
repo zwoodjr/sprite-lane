@@ -222,7 +222,7 @@ func _tick_rampage_aoe() -> void:
 		return
 	_aoe_cd = float(_def.get("rampage_tick", 0.28))
 	var radius := float(_def.get("rampage_aoe_radius", 110.0))
-	var dmg := float(_def.get("rampage_aoe_damage", 38.0))
+	var dmg := float(_def.get("rampage_aoe_damage", 38.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
 	Juice.burst(global_position, Color(1.0, 0.4, 0.2, 0.9), 14, radius * 1.4, 0.35, 1.2)
 	Juice.dust_puff(global_position + Vector2(0, 10), 10)
 	Juice.shake(0.1)
@@ -329,7 +329,7 @@ func _tick_ram(delta: float) -> void:
 		body.flip_h = _ram_dir.x < 0.0
 	## Wake: enemies we pass (not the primary — they get the impact hit).
 	var wake_r := float(_def.get("ram_wake_radius", 42.0))
-	var wake_dmg := float(_def.get("ram_wake_damage", 14.0))
+	var wake_dmg := float(_def.get("ram_wake_damage", 14.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
 	var primary_id := _target.get_instance_id() if _target != null and is_instance_valid(_target) else -1
 	for n in get_tree().get_nodes_in_group("enemies"):
 		if not (n is Node2D) or not is_instance_valid(n):
@@ -363,7 +363,7 @@ func _ram_impact(connected: bool) -> void:
 		_apply_look()
 		return
 	var radius := float(_def.get("ram_impact_radius", 95.0))
-	var dmg := float(_def.get("ram_impact_damage", 42.0))
+	var dmg := float(_def.get("ram_impact_damage", 42.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
 	## Snap onto the target so the boom reads on their body, not empty dust.
 	if _target != null and is_instance_valid(_target):
 		global_position = global_position.lerp((_target as Node2D).global_position, 0.55)
@@ -384,7 +384,7 @@ func _ram_impact(connected: bool) -> void:
 
 func _bite(enemy: Node2D) -> void:
 	_bite_cd = float(_def.get("bite_cooldown", 0.6))
-	var dmg := float(_def.get("bite_damage", 8.0))
+	var dmg := float(_def.get("bite_damage", 8.0)) * GameState.pet_power_mult()
 	if enemy.has_method("take_damage"):
 		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized())
 	Juice.sfx("hit", -10.0)

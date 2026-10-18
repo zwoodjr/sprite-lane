@@ -86,16 +86,18 @@ func _break_open() -> void:
 	Juice.shake(0.1)
 	Juice.burst(pos, Color(0.7, 0.5, 0.3), 16, 200.0, 0.5, 1.2)
 	broken.emit(pos)
-	## Outcomes: power-up (~20%) · scrap-only (~32%) · empty (~48%).
+	## Outcomes: power-up (~20% + Hangar loot quality) · scrap-only · empty.
+	## Soft-cap so empty crates stay common (player preference).
+	var buff_chance := clampf(powerup_chance + GameState.loot_quality_bonus(), 0.05, 0.35)
 	var roll := randf()
-	if roll <= powerup_chance:
+	if roll <= buff_chance:
 		## Deferred: we're usually inside a physics callback (bullet hit).
 		_spawn_pickup.call_deferred(get_tree().current_scene, pos)
 		## Tiny scrap with buffs so opens aren't always dry.
 		if randf() < 0.35:
 			var scrap := GameState.add_scrap(1)
 			Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap, UiTheme.AMBER, 14)
-	elif roll <= powerup_chance + (1.0 - powerup_chance) * scrap_only_chance:
+	elif roll <= buff_chance + (1.0 - buff_chance) * scrap_only_chance:
 		var scrap2 := GameState.add_scrap(randi_range(1, 2))
 		Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap2, UiTheme.AMBER, 15)
 	else:

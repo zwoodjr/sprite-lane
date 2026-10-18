@@ -8,7 +8,7 @@ var _list: VBoxContainer
 func build(c: VBoxContainer) -> void:
 	c.add_child(header("HANGAR", GameState.go_main_menu))
 	var intro := UiTheme.body_label(
-		"Spend banked scrap on permanent upgrades. In-run levels never carry — only what you buy here sticks after a wipe.",
+		"Spend banked scrap on permanent upgrades. In-run levels never carry — only what you buy here sticks after a wipe. Costs stretch so a few extracts won't dump the tree.",
 		15, UiTheme.TEXT_DIM
 	)
 	c.add_child(intro)

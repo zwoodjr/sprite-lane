@@ -207,6 +207,8 @@ static func _table() -> Dictionary:
 			"post_heal_firerate_mult": 1.25,
 			"post_heal_duration": 3.0,
 			"has_last_stitch": true,
+			## Brace Plate Hangar ranks apply at full strength for sawbones kits.
+			"block_affinity": true,
 			"loot_weight_bonus": 0.0,
 			"interact_speed_mult": 1.0,
 		},
