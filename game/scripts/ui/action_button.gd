@@ -77,11 +77,16 @@ func _draw() -> void:
 	draw_circle(c, r, Color(fill.r, fill.g, fill.b, 0.82 * a))
 	draw_arc(c, r - 1.5, 0.0, TAU, 48, Color(tint.r, tint.g, tint.b, a), 3.0, true)
 	## Cooldown sweep
-	if cooldown_ratio > 0.01:
+	## Ratio can exceed 1 when a run upgrade shortens the cooldown mid-tick; a
+	## >360° fan self-intersects and spams "Invalid polygon data" — clamp it.
+	var cdr := clampf(cooldown_ratio, 0.0, 1.0)
+	if cdr >= 0.995:
+		draw_circle(c, r - 3.0, Color(0, 0, 0, 0.55))
+	elif cdr > 0.02:
 		var pts := PackedVector2Array([c])
 		var start := -PI * 0.5
-		var end := start + TAU * cooldown_ratio
-		var steps := 32
+		var end := start + TAU * cdr
+		var steps := maxi(3, int(ceil(32.0 * cdr)))
 		for i in range(steps + 1):
 			var ang := lerpf(start, end, float(i) / steps)
 			pts.append(c + Vector2(cos(ang), sin(ang)) * (r - 3.0))

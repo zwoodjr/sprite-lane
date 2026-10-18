@@ -408,7 +408,7 @@ func _spawn_afterimage() -> void:
 
 func get_dash_cooldown_ratio() -> float:
 	var cd := DASH_COOLDOWN * GameState.dash_cooldown_mult()
-	return _dash_cd / cd if cd > 0.0 else 0.0
+	return clampf(_dash_cd / cd, 0.0, 1.0) if cd > 0.0 else 0.0
 
 ## =============================================================================
 ## Mount
@@ -457,7 +457,7 @@ func _ability_cooldown() -> float:
 
 func get_ability_cooldown_ratio() -> float:
 	var cd := _ability_cooldown()
-	return _ability_cd / cd if cd > 0.0 else 0.0
+	return clampf(_ability_cd / cd, 0.0, 1.0) if cd > 0.0 else 0.0
 
 func _try_ability() -> void:
 	if not has_ability():
