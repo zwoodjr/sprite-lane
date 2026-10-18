@@ -24,12 +24,18 @@ func _on_level_up(new_level: int, choices: Array) -> void:
 func open(new_level: int, choices: Array) -> void:
 	if _open:
 		return
-	if choices.is_empty():
-		choices = Progression.roll_run_choices(2)
+	## Copy so apply_run_upgrade → pending_run_choices.clear() can't empty our picks.
+	var picks: Array = choices.duplicate()
+	if picks.is_empty():
+		picks = Progression.roll_run_choices(2)
 	## Headless / fast-timer bots: auto-pick so the match doesn't stall paused.
-	if GameState.fast_timers and choices.size() > 0:
-		GameState.apply_run_upgrade(choices[0])
-		chosen.emit(choices[0])
+	if GameState.fast_timers:
+		if picks.size() > 0:
+			var pick: Dictionary = picks[0]
+			GameState.apply_run_upgrade(pick)
+			chosen.emit(pick)
+		else:
+			GameState.run_level_paused = false
 		return
 	_open = true
 	get_tree().paused = true
@@ -63,7 +69,7 @@ func open(new_level: int, choices: Array) -> void:
 	row.add_theme_constant_override("separation", 16)
 	v.add_child(row)
 
-	for u in choices:
+	for u in picks:
 		row.add_child(_choice_btn(u))
 
 	Juice.sfx("ui_tap")
@@ -93,4 +99,6 @@ func close() -> void:
 	_root.visible = false
 	for c in _root.get_children():
 		c.queue_free()
+	## Sticks/fire stay held while paused (touch_controls is PAUSABLE).
+	TouchInput.clear_sticks()
 	get_tree().paused = false

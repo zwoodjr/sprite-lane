@@ -11,6 +11,10 @@ var lifetime: float = 1.1
 var source: Node = null
 var splash_radius: float = 0.0
 var splash_mult: float = 0.5
+var status_effect: Dictionary = {} ## special ammo / run mods
+var pierce_left: int = 0
+var ricochet_left: int = 0
+var _hit_ids: Dictionary = {} ## instance_id -> true, avoid re-hitting same foe when piercing
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -112,12 +116,29 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 	if _is_friendly(body):
 		return
+	var id := body.get_instance_id()
+	if _hit_ids.has(id):
+		return
 
 	if from_player:
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
-			## Enemy signature: (float, Vector2 knock dir)
-			body.take_damage(damage, direction)
+			_hit_ids[id] = true
+			var dmg := damage
+			## Backstab / mark / field notes / short circuit.
+			if source != null and is_instance_valid(source) and source.has_method("mod_bullet_damage"):
+				dmg = float(source.call("mod_bullet_damage", dmg, body, direction))
+			body.take_damage(dmg, direction)
+			_apply_status(body)
 			_apply_splash(body)
+			if pierce_left > 0:
+				pierce_left -= 1
+				Juice.burst(global_position, Color(1, 0.85, 0.45), 4, 80.0, 0.2)
+				return
+			if ricochet_left > 0:
+				ricochet_left -= 1
+				if _try_ricochet(body):
+					Juice.burst(global_position, Color(0.9, 0.95, 1.0), 6, 100.0, 0.25)
+					return
 			_impact(Color(1, 0.85, 0.45))
 		elif body.is_in_group("breakables") and body.has_method("take_damage"):
 			body.take_damage(damage)
@@ -137,6 +158,60 @@ func _on_body_entered(body: Node2D) -> void:
 			_impact(Color(1, 0.35, 0.25))
 		elif body is StaticBody2D or body is TileMap:
 			_impact(Color(0.8, 0.7, 0.55))
+
+
+func _try_ricochet(from_body: Node) -> bool:
+	var best: Node2D = null
+	var best_d := 220.0 * 220.0
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if n == from_body or not is_instance_valid(n) or not (n is Node2D):
+			continue
+		if _hit_ids.has(n.get_instance_id()):
+			continue
+		var e := n as Node2D
+		var d := global_position.distance_squared_to(e.global_position)
+		if d < best_d:
+			best_d = d
+			best = e
+	if best == null:
+		return false
+	direction = (best.global_position - global_position).normalized()
+	rotation = direction.angle()
+	damage *= 0.7
+	_arm_left = 0.02
+	return true
+
+
+func _apply_status(body: Node) -> void:
+	if status_effect.is_empty() or body == null or not is_instance_valid(body):
+		return
+	var id := str(status_effect.get("id", ""))
+	match id:
+		"shock":
+			if body.has_method("distract"):
+				body.call("distract", float(status_effect.get("stun", 0.55)))
+			if body.has_method("set_meta"):
+				body.set_meta("stunned_machine", true)
+		"frost":
+			if body.has_method("apply_slow"):
+				body.call("apply_slow", float(status_effect.get("slow", 0.55)), float(status_effect.get("slow_sec", 1.4)))
+			elif body.has_method("distract"):
+				body.call("distract", float(status_effect.get("slow_sec", 1.4)) * 0.5)
+		"incendiary":
+			if body.has_method("apply_dot"):
+				body.call("apply_dot", float(status_effect.get("dot", 4.0)), float(status_effect.get("dot_ticks", 3)) * 0.5)
+			elif body.has_method("take_damage"):
+				body.call("take_damage", float(status_effect.get("dot", 4.0)), Vector2.ZERO)
+		"poison", "dust":
+			if body.has_method("apply_dot"):
+				body.call("apply_dot", 3.0 + float(status_effect.get("stacks", 1.0)), 2.0)
+		"explosive":
+			pass
+		_:
+			pass
+	## Marked (Vesper class): enemies take extra damage from all sources.
+	if float(status_effect.get("mark", 0.0)) > 0.0 and body.has_method("apply_mark"):
+		body.call("apply_mark", 4.0)
 
 
 func _apply_splash(primary: Node) -> void:
@@ -184,9 +259,6 @@ func _fizzle() -> void:
 
 
 func _cleanup() -> void:
-	set_deferred("monitoring", false)
-	if sprite:
-		sprite.visible = false
-	var tw := _trail.create_tween()
-	tw.tween_property(_trail, "modulate:a", 0.0, 0.08)
-	tw.tween_callback(queue_free)
+	if is_instance_valid(_trail):
+		_trail.queue_free()
+	queue_free()

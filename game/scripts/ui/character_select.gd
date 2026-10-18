@@ -32,18 +32,24 @@ func build(c: VBoxContainer) -> void:
 	row.add_theme_constant_override("separation", 14 if portrait else 18)
 	c.add_child(row)
 
-	## Portrait card
+	## Portrait card — extra top pad so tall sheet heads (Vesper) aren't clipped.
 	var pc := card(UiTheme.LINE)
 	pc.custom_minimum_size = Vector2(0 if portrait else 250, 0)
+	pc.clip_contents = false
 	row.add_child(pc)
 	var pv := VBoxContainer.new()
 	pv.alignment = BoxContainer.ALIGNMENT_CENTER
+	pv.add_theme_constant_override("separation", 8)
 	pc.add_child(pv)
+	var portrait_pad := Control.new()
+	portrait_pad.custom_minimum_size = Vector2(0, 10)
+	pv.add_child(portrait_pad)
 	_portrait = TextureRect.new()
-	_portrait.custom_minimum_size = Vector2(140 if portrait else 200, 140 if portrait else 200)
+	_portrait.custom_minimum_size = Vector2(150 if portrait else 210, 160 if portrait else 220)
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_portrait.clip_contents = false
 	pv.add_child(_portrait)
 	_name = UiTheme.title_label("", 26 if portrait else 28)
 	pv.add_child(_name)

@@ -1,6 +1,20 @@
 # MVP status (repo mirror)
 
-**Latest (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
+**Latest (Master Brief Phases 0–9):** Full brief pass on the Godot MVP.
+
+- **P0 bugs** fixed (picker OOB, touch shoot, sticks, result unpause, scrap migration, chargers, focus-out pause, polygon spam, Dev chrome).
+- **P1 feel:** on-screen auto-fire, 0.5s i-frames, heal drops, larger heroes / smaller pets, bottle-cap DASH/ABILITY, HEALTH/XP HUD.
+- **P2 stay-or-go:** Haze/Drift + loot × mult / Threat, extract windows, 3s pad channel (hit resets), death keep %.
+- **P3–4:** special ammo + shared/class run upgrades; survivor tricks (Overload, Rush, Heal, etc.).
+- **P5:** elite/boss rewards, Rad Gator death cloud, role roster.
+- **P6–7:** Hangar layers (Generator/Radio/Scrap Press/Ammo Bench, stations, kennel, stash) + gear/legendary stubs.
+- **P8–9:** Dust tiers 1–10 unlock ladder; events (Supply Crash, Dust Surge, Elite Hunt…) + logbook/quest stubs.
+  Headless `test_runner` PASS (both bot matches extract).
+
+**Combat wiring pass:** Class upgrades now apply (was dropped by `run_mods.has`); shared shot mods (split/pierce/ricochet/poison), scrap drone / spore mines / orbit blades, firewalk / second wind / iron tonic, kennel ranks scale Noel/Bentley/Lillie, events (Scrap Spike / Dust Surge / etc.) apply timed effects, set-bonus tags from armor + stations.
+
+
+**Prior (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
 
 **Prior (Hangar scroll):** Full meta catalog was hard to drag / stuck on iPhone·Xogot portrait. `hangar.gd` now uses a touch-friendly ScrollContainer (no horizontal steal, deadzone, follow-focus), rows pass drag to the scroller, list width syncs for autowrap height, rebuild frees rows immediately and clamps scroll, portrait chrome tightened + end pad for Xogot bottom toolbar. Re-pull PR #10.
 

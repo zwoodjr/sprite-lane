@@ -41,12 +41,26 @@ var auto_aim: bool:
 
 func _ready() -> void:
 	touch_primary = _detect_touch_primary()
+	## iOS/Xogot emulate a mouse click from the first touch. If "shoot" is bound
+	## to LMB, every tap = fire (slows the player, blocks OOS regen). Drop mouse
+	## shoot/dash bindings on touch-primary devices; keep keyboard on all.
+	if touch_primary:
+		_strip_mouse_from_action("shoot")
+		_strip_mouse_from_action("dash")
 
 
 func _detect_touch_primary() -> bool:
 	if OS.has_feature("mobile") or OS.has_feature("ios") or OS.has_feature("android"):
 		return true
 	return DisplayServer.is_touchscreen_available()
+
+
+func _strip_mouse_from_action(action: String) -> void:
+	if not InputMap.has_action(action):
+		return
+	for ev in InputMap.action_get_events(action):
+		if ev is InputEventMouseButton:
+			InputMap.action_erase_event(action, ev)
 
 
 func is_single_stick() -> bool:

@@ -54,11 +54,13 @@ func _ready() -> void:
 	_twin = bool(GameState.settings.get("twin_stick", false))
 	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
 
-	btn_fire = _make_button("FIRE", "hold", 56.0, UiTheme.RUST)
-	btn_dash = _make_button("DASH", "", 46.0, UiTheme.TEAL)
-	btn_ability = _make_button("ABILITY", "", 46.0, UiTheme.AMBER)
-	btn_mount = _make_button("MOUNT", "", 36.0, Color(0.6, 0.6, 0.75))
-	btn_pause = _make_button("II", "", 30.0, Color(0.75, 0.68, 0.58))
+	## Phase 1 layout: big DASH + smaller ABILITY. FIRE removed when auto-fire
+	## is on (default); RIDE sits as a small top toggle off the main cluster.
+	btn_fire = _make_button("FIRE", "hold", 44.0, UiTheme.RUST)
+	btn_dash = _make_button("DASH", "", 58.0, UiTheme.TEAL)
+	btn_ability = _make_button("ABILITY", "", 42.0, UiTheme.AMBER)
+	btn_mount = _make_button("RIDE", "", 28.0, Color(0.6, 0.6, 0.75))
+	btn_pause = _make_button("II", "", 28.0, Color(0.75, 0.68, 0.58))
 
 	btn_fire.pressed_down.connect(func() -> void: TouchInput.set_fire_held(true))
 	btn_fire.released.connect(func() -> void: TouchInput.set_fire_held(false))
@@ -73,6 +75,9 @@ func _ready() -> void:
 		## Desktop: keyboard + mouse. Keep pause visible, hide thumb controls.
 		for b in [btn_fire, btn_dash, btn_ability, btn_mount]:
 			b.visible = false
+	elif TouchInput.is_auto_fire() and TouchInput.is_single_stick():
+		## Auto-fire covers shooting — hide FIRE so the right side stays two buttons.
+		btn_fire.visible = false
 
 func _make_button(text: String, sub: String, r: float, tint: Color) -> Control:
 	var b: Control = Control.new()
@@ -98,12 +103,11 @@ func _layout() -> void:
 	root.offset_bottom = -(win.y - (m.position.y + m.size.y))
 	var w := m.size.x
 	var h := m.size.y
-	## Portrait-friendly cluster: bottom-right (mirrored when left-handed).
-	## FIRE stays available for idle hold; smaller so it doesn't crowd DASH/ABILITY.
-	_place(btn_fire, Vector2(w - 78, h - 210))
-	_place(btn_dash, Vector2(w - 92, h - 96))
-	_place(btn_ability, Vector2(w - 200, h - 78))
-	_place(btn_mount, Vector2(w - 188, h - 188))
+	## Right side: big DASH + smaller ABILITY. RIDE + pause live near the top.
+	_place(btn_dash, Vector2(w - 88, h - 100))
+	_place(btn_ability, Vector2(w - 196, h - 78))
+	_place(btn_fire, Vector2(w - 88, h - 220))
+	_place(btn_mount, Vector2(w - 46, 96), false)
 	_place(btn_pause, Vector2(w - 34, 36), false)
 
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
@@ -260,9 +264,12 @@ func _process(delta: float) -> void:
 		_player = get_tree().get_first_node_in_group("player")
 	if _player:
 		btn_dash.set("cooldown_ratio", _player.call("get_dash_cooldown_ratio"))
+		btn_dash.set("icon_kind", "rush")
 		btn_ability.set("cooldown_ratio", _player.call("get_ability_cooldown_ratio"))
 		btn_ability.set("label_text", str(_player.call("get_ability_short_name")))
 		btn_ability.set("disabled", not bool(_player.call("has_ability")))
+		var ab: Dictionary = GameState.get_character().get("ability", {})
+		btn_ability.set("icon_kind", str(ab.get("icon", "")))
 		var mount_ok: bool = bool(_player.call("can_mount"))
 		btn_mount.set("disabled", not mount_ok)
 		btn_mount.set("label_text", "RIDE" if not _player.call("is_mounted") else "HOP OFF")

@@ -5,8 +5,8 @@ extends CharacterBody2D
 signal rampage_started(target: Node)
 signal rampage_ended
 
-## Pets sit near hero FOV so companions aren't tiny ants beside the cast.
-const BODY_FOV_PX := 50.0
+## Pets must read smaller than heroes (were oversized vs 60px heroes).
+const BODY_FOV_PX := 38.0
 
 var _def: Dictionary = {}
 var _player: Node2D
@@ -220,8 +220,9 @@ func _idle_bite() -> void:
 func _tick_rampage_aoe() -> void:
 	if _aoe_cd > 0.0:
 		return
-	_aoe_cd = float(_def.get("rampage_tick", 0.28))
-	var radius := float(_def.get("rampage_aoe_radius", 110.0))
+	var rank := GameState.kennel_rank(str(_def.get("id", "")))
+	_aoe_cd = float(_def.get("rampage_tick", 0.28)) * (1.0 - 0.05 * float(rank))
+	var radius := float(_def.get("rampage_aoe_radius", 110.0)) * (1.0 + 0.08 * float(rank))
 	var dmg := float(_def.get("rampage_aoe_damage", 38.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
 	Juice.burst(global_position, Color(1.0, 0.4, 0.2, 0.9), 14, radius * 1.4, 0.35, 1.2)
 	Juice.dust_puff(global_position + Vector2(0, 10), 10)
@@ -246,11 +247,14 @@ func _tick_bentley() -> void:
 		_do_find()
 
 func _do_bark() -> void:
-	_bark_cd = float(_def.get("bark_cooldown", 5.5))
+	var rank := GameState.kennel_rank(str(_def.get("id", "")))
+	var cd := float(_def.get("bark_cooldown", 5.5)) * (1.0 - 0.08 * float(rank))
+	_bark_cd = maxf(2.8, cd)
 	_accent_left = 0.55
 	_apply_look()
-	var radius := float(_def.get("bark_radius", 180.0))
-	var dur := float(_def.get("bark_distract_sec", 1.4))
+	## Kennel: bark reaches farther and briefly stuns (longer distract).
+	var radius := float(_def.get("bark_radius", 180.0)) * (1.0 + 0.15 * float(rank))
+	var dur := float(_def.get("bark_distract_sec", 1.4)) * (1.0 + 0.2 * float(rank))
 	Juice.sfx("ability", -4.0)
 	Juice.float_text(global_position + Vector2(0, -26), "BARK!", Color(1.0, 0.9, 0.5), 16)
 	Juice.burst(global_position, Color(1.0, 0.85, 0.4), 12, radius * 0.6, 0.35)
@@ -267,10 +271,13 @@ func _do_bark() -> void:
 		Juice.shake(0.08)
 
 func _do_find() -> void:
-	_find_cd = float(_def.get("find_cooldown", 7.0))
+	var rank := GameState.kennel_rank(str(_def.get("id", "")))
+	var cd := float(_def.get("find_cooldown", 7.0)) * (1.0 - 0.1 * float(rank))
+	_find_cd = maxf(3.5, cd)
 	_accent_left = maxf(_accent_left, 0.4)
 	_apply_look()
-	var radius := float(_def.get("find_radius", 520.0))
+	## Kennel: gifts get better (more scrap / wider pull).
+	var radius := float(_def.get("find_radius", 520.0)) * (1.0 + 0.12 * float(rank))
 	Juice.sfx("pickup", -6.0)
 	Juice.float_text(global_position + Vector2(0, -26), "FOUND!", Color(0.7, 0.95, 0.6), 15)
 	## Ping breakables in range.
@@ -291,8 +298,10 @@ func _do_find() -> void:
 			continue
 		p.global_position = p.global_position.lerp(_player.global_position, 0.55)
 		pulled += 1
-	## Always a little scrap sniff.
-	var scrap := GameState.add_scrap(randi_range(1, 3))
+	## Always a little scrap sniff — kennel ranks improve gifts.
+	var lo := 1 + rank
+	var hi := 3 + rank * 2
+	var scrap := GameState.add_scrap(randi_range(lo, hi))
 	Juice.float_text(_player.global_position + Vector2(0, -40), "+%d scrap" % scrap, UiTheme.AMBER, 14)
 	if pulled > 0:
 		Juice.burst(_player.global_position, Color(0.6, 1.0, 0.7), 10, 120.0, 0.4)
@@ -300,7 +309,8 @@ func _do_find() -> void:
 func _try_start_ram() -> void:
 	if _ram_cd > 0.0:
 		return
-	var max_r := float(_def.get("ram_range", 280.0))
+	var rank := GameState.kennel_rank(str(_def.get("id", "")))
+	var max_r := float(_def.get("ram_range", 280.0)) * (1.0 + 0.1 * float(rank))
 	var foe := _nearest_enemy(max_r)
 	if foe == null:
 		return
@@ -309,7 +319,7 @@ func _try_start_ram() -> void:
 	## Long enough to close on a moving target when we home each frame.
 	_ram_left = float(_def.get("ram_duration", 0.85))
 	_ram_wake_hit.clear()
-	_ram_cd = float(_def.get("ram_cooldown", 6.5))
+	_ram_cd = float(_def.get("ram_cooldown", 6.5)) * (1.0 - 0.08 * float(rank))
 	_apply_look()
 	Juice.sfx("dash", -2.0)
 	Juice.float_text(global_position + Vector2(0, -28), "LILLIE RAM!", Color(1.0, 0.55, 0.3), 16)
