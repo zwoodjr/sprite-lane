@@ -100,7 +100,7 @@ func _mode_card(mode: Dictionary, portrait: bool = false) -> Control:
 		"%d chances to extract" % windows,
 		"Enemies at %d%% strength" % int(float(mode["enemy_hp"]) * 100.0),
 		"Payout ×%.2f" % float(mode["payout_mult"]),
-		"%d gear slots insured (kept even if you wipe)" % int(mode["insurance_slots"]),
+		"Wipe keeps banked scrap + Hangar · bag loot is at risk",
 	]
 	for line in lines:
 		var l := UiTheme.body_label("• " + line, 16)

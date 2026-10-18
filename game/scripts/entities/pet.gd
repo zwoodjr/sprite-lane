@@ -5,7 +5,8 @@ extends CharacterBody2D
 signal rampage_started(target: Node)
 signal rampage_ended
 
-const BODY_FOV_PX := 42.0
+## Pets sit near hero FOV so companions aren't tiny ants beside the cast.
+const BODY_FOV_PX := 50.0
 
 var _def: Dictionary = {}
 var _player: Node2D
@@ -305,7 +306,8 @@ func _try_start_ram() -> void:
 		return
 	_target = foe
 	_ram_dir = (foe.global_position - global_position).normalized()
-	_ram_left = 0.55
+	## Long enough to close on a moving target when we home each frame.
+	_ram_left = float(_def.get("ram_duration", 0.85))
 	_ram_wake_hit.clear()
 	_ram_cd = float(_def.get("ram_cooldown", 6.5))
 	_apply_look()
@@ -315,41 +317,56 @@ func _try_start_ram() -> void:
 
 func _tick_ram(delta: float) -> void:
 	_ram_left -= delta
+	## Home on the live target so knockback / strafe can't make us hit empty air.
+	if _target != null and is_instance_valid(_target):
+		var to_tgt := (_target as Node2D).global_position - global_position
+		if to_tgt.length() > 4.0:
+			_ram_dir = _ram_dir.lerp(to_tgt.normalized(), clampf(delta * 10.0, 0.0, 1.0)).normalized()
 	var spd := float(_def.get("ram_speed", 520.0))
 	velocity = _ram_dir * spd
 	move_and_slide()
 	if body:
 		body.flip_h = _ram_dir.x < 0.0
-	## Wake damage — hit enemies we pass near (once per charge).
-	var wake_r := float(_def.get("ram_wake_radius", 36.0))
+	## Wake: enemies we pass (not the primary — they get the impact hit).
+	var wake_r := float(_def.get("ram_wake_radius", 42.0))
 	var wake_dmg := float(_def.get("ram_wake_damage", 14.0))
+	var primary_id := _target.get_instance_id() if _target != null and is_instance_valid(_target) else -1
 	for n in get_tree().get_nodes_in_group("enemies"):
 		if not (n is Node2D) or not is_instance_valid(n):
 			continue
 		var e := n as Node2D
 		var id := e.get_instance_id()
-		if _ram_wake_hit.has(id):
+		if id == primary_id or _ram_wake_hit.has(id):
 			continue
 		if global_position.distance_to(e.global_position) > wake_r:
 			continue
 		_ram_wake_hit[id] = true
 		if e.has_method("take_damage"):
-			e.call("take_damage", wake_dmg, _ram_dir)
+			## No knock on wake — normalized dirs would still full-yeet the pack.
+			e.call("take_damage", wake_dmg, Vector2.ZERO)
 		Juice.burst(e.global_position, Color(1.0, 0.7, 0.4), 6, 80.0, 0.2)
-	## Impact: close to target or timer end.
-	var impact := false
+	## Real contact only — timer expire without contact = miss, no phantom AOE.
+	var contact_r := float(_def.get("ram_contact_radius", 48.0))
 	if _target != null and is_instance_valid(_target):
-		if global_position.distance_to(_target.global_position) < 28.0:
-			impact = true
+		if global_position.distance_to((_target as Node2D).global_position) <= contact_r:
+			_ram_impact(true)
+			return
 	if _ram_left <= 0.0:
-		impact = true
-	if impact:
-		_ram_impact()
+		_ram_impact(false)
 
-func _ram_impact() -> void:
+func _ram_impact(connected: bool) -> void:
 	_ram_left = 0.0
+	if not connected:
+		Juice.dust_puff(global_position + Vector2(0, 10), 6)
+		Juice.float_text(global_position + Vector2(0, -24), "MISS", Color(0.75, 0.7, 0.6), 14)
+		_target = null
+		_apply_look()
+		return
 	var radius := float(_def.get("ram_impact_radius", 95.0))
 	var dmg := float(_def.get("ram_impact_damage", 42.0))
+	## Snap onto the target so the boom reads on their body, not empty dust.
+	if _target != null and is_instance_valid(_target):
+		global_position = global_position.lerp((_target as Node2D).global_position, 0.55)
 	Juice.sfx("enemy_die", -4.0)
 	Juice.burst(global_position, Color(1.0, 0.5, 0.25), 22, radius * 1.5, 0.5)
 	Juice.shake(0.22)
@@ -392,7 +409,10 @@ func _update_visuals(delta: float) -> void:
 	_walk.tick(body, velocity, delta, {
 		"move_thresh": 24.0,
 		"speed_ref": float(_def.get("follow_speed", 260.0)),
-		"bob_amp": 3.2 if hot else 2.4,
+		## Strip already has the doodle trot — keep secondary motion tiny.
+		"bob_amp": 1.4 if hot else 0.9,
+		"squash_amp": 0.012,
+		"lean_amp": 0.03,
 		"attack": hot or _accent_left > 0.0,
 	})
 	if _ram_left > 0.0:

@@ -18,6 +18,9 @@ const ACCOUNT_XP_STEP := 60
 const EXTRACT_ACCOUNT_XP := 25
 const WIPE_ACCOUNT_XP_FLOOR := 8
 
+## Loadout / stash UI not shipped — hide insurance buy CTA until it exists.
+const LOADOUT_UI_SHIPPED := false
+
 
 static func run_xp_to_next(level: int) -> int:
 	var lv := clampi(level, 1, RUN_LEVEL_CAP)
@@ -99,68 +102,114 @@ static func roll_run_choices(count: int = 2, exclude: Array = []) -> Array[Dicti
 
 
 ## Meta Hangar catalog — scrap spend, permanent. Soft-gated by account_level.
+## Tuned so ~3 extracts cannot dump the tree (more ranks, steeper costs, extra skills).
 static func hangar_catalog() -> Array[Dictionary]:
 	return [
 		{
 			"id": "starting_hp",
 			"name": "Iron Rations",
-			"desc": "+15 starting HP per rank",
-			"cost": 70,
-			"cost_step": 40,
-			"max_rank": 5,
+			"desc": "+10 starting HP per rank",
+			"cost": 90,
+			"cost_step": 55,
+			"cost_curve": 1.35,
+			"max_rank": 8,
 			"min_account_level": 1,
 			"effect": "max_hp",
-			"per_rank": 15.0,
+			"per_rank": 10.0,
 		},
 		{
 			"id": "scrap_find",
 			"name": "Magnet Fingers",
-			"desc": "+12% scrap found in-run per rank",
-			"cost": 55,
-			"cost_step": 35,
-			"max_rank": 5,
+			"desc": "+8% scrap found in-run per rank (diminishing feel via cost curve)",
+			"cost": 75,
+			"cost_step": 50,
+			"cost_curve": 1.4,
+			"max_rank": 8,
 			"min_account_level": 1,
 			"effect": "scrap_find",
-			"per_rank": 0.12,
+			"per_rank": 0.08,
 		},
 		{
 			"id": "starting_damage",
 			"name": "Honed Edge",
-			"desc": "+6% starting damage per rank",
-			"cost": 80,
-			"cost_step": 45,
-			"max_rank": 4,
+			"desc": "+4% starting damage per rank",
+			"cost": 110,
+			"cost_step": 65,
+			"cost_curve": 1.4,
+			"max_rank": 8,
 			"min_account_level": 2,
 			"effect": "damage",
-			"per_rank": 0.06,
+			"per_rank": 0.04,
 		},
 		{
-			"id": "insurance_slot",
-			"name": "Extra Tape",
-			"desc": "+1 insurance slot (mode cap still applies)",
-			"cost": 140,
-			"cost_step": 80,
-			"max_rank": 2,
+			"id": "dash_cooldown",
+			"name": "Loose Boots",
+			"desc": "−4% dash cooldown per rank",
+			"cost": 85,
+			"cost_step": 50,
+			"cost_curve": 1.35,
+			"max_rank": 6,
+			"min_account_level": 2,
+			"effect": "dash_cd",
+			"per_rank": 0.04,
+		},
+		{
+			"id": "extract_payout",
+			"name": "Ledger Grease",
+			"desc": "+5% extract scrap payout per rank",
+			"cost": 120,
+			"cost_step": 70,
+			"cost_curve": 1.45,
+			"max_rank": 6,
 			"min_account_level": 3,
-			"effect": "insurance",
-			"per_rank": 1.0,
+			"effect": "extract_payout",
+			"per_rank": 0.05,
 		},
 		{
 			"id": "hangar_notes",
 			"name": "Field Notes",
 			"desc": "Unlock stub — hangar lore scrap (cosmetic for now)",
-			"cost": 40,
-			"cost_step": 0,
-			"max_rank": 1,
+			"cost": 60,
+			"cost_step": 40,
+			"cost_curve": 1.2,
+			"max_rank": 3,
 			"min_account_level": 1,
 			"effect": "notes",
 			"per_rank": 1.0,
 		},
+		{
+			## Hidden until a real loadout / stash screen ships — buying slots with nowhere to assign them is confusing.
+			"id": "insurance_slot",
+			"name": "Extra Tape",
+			"desc": "+1 insurance slot (needs Loadout screen — coming later)",
+			"cost": 200,
+			"cost_step": 120,
+			"cost_curve": 1.5,
+			"max_rank": 3,
+			"min_account_level": 4,
+			"effect": "insurance",
+			"per_rank": 1.0,
+			"requires_loadout_ui": true,
+		},
 	]
 
 
+static func hangar_catalog_visible() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for entry in hangar_catalog():
+		if bool(entry.get("requires_loadout_ui", false)) and not LOADOUT_UI_SHIPPED:
+			continue
+		out.append(entry)
+	return out
+
+
 static func hangar_cost(entry: Dictionary, current_rank: int) -> int:
-	return int(entry.get("cost", 50)) + int(entry.get("cost_step", 0)) * current_rank
+	## Base + linear step, then multiply by cost_curve^rank for late-rank stretch.
+	var base := float(entry.get("cost", 50)) + float(entry.get("cost_step", 0)) * float(current_rank)
+	var curve := float(entry.get("cost_curve", 1.0))
+	if curve > 1.001 and current_rank > 0:
+		base *= pow(curve, float(current_rank))
+	return maxi(1, int(round(base)))
 
 
 static func meta_bonus(meta: Dictionary, effect: String) -> float:

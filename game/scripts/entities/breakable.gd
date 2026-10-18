@@ -7,7 +7,9 @@ signal broken(global_pos: Vector2)
 const PickupScene := preload("res://scenes/entities/powerup_pickup.tscn")
 
 @export var max_hp: float = 24.0
-@export var drop_chance: float = 0.65 ## with ~⅕ spawn density ≈ rare finds overall
+## Power-up rate target ~2/10 crates. Rest: empty or scrap-only.
+@export var powerup_chance: float = 0.20
+@export var scrap_only_chance: float = 0.40 ## of the non-powerup rolls → lean scrap; else empty
 
 var hp: float = 24.0
 var kind: String = "crate"
@@ -84,9 +86,18 @@ func _break_open() -> void:
 	Juice.shake(0.1)
 	Juice.burst(pos, Color(0.7, 0.5, 0.3), 16, 200.0, 0.5, 1.2)
 	broken.emit(pos)
-	if randf() <= drop_chance:
+	## Outcomes: power-up (~20%) · scrap-only (~32%) · empty (~48%).
+	var roll := randf()
+	if roll <= powerup_chance:
 		## Deferred: we're usually inside a physics callback (bullet hit).
 		_spawn_pickup.call_deferred(get_tree().current_scene, pos)
-	var scrap := GameState.add_scrap(randi_range(1, 3))
-	Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap, UiTheme.AMBER, 15)
+		## Tiny scrap with buffs so opens aren't always dry.
+		if randf() < 0.35:
+			var scrap := GameState.add_scrap(1)
+			Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap, UiTheme.AMBER, 14)
+	elif roll <= powerup_chance + (1.0 - powerup_chance) * scrap_only_chance:
+		var scrap2 := GameState.add_scrap(randi_range(1, 2))
+		Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap2, UiTheme.AMBER, 15)
+	else:
+		Juice.float_text(pos + Vector2(0, -18), "empty", Color(0.7, 0.65, 0.55), 13)
 	queue_free()

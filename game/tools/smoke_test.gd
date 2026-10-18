@@ -23,7 +23,9 @@ func _init() -> void:
 	assert(LoadoutStubs.mount_ladder().size() == 3)
 	assert(bool(LoadoutStubs.tank_entry()["dev_only"]))
 	assert(Progression.run_xp_to_next(1) == 30)
-	assert(Progression.hangar_catalog().size() >= 4)
+	assert(Progression.hangar_catalog().size() >= 6)
+	assert(Progression.hangar_catalog_visible().size() >= 5)
+	assert(not Progression.LOADOUT_UI_SHIPPED) ## insurance CTA hidden until loadout UI
 	assert(Progression.roll_run_choices(2).size() == 2)
 	assert(Progression.account_level_from_xp(0) == 1)
 	assert(PetDefs.all_pets().size() == 3)

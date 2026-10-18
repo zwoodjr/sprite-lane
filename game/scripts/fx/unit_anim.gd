@@ -55,6 +55,9 @@ func tick(sprite: Sprite2D, velocity: Vector2, delta: float, opts: Dictionary = 
 	var move_thresh := float(opts.get("move_thresh", 28.0))
 	var speed_ref := float(opts.get("speed_ref", 200.0))
 	var bob_amp := float(opts.get("bob_amp", 3.0))
+	## Pets / quadrupeds: keep near-zero so strip frames aren't re-hotdog'd.
+	var squash_amp := float(opts.get("squash_amp", 0.045))
+	var lean_amp := float(opts.get("lean_amp", 0.08))
 	var attack := bool(opts.get("attack", false))
 	var moving := velocity.length() > move_thresh
 	## Face travel direction when moving; keep last facing when idle.
@@ -73,10 +76,10 @@ func tick(sprite: Sprite2D, velocity: Vector2, delta: float, opts: Dictionary = 
 		sprite.position.y = -absf(sin(_phase)) * bob_amp
 		var squash := sin(_phase * 2.0)
 		sprite.scale = Vector2(
-			bs * (1.0 + squash * 0.045),
-			bs * (1.0 - squash * 0.045)
+			bs * (1.0 + squash * squash_amp),
+			bs * (1.0 - squash * squash_amp)
 		)
-		var want_lean := clampf(velocity.x / maxf(speed_ref, 1.0), -1.0, 1.0) * 0.08
+		var want_lean := clampf(velocity.x / maxf(speed_ref, 1.0), -1.0, 1.0) * lean_amp
 		_lean = lerpf(_lean, want_lean, clampf(delta * 10.0, 0.0, 1.0))
 		sprite.rotation = _lean
 	else:

@@ -203,6 +203,13 @@ func starting_damage_bonus() -> float:
 func insurance_bonus_slots() -> int:
 	return int(Progression.meta_bonus(meta_upgrades, "insurance"))
 
+func dash_cooldown_mult() -> float:
+	## Hangar Loose Boots — floor so dash never becomes free spam.
+	return maxf(0.55, 1.0 - Progression.meta_bonus(meta_upgrades, "dash_cd"))
+
+func extract_payout_mult() -> float:
+	return 1.0 + Progression.meta_bonus(meta_upgrades, "extract_payout")
+
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
 	save_profile()
@@ -339,6 +346,9 @@ func try_buy_hangar(entry_id: String) -> bool:
 			break
 	if entry.is_empty():
 		return false
+	## Insurance slots stay data-ready but unpurchasable until Loadout UI ships.
+	if bool(entry.get("requires_loadout_ui", false)) and not Progression.LOADOUT_UI_SHIPPED:
+		return false
 	var rank := meta_rank(entry_id)
 	if rank >= int(entry.get("max_rank", 1)):
 		return false
@@ -360,7 +370,9 @@ func on_extract_success() -> void:
 	var mode := get_mode()
 	var tl := ModeDefs.tl_table(threat_level)
 	var base := 100 + scrap_found * 2 + kills * 5
-	payout_this_run = int(base * stay_bonus * float(tl["payout"]) * float(mode["payout_mult"]))
+	payout_this_run = int(
+		base * stay_bonus * float(tl["payout"]) * float(mode["payout_mult"]) * extract_payout_mult()
+	)
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
 	result_scrap_banked = payout_this_run

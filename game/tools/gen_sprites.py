@@ -912,34 +912,84 @@ def make_brute() -> Image.Image:
 # ---------------------------------------------------------------------------
 
 def make_skate() -> Image.Image:
-    """Scrap skateboard with vial strap + taped trucks."""
-    img = new(48, 24)
+    """Thin scrap skateboard — clear deck silhouette (not a hotdog blob)."""
+    img = new(80, 40)
     p = img.load()
-    w, h = 48, 24
-    # deck
-    fill_rect(p, 3, 8, 44, 16, (70, 50, 34, 255), w, h)
-    fill_rect(p, 3, 8, 44, 11, (160, 100, 48, 255), w, h)
-    fill_rect(p, 5, 6, 42, 10, (120, 78, 40, 255), w, h)
-    # grip tape strip
-    fill_rect(p, 8, 9, 39, 11, SCRAP_DK, w, h)
-    # nose/tail kick
-    fill_rect(p, 2, 7, 5, 12, (140, 90, 48, 255), w, h)
-    fill_rect(p, 42, 7, 45, 12, (140, 90, 48, 255), w, h)
-    # herb / vial strap
-    fill_rect(p, 17, 3, 30, 9, VIAL_DK, w, h)
-    fill_rect(p, 18, 4, 29, 8, VIAL, w, h)
-    px(p, 19, 5, VIAL_LT, w, h)
-    fill_rect(p, 21, 2, 26, 4, SCRAP, w, h)
+    w, h = 80, 40
+    drop_shadow(img, 40, 34, 28, 4, 70)
+    # thin deck (side profile) with nose/tail kicks
+    wood = (150, 104, 58, 255)
+    wood_lt = (178, 128, 74, 255)
+    wood_dk = (96, 64, 36, 255)
+    fill_rect(p, 6, 14, 73, 20, wood_dk, w, h)
+    fill_rect(p, 6, 14, 73, 17, wood_lt, w, h)
+    fill_rect(p, 8, 15, 71, 19, wood, w, h)
+    # kicknose / kicktail (up-tilted ends)
+    fill_rect(p, 4, 11, 10, 17, wood_lt, w, h)
+    fill_rect(p, 69, 11, 75, 17, wood_lt, w, h)
+    fill_rect(p, 5, 12, 9, 15, wood, w, h)
+    fill_rect(p, 70, 12, 74, 15, wood, w, h)
+    # grip tape
+    fill_rect(p, 14, 15, 65, 17, SCRAP_DK, w, h)
+    for x in range(16, 64, 3):
+        px(p, x, 16, (50, 44, 40, 255), w, h)
+    # rust bands
+    fill_rect(p, 18, 14, 22, 20, RUST, w, h)
+    fill_rect(p, 57, 14, 61, 20, RUST, w, h)
+    # vial pouch + tonic
+    fill_rect(p, 24, 8, 34, 15, (70, 48, 32, 255), w, h)
+    fill_rect(p, 26, 5, 32, 14, VIAL_DK, w, h)
+    fill_rect(p, 27, 6, 31, 13, VIAL, w, h)
+    px(p, 28, 7, VIAL_LT, w, h)
+    fill_rect(p, 27, 4, 31, 6, SCRAP, w, h)
     # trucks
-    fill_rect(p, 9, 14, 16, 18, SCRAP, w, h)
-    fill_rect(p, 31, 14, 38, 18, SCRAP, w, h)
-    fill_rect(p, 10, 14, 15, 15, DUST, w, h)  # tape
-    fill_rect(p, 32, 14, 37, 15, DUST, w, h)
+    fill_rect(p, 14, 20, 24, 24, SCRAP, w, h)
+    fill_rect(p, 55, 20, 65, 24, SCRAP, w, h)
+    px(p, 16, 21, DUST, w, h)
+    px(p, 57, 21, DUST, w, h)
+    # wheels (two visible)
+    fill_ellipse(p, 12, 22, 24, 34, SCRAP_DK, w, h)
+    fill_ellipse(p, 53, 22, 65, 34, SCRAP_DK, w, h)
+    fill_ellipse(p, 15, 25, 21, 31, (180, 150, 90, 255), w, h)
+    fill_ellipse(p, 56, 25, 62, 31, (180, 150, 90, 255), w, h)
+    fill_ellipse(p, 17, 27, 19, 29, AMBER, w, h)
+    fill_ellipse(p, 58, 27, 60, 29, AMBER, w, h)
+    return add_outline(img, thickness=2)
+
+
+def make_scooter() -> Image.Image:
+    """Scrap kick-scooter — ladder tier above skateboard."""
+    img = new(72, 72)
+    p = img.load()
+    w, h = 72, 72
+    drop_shadow(img, 38, 64, 22, 4, 70)
+    rust = RUST
+    rust_lt = shade(RUST, 1.2)
+    # deck
+    fill_rect(p, 18, 44, 58, 54, SCRAP_DK, w, h)
+    fill_rect(p, 18, 44, 58, 48, rust_lt, w, h)
+    fill_rect(p, 20, 45, 56, 52, rust, w, h)
+    for x in range(22, 54, 4):
+        px(p, x, 47, RUST_DK, w, h)
+    # stem + T-bar
+    fill_rect(p, 22, 12, 28, 46, SCRAP, w, h)
+    fill_rect(p, 22, 12, 28, 18, SCRAP_LT, w, h)
+    fill_rect(p, 10, 10, 40, 16, SCRAP_DK, w, h)
+    fill_rect(p, 10, 10, 40, 13, SCRAP, w, h)
+    fill_rect(p, 8, 11, 14, 15, (40, 36, 32, 255), w, h)
+    fill_rect(p, 36, 11, 42, 15, (40, 36, 32, 255), w, h)
+    # vial pouch
+    fill_rect(p, 30, 34, 40, 46, (70, 48, 32, 255), w, h)
+    fill_rect(p, 32, 30, 38, 44, VIAL_DK, w, h)
+    fill_rect(p, 33, 31, 37, 43, VIAL, w, h)
+    px(p, 34, 32, VIAL_LT, w, h)
     # wheels
-    fill_ellipse(p, 7, 15, 16, 22, SCRAP_DK, w, h)
-    fill_ellipse(p, 31, 15, 40, 22, SCRAP_DK, w, h)
-    fill_ellipse(p, 9, 17, 14, 20, AMBER_DK, w, h)
-    fill_ellipse(p, 33, 17, 38, 20, AMBER_DK, w, h)
+    fill_ellipse(p, 16, 50, 30, 64, SCRAP_DK, w, h)
+    fill_ellipse(p, 48, 50, 62, 64, SCRAP_DK, w, h)
+    fill_ellipse(p, 19, 53, 27, 61, (160, 90, 50, 255), w, h)
+    fill_ellipse(p, 51, 53, 59, 61, (160, 90, 50, 255), w, h)
+    # rear fender
+    fill_rect(p, 50, 48, 60, 52, SCRAP, w, h)
     return add_outline(img, thickness=2)
 
 
@@ -1023,7 +1073,7 @@ def make_wreck() -> Image.Image:
 
 
 def make_herb_crate() -> Image.Image:
-    """Breakable — chunky wood + bright vial lid (FOV pop)."""
+    """Breakable — chunky wood grain + bright vial (wasteland sheet detail)."""
     img = new(40, 40)
     p = img.load()
     w, h = 40, 40
@@ -1033,6 +1083,16 @@ def make_herb_crate() -> Image.Image:
     fill_rect(p, 5, 30, 34, 34, (86, 56, 30, 255), w, h)
     fill_rect(p, 5, 20, 34, 21, (70, 46, 24, 255), w, h)
     fill_rect(p, 5, 26, 34, 27, (70, 46, 24, 255), w, h)
+    # plank seams + nail heads
+    for x in (12, 20, 28):
+        fill_rect(p, x, 13, x, 33, (70, 46, 24, 255), w, h)
+    px(p, 8, 14, SCRAP, w, h)
+    px(p, 30, 14, SCRAP, w, h)
+    px(p, 8, 31, SCRAP_DK, w, h)
+    px(p, 30, 31, SCRAP_DK, w, h)
+    # corner rust
+    px(p, 6, 33, RUST, w, h)
+    px(p, 32, 33, RUST, w, h)
     # sealed vial on top — tall for silhouette
     fill_rect(p, 14, 2, 25, 14, VIAL_DK, w, h)
     fill_rect(p, 15, 3, 24, 12, VIAL, w, h)
@@ -1149,6 +1209,7 @@ def make_rock(seed: int, size: int) -> Image.Image:
     rnd = random.Random(seed)
     img = new(size, size)
     d = ImageDraw.Draw(img)
+    p = img.load()
     drop_shadow(img, size // 2, int(size * 0.78), int(size * 0.4), int(size * 0.12), 70)
     pts = []
     for i in range(8):
@@ -1159,6 +1220,13 @@ def make_rock(seed: int, size: int) -> Image.Image:
     top = [(x, y - 2) for x, y in pts if y < size * 0.55]
     if len(top) >= 3:
         d.polygon(top, fill=(134, 120, 106, 255))
+    # facet chips + rust flecks for sheet readability
+    for _ in range(3):
+        x = rnd.randint(size // 4, size * 3 // 4)
+        y = rnd.randint(size // 3, size * 2 // 3)
+        d.rectangle([x, y, x + 2, y + 1], fill=(84, 74, 66, 255))
+    if rnd.random() < 0.6:
+        px(p, size // 2, size // 2 + 2, RUST, size, size)
     return add_outline(img, thickness=2)
 
 
@@ -1243,53 +1311,78 @@ def _soft_blob(d: ImageDraw.ImageDraw, cx: int, cy: int, rw: int, rh: int, col) 
 
 
 def ground_tile(seed: int, kind: str = "plain") -> Image.Image:
-    """Wide-FOV ground: soft value patches, sparse mid-scale grit — no specklemush."""
+    """Chunky wasteland ground — readable pixel grit, not soft flat blobs."""
     rnd = random.Random(seed)
     base = DUST[:3]
     img = Image.new("RGBA", (64, 64), base + (255,))
     d = ImageDraw.Draw(img)
+    p = img.load()
 
-    # large soft value patches (read as terrain when zoomed out)
-    for _ in range(4):
-        cx, cy = rnd.randrange(8, 56), rnd.randrange(8, 56)
-        rw, rh = rnd.randint(6, 14), rnd.randint(4, 10)
-        k = rnd.choice([0.88, 0.92, 1.06, 1.10])
-        _soft_blob(d, cx, cy, rw, rh, shade(base + (255,), k))
+    # Broad value plates (hard-edged chunks, not blurry ellipses)
+    for _ in range(5):
+        x0, y0 = rnd.randrange(0, 48), rnd.randrange(0, 48)
+        bw, bh = rnd.randint(10, 22), rnd.randint(8, 18)
+        k = rnd.choice([0.86, 0.90, 0.96, 1.05, 1.10])
+        col = shade(base + (255,), k)
+        d.rectangle([x0, y0, x0 + bw, y0 + bh], fill=col)
+        # bevel lip
+        d.rectangle([x0, y0, x0 + bw, y0 + 1], fill=shade(col, 1.12))
+        d.rectangle([x0, y0 + bh - 1, x0 + bw, y0 + bh], fill=shade(col, 0.82))
 
-    # sparse mid-scale grit blocks (not 160 single pixels)
-    for _ in range(6):
-        x, y = rnd.randrange(2, 58), rnd.randrange(2, 58)
-        c = rnd.choice([DUST_DK, shade(DUST + (255,), 0.85), (140, 100, 60, 255)])
-        bw, bh = rnd.randint(2, 4), rnd.randint(1, 3)
+    # Mid-scale grit bricks + sparse pebbles with outline
+    for _ in range(10):
+        x, y = rnd.randrange(1, 60), rnd.randrange(1, 60)
+        c = rnd.choice([DUST_DK, shade(DUST + (255,), 0.82), (132, 96, 58, 255), RUST_DK])
+        bw, bh = rnd.randint(2, 5), rnd.randint(1, 3)
         d.rectangle([x, y, x + bw, y + bh], fill=c)
 
     if kind == "pebbles":
-        for _ in range(5):
-            x, y = rnd.randrange(4, 56), rnd.randrange(4, 56)
-            r = rnd.choice([2, 2, 3])
-            d.ellipse([x, y, x + r * 2, y + r], fill=shade(base + (255,), 0.78))
-            d.ellipse([x + 1, y, x + r, y + r - 1], fill=shade(base + (255,), 0.95))
+        for _ in range(7):
+            x, y = rnd.randrange(4, 54), rnd.randrange(4, 54)
+            r = rnd.choice([2, 3, 3, 4])
+            rock = shade(base + (255,), 0.72)
+            d.ellipse([x, y, x + r * 2, y + r], fill=rock)
+            d.ellipse([x + 1, y, x + r, y + max(1, r - 1)], fill=shade(rock, 1.15))
+            # hard outline pixels
+            px(p, x, y + r // 2, SCRAP_DK, 64, 64)
+            px(p, x + r * 2, y + r // 2, SCRAP_DK, 64, 64)
     elif kind == "cracks":
-        for _ in range(2):
-            x, y = rnd.randrange(8, 56), rnd.randrange(8, 56)
-            for _step in range(8):
-                nx = max(2, min(61, x + rnd.randint(-5, 5)))
-                ny = max(2, min(61, y + rnd.randint(-5, 5)))
-                d.line([x, y, nx, ny], fill=shade(base + (255,), 0.70), width=2)
+        for _ in range(3):
+            x, y = rnd.randrange(6, 56), rnd.randrange(6, 56)
+            for _step in range(10):
+                nx = max(2, min(61, x + rnd.randint(-6, 6)))
+                ny = max(2, min(61, y + rnd.randint(-6, 6)))
+                d.line([x, y, nx, ny], fill=shade(base + (255,), 0.62), width=2)
+                # rust fleck along crack
+                if rnd.random() < 0.25:
+                    px(p, x, y, RUST, 64, 64)
                 x, y = nx, ny
     elif kind == "ripples":
-        for row in range(10, 58, 14):
-            off = rnd.randint(0, 6)
-            for x in range(4, 60, 3):
-                yy = row + int(2 * ((x + off) % 18 > 9))
-                d.rectangle([x, yy % 64, x + 1, (yy % 64) + 1], fill=shade(base + (255,), 1.08))
+        for row in range(8, 60, 12):
+            off = rnd.randint(0, 8)
+            for x in range(2, 62, 2):
+                yy = (row + int(2 * (((x + off) % 16) > 8))) % 64
+                col = shade(base + (255,), 1.10 if (x // 2) % 2 == 0 else 0.92)
+                d.rectangle([x, yy, x + 1, yy + 1], fill=col)
     elif kind == "vial_glint":
-        # rare larger glint (not sparkle noise)
-        for _ in range(2):
-            x, y = rnd.randrange(8, 52), rnd.randrange(8, 52)
-            d.rectangle([x, y, x + 2, y + 1], fill=VIAL[:3] + (160,))
-            d.point((x, y), fill=VIAL_LT[:3] + (200,))
-    # plain / default: already has soft patches
+        for _ in range(3):
+            x, y = rnd.randrange(6, 50), rnd.randrange(6, 50)
+            d.rectangle([x, y, x + 3, y + 2], fill=VIAL_DK)
+            d.rectangle([x + 1, y, x + 2, y + 1], fill=VIAL)
+            px(p, x + 1, y, VIAL_LT, 64, 64)
+            # scrap ring around glint
+            d.rectangle([x - 1, y - 1, x + 4, y - 1], fill=SCRAP_DK)
+    else:
+        # plain: add a few scrap flecks + tire track hint
+        if rnd.random() < 0.7:
+            y = rnd.randrange(20, 50)
+            for x in range(4, 60, 3):
+                d.rectangle([x, y, x + 1, y + 1], fill=shade(base + (255,), 0.78))
+                d.rectangle([x, y + 4, x + 1, y + 5], fill=shade(base + (255,), 0.78))
+
+    # Corner dust cornerstones so tiles read as plates, not flat wash
+    for cx, cy in ((0, 0), (60, 0), (0, 60), (60, 60)):
+        d.rectangle([cx, cy, cx + 3, cy + 3], fill=shade(base + (255,), 0.88))
 
     return img
 
@@ -1490,6 +1583,7 @@ def main() -> None:
     save(make_brute(), "enemies/brute.png")
 
     save(make_skate(), "mounts/skateboard.png")
+    save(make_scooter(), "mounts/scooter.png")
 
     save(make_pad(False), "props/extract_sealed.png")
     save(make_pad(True), "props/extract_open.png")
@@ -1524,5 +1618,38 @@ def main() -> None:
     print("DONE — Noel / Bentley / Lillie pet family →", OUT)
 
 
+def regen_world_only() -> None:
+    """Facelift tiles/props/mounts without touching locked pet/hero sheets."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    save(make_skate(), "mounts/skateboard.png")
+    save(make_scooter(), "mounts/scooter.png")
+    save(make_pad(False), "props/extract_sealed.png")
+    save(make_pad(True), "props/extract_open.png")
+    save(make_wreck(), "props/wreck.png")
+    save(make_herb_crate(), "props/herb_crate.png")
+    save(make_vial_crate(), "props/vial_crate.png")
+    save(make_apothecary_chest(), "props/apothecary_chest.png")
+    save(make_scrap_drum(), "props/scrap_drum.png")
+    save(make_scrap_pile(), "props/scrap_pile.png")
+    save(make_tower(), "props/signal_tower.png")
+    save(make_rock(1, 30), "props/rock_small.png")
+    save(make_rock(7, 46), "props/rock_large.png")
+    save(make_dead_bush(), "props/dead_bush.png")
+    save(make_bones(), "props/bones.png")
+    save(make_tire(), "props/tire.png")
+    save(make_cactus(), "props/cactus.png")
+    save(make_sign(), "props/sign_post.png")
+    kinds = ["plain", "pebbles", "plain", "cracks", "ripples", "vial_glint"]
+    for i, k in enumerate(kinds):
+        save(ground_tile(i * 31 + 5, k), f"tiles/ground_{i}.png")
+    for i in range(4):
+        save(dust_tile(i), f"tiles/dust_{i}.png")
+    print("DONE — world facelift →", OUT)
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--world-only":
+        regen_world_only()
+    else:
+        main()

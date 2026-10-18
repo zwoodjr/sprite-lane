@@ -9,7 +9,7 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "The idea",
 			"icon": "◎",
-			"body": "You drop into an endless dust wasteland. Fight, loot crates, and get OUT through an extract pad.\n\nMake it out → bank scrap and spend it in the Hangar.\nGo down → lose bag loot and uninsured gear; banked scrap and Hangar upgrades stay.\n\nDuring a run you also level up for temporary loadout picks — those reset every deploy.",
+			"body": "You drop into an endless dust wasteland. Fight, loot crates, and get OUT through an extract pad.\n\nMake it out → bank scrap and spend it in the Hangar.\nGo down → lose bag loot; banked scrap and Hangar upgrades stay.\n\nDuring a run you also level up for temporary loadout picks — those reset every deploy.",
 		},
 		{
 			"title": "Moving & shooting",
@@ -44,7 +44,7 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "Loot & abilities",
 			"icon": "✚",
-			"body": "Shoot crates open for scrap and the occasional timed buff (speed, damage, shield, heal).\n\nYour character's ABILITY button is unique — check the character screen for what it does.\n\nRIDE hops on your mount for speed (it burns fuel). Riding into crates smashes them.",
+			"body": "Shoot crates open — many are empty, some drop lean scrap, a few (~2/10) drop timed buffs (speed, damage, shield, heal).\n\nYour character's ABILITY button is unique — check the character screen for what it does.\n\nRIDE hops on your mount for speed (it burns fuel). Riding into crates smashes them.",
 		},
 		{
 			"title": "Your pet",
@@ -54,6 +54,6 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "Two progress tracks",
 			"icon": "◆",
-			"body": "IN-RUN: kills and staying near open extracts fill your RUN level bar. Each level lets you pick a temporary boost (damage, HP, speed…). Gone when the run ends.\n\nMETA: extracted scrap banks permanently. Spend it in the Hangar (main menu) for starting HP, scrap find, damage, extra insurance. Account level only soft-gates higher Hangar tiers.",
+			"body": "IN-RUN: kills and staying near open extracts fill your RUN level bar. Each level lets you pick a temporary boost (damage, HP, speed…). Gone when the run ends.\n\nMETA: extracted scrap banks permanently. Spend it in the Hangar (main menu) for starting HP, scrap find, damage, dash, and extract payout. Account level soft-gates higher tiers. (Loadout insurance UI comes later.)",
 		},
 	]

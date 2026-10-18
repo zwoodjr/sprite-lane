@@ -39,7 +39,8 @@ var _body_base_scale: float = 1.0
 var _warn: Polygon2D
 var _shadow: Polygon2D
 
-const BODY_FOV_PX := 44.0
+## Slightly larger than heroes (52) so wasteland sheet mobs read at survivor FOV.
+const BODY_FOV_PX := 58.0
 
 func _ensure_kinds() -> void:
 	if KINDS.is_empty():
@@ -142,9 +143,9 @@ func _style_bar() -> void:
 	fill.set_corner_radius_all(3)
 	hp_bar.add_theme_stylebox_override("background", bg)
 	hp_bar.add_theme_stylebox_override("fill", fill)
-	## Sit above chunky 48–64px silhouettes at survivor FOV.
-	hp_bar.offset_top = -34.0
-	hp_bar.offset_bottom = -28.0
+	## Sit above chunkier ~58px mob silhouettes at survivor FOV.
+	hp_bar.offset_top = -42.0
+	hp_bar.offset_bottom = -36.0
 	hp_bar.visible = false  ## only shown once damaged
 
 func _physics_process(delta: float) -> void:

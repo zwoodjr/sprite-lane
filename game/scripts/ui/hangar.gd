@@ -52,7 +52,7 @@ func _rebuild() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	_scrap_label.text = "SCRAP %d" % GameState.account_scrap
-	for entry in Progression.hangar_catalog():
+	for entry in Progression.hangar_catalog_visible():
 		_list.add_child(_row(entry))
 
 func _row(entry: Dictionary) -> PanelContainer:

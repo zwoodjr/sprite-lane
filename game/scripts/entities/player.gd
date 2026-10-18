@@ -372,7 +372,7 @@ func _try_dash() -> void:
 		dir = velocity.normalized() if velocity.length() > 20.0 else _last_aim
 	_dash_dir = dir.normalized()
 	_dash_left = DASH_TIME
-	_dash_cd = DASH_COOLDOWN
+	_dash_cd = DASH_COOLDOWN * GameState.dash_cooldown_mult()
 	_iframes = maxf(_iframes, DASH_IFRAMES)
 	Juice.sfx("dash")
 	Juice.dust_puff(global_position + Vector2(0, 16), 8)
@@ -392,7 +392,8 @@ func _spawn_afterimage() -> void:
 	tw.tween_callback(ghost.queue_free)
 
 func get_dash_cooldown_ratio() -> float:
-	return _dash_cd / DASH_COOLDOWN
+	var cd := DASH_COOLDOWN * GameState.dash_cooldown_mult()
+	return _dash_cd / cd if cd > 0.0 else 0.0
 
 ## =============================================================================
 ## Mount
