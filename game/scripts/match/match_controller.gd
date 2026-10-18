@@ -1,6 +1,5 @@
 extends Node2D
 
-const ExtractScatter = preload("res://scripts/world/extract_scatter.gd")
 const EnemyScene := preload("res://scenes/entities/enemy.tscn")
 const ExtractPadScene := preload("res://scenes/entities/extract_pad.tscn")
 const PetScene := preload("res://scenes/entities/pet.tscn")

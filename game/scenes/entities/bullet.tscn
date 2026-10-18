@@ -8,7 +8,7 @@ radius = 4.0
 
 [node name="Bullet" type="Area2D"]
 collision_layer = 8
-## Default = player shot mask (world|enemies). Script retargets for enemy shots.
+; Default mask = world|enemies (5). Script retargets for enemy shots.
 collision_mask = 5
 monitoring = true
 monitorable = false
