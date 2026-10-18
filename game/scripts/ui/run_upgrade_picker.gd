@@ -26,12 +26,20 @@ func open(new_level: int, choices: Array) -> void:
 		return
 	if choices.is_empty():
 		choices = Progression.roll_run_choices(2)
+	if choices.is_empty():
+		## Every upgrade already taken — nothing to pick, don't pause.
+		GameState.pending_run_choices.clear()
+		GameState.run_level_paused = false
+		return
 	## Headless / fast-timer bots: auto-pick so the match doesn't stall paused.
-	if GameState.fast_timers and choices.size() > 0:
-		GameState.apply_run_upgrade(choices[0])
-		chosen.emit(choices[0])
+	if GameState.fast_timers:
+		var first: Dictionary = choices[0]
+		GameState.apply_run_upgrade(first)
+		chosen.emit(first)
 		return
 	_open = true
+	## Release any held stick / buttons so nothing is "stuck" after the pick.
+	TouchInput.clear_sticks()
 	get_tree().paused = true
 	_root.visible = true
 	for c in _root.get_children():
@@ -90,6 +98,7 @@ func _pick(upgrade: Dictionary) -> void:
 
 func close() -> void:
 	_open = false
+	TouchInput.clear_sticks()
 	_root.visible = false
 	for c in _root.get_children():
 		c.queue_free()

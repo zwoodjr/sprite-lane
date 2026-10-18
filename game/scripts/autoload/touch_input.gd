@@ -12,6 +12,8 @@ signal ability_pressed
 signal mount_pressed
 signal pause_pressed
 signal dash_pressed
+## Emitted by clear_sticks() so TouchControls drops its tracked fingers too.
+signal sticks_cleared
 
 const AIM_FIRE_THRESHOLD := 0.32
 ## Move stick must push past this to count as run-aim (pairs with larger hero sprites).
@@ -40,7 +42,31 @@ var auto_aim: bool:
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	touch_primary = _detect_touch_primary()
+	if touch_primary:
+		_strip_mouse_bindings()
+
+
+## iOS emulates mouse clicks from touches, so a mouse-bound "shoot"/"dash"
+## fired on ANY tap. On touch-first devices, actions are keyboard + on-screen only.
+func _strip_mouse_bindings() -> void:
+	for action in InputMap.get_actions():
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventMouseButton:
+				InputMap.action_erase_event(action, ev)
+
+
+## Auto-pause when the app goes to the background (iOS home swipe / call).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		clear_sticks()
+		var tree := get_tree()
+		if tree == null or tree.paused:
+			return
+		var scene := tree.current_scene
+		if scene != null and scene.has_method("request_auto_pause"):
+			scene.call("request_auto_pause")
 
 
 func _detect_touch_primary() -> bool:
@@ -83,6 +109,7 @@ func clear_sticks() -> void:
 	aim_strength = 0.0
 	aim_stick_firing = false
 	fire_held = false
+	sticks_cleared.emit()
 
 
 func pulse_extract() -> void:

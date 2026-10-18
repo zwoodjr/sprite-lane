@@ -45,7 +45,9 @@ var _player: Node = null
 
 func _ready() -> void:
 	layer = 20
-	process_mode = Node.PROCESS_MODE_PAUSABLE
+	## ALWAYS so finger-up events that happen while a menu has the tree paused
+	## still release the stick / buttons (otherwise they stay "held" on resume).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stick_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stick_draw.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -69,6 +71,7 @@ func _ready() -> void:
 
 	_layout()
 	get_viewport().size_changed.connect(_layout)
+	TouchInput.sticks_cleared.connect(_reset_touches)
 	if not TouchInput.touch_primary:
 		## Desktop: keyboard + mouse. Keep pause visible, hide thumb controls.
 		for b in [btn_fire, btn_dash, btn_ability, btn_mount]:
@@ -86,6 +89,8 @@ func _make_button(text: String, sub: String, r: float, tint: Color) -> Control:
 	return b
 
 func _exit_tree() -> void:
+	if TouchInput.sticks_cleared.is_connected(_reset_touches):
+		TouchInput.sticks_cleared.disconnect(_reset_touches)
 	TouchInput.clear_sticks()
 
 func _layout() -> void:
@@ -117,7 +122,24 @@ func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 
 ## --- Input routing -------------------------------------------------------------
 
+func _reset_touches() -> void:
+	for b in _buttons:
+		if bool(b.get("held")):
+			b.call("release")
+	_move_id = -1
+	_move_active = false
+	_aim_id = -1
+	_aim_active = false
+	_aim_vec = Vector2.ZERO
+	if stick_draw:
+		stick_draw.queue_redraw()
+
 func _input(event: InputEvent) -> void:
+	if get_tree().paused:
+		## Menus own input while paused; only track lifts so nothing sticks.
+		if event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+			_end_touch((event as InputEventScreenTouch).index)
+		return
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed:
