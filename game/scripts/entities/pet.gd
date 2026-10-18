@@ -1,7 +1,6 @@
 extends CharacterBody2D
 
-## Active companion. Follows the player; Noel enrages when the player is hit
-## and AOE-rampages until THAT attacking unit dies.
+## Active companion — Noel / Bentley / Lillie kits.
 
 signal rampage_started(target: Node)
 signal rampage_ended
@@ -10,10 +9,17 @@ const BODY_FOV_PX := 40.0
 
 var _def: Dictionary = {}
 var _player: Node2D
-var _target: Node2D ## rampage focus (the unit that hit the player)
+var _target: Node2D
 var _rampaging: bool = false
 var _bite_cd: float = 0.0
 var _aoe_cd: float = 0.0
+var _bark_cd: float = 1.5
+var _find_cd: float = 2.5
+var _ram_cd: float = 2.0
+var _ram_left: float = 0.0
+var _ram_dir: Vector2 = Vector2.RIGHT
+var _ram_wake_hit: Dictionary = {} ## instance_id -> true this charge
+var _accent_left: float = 0.0
 var _bob_t: float = 0.0
 var _body_base_scale: float = 1.0
 var _flash_left: float = 0.0
@@ -46,10 +52,20 @@ func _ready() -> void:
 	tw.tween_property(self, "modulate:a", 1.0, 0.25)
 
 
+func _ability_id() -> String:
+	return str(_def.get("ability_id", ""))
+
+
+func _accent_active() -> bool:
+	return _rampaging or _ram_left > 0.0 or _accent_left > 0.0
+
+
 func _apply_look() -> void:
 	var path := str(_def.get("sprite", "res://assets/sprites/pets/noel.png"))
-	if _rampaging and str(_def.get("sprite_rampage", "")) != "":
-		path = str(_def["sprite_rampage"])
+	## Prefer sprite_accent; fall back to legacy sprite_rampage key.
+	var accent := str(_def.get("sprite_accent", _def.get("sprite_rampage", "")))
+	if _accent_active() and accent != "":
+		path = accent
 	var tex := load(path) as Texture2D
 	if body and tex:
 		body.texture = tex
@@ -57,10 +73,12 @@ func _apply_look() -> void:
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
 		name_label.add_theme_font_size_override("font_size", 10)
-		name_label.add_theme_color_override(
-			"font_color",
-			Color(1.0, 0.45, 0.3) if _rampaging else Color(0.92, 0.86, 0.72)
-		)
+		var col := Color(0.92, 0.86, 0.72)
+		if _rampaging or _ram_left > 0.0:
+			col = Color(1.0, 0.45, 0.3)
+		elif _accent_left > 0.0:
+			col = Color(1.0, 0.85, 0.45)
+		name_label.add_theme_color_override("font_color", col)
 
 
 func _sync_body_scale() -> void:
@@ -75,7 +93,14 @@ func _sync_body_scale() -> void:
 func _physics_process(delta: float) -> void:
 	_bite_cd = maxf(0.0, _bite_cd - delta)
 	_aoe_cd = maxf(0.0, _aoe_cd - delta)
+	_bark_cd = maxf(0.0, _bark_cd - delta)
+	_find_cd = maxf(0.0, _find_cd - delta)
+	_ram_cd = maxf(0.0, _ram_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
+	var was_accent := _accent_left > 0.0
+	_accent_left = maxf(0.0, _accent_left - delta)
+	if was_accent and _accent_left <= 0.0 and not _rampaging and _ram_left <= 0.0:
+		_apply_look()
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as Node2D
 		if _player == null:
@@ -92,11 +117,6 @@ func _refresh_rampage_target() -> void:
 	if _target == null or not is_instance_valid(_target) or _target.is_queued_for_deletion():
 		_end_rampage()
 		return
-	## Enemy removed from group on death before free — treat as dead.
-	if _target.is_in_group("enemies") == false and _target.get("hp") != null:
-		if float(_target.get("hp")) <= 0.0:
-			_end_rampage()
-			return
 	if not _target.is_in_group("enemies"):
 		_end_rampage()
 
@@ -106,8 +126,7 @@ func _on_player_attacked(attacker: Node) -> void:
 		return
 	if not attacker.is_in_group("enemies"):
 		return
-	if str(_def.get("ability_id", "")) != "territorial_rampage":
-		## Non-Noel pets: snap toward the attacker for a bite, no rampage.
+	if _ability_id() != "territorial_rampage":
 		_target = attacker as Node2D
 		return
 	_begin_rampage(attacker as Node2D)
@@ -137,6 +156,10 @@ func _end_rampage() -> void:
 
 
 func _update_move(delta: float) -> void:
+	## Lillie ram charge overrides follow.
+	if _ram_left > 0.0:
+		_tick_ram(delta)
+		return
 	var speed := float(_def.get("follow_speed", 260.0))
 	if _rampaging:
 		speed *= float(_def.get("rampage_speed_mult", 1.5))
@@ -146,7 +169,6 @@ func _update_move(delta: float) -> void:
 	elif _target != null and is_instance_valid(_target) and global_position.distance_to(_target.global_position) < 220.0:
 		goal = _target.global_position
 	else:
-		## Orbit behind / beside the player.
 		var facing := Vector2.RIGHT
 		if _player.get("velocity") is Vector2 and (_player.velocity as Vector2).length() > 20.0:
 			facing = (_player.velocity as Vector2).normalized()
@@ -167,11 +189,25 @@ func _update_move(delta: float) -> void:
 
 
 func _update_combat(delta: float) -> void:
-	if _rampaging:
-		_tick_rampage_aoe()
-		return
-	## Idle territorial bites on nearest nearby enemy.
-	if _bite_cd > 0.0:
+	match _ability_id():
+		"territorial_rampage":
+			if _rampaging:
+				_tick_rampage_aoe()
+				return
+			_idle_bite()
+		"talker_finder":
+			_tick_bentley()
+			_idle_bite()
+		"ram_headbutt":
+			if _ram_left <= 0.0:
+				_try_start_ram()
+			_idle_bite()
+		_:
+			_idle_bite()
+
+
+func _idle_bite() -> void:
+	if _bite_cd > 0.0 or _ram_left > 0.0:
 		return
 	var nearest := _nearest_enemy(float(_def.get("bite_range", 40.0)) + 8.0)
 	if nearest == null:
@@ -182,8 +218,7 @@ func _update_combat(delta: float) -> void:
 func _tick_rampage_aoe() -> void:
 	if _aoe_cd > 0.0:
 		return
-	var tick := float(_def.get("rampage_tick", 0.28))
-	_aoe_cd = tick
+	_aoe_cd = float(_def.get("rampage_tick", 0.28))
 	var radius := float(_def.get("rampage_aoe_radius", 110.0))
 	var dmg := float(_def.get("rampage_aoe_damage", 38.0))
 	Juice.burst(global_position, Color(1.0, 0.4, 0.2, 0.9), 14, radius * 1.4, 0.35, 1.2)
@@ -197,12 +232,143 @@ func _tick_rampage_aoe() -> void:
 		if global_position.distance_to(e.global_position) > radius:
 			continue
 		if e.has_method("take_damage"):
-			var dir := (e.global_position - global_position).normalized()
-			e.call("take_damage", dmg, dir)
-	## Focus bite on the attacker too (extra punch).
+			e.call("take_damage", dmg, (e.global_position - global_position).normalized())
 	if _target != null and is_instance_valid(_target) and _target.has_method("take_damage"):
 		if global_position.distance_to(_target.global_position) <= radius:
 			_target.call("take_damage", dmg * 0.35, (_target.global_position - global_position).normalized())
+
+
+func _tick_bentley() -> void:
+	if _bark_cd <= 0.0:
+		_do_bark()
+	if _find_cd <= 0.0:
+		_do_find()
+
+
+func _do_bark() -> void:
+	_bark_cd = float(_def.get("bark_cooldown", 5.5))
+	_accent_left = 0.55
+	_apply_look()
+	var radius := float(_def.get("bark_radius", 180.0))
+	var dur := float(_def.get("bark_distract_sec", 1.4))
+	Juice.sfx("ability", -4.0)
+	Juice.float_text(global_position + Vector2(0, -26), "BARK!", Color(1.0, 0.9, 0.5), 16)
+	Juice.burst(global_position, Color(1.0, 0.85, 0.4), 12, radius * 0.6, 0.35)
+	var n := 0
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if not (node is Node2D) or not is_instance_valid(node):
+			continue
+		if global_position.distance_to((node as Node2D).global_position) > radius:
+			continue
+		if node.has_method("distract"):
+			node.call("distract", dur)
+			n += 1
+	if n > 0:
+		Juice.shake(0.08)
+
+
+func _do_find() -> void:
+	_find_cd = float(_def.get("find_cooldown", 7.0))
+	_accent_left = maxf(_accent_left, 0.4)
+	_apply_look()
+	var radius := float(_def.get("find_radius", 520.0))
+	Juice.sfx("pickup", -6.0)
+	Juice.float_text(global_position + Vector2(0, -26), "FOUND!", Color(0.7, 0.95, 0.6), 15)
+	## Ping breakables in range.
+	for crate in get_tree().get_nodes_in_group("breakables"):
+		if not (crate is Node2D) or not is_instance_valid(crate):
+			continue
+		if global_position.distance_to((crate as Node2D).global_position) > radius:
+			continue
+		if crate.has_method("ping"):
+			crate.call("ping")
+	## Pull pickups toward the player.
+	var pulled := 0
+	for pu in get_tree().get_nodes_in_group("powerups"):
+		if not (pu is Node2D) or not is_instance_valid(pu):
+			continue
+		var p := pu as Node2D
+		if _player.global_position.distance_to(p.global_position) > radius:
+			continue
+		p.global_position = p.global_position.lerp(_player.global_position, 0.55)
+		pulled += 1
+	## Always a little scrap sniff.
+	var scrap := GameState.add_scrap(randi_range(1, 3))
+	Juice.float_text(_player.global_position + Vector2(0, -40), "+%d scrap" % scrap, UiTheme.AMBER, 14)
+	if pulled > 0:
+		Juice.burst(_player.global_position, Color(0.6, 1.0, 0.7), 10, 120.0, 0.4)
+
+
+func _try_start_ram() -> void:
+	if _ram_cd > 0.0:
+		return
+	var max_r := float(_def.get("ram_range", 280.0))
+	var foe := _nearest_enemy(max_r)
+	if foe == null:
+		return
+	_target = foe
+	_ram_dir = (foe.global_position - global_position).normalized()
+	_ram_left = 0.55
+	_ram_wake_hit.clear()
+	_ram_cd = float(_def.get("ram_cooldown", 6.5))
+	_apply_look()
+	Juice.sfx("dash", -2.0)
+	Juice.float_text(global_position + Vector2(0, -28), "LILLIE RAM!", Color(1.0, 0.55, 0.3), 16)
+	Juice.dust_puff(global_position + Vector2(0, 12), 8)
+
+
+func _tick_ram(delta: float) -> void:
+	_ram_left -= delta
+	var spd := float(_def.get("ram_speed", 520.0))
+	velocity = _ram_dir * spd
+	move_and_slide()
+	if body:
+		body.flip_h = _ram_dir.x < 0.0
+	## Wake damage — hit enemies we pass near (once per charge).
+	var wake_r := float(_def.get("ram_wake_radius", 36.0))
+	var wake_dmg := float(_def.get("ram_wake_damage", 14.0))
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		var id := e.get_instance_id()
+		if _ram_wake_hit.has(id):
+			continue
+		if global_position.distance_to(e.global_position) > wake_r:
+			continue
+		_ram_wake_hit[id] = true
+		if e.has_method("take_damage"):
+			e.call("take_damage", wake_dmg, _ram_dir)
+		Juice.burst(e.global_position, Color(1.0, 0.7, 0.4), 6, 80.0, 0.2)
+	## Impact: close to target or timer end.
+	var impact := false
+	if _target != null and is_instance_valid(_target):
+		if global_position.distance_to(_target.global_position) < 28.0:
+			impact = true
+	if _ram_left <= 0.0:
+		impact = true
+	if impact:
+		_ram_impact()
+
+
+func _ram_impact() -> void:
+	_ram_left = 0.0
+	var radius := float(_def.get("ram_impact_radius", 95.0))
+	var dmg := float(_def.get("ram_impact_damage", 42.0))
+	Juice.sfx("enemy_die", -4.0)
+	Juice.burst(global_position, Color(1.0, 0.5, 0.25), 22, radius * 1.5, 0.5)
+	Juice.shake(0.22)
+	Juice.float_text(global_position + Vector2(0, -30), "BOOM!", Color(1.0, 0.6, 0.3), 18)
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		if global_position.distance_to(e.global_position) > radius:
+			continue
+		if e.has_method("take_damage"):
+			e.call("take_damage", dmg, (e.global_position - global_position).normalized())
+	_target = null
+	_apply_look()
 
 
 func _bite(enemy: Node2D) -> void:
@@ -231,14 +397,17 @@ func _update_visuals(delta: float) -> void:
 	if body == null:
 		return
 	var bs := _body_base_scale
-	_bob_t += delta * (18.0 if _rampaging else 12.0)
-	body.position.y = -absf(sin(_bob_t)) * (4.0 if _rampaging else 2.0)
-	var pulse := 1.0 + (0.08 if _rampaging else 0.0) * sin(_bob_t * 2.0)
+	var hot := _rampaging or _ram_left > 0.0
+	_bob_t += delta * (18.0 if hot else 12.0)
+	body.position.y = -absf(sin(_bob_t)) * (4.0 if hot else 2.0)
+	var pulse := 1.0 + (0.08 if hot else 0.0) * sin(_bob_t * 2.0)
 	body.scale = Vector2.ONE * bs * pulse
-	if _rampaging:
+	if _ram_left > 0.0:
+		body.modulate = Color(1.4, 0.9, 0.7)
+	elif _rampaging:
 		body.modulate = Color(1.35, 0.75, 0.65) if int(_bob_t * 8.0) % 2 == 0 else Color(1.15, 0.85, 0.8)
-	elif _flash_left > 0.0:
-		body.modulate = Color(1.4, 1.2, 1.0)
+	elif _flash_left > 0.0 or _accent_left > 0.0:
+		body.modulate = Color(1.35, 1.2, 0.95)
 	else:
 		body.modulate = Color.WHITE
 

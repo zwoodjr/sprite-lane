@@ -49,7 +49,7 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "Your pet",
 			"icon": "🐾",
-			"body": "Equip a pet on the character screen (default: Noel).\n\nNoel is super territorial. When an enemy hits YOU, Noel enrages and AOE-rampages until THAT attacker dies — then settles.\n\nDust Hound is a lighter Hunt pet (follows and bites, no rampage).",
+			"body": "Equip a pet on the character screen (default: Noel).\n\nNoel — territorial: when you're hit, she AOE-rampages until THAT attacker dies.\nBentley — bark distracts foes; periodically finds scrap/crates/pickups.\nLillie — tank ram: charge with wake damage, then AOE on impact.",
 		},
 		{
 			"title": "Two progress tracks",

@@ -511,6 +511,179 @@ def make_noel(rampage: bool = False) -> Image.Image:
     return img
 
 
+def make_bentley(alert: bool = False) -> Image.Image:
+    """Bentley — cream doodle, Noel-family grammar.
+
+    Cream body, apricot ears / eye patches / back patch, liver nose,
+    same big-head stubby-body silhouette as Noel. Alert = open mouth bark.
+    """
+    S = PET_SIZE
+    img = new(S, S)
+    drop_shadow(img, 32, 58, 16, 4, 90)
+
+    cream = (240, 232, 218, 255)
+    cream_lt = (250, 244, 236, 255)
+    cream_dk = (210, 198, 178, 255)
+    apricot = (204, 148, 96, 255)
+    apricot_lt = (224, 176, 124, 255)
+    apricot_dk = (160, 108, 68, 255)
+    liver = (150, 96, 84, 255)
+    liver_dk = (110, 68, 58, 255)
+
+    def paint_leg(p, w, h):
+        fill_rect(p, 1, 0, 7, 10, cream_dk, w, h)
+        fill_rect(p, 1, 0, 7, 3, cream, w, h)
+        fill_rect(p, 0, 8, 8, 12, apricot_dk, w, h)
+        fill_rect(p, 0, 8, 8, 9, apricot, w, h)
+
+    def paint_tail(p, w, h):
+        fill_rect(p, 2, 6, 10, 14, cream, w, h)
+        fill_rect(p, 4, 2, 12, 10, cream_lt, w, h)
+        fill_rect(p, 6, 0, 13, 5, apricot, w, h)
+        fill_rect(p, 8, 0, 13, 2, apricot_lt, w, h)
+
+    def paint_body(p, w, h):
+        fill_ellipse(p, 2, 2, 25, 22, cream, w, h)
+        fill_ellipse(p, 4, 4, 23, 14, cream_lt, w, h)
+        fill_ellipse(p, 4, 14, 23, 22, cream_dk, w, h)
+        fill_ellipse(p, 10, 4, 22, 14, apricot, w, h)
+        fill_ellipse(p, 12, 5, 20, 10, apricot_lt, w, h)
+        fill_rect(p, 6, 16, 21, 20, NOEL_COLLAR, w, h)
+        fill_rect(p, 6, 16, 21, 17, shade(NOEL_COLLAR, 1.2), w, h)
+        fill_rect(p, 12, 18, 16, 23, NOEL_TAG, w, h)
+        fill_rect(p, 13, 19, 15, 21, AMBER_LT, w, h)
+
+    def paint_head(p, w, h):
+        fill_ellipse(p, 4, 8, 35, 36, cream, w, h)
+        fill_ellipse(p, 6, 10, 33, 24, cream_lt, w, h)
+        fill_ellipse(p, 8, 26, 31, 36, cream_dk, w, h)
+        hair_mass(p, [
+            (10, 2, 16, 10, cream_lt),
+            (16, 0, 24, 9, cream),
+            (22, 2, 30, 10, cream_lt),
+            (12, 4, 18, 8, cream),
+            (20, 1, 26, 6, cream_lt),
+        ], w, h)
+        # long floppy apricot ears
+        fill_ellipse(p, 0, 10, 10, 30, apricot_dk, w, h)
+        fill_ellipse(p, 1, 12, 8, 26, apricot, w, h)
+        fill_ellipse(p, 2, 14, 6, 20, apricot_lt, w, h)
+        fill_ellipse(p, 30, 10, 39, 30, apricot_dk, w, h)
+        fill_ellipse(p, 32, 12, 38, 26, apricot, w, h)
+        fill_ellipse(p, 33, 14, 37, 20, apricot_lt, w, h)
+        # apricot eye patches
+        fill_ellipse(p, 7, 15, 18, 26, apricot, w, h)
+        fill_ellipse(p, 22, 15, 33, 26, apricot, w, h)
+        fill_ellipse(p, 9, 16, 16, 22, apricot_lt, w, h)
+        fill_ellipse(p, 24, 16, 31, 22, apricot_lt, w, h)
+        fill_ellipse(p, 11, 24, 29, 35, cream_lt, w, h)
+        fill_ellipse(p, 13, 26, 27, 33, WHITE, w, h)
+        eyes_dots(p, 11, 25, 18, w, h, INK if not alert else (180, 60, 40, 255), size=3)
+        if alert:
+            fill_rect(p, 17, 34, 23, 38, liver_dk, w, h)
+            fill_rect(p, 18, 35, 22, 37, (40, 20, 18, 255), w, h)
+            px(p, 12, 18, AMBER_LT, w, h)
+            px(p, 26, 18, AMBER_LT, w, h)
+        fill_ellipse(p, 16, 26, 24, 32, liver, w, h)
+        fill_ellipse(p, 17, 27, 23, 31, liver_dk, w, h)
+        fill_rect(p, 18, 27, 20, 28, shade(liver, 1.25), w, h)
+
+    _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 18, 46)
+    _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 36, 46)
+    _stamp(img, _outlined_part(16, 16, paint_tail, thickness=2), 44, 34)
+    _stamp(img, _outlined_part(28, 26, paint_body, thickness=2), 18, 30)
+    _stamp(img, _outlined_part(40, 40, paint_head, thickness=2), 12, 2)
+    return img
+
+
+def make_lillie(charging: bool = False) -> Image.Image:
+    """Lillie — ginger/white parti tank, Noel-family grammar, sturdier body.
+
+    White muzzle + blaze, white chest/paws, ginger ears/back/tail, liver nose.
+    Charging accent: lean-forward read + amber eye glints.
+    """
+    S = PET_SIZE
+    img = new(S, S)
+    drop_shadow(img, 32, 58, 18, 4, 95)
+
+    white = (245, 240, 232, 255)
+    white_lt = (255, 252, 248, 255)
+    white_dk = (210, 200, 188, 255)
+    ginger = (196, 120, 64, 255)
+    ginger_lt = (220, 150, 90, 255)
+    ginger_dk = (150, 84, 42, 255)
+    liver = (140, 88, 72, 255)
+    liver_dk = (100, 60, 50, 255)
+
+    def paint_leg(p, w, h):
+        # white socks
+        fill_rect(p, 1, 0, 8, 10, white_dk, w, h)
+        fill_rect(p, 1, 0, 8, 3, white, w, h)
+        fill_rect(p, 0, 8, 9, 13, white_lt, w, h)
+        fill_rect(p, 0, 8, 9, 9, white, w, h)
+
+    def paint_tail(p, w, h):
+        fill_rect(p, 2, 4, 12, 14, ginger, w, h)
+        fill_rect(p, 4, 0, 14, 8, ginger_lt, w, h)
+        fill_rect(p, 8, 0, 14, 3, ginger_lt, w, h)
+        fill_rect(p, 2, 10, 6, 14, ginger_dk, w, h)
+
+    def paint_body(p, w, h):
+        # Wider tank torso than Noel
+        fill_ellipse(p, 1, 2, 30, 24, ginger, w, h)
+        fill_ellipse(p, 3, 3, 28, 14, ginger_lt, w, h)
+        fill_ellipse(p, 3, 15, 28, 24, ginger_dk, w, h)
+        # white chest blaze
+        fill_ellipse(p, 10, 8, 22, 24, white, w, h)
+        fill_ellipse(p, 12, 10, 20, 20, white_lt, w, h)
+        fill_rect(p, 8, 18, 24, 22, NOEL_COLLAR, w, h)
+        fill_rect(p, 8, 18, 24, 19, shade(NOEL_COLLAR, 1.2), w, h)
+        fill_rect(p, 14, 20, 18, 25, NOEL_TAG, w, h)
+        fill_rect(p, 15, 21, 17, 23, AMBER_LT, w, h)
+
+    def paint_head(p, w, h):
+        # Slightly bigger head mass for tank read
+        fill_ellipse(p, 2, 6, 38, 38, ginger, w, h)
+        fill_ellipse(p, 4, 8, 36, 22, ginger_lt, w, h)
+        # white muzzle + forehead blaze
+        fill_ellipse(p, 8, 14, 32, 38, white, w, h)
+        fill_ellipse(p, 10, 16, 30, 28, white_lt, w, h)
+        fill_rect(p, 16, 6, 24, 18, white, w, h)  # blaze up the forehead
+        fill_rect(p, 17, 4, 23, 10, white_lt, w, h)
+        hair_mass(p, [
+            (8, 0, 14, 8, ginger_lt),
+            (14, 0, 20, 6, ginger),
+            (24, 0, 32, 8, ginger_lt),
+            (6, 4, 12, 12, ginger),
+            (28, 4, 34, 12, ginger),
+        ], w, h)
+        # ginger floppy ears
+        fill_ellipse(p, 0, 8, 10, 28, ginger_dk, w, h)
+        fill_ellipse(p, 1, 10, 8, 24, ginger, w, h)
+        fill_ellipse(p, 2, 12, 6, 18, ginger_lt, w, h)
+        fill_ellipse(p, 30, 8, 40, 28, ginger_dk, w, h)
+        fill_ellipse(p, 32, 10, 38, 24, ginger, w, h)
+        fill_ellipse(p, 33, 12, 37, 18, ginger_lt, w, h)
+        eyes_dots(p, 12, 26, 18, w, h, INK if not charging else (200, 50, 30, 255), size=3)
+        if charging:
+            px(p, 13, 18, AMBER_LT, w, h)
+            px(p, 27, 18, AMBER_LT, w, h)
+            # open smile / impact grimace
+            fill_rect(p, 16, 32, 24, 36, liver_dk, w, h)
+            fill_rect(p, 17, 33, 23, 35, (220, 120, 120, 255), w, h)
+        # liver nose
+        fill_ellipse(p, 16, 26, 24, 32, liver, w, h)
+        fill_ellipse(p, 17, 27, 23, 31, liver_dk, w, h)
+        fill_rect(p, 18, 27, 20, 28, shade(liver, 1.3), w, h)
+
+    # Wider stance (tank)
+    _stamp(img, _outlined_part(11, 15, paint_leg, thickness=2), 16, 45)
+    _stamp(img, _outlined_part(11, 15, paint_leg, thickness=2), 37, 45)
+    _stamp(img, _outlined_part(18, 16, paint_tail, thickness=2), 44, 34)
+    _stamp(img, _outlined_part(32, 28, paint_body, thickness=2), 16, 28)
+    _stamp(img, _outlined_part(42, 42, paint_head, thickness=2), 11, 1)
+    return img
+
 
 def make_dust_hound() -> Image.Image:
     """Dust Hound — scrap-mutt filler; same Noel-family silhouette."""
@@ -1226,65 +1399,90 @@ def make_ui() -> None:
 # ---------------------------------------------------------------------------
 
 def write_noel_previews(preview_dir: Path) -> None:
-    """Export magnified previews for store media/noel-pet/ comparison."""
+    """Export pet family previews (Noel bible + Bentley + Lillie)."""
     preview_dir.mkdir(parents=True, exist_ok=True)
+    pets_dir = preview_dir.parent / "pets"
+    pets_dir.mkdir(parents=True, exist_ok=True)
 
     def magnify(img: Image.Image, scale: int = 8) -> Image.Image:
         return img.resize((img.width * scale, img.height * scale), Image.NEAREST)
 
     noel = make_noel(False)
     noel_r = make_noel(True)
-    rook = make_rook()
-    cinder = make_cinder()
-    hound = make_dust_hound()
+    bentley = make_bentley(False)
+    bentley_a = make_bentley(True)
+    lillie = make_lillie(False)
+    lillie_c = make_lillie(True)
 
-    noel.save(preview_dir / "noel.png")
-    noel_r.save(preview_dir / "noel_rampage.png")
+    for name, im in (
+        ("noel.png", noel),
+        ("noel_rampage.png", noel_r),
+        ("bentley.png", bentley),
+        ("bentley_alert.png", bentley_a),
+        ("lillie.png", lillie),
+        ("lillie_charge.png", lillie_c),
+    ):
+        im.save(preview_dir / name)
+        im.save(pets_dir / name)
+
     magnify(noel, 8).save(preview_dir / "noel_8x.png")
     magnify(noel_r, 8).save(preview_dir / "noel_rampage_8x.png")
-    magnify(hound, 8).save(preview_dir / "dust_hound_8x.png")
-    magnify(rook, 6).save(preview_dir / "rook_vex_6x.png")
-    magnify(cinder, 6).save(preview_dir / "sister_cinder_6x.png")
+    magnify(bentley, 8).save(preview_dir / "bentley_8x.png")
+    magnify(bentley_a, 8).save(preview_dir / "bentley_alert_8x.png")
+    magnify(lillie, 8).save(preview_dir / "lillie_8x.png")
+    magnify(lillie_c, 8).save(preview_dir / "lillie_charge_8x.png")
+    for name in ("bentley_8x.png", "bentley_alert_8x.png", "lillie_8x.png", "lillie_charge_8x.png", "noel_8x.png"):
+        src = preview_dir / name
+        if src.exists():
+            Image.open(src).save(pets_dir / name)
 
-    ## Sheet: Noel idle | rampage | face ref strip | heroes
-    sheet = Image.new("RGBA", (640, 320), (48, 36, 28, 255))
-    sheet.paste(magnify(noel, 4), (16, 40))
-    sheet.paste(magnify(noel_r, 4), (290, 40))
-    sheet.paste(magnify(rook, 2), (16, 200))
-    sheet.paste(magnify(cinder, 2), (220, 200))
-    sheet.paste(magnify(hound, 2), (424, 200))
+    ## Family sheet: Noel | Bentley | Lillie (+ accents below)
+    sheet = Image.new("RGBA", (960, 400), (48, 36, 28, 255))
+    sheet.paste(magnify(noel, 4), (24, 40))
+    sheet.paste(magnify(bentley, 4), (340, 40))
+    sheet.paste(magnify(lillie, 4), (656, 40))
+    sheet.paste(magnify(noel_r, 2), (40, 300))
+    sheet.paste(magnify(bentley_a, 2), (200, 300))
+    sheet.paste(magnify(lillie_c, 2), (360, 300))
     d = ImageDraw.Draw(sheet)
-    d.text((16, 12), "Noel idle 64px", fill=(240, 220, 180, 255))
-    d.text((290, 12), "Noel RAMPAGE", fill=(240, 120, 80, 255))
-    d.text((16, 176), "Rook / Cinder / Dust Hound (heroes 96 · pets 64)", fill=(200, 180, 140, 255))
+    d.text((24, 12), "Noel (bible)", fill=(240, 220, 180, 255))
+    d.text((340, 12), "Bentley (talker/finder)", fill=(240, 200, 150, 255))
+    d.text((656, 12), "Lillie (tank ram)", fill=(240, 180, 120, 255))
+    d.text((40, 280), "Accents: Noel rampage · Bentley bark · Lillie charge", fill=(200, 180, 140, 255))
+    sheet.save(preview_dir / "pets_family_sheet.png")
     sheet.save(preview_dir / "noel_sheet.png")
+    sheet.save(pets_dir / "pets_family_sheet.png")
 
-    ## Side-by-side vs approved face pixelation if present
-    face_ref = Path("/cursor/stores/bc-01a1472d-6408-7edd-b9ed-fb76363c6b5e/media/pixelate/face_pixel_64.png")
-    if face_ref.exists():
-        face = Image.open(face_ref).convert("RGBA")
-        ## Display face as ~256 so both columns match
-        face_s = face.resize((256, 256), Image.NEAREST)
-        noel_face = magnify(noel.crop((12, 2, 52, 42)), 6)  # head crop ~40 → 240
+    ## vs Noel strips
+    for label, pet_im, out_name in (
+        ("Bentley", bentley, "bentley_vs_noel.png"),
+        ("Lillie", lillie, "lillie_vs_noel.png"),
+    ):
         cmp = Image.new("RGBA", (560, 300), (40, 30, 24, 255))
-        cmp.paste(face_s, (16, 28))
-        cmp.paste(noel_face, (290, 28))
+        cmp.paste(magnify(noel, 4), (24, 40))
+        cmp.paste(magnify(pet_im, 4), (300, 40))
         dc = ImageDraw.Draw(cmp)
-        dc.text((16, 8), "Approved face_pixel_64 (detail bar)", fill=(220, 200, 160, 255))
-        dc.text((290, 8), "Noel sprite head (64 craft)", fill=(220, 200, 160, 255))
-        cmp.save(preview_dir / "noel_vs_face_ref.png")
+        dc.text((24, 12), "Noel (style bible)", fill=(220, 200, 160, 255))
+        dc.text((300, 12), f"{label} (Noel family)", fill=(220, 200, 160, 255))
+        cmp.save(preview_dir / out_name)
+        cmp.save(pets_dir / out_name)
 
-    print("wrote previews →", preview_dir)
+    print("wrote pet previews →", preview_dir)
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
+    ## Human heroes: keep regenerating placeholders only (no craft focus).
     save(make_rook(), "characters/rook_vex.png")
     save(make_cinder(), "characters/sister_cinder.png")
 
     save(make_noel(False), "pets/noel.png")
     save(make_noel(True), "pets/noel_rampage.png")
+    save(make_bentley(False), "pets/bentley.png")
+    save(make_bentley(True), "pets/bentley_alert.png")
+    save(make_lillie(False), "pets/lillie.png")
+    save(make_lillie(True), "pets/lillie_charge.png")
     save(make_dust_hound(), "pets/dust_hound.png")
 
     save(make_raider(), "enemies/raider.png")
@@ -1323,7 +1521,7 @@ def main() -> None:
 
     preview = Path("/cursor/stores/bc-01a1472d-6408-7edd-b9ed-fb76363c6b5e/media/noel-pet")
     write_noel_previews(preview)
-    print("DONE — 64-detail Noel + anti-thumb heroes →", OUT)
+    print("DONE — Noel / Bentley / Lillie pet family →", OUT)
 
 
 if __name__ == "__main__":

@@ -44,12 +44,23 @@ var _player: Node2D
 var _dead: bool = false
 var _spawn_in: float = 0.35
 var _bob_t: float = 0.0
+var _distract_left: float = 0.0
 
 @onready var body: Sprite2D = $Body
 @onready var hp_bar: ProgressBar = $HpBar
 
 var _warn: Polygon2D
 var _shadow: Polygon2D
+
+
+func distract(seconds: float) -> void:
+	## Bentley bark — cancel wind-up / lunge and pause aggression briefly.
+	_distract_left = maxf(_distract_left, seconds)
+	_windup_left = 0.0
+	_lunge_left = 0.0
+	_fire_cd = maxf(_fire_cd, seconds)
+	if _warn:
+		_warn.color.a = 0.0
 
 
 func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float = 1.0, kind_id: String = "raider") -> void:
@@ -122,6 +133,7 @@ func _physics_process(delta: float) -> void:
 		_spawn_in -= delta
 		return
 	_fire_cd = maxf(0.0, _fire_cd - delta)
+	_distract_left = maxf(0.0, _distract_left - delta)
 	_player = get_tree().get_first_node_in_group("player") as Node2D
 	if _player == null:
 		velocity = velocity.move_toward(Vector2.ZERO, 600.0 * delta)
@@ -130,6 +142,15 @@ func _physics_process(delta: float) -> void:
 	var to_player := _player.global_position - global_position
 	var dist := to_player.length()
 	var dir := to_player / maxf(dist, 0.001)
+
+	if _distract_left > 0.0:
+		velocity = velocity.move_toward(dir.orthogonal() * speed * 0.35, 700.0 * delta)
+		move_and_slide()
+		if body:
+			body.modulate = Color(1.15, 1.05, 0.7)
+		return
+	elif body:
+		body.modulate = Color.WHITE
 
 	## Wind-up in progress: hold still and telegraph.
 	if _windup_left > 0.0:

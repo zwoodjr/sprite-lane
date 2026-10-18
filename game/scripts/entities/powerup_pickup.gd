@@ -24,6 +24,7 @@ func setup(powerup: Dictionary) -> void:
 
 
 func _ready() -> void:
+	add_to_group("powerups")
 	body_entered.connect(_on_body_entered)
 	collision_layer = 0
 	collision_mask = 2
