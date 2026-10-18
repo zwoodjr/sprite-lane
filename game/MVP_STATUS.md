@@ -11,6 +11,9 @@
 - **P8–9:** Dust tiers 1–10 unlock ladder; events (Supply Crash, Dust Surge, Elite Hunt…) + logbook/quest stubs.
   Headless `test_runner` PASS (both bot matches extract).
 
+**Combat wiring pass:** Class upgrades now apply (was dropped by `run_mods.has`); shared shot mods (split/pierce/ricochet/poison), scrap drone / spore mines / orbit blades, firewalk / second wind / iron tonic, kennel ranks scale Noel/Bentley/Lillie, events (Scrap Spike / Dust Surge / etc.) apply timed effects, set-bonus tags from armor + stations.
+
+
 **Prior (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
 
 **Prior (Hangar scroll):** Full meta catalog was hard to drag / stuck on iPhone·Xogot portrait. `hangar.gd` now uses a touch-friendly ScrollContainer (no horizontal steal, deadzone, follow-focus), rows pass drag to the scroller, list width syncs for autowrap height, rebuild frees rows immediately and clamps scroll, portrait chrome tightened + end pad for Xogot bottom toolbar. Re-pull PR #10.

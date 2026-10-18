@@ -49,6 +49,10 @@ func _ensure_kinds() -> void:
 	if KINDS.is_empty():
 		KINDS = EnemyDefs.combat_kinds_table()
 
+func _move_speed() -> float:
+	return speed * (0.55 if _slow_left > 0.0 else 1.0) * _slow_mult
+
+
 func _archetype() -> String:
 	## Combat behavior bucket (raider / charger / brute). Kind id is the sheet slug.
 	var a := str(_def.get("archetype", ""))
@@ -59,6 +63,12 @@ func _archetype() -> String:
 		return kind
 	return "raider"
 
+var _dot_left: float = 0.0
+var _dot_dps: float = 0.0
+var _slow_left: float = 0.0
+var _slow_mult: float = 1.0
+var _mark_left: float = 0.0
+
 func distract(seconds: float) -> void:
 	## Bentley bark — cancel wind-up / lunge and pause aggression briefly.
 	_distract_left = maxf(_distract_left, seconds)
@@ -68,6 +78,20 @@ func distract(seconds: float) -> void:
 	if _warn:
 		_warn_alpha = 0.0
 		_warn.queue_redraw()
+
+
+func apply_dot(dps: float, duration: float) -> void:
+	_dot_dps = maxf(_dot_dps, dps)
+	_dot_left = maxf(_dot_left, duration)
+
+
+func apply_slow(mult: float, duration: float) -> void:
+	_slow_mult = minf(_slow_mult, clampf(mult, 0.2, 1.0))
+	_slow_left = maxf(_slow_left, duration)
+
+
+func apply_mark(duration: float) -> void:
+	_mark_left = maxf(_mark_left, duration)
 
 func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float = 1.0, kind_id: String = "rad_gator") -> void:
 	global_position = spawn_pos
@@ -160,6 +184,23 @@ func _physics_process(delta: float) -> void:
 	_fire_cd = maxf(0.0, _fire_cd - delta)
 	_distract_left = maxf(0.0, _distract_left - delta)
 	_attack_flash = maxf(0.0, _attack_flash - delta)
+	_mark_left = maxf(0.0, _mark_left - delta)
+	if _slow_left > 0.0:
+		_slow_left -= delta
+		if _slow_left <= 0.0:
+			_slow_mult = 1.0
+	if _dot_left > 0.0:
+		_dot_left -= delta
+		hp -= _dot_dps * delta
+		if hp_bar:
+			hp_bar.visible = true
+			hp_bar.value = hp
+		if hp <= 0.0:
+			_die()
+			return
+	## Dust Surge: enemies hit harder (already applied at spawn via dmg mult); keep tint.
+	if GameState.has_event("dust_surge") and body:
+		body.modulate = Color(1.2, 0.85, 0.75)
 	_player = get_tree().get_first_node_in_group("player") as Node2D
 	if _player == null:
 		velocity = velocity.move_toward(Vector2.ZERO, 600.0 * delta)
@@ -171,7 +212,7 @@ func _physics_process(delta: float) -> void:
 	var dir := to_player / maxf(dist, 0.001)
 
 	if _distract_left > 0.0:
-		velocity = velocity.move_toward(dir.orthogonal() * speed * 0.35, 700.0 * delta)
+		velocity = velocity.move_toward(dir.orthogonal() * _move_speed() * 0.35, 700.0 * delta)
 		move_and_slide()
 		if body:
 			body.modulate = Color(1.15, 1.05, 0.7)
@@ -200,7 +241,7 @@ func _physics_process(delta: float) -> void:
 
 	if _lunge_left > 0.0:
 		_lunge_left -= delta
-		velocity = _lunge_dir * speed * 3.4
+		velocity = _lunge_dir * _move_speed() * 3.4
 		move_and_slide()
 		## Refresh dist after the slide — lunge closes far more than the old 26px check.
 		if _player != null and is_instance_valid(_player):
@@ -218,7 +259,7 @@ func _physics_process(delta: float) -> void:
 		_tick_walk_anim(delta, true)
 		return
 
-	var chase := speed
+	var chase := _move_speed()
 	if _player.has_method("get_active_buffs") and (_player.get_active_buffs() as Dictionary).has("quiet") and dist > 220.0:
 		chase *= 0.75
 	var pref := float(_def["pref"])
@@ -302,18 +343,41 @@ func _fire(dir: Vector2, spd: float) -> void:
 func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 	if _dead:
 		return
-	hp -= amount
+	var dmg := amount
+	## Vesper Marked: take extra from all sources.
+	if _mark_left > 0.0:
+		dmg *= 1.25
+	## Short Circuit: stunned machines take double.
+	if float(GameState.run_mods.get("class_short", 0.0)) > 0.0 and _distract_left > 0.0:
+		if kind.contains("cyber") or kind.contains("mech") or kind.contains("jugger") or kind.contains("naught") or kind.contains("iron"):
+			dmg *= 2.0
+	hp -= dmg
 	if hp_bar:
 		hp_bar.visible = true
 		hp_bar.value = hp
 	Juice.flash(body, Color(4, 4, 4), 0.08)
-	Juice.float_text(global_position + Vector2(0, -26), str(int(round(amount))), Color(1, 0.92, 0.6), 16)
+	Juice.float_text(global_position + Vector2(0, -26), str(int(round(dmg))), Color(1, 0.92, 0.6), 16)
 	Juice.sfx("hit", -8.0)
 	if from_dir.length() > 0.01:
 		var resist := 0.35 if _archetype() == "brute" else 1.0
 		_knock += from_dir.normalized() * 220.0 * resist
+		## Rubble Wall: knocked foes slam into neighbors.
+		if float(GameState.run_mods.get("class_rubble", 0.0)) > 0.0:
+			_rubble_slam(from_dir)
 	if hp <= 0.0:
 		_die()
+
+
+func _rubble_slam(from_dir: Vector2) -> void:
+	var tip := global_position + from_dir.normalized() * 48.0
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if n == self or not is_instance_valid(n) or not (n is Node2D):
+			continue
+		var e := n as Node2D
+		if tip.distance_to(e.global_position) > 40.0:
+			continue
+		if e.has_method("take_damage"):
+			e.call("take_damage", 8.0, from_dir)
 
 func _spawn_health_drop() -> void:
 	var scene := get_tree().current_scene
@@ -360,6 +424,7 @@ func _die() -> void:
 	var range_v: Vector2i = _def.get("scrap", Vector2i(1, 3))
 	var scrap := GameState.add_scrap(randi_range(range_v.x, range_v.y))
 	GameState.kills += 1
+	GameState.note_kill_kind(kind)
 	GameState.add_run_xp(int(_def.get("xp", 3)))
 	Juice.sfx("enemy_die", -2.0)
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)

@@ -57,6 +57,16 @@ var _ability: Dictionary = {}
 var _burst_left: int = 0
 var _burst_gap_left: float = 0.0
 var _drone_cd: float = 1.0
+var _scrap_drone_cd: float = 0.8
+var _mine_cd: float = 0.0
+var _blade_angle: float = 0.0
+var _shield_charges: int = 0
+var _shield_recharge: float = 0.0
+var _stealth_left: float = 0.0
+var _planted_t: float = 0.0 ## Bell Tower charge while standing still
+var _quarry_hits: int = 0
+var _supply_cd: float = 18.0
+var _firewalk_spots: Array = [] ## recent fire trail positions
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -209,14 +219,38 @@ func _physics_process(delta: float) -> void:
 	_update_visuals(delta)
 
 func _tick_timers(delta: float) -> void:
+	var prev_rush := _rush_left
 	_fire_cd = maxf(0.0, _fire_cd - delta)
 	_ability_cd = maxf(0.0, _ability_cd - delta)
 	_post_heal_left = maxf(0.0, _post_heal_left - delta)
 	_rush_left = maxf(0.0, _rush_left - delta)
+	## Aftershock: RUSH ends in an explosion.
+	if prev_rush > 0.0 and _rush_left <= 0.0 and float(GameState.run_mods.get("class_aftershock", 0.0)) > 0.0:
+		_slam_nearby(110.0, 42.0)
+		Juice.float_text(global_position + Vector2(0, -36), "AFTERSHOCK", UiTheme.AMBER, 16)
 	_iframes = maxf(0.0, _iframes - delta)
 	_dash_cd = maxf(0.0, _dash_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
 	_drone_cd = maxf(0.0, _drone_cd - delta)
+	_scrap_drone_cd = maxf(0.0, _scrap_drone_cd - delta)
+	_mine_cd = maxf(0.0, _mine_cd - delta)
+	_supply_cd = maxf(0.0, _supply_cd - delta)
+	_stealth_left = maxf(0.0, _stealth_left - delta)
+	if _stealth_left <= 0.0 and modulate.a < 0.99:
+		modulate.a = 1.0
+	## Bell Tower: charge while standing still.
+	if velocity.length() < 25.0 and float(GameState.run_mods.get("class_bell", 0.0)) > 0.0:
+		_planted_t = minf(3.0, _planted_t + delta)
+	else:
+		_planted_t = maxf(0.0, _planted_t - delta * 2.0)
+	## Iron Tonic shield recharge.
+	if float(GameState.run_mods.get("shield", 0.0)) > 0.0:
+		if _shield_charges <= 0:
+			_shield_recharge -= delta
+			if _shield_recharge <= 0.0:
+				_shield_charges = 1
+				_shield_recharge = 12.0
+				Juice.float_text(global_position + Vector2(0, -30), "SHIELD", Color(0.7, 0.85, 1.0), 14)
 	if _burst_left > 0:
 		_burst_gap_left = maxf(0.0, _burst_gap_left - delta)
 		if _burst_gap_left <= 0.0 and _reload_left <= 0.0 and _dash_left <= 0.0:
@@ -231,6 +265,12 @@ func _tick_timers(delta: float) -> void:
 			_ammo = _mag_size()
 			ammo_changed.emit(_ammo, _mag_size(), false)
 	_tick_drone_assist()
+	_tick_scrap_drone()
+	_tick_spore_mines(delta)
+	_tick_orbit_blades(delta)
+	_tick_bayonet()
+	_tick_supply_drop()
+	_tick_firewalk_damage(delta)
 
 func _current_speed() -> float:
 	var s := base_speed * move_mult * _buff_move()
@@ -251,6 +291,8 @@ func _update_movement(delta: float) -> void:
 		move_and_slide()
 		if int(_dash_left * 60.0) % 2 == 0:
 			_spawn_afterimage()
+			if float(GameState.run_mods.get("firewalk", 0.0)) > 0.0:
+				_stamp_firewalk()
 		return
 	var target := dir * _current_speed()
 	var rate := accel if dir.length() > 0.01 else decel
@@ -403,6 +445,17 @@ func _try_dash() -> void:
 	_dash_cd = DASH_COOLDOWN * GameState.dash_cooldown_mult()
 	## Dust Lungs (endurance stub) stretches dash i-frames modestly.
 	_iframes = maxf(_iframes, DASH_IFRAMES * GameState.endurance_iframe_mult())
+	## Second Wind: dashing heals a little.
+	var heal_amt := float(GameState.run_mods.get("dash_heal", 0.0))
+	if heal_amt > 0.0 and hp > 0.0:
+		hp = minf(max_hp, hp + heal_amt)
+		health_changed.emit(hp, max_hp)
+		Juice.float_text(global_position + Vector2(0, -28), "+%d" % int(heal_amt), UiTheme.TEAL, 14)
+	## Back Way Out: brief invisibility.
+	if float(GameState.run_mods.get("class_stealth", 0.0)) > 0.0:
+		_stealth_left = maxf(_stealth_left, 2.0)
+		modulate.a = 0.35
+	## Firewalk trail stamped during dash in _update_movement.
 	Juice.sfx("dash")
 	Juice.dust_puff(global_position + Vector2(0, 16), 8)
 	dashed.emit()
@@ -726,6 +779,11 @@ func _fire_one_shot(counts_as_trigger: bool) -> void:
 		return
 	_ammo -= 1
 	var pellets := maxi(1, int(_weapon.get("pellets", 1)))
+	## Split Shot: every third shot fires three.
+	var shot_n := int(GameState.weapon.get("_shot_count", 0)) + 1
+	GameState.weapon["_shot_count"] = shot_n
+	if float(GameState.run_mods.get("split", 0.0)) > 0.0 and shot_n % 3 == 0:
+		pellets = maxi(pellets, 3)
 	var base_spread := deg_to_rad(float(_weapon.get("spread_deg", 6.0)))
 	if _buffs.has("quiet"):
 		base_spread *= 0.7
@@ -738,12 +796,15 @@ func _fire_one_shot(counts_as_trigger: bool) -> void:
 		var aim := _last_aim
 		var spread := base_spread
 		if pellets > 1:
-			## Dual blades: fan the pair so both slashes read.
-			var fan := deg_to_rad(10.0)
+			## Dual blades / split: fan the pellets so they read.
+			var fan := deg_to_rad(10.0 if pellets == 2 else 14.0)
 			aim = aim.rotated(lerpf(-fan, fan, float(i) / float(maxi(1, pellets - 1))))
 		aim = aim.rotated(randf_range(-spread, spread))
 		aim_for_fx = aim
 		var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage()
+		## Bell Tower: standing still charges stronger shots.
+		if _planted_t > 0.5:
+			dmg *= 1.0 + minf(0.6, _planted_t * 0.2)
 		var close_r := float(_weapon.get("close_bonus_range", 0.0))
 		if close_r > 0.0:
 			var foe := _nearest_enemy_in_range(close_r)
@@ -762,6 +823,18 @@ func _fire_one_shot(counts_as_trigger: bool) -> void:
 			if str(status.get("id", "")) == "explosive":
 				splash_r = maxf(splash_r, float(status.get("splash_radius", 55.0)))
 				splash_m = maxf(splash_m, float(status.get("splash_mult", 0.45)))
+		## Dust Rounds poison.
+		if float(GameState.run_mods.get("poison", 0.0)) > 0.0:
+			status = status.duplicate(true) if not status.is_empty() else {}
+			if status.is_empty():
+				status = {"id": "poison", "stacks": float(GameState.run_mods.get("poison", 1.0))}
+			else:
+				status["poison"] = true
+				status["stacks"] = float(GameState.run_mods.get("poison", 1.0))
+		## Marked class.
+		if float(GameState.run_mods.get("class_mark", 0.0)) > 0.0:
+			status = status.duplicate(true) if not status.is_empty() else {"id": "mark"}
+			status["mark"] = 1.0
 		var bullet: Area2D = BulletScene.instantiate()
 		bullet.setup(
 			global_position + aim * 28.0,
@@ -775,7 +848,16 @@ func _fire_one_shot(counts_as_trigger: bool) -> void:
 			splash_m
 		)
 		bullet.set("status_effect", status)
+		bullet.set("pierce_left", int(GameState.run_mods.get("pierce", 0.0)))
+		bullet.set("ricochet_left", int(GameState.run_mods.get("ricochet", 0.0)))
 		get_tree().current_scene.add_child(bullet)
+	## Quarry Slam: every few maul swings.
+	if float(GameState.run_mods.get("class_quarry", 0.0)) > 0.0 and counts_as_trigger:
+		_quarry_hits += 1
+		if _quarry_hits >= 4:
+			_quarry_hits = 0
+			_slam_nearby(100.0, 30.0)
+			Juice.float_text(global_position + Vector2(0, -34), "QUARRY", UiTheme.AMBER, 14)
 	_recoil = float(_weapon.get("recoil", 5.0))
 	_flash_left = 0.045
 	_attack_flash = 0.12
@@ -810,6 +892,9 @@ func _nearest_enemy_in_range(radius: float) -> Node2D:
 
 func _tick_drone_assist() -> void:
 	var interval := float(_weapon.get("drone_assist_interval", 0.0))
+	## Wingman class also enables a drone.
+	if interval <= 0.0 and float(GameState.run_mods.get("class_wingman", 0.0)) > 0.0:
+		interval = 0.85
 	if interval <= 0.0 or _drone_cd > 0.0 or hp <= 0.0:
 		return
 	if _reload_left > 0.0 or _dash_left > 0.0:
@@ -818,25 +903,139 @@ func _tick_drone_assist() -> void:
 	if foe == null:
 		return
 	_drone_cd = interval
+	_spawn_assist_shot(foe, float(_weapon.get("drone_assist_damage", 8.0)) * 0.85, "DRONE")
+
+
+func _tick_scrap_drone() -> void:
+	if float(GameState.run_mods.get("drone", 0.0)) <= 0.0:
+		return
+	if _scrap_drone_cd > 0.0 or hp <= 0.0:
+		return
+	var foe := _nearest_enemy_in_range(380.0)
+	if foe == null:
+		return
+	_scrap_drone_cd = 0.9 / (1.0 + 0.25 * float(GameState.run_mods.get("drone", 1.0)))
+	_spawn_assist_shot(foe, 7.0 * float(GameState.run_mods.get("drone", 1.0)), "SCRAP")
+
+
+func _spawn_assist_shot(foe: Node2D, dmg: float, label: String) -> void:
 	var aim := (foe.global_position - global_position).normalized()
 	if aim.length_squared() < 0.01:
 		aim = _last_aim
-	var dmg := float(_weapon.get("drone_assist_damage", 8.0)) * damage_mult * 0.85
 	var bullet: Area2D = BulletScene.instantiate()
-	bullet.setup(
-		global_position + aim * 36.0,
-		aim,
-		900.0,
-		dmg,
-		true,
-		self,
-		0.9,
-		0.0,
-		0.0
-	)
+	bullet.setup(global_position + aim * 36.0, aim, 900.0, dmg * damage_mult, true, self, 0.9, 0.0, 0.0)
 	get_tree().current_scene.add_child(bullet)
 	Juice.sfx("shot", -10.0)
-	Juice.float_text(global_position + Vector2(0, -36), "DRONE", UiTheme.TEAL, 12)
+	Juice.float_text(global_position + Vector2(0, -36), label, UiTheme.TEAL, 12)
+
+
+func _tick_spore_mines(delta: float) -> void:
+	if float(GameState.run_mods.get("mines", 0.0)) <= 0.0 or hp <= 0.0:
+		return
+	if velocity.length() < 40.0:
+		return
+	if _mine_cd > 0.0:
+		return
+	_mine_cd = 1.6 / float(GameState.run_mods.get("mines", 1.0))
+	## Instant proximity mine: damages nearby foes.
+	Juice.burst(global_position, Color(0.55, 0.9, 0.4), 10, 70.0, 0.35)
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		if global_position.distance_to(e.global_position) > 55.0:
+			continue
+		if e.has_method("take_damage"):
+			e.call("take_damage", 14.0 * damage_mult, Vector2.ZERO)
+		if e.has_method("apply_dot"):
+			e.call("apply_dot", 4.0, 2.0)
+
+
+func _tick_orbit_blades(delta: float) -> void:
+	if float(GameState.run_mods.get("blades", 0.0)) <= 0.0 or hp <= 0.0:
+		return
+	_blade_angle += delta * 4.5
+	var n_blades := int(GameState.run_mods.get("blades", 1.0))
+	for i in range(n_blades):
+		var ang := _blade_angle + TAU * float(i) / float(n_blades)
+		var tip := global_position + Vector2(cos(ang), sin(ang)) * 58.0
+		for n in get_tree().get_nodes_in_group("enemies"):
+			if not (n is Node2D) or not is_instance_valid(n):
+				continue
+			var e := n as Node2D
+			if tip.distance_to(e.global_position) > 28.0:
+				continue
+			if e.has_method("take_damage") and randf() < 0.08:
+				e.call("take_damage", 6.0 * damage_mult, (e.global_position - global_position).normalized())
+
+
+func _tick_bayonet() -> void:
+	if float(GameState.run_mods.get("class_bayonet", 0.0)) <= 0.0 or hp <= 0.0:
+		return
+	if randf() > 0.12:
+		return
+	var foe := _nearest_enemy_in_range(55.0)
+	if foe == null:
+		return
+	if foe.has_method("take_damage"):
+		foe.call("take_damage", 10.0 * damage_mult, (foe.global_position - global_position).normalized())
+		Juice.float_text(foe.global_position + Vector2(0, -20), "STAB", UiTheme.RUST, 12)
+
+
+func _tick_supply_drop() -> void:
+	if float(GameState.run_mods.get("class_supply", 0.0)) <= 0.0:
+		return
+	if _supply_cd > 0.0 or hp <= 0.0:
+		return
+	_supply_cd = 20.0
+	GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
+	Juice.float_text(global_position + Vector2(0, -44), "SUPPLY DROP", UiTheme.AMBER, 16)
+
+
+func _stamp_firewalk() -> void:
+	_firewalk_spots.append({"pos": global_position, "t": 1.4})
+	if _firewalk_spots.size() > 12:
+		_firewalk_spots.pop_front()
+	Juice.burst(global_position, Color(1.0, 0.45, 0.2), 4, 40.0, 0.25)
+
+
+func _tick_firewalk_damage(delta: float) -> void:
+	if _firewalk_spots.is_empty():
+		return
+	var keep: Array = []
+	for spot in _firewalk_spots:
+		spot["t"] = float(spot["t"]) - delta
+		if float(spot["t"]) <= 0.0:
+			continue
+		keep.append(spot)
+		var pos: Vector2 = spot["pos"]
+		for n in get_tree().get_nodes_in_group("enemies"):
+			if not (n is Node2D) or not is_instance_valid(n):
+				continue
+			var e := n as Node2D
+			if pos.distance_to(e.global_position) > 36.0:
+				continue
+			if e.has_method("take_damage") and randf() < 0.15:
+				e.call("take_damage", 5.0 * damage_mult, Vector2.ZERO)
+	_firewalk_spots = keep
+
+
+func mod_bullet_damage(base: float, body: Node, dir: Vector2) -> float:
+	var dmg := base
+	## Double Cross: hits from behind deal triple.
+	if float(GameState.run_mods.get("class_backstab", 0.0)) > 0.0 and body is Node2D:
+		var e := body as Node2D
+		var to_me := (global_position - e.global_position).normalized()
+		var facing := dir ## approximate: if we're shooting into their back
+		## Prefer enemy velocity as facing if available.
+		if "velocity" in e and e.velocity is Vector2 and (e.velocity as Vector2).length() > 10.0:
+			facing = (e.velocity as Vector2).normalized()
+		if facing.dot(to_me) > 0.35:
+			dmg *= 3.0
+	## Field Notes: stronger vs kinds you've killed.
+	if body.get("kind") != null:
+		dmg *= GameState.field_notes_mult(str(body.get("kind")))
+	return dmg
 
 
 func _start_reload() -> void:
@@ -873,6 +1072,18 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.float_text(global_position + Vector2(0, -30), "DODGE", UiTheme.TEAL, 16)
 		Juice.sfx("dash", -8.0)
 		return
+	## Iron Tonic: shield blocks one hit.
+	if _shield_charges > 0:
+		_shield_charges = 0
+		_shield_recharge = 12.0
+		_iframes = maxf(_iframes, 0.4)
+		Juice.float_text(global_position + Vector2(0, -30), "SHIELD!", Color(0.7, 0.85, 1.0), 16)
+		Juice.burst(global_position, Color(0.6, 0.8, 1.0), 12, 100.0, 0.35)
+		return
+	## Stealth: enemies lose track — ignore hits while stealthed.
+	if _stealth_left > 0.0:
+		Juice.float_text(global_position + Vector2(0, -28), "MISSED", UiTheme.TEAL, 14)
+		return
 	var dmg := float(amount) * resist_mult
 	## Pebble tank: resist knockback/chip via knockback_resist as DR softener.
 	var kb := float(_char.get("knockback_resist", 0.0))
@@ -885,6 +1096,8 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	## Unbreakable class pick: reduced damage below half HP.
 	if float(GameState.run_mods.get("class_unbreakable", 0.0)) > 0.0 and hp < max_hp * 0.5:
 		dmg *= 0.65
+	## Set bonus DR (Plague Doctor / Demolition / etc. via armor tags).
+	dmg *= GameState.set_damage_taken_mult()
 	hp -= dmg
 	## Fair hits: ~0.5s i-frames so one mistake isn't a full wipe (was 0.12s).
 	_iframes = 0.5

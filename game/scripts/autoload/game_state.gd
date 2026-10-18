@@ -82,6 +82,8 @@ var loot_multiplier: float = 1.0
 var special_ammo: Dictionary = {} ## active special ammo def + time left
 var run_bag_gear: Array = [] ## gear found this run (stash only on extract)
 var match_elapsed: float = 0.0
+var run_kill_kinds: Dictionary = {} ## kind_id -> kill count (Quill Field Notes)
+var active_events: Dictionary = {} ## id -> time_left
 var scrap_found: int = 0
 var kills: int = 0
 var extracted: bool = false
@@ -94,14 +96,7 @@ var extract_pad_info: Array = []
 ## In-run leveling (temporary power)
 var run_xp: int = 0 ## toward next run level
 var run_level: int = 1
-var run_mods: Dictionary = {
-	"damage": 0.0,
-	"firerate": 0.0,
-	"max_hp": 0.0,
-	"move": 0.0,
-	"mag": 0.0,
-	"ability_cd": 0.0,
-}
+var run_mods: Dictionary = {}
 var run_picks_taken: Array = [] ## upgrade ids chosen this run
 var pending_run_choices: Array = []
 var run_level_paused: bool = false
@@ -257,8 +252,8 @@ func insurance_bonus_slots() -> int:
 	return int(Progression.meta_bonus(meta_upgrades, "insurance"))
 
 func dash_cooldown_mult() -> float:
-	## Hangar Loose Boots — floor so dash never becomes free spam.
-	return maxf(0.55, 1.0 - Progression.meta_bonus(meta_upgrades, "dash_cd"))
+	## Hangar Loose Boots + Night Runner / Smuggler set — floor so dash never free.
+	return maxf(0.55, 1.0 - Progression.meta_bonus(meta_upgrades, "dash_cd") - set_dash_cd_bonus())
 
 func extract_payout_mult() -> float:
 	return 1.0 + Progression.meta_bonus(meta_upgrades, "extract_payout")
@@ -290,7 +285,7 @@ func block_chance() -> float:
 
 func move_speed_bonus() -> float:
 	## Modest — TL and enemies still catch up.
-	return clampf(Progression.meta_bonus(meta_upgrades, "move_speed"), 0.0, 0.15)
+	return clampf(Progression.meta_bonus(meta_upgrades, "move_speed") + set_move_bonus(), 0.0, 0.22)
 
 func pickup_radius_bonus() -> float:
 	return Progression.meta_bonus(meta_upgrades, "pickup_radius")
@@ -374,13 +369,9 @@ func begin_run() -> void:
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
-	run_mods = {
-		"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0,
-		"ricochet": 0.0, "split": 0.0, "poison": 0.0, "pierce": 0.0,
-		"drone": 0.0, "mines": 0.0, "blades": 0.0,
-		"firewalk": 0.0, "dash_heal": 0.0, "shield": 0.0,
-		"scrap_find_run": 0.0, "luck": 0.0,
-	}
+	run_mods = _empty_run_mods()
+	run_kill_kinds = {}
+	active_events = {}
 	run_picks_taken.clear()
 	pending_run_choices.clear()
 	run_level_paused = false
@@ -424,7 +415,8 @@ func add_run_xp(amount: int) -> void:
 		run_xp -= Progression.run_xp_to_next(run_level)
 		run_level += 1
 		leveled = true
-		var choices := Progression.roll_run_choices(2, run_picks_taken, selected_character_id)
+		var n_choices := 3 if float(run_mods.get("luck", 0.0)) > 0.0 else 2
+		var choices := Progression.roll_run_choices(n_choices, run_picks_taken, selected_character_id)
 		pending_run_choices = choices
 		run_level_paused = true
 		run_level_up.emit(run_level, choices)
@@ -437,8 +429,12 @@ func add_run_xp(amount: int) -> void:
 func apply_run_upgrade(upgrade: Dictionary) -> void:
 	var stat := str(upgrade.get("stat", ""))
 	var add := float(upgrade.get("add", 0.0))
-	if run_mods.has(stat):
-		run_mods[stat] = float(run_mods[stat]) + add
+	## Always write — class_* and future mods must not be dropped.
+	if stat != "":
+		run_mods[stat] = float(run_mods.get(stat, 0.0)) + add
+	## Consumable luck: used once for the next picker (already applied via n_choices).
+	if stat == "luck":
+		pass
 	var uid := str(upgrade.get("id", ""))
 	if uid != "" and uid not in run_picks_taken:
 		run_picks_taken.append(uid)
@@ -570,16 +566,27 @@ func on_wipe() -> void:
 func _reset_run_power_after_end() -> void:
 	## Permanent power never comes from run levels — clear after banking rewards.
 	run_xp = 0
-	run_mods = {
+	run_mods = _empty_run_mods()
+	run_kill_kinds = {}
+	active_events = {}
+	run_picks_taken.clear()
+	pending_run_choices.clear()
+	run_level_paused = false
+
+
+func _empty_run_mods() -> Dictionary:
+	return {
 		"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0,
 		"ricochet": 0.0, "split": 0.0, "poison": 0.0, "pierce": 0.0,
 		"drone": 0.0, "mines": 0.0, "blades": 0.0,
 		"firewalk": 0.0, "dash_heal": 0.0, "shield": 0.0,
 		"scrap_find_run": 0.0, "luck": 0.0,
+		"class_aftershock": 0.0, "class_rubble": 0.0, "class_bell": 0.0, "class_mark": 0.0,
+		"class_unbreakable": 0.0, "class_quarry": 0.0, "class_livewire": 0.0, "class_short": 0.0,
+		"class_sanctuary": 0.0, "class_burn": 0.0, "class_notes": 0.0, "class_bayonet": 0.0,
+		"class_stealth": 0.0, "class_backstab": 0.0, "class_wingman": 0.0, "class_supply": 0.0,
 	}
-	run_picks_taken.clear()
-	pending_run_choices.clear()
-	run_level_paused = false
+
 
 func timer_scale() -> float:
 	return FAST_TIMER_SCALE if fast_timers else 1.0
@@ -667,9 +674,120 @@ func record_boss_kill(boss_id: String) -> void:
 
 
 func scrap_find_mult() -> float:
-	var meta := 1.0 + Progression.meta_bonus(meta_upgrades, "scrap_find")
+	var meta := 1.0 + Progression.meta_bonus(meta_upgrades, "scrap_find") + set_scrap_bonus()
 	var run := 1.0 + float(run_mods.get("scrap_find_run", 0.0))
-	return meta * run
+	return meta * run * scrap_event_mult()
+
+
+func note_kill_kind(kind_id: String) -> void:
+	if kind_id == "":
+		return
+	run_kill_kinds[kind_id] = int(run_kill_kinds.get(kind_id, 0)) + 1
+
+
+func field_notes_mult(kind_id: String) -> float:
+	if float(run_mods.get("class_notes", 0.0)) <= 0.0:
+		return 1.0
+	var n := int(run_kill_kinds.get(kind_id, 0))
+	return 1.0 + minf(0.5, 0.05 * float(n))
+
+
+func set_active_event(id: String, duration: float) -> void:
+	active_events[id] = duration
+
+
+func tick_active_events(delta: float) -> void:
+	var dead: Array = []
+	for k in active_events.keys():
+		active_events[k] = float(active_events[k]) - delta
+		if float(active_events[k]) <= 0.0:
+			dead.append(k)
+	for k in dead:
+		active_events.erase(k)
+
+
+func has_event(id: String) -> bool:
+	return float(active_events.get(id, 0.0)) > 0.0
+
+
+func scrap_event_mult() -> float:
+	return 2.0 if has_event("scrap_spike") else 1.0
+
+
+func dust_surge_enemy_mult() -> float:
+	return 1.35 if has_event("dust_surge") else 1.0
+
+
+## Armor set bonuses from equipped stub armor + any set pieces in stash that match.
+func set_damage_taken_mult() -> float:
+	var tags := _active_set_tags()
+	var m := 1.0
+	if "knockback_resist" in tags:
+		m *= 0.92
+	return m
+
+
+func set_move_bonus() -> float:
+	return 0.08 if "move_speed" in _active_set_tags() else 0.0
+
+
+func set_scrap_bonus() -> float:
+	return 0.12 if "scrap_find" in _active_set_tags() else 0.0
+
+
+func set_dash_cd_bonus() -> float:
+	var tags := _active_set_tags()
+	var m := 0.0
+	if "dash_cd" in tags:
+		m += 0.12
+	return m
+
+
+func _active_set_tags() -> Array:
+	var tags: Array = []
+	## Default armor stub set_id maps lightly; also count epic set pieces in bag/stash worn via armor.pieces.
+	var set_counts: Dictionary = {}
+	var pieces: Dictionary = armor.get("pieces", {}) if typeof(armor) == TYPE_DICTIONARY else {}
+	for slot in pieces.keys():
+		var piece: Variant = pieces[slot]
+		if typeof(piece) != TYPE_DICTIONARY:
+			continue
+		var sid := str(piece.get("set", ""))
+		if sid == "":
+			continue
+		set_counts[sid] = int(set_counts.get(sid, 0)) + 1
+	## Also honor armor.set_id as a 3-piece stand-in for the current stub.
+	var stub := str(armor.get("set_id", ""))
+	if stub != "" and not set_counts.has(stub):
+		set_counts[stub] = 3
+	for sid in set_counts.keys():
+		var n := int(set_counts[sid])
+		var def: Dictionary = {}
+		if GearDefs.GENERAL_SETS.has(sid):
+			def = GearDefs.GENERAL_SETS[sid]
+		elif GearDefs.SURVIVOR_SETS.has(sid):
+			def = GearDefs.SURVIVOR_SETS[sid]
+		elif sid == "scrap_sentinel":
+			## MVP stub armor: treat as light Demolition Crew 2-piece.
+			if n >= 2:
+				tags.append("knockback_resist")
+			continue
+		if def.is_empty():
+			continue
+		var bonuses: Dictionary = def.get("bonuses", {})
+		for need in bonuses.keys():
+			if n >= int(need):
+				tags.append(str(bonuses[need]))
+	## Survivor set if station high enough (soft stand-in until loadout UI).
+	var surv := selected_character_id
+	if GearDefs.SURVIVOR_SETS.has(surv) and station_rank(surv) >= 2:
+		var sb: Dictionary = GearDefs.SURVIVOR_SETS[surv].get("bonuses", {})
+		if sb.has(2):
+			tags.append(str(sb[2]))
+		if station_rank(surv) >= 4 and sb.has(3):
+			tags.append(str(sb[3]))
+	return tags
+
 
 func go_main_menu() -> void:
 	get_tree().paused = false

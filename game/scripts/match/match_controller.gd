@@ -129,6 +129,7 @@ func _process(delta: float) -> void:
 	_match_time += delta
 	GameState.tick_loot_multiplier(delta)
 	GameState.tick_special_ammo(delta)
+	GameState.tick_active_events(delta)
 	_maybe_radio_stub()
 	_maybe_midrun_events()
 	_maybe_elite_after_three_min()
@@ -177,17 +178,22 @@ func _maybe_midrun_events() -> void:
 func _apply_event(ev: Dictionary) -> void:
 	var id := str(ev.get("id", ""))
 	match id:
+		"radio_scrap_spike":
+			GameState.set_active_event("scrap_spike", 30.0)
+			hud.show_toast("Scrap Spike — double scrap for 30s!", UiTheme.AMBER)
 		"pulse_herb_bloom", "radio_herb_bloom":
 			## Spawn a few heal pickups near the player.
-			for i in range(3):
+			for i in range(4):
 				var ang := randf() * TAU
-				var pos := player.global_position + Vector2(cos(ang), sin(ang)) * randf_range(80, 160)
+				var pos := player.global_position + Vector2(cos(ang), sin(ang)) * randf_range(80, 200)
 				_spawn_heal_at(pos)
+			GameState.set_active_event("herb_bloom", 90.0)
 		"radio_pad_tip", "pad_heat":
-			## Open pads a bit early if sealed.
+			## Open pads a bit early if sealed; spawn pad guards.
 			if not _extract_open and _phase_time_left > 8.0:
 				_phase_time_left = minf(_phase_time_left, 8.0)
 				hud.show_toast("Pads heating early!", UiTheme.RUST)
+			_spawn_ambush()
 		"supply_crash":
 			GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
 			GameState.add_run_gear(GearDefs.make_loose_armor("chest", "epic"))
@@ -195,9 +201,13 @@ func _apply_event(ev: Dictionary) -> void:
 			_spawn_ambush()
 		"dust_surge":
 			GameState.threat_level = mini(GameState.threat_level + 1, 5)
+			GameState.set_active_event("dust_surge", 20.0)
 			hud.show_toast("Dust Surge — survive the dark!", UiTheme.DANGER)
 		"elite_hunt":
 			_spawn_elite(true)
+		"extract_ambush_bounty", "extract_pet_bond":
+			## Toast-only until extract-side scoring ships fully.
+			pass
 
 func _spawn_heal_at(pos: Vector2) -> void:
 	var pickup: Area2D = load("res://scenes/entities/powerup_pickup.tscn").instantiate()
@@ -376,6 +386,7 @@ func _spawn_enemy() -> void:
 	var step := float(_mode.get("tl_step_size", 1.0))
 	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
 	var dmg_m := (1.0 + (float(tl["damage"]) - 1.0) * step) * float(_mode.get("enemy_damage", 1.0))
+	dmg_m *= GameState.dust_surge_enemy_mult()
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	enemy.setup(spot, hp_m, dmg_m, 1.0, _roll_enemy_kind())
 	world.add_child(enemy)
