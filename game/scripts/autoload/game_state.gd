@@ -32,11 +32,8 @@ var account_xp: int = 0
 var account_level: int = 1
 var meta_upgrades: Dictionary = {} ## id -> rank
 var garage_tokens: int = 0
-var mount_unlock_tier: int = 0 ## 0 = skateboard usable
 var successful_extracts: int = 0
 
-## Tank never unlocks for players.
-var tank_dev_flag: bool = false
 
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
@@ -65,7 +62,6 @@ var total_runs: int = 0
 var armor: Dictionary = {}
 var weapon: Dictionary = {}
 var pet: Dictionary = {}
-var mount: Dictionary = {}
 
 ## --- In-run (resets every deploy) ---
 var threat_level: int = 0
@@ -133,7 +129,6 @@ func save_profile() -> void:
 		"meta_upgrades": meta_upgrades,
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
-		"mount_unlock_tier": mount_unlock_tier,
 		"best_payout": best_payout,
 		"total_runs": total_runs,
 		"selected_mode_id": selected_mode_id,
@@ -177,7 +172,6 @@ func load_profile() -> void:
 		meta_upgrades = (mu as Dictionary).duplicate()
 	garage_tokens = int(d.get("garage_tokens", 0))
 	successful_extracts = int(d.get("successful_extracts", 0))
-	mount_unlock_tier = int(d.get("mount_unlock_tier", 0))
 	best_payout = int(d.get("best_payout", 0))
 	total_runs = int(d.get("total_runs", 0))
 	_sync_account_level()
@@ -279,7 +273,6 @@ func reset_profile() -> void:
 	meta_upgrades.clear()
 	garage_tokens = 0
 	successful_extracts = 0
-	mount_unlock_tier = 0
 	best_payout = 0
 	total_runs = 0
 	save_profile()
@@ -296,18 +289,15 @@ func reset_loadout_to_defaults() -> void:
 	## Kit follows the selected hero — never the old shared Scrap SMG.
 	weapon = LoadoutStubs.weapon_for_character(selected_character_id)
 	pet = LoadoutStubs.default_pet(selected_pet_id)
-	mount = LoadoutStubs.default_mount(mount_unlock_tier)
 	insured_slots.clear()
 	var slots: int = int(get_mode().get("insurance_slots", 2)) + insurance_bonus_slots()
-	slots = mini(slots, 4)
+	slots = mini(slots, 3)
 	if slots >= 1:
 		insured_slots.append("weapon")
 	if slots >= 2:
 		insured_slots.append("pet")
 	if slots >= 3:
 		insured_slots.append("armor")
-	if slots >= 4:
-		insured_slots.append("mount")
 	loadout_changed.emit()
 
 func begin_run() -> void:
@@ -452,13 +442,6 @@ func on_extract_success() -> void:
 	_sync_account_level()
 	result_run_level_reached = run_level
 	successful_extracts += 1
-	if successful_extracts >= 3 and mount_unlock_tier < 1:
-		mount_unlock_tier = 1
-		result_unlocks.append("Scooter unlocked in the hangar")
-	elif mount_unlock_tier < 1:
-		var left := 3 - successful_extracts
-		if left > 0 and left <= 2:
-			result_unlocks.append("Scooter in %d more extract%s" % [left, "s" if left != 1 else ""])
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d (Hangar gates)" % account_level)
 	result_summary = "Extracted. +%d scrap banked · run Lv %d · TL %d" % [
@@ -492,7 +475,7 @@ func on_wipe() -> void:
 	payout_this_run = 0
 	result_lost_keys = PackedStringArray()
 	result_kept_keys = PackedStringArray()
-	for key in ["weapon", "armor", "pet", "mount"]:
+	for key in ["weapon", "armor", "pet"]:
 		if key in insured_slots:
 			result_kept_keys.append(key)
 		else:

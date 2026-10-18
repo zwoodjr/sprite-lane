@@ -23,7 +23,6 @@ var stick_radius: float = BASE_STICK_RADIUS
 var btn_fire: Control
 var btn_dash: Control
 var btn_ability: Control
-var btn_mount: Control
 var btn_pause: Control
 var _buttons: Array[Control] = []
 
@@ -59,14 +58,12 @@ func _ready() -> void:
 	btn_fire = _make_button("FIRE", "hold", 56.0, UiTheme.RUST)
 	btn_dash = _make_button("DASH", "", 46.0, UiTheme.TEAL)
 	btn_ability = _make_button("ABILITY", "", 46.0, UiTheme.AMBER)
-	btn_mount = _make_button("MOUNT", "", 36.0, Color(0.6, 0.6, 0.75))
 	btn_pause = _make_button("II", "", 30.0, Color(0.75, 0.68, 0.58))
 
 	btn_fire.pressed_down.connect(func() -> void: TouchInput.set_fire_held(true))
 	btn_fire.released.connect(func() -> void: TouchInput.set_fire_held(false))
 	btn_dash.pressed_down.connect(TouchInput.pulse_dash)
 	btn_ability.pressed_down.connect(TouchInput.pulse_ability)
-	btn_mount.pressed_down.connect(TouchInput.pulse_mount)
 	btn_pause.pressed_down.connect(TouchInput.pulse_pause)
 
 	_layout()
@@ -74,7 +71,7 @@ func _ready() -> void:
 	TouchInput.sticks_cleared.connect(_reset_touches)
 	if not TouchInput.touch_primary:
 		## Desktop: keyboard + mouse. Keep pause visible, hide thumb controls.
-		for b in [btn_fire, btn_dash, btn_ability, btn_mount]:
+		for b in [btn_fire, btn_dash, btn_ability]:
 			b.visible = false
 
 func _make_button(text: String, sub: String, r: float, tint: Color) -> Control:
@@ -108,7 +105,6 @@ func _layout() -> void:
 	_place(btn_fire, Vector2(w - 78, h - 210))
 	_place(btn_dash, Vector2(w - 92, h - 96))
 	_place(btn_ability, Vector2(w - 200, h - 78))
-	_place(btn_mount, Vector2(w - 188, h - 188))
 	_place(btn_pause, Vector2(w - 34, 36), false)
 
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
@@ -285,9 +281,6 @@ func _process(delta: float) -> void:
 		btn_ability.set("cooldown_ratio", _player.call("get_ability_cooldown_ratio"))
 		btn_ability.set("label_text", str(_player.call("get_ability_short_name")))
 		btn_ability.set("disabled", not bool(_player.call("has_ability")))
-		var mount_ok: bool = bool(_player.call("can_mount"))
-		btn_mount.set("disabled", not mount_ok)
-		btn_mount.set("label_text", "RIDE" if not _player.call("is_mounted") else "HOP OFF")
 		if _twin:
 			btn_fire.set("sub_text", "auto-aim" if GameState.settings.get("auto_aim", true) else "")
 		else:

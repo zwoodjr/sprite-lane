@@ -23,7 +23,6 @@ var _go := false
 var _headless := false
 var _abil_t := 3.0
 var _abil_uses := 0
-var _mount_toggles := 0
 var _pet_far := 0.0
 var _min_hp := 9999.0
 var _reload_s := 0.0
@@ -185,16 +184,13 @@ func _extra(delta: float) -> void:
 		_abil_t = 4.0
 		TouchInput.pulse_ability()
 		_abil_uses += 1
-	if int(_t * 60) % (60 * 25) == 0 and _t > 1.0:
-		TouchInput.pulse_mount()
-		_mount_toggles += 1
 	for pet in get_tree().get_nodes_in_group("pets"):
 		if is_instance_valid(pet) and pet.global_position.distance_to(_p.global_position) > 500.0:
 			_pet_far += delta
 
 
 func _summary() -> void:
-	print("SUMMARY char=%s pet=%s mode=%s t=%.0f hp_end=%.0f min_hp=%.0f kills=%d scrap=%d runlv=%d hits=%d abil=%d mounts=%d pet_far_s=%.0f reload_s=%.0f stuck_s=%.0f" % [
+	print("SUMMARY char=%s pet=%s mode=%s t=%.0f hp_end=%.0f min_hp=%.0f kills=%d scrap=%d runlv=%d hits=%d abil=%d pet_far_s=%.0f reload_s=%.0f stuck_s=%.0f" % [
 		GameState.selected_character_id, GameState.selected_pet_id, GameState.selected_mode_id, _t,
 		_p.hp if is_instance_valid(_p) else -1.0, _min_hp, GameState.kills, GameState.get("scrap_found"), GameState.run_level,
-		_dmg_events, _abil_uses, _mount_toggles, _pet_far, _reload_s, _stuck_s])
+		_dmg_events, _abil_uses, _pet_far, _reload_s, _stuck_s])

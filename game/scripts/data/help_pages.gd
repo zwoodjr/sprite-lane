@@ -44,7 +44,7 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "Loot & abilities",
 			"icon": "✚",
-			"body": "Shoot crates open — many are empty, some drop lean scrap, a few (~2/10) drop timed buffs (speed, damage, shield, heal).\n\nYour character's ABILITY button is unique — check the character screen for what it does.\n\nRIDE hops on your mount for speed (it burns fuel). Riding into crates smashes them.",
+			"body": "Shoot crates open — many are empty, some drop lean scrap, a few (~2/10) drop timed buffs (speed, damage, shield, heal).\n\nYour character's ABILITY button is unique — check the character screen for what it does.",
 		},
 		{
 			"title": "Your pet",

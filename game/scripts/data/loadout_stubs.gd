@@ -1,7 +1,7 @@
 class_name LoadoutStubs
 extends RefCounted
 
-## Thin architecture stubs so Armor / Weapons / Pets / Mounts match the design.
+## Thin architecture stubs so Armor / Weapons / Pets match the design.
 ## Shallow effects only — enough for the MVP vertical slice.
 
 static func default_armor() -> Dictionary:
@@ -214,58 +214,3 @@ static func default_pet(pet_id: String = "") -> Dictionary:
 
 static func available_pets() -> Array[Dictionary]:
 	return PetDefs.all_pets()
-
-static func default_mount(unlocked_tier: int = 0) -> Dictionary:
-	var ladder := mount_ladder()
-	var tier: int = clampi(unlocked_tier, 0, ladder.size() - 1)
-	var mount: Dictionary = ladder[tier].duplicate(true)
-	mount["unlocked_tier"] = unlocked_tier
-	mount["mounted"] = false
-	return mount
-
-static func mount_ladder() -> Array[Dictionary]:
-	return [
-		{
-			"tier": 0,
-			"id": "skateboard",
-			"name": "Skateboard",
-			"speed_mult": 1.45,
-			"fuel": 100.0,
-			"fuel_burn": 4.0,
-			"durability": 40,
-			"usable": true,
-			"unlock": "Survive first lockout once",
-		},
-		{
-			"tier": 1,
-			"id": "scooter",
-			"name": "Scooter",
-			"speed_mult": 1.7,
-			"fuel": 120.0,
-			"fuel_burn": 5.0,
-			"durability": 55,
-			"usable": false,
-			"unlock": "3 successful extracts (stub — locked)",
-		},
-		{
-			"tier": 2,
-			"id": "dirt_bike",
-			"name": "Dirt Bike",
-			"speed_mult": 2.0,
-			"fuel": 140.0,
-			"fuel_burn": 7.0,
-			"durability": 70,
-			"usable": false,
-			"unlock": "Scooter mastery + landmark clears (stub — locked)",
-		},
-	]
-
-## Tank is not for players — kept behind unused flag only.
-static func tank_entry() -> Dictionary:
-	return {
-		"id": "tank",
-		"name": "Tank",
-		"mythic_locked": true,
-		"dev_only": true,
-		"note": "Developer / owner flag only. Player ladder ends at APC (later).",
-	}

@@ -76,8 +76,6 @@ func _run() -> void:
 				TouchInput.pulse_dash()
 			if frames % 400 == 0:
 				TouchInput.pulse_ability()
-			if frames % 700 == 0:
-				TouchInput.pulse_mount()
 			if frames == 300 and not paused_once:
 				paused_once = true
 				hud.call("_open_pause")

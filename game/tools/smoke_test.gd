@@ -20,8 +20,6 @@ func _init() -> void:
 	var anim = UnitAnim.new()
 	anim.setup_from_walk_path("res://assets/sprites/characters/ash_rook_walk.png")
 	assert(anim.has_frames())
-	assert(LoadoutStubs.mount_ladder().size() == 3)
-	assert(bool(LoadoutStubs.tank_entry()["dev_only"]))
 	assert(Progression.run_xp_to_next(1) == 30)
 	assert(Progression.hangar_catalog().size() >= 16)
 	assert(Progression.hangar_catalog_visible().size() >= 15)
@@ -61,8 +59,8 @@ func _init() -> void:
 	## Scene loads need GameState autoload — use:
 	##   godot4 --headless --path game --quit-after 3
 	## for full project boot. This script only validates data stubs.
-	print("SMOKE_OK phases_easy=%d phases_medium=%d mounts=%d hangar=%d pets=%d" % [
-		easy["phases"].size(), med["phases"].size(), LoadoutStubs.mount_ladder().size(),
+	print("SMOKE_OK phases_easy=%d phases_medium=%d hangar=%d pets=%d" % [
+		easy["phases"].size(), med["phases"].size(),
 		Progression.hangar_catalog().size(), PetDefs.all_pets().size(),
 	])
 	quit(0)

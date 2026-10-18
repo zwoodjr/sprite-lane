@@ -1,6 +1,6 @@
 extends StaticBody2D
 
-## Destructible scrap / apothecary prop. Player bullets (and mounted ram) break it.
+## Destructible scrap / apothecary prop. Player shots and swings break it.
 
 signal broken(global_pos: Vector2)
 

@@ -7,7 +7,7 @@ extends Node
 const SFX_NAMES := [
 	"shot", "enemy_shot", "hit", "enemy_die", "hurt", "dash", "reload", "break",
 	"pickup", "extract_open", "seal", "extract_win", "wipe", "ui_tap", "threat_up",
-	"ability", "mount", "empty",
+	"ability", "empty",
 ]
 const POOL_SIZE := 12
 

@@ -37,7 +37,6 @@ var _ability_cd: float = 0.0
 var _post_heal_left: float = 0.0
 var _rush_left: float = 0.0
 var _last_stitch_available: bool = false
-var _mounted: bool = false
 var _oos_timer: float = 0.0
 var _iframes: float = 0.0
 var _dash_left: float = 0.0
@@ -50,7 +49,6 @@ var _flash_left: float = 0.0
 var _last_aim: Vector2 = Vector2.RIGHT
 var _char: Dictionary = {}
 var _weapon: Dictionary = {}
-var _mount: Dictionary = {}
 var _armor: Dictionary = {}
 var _buffs: Dictionary = {}  ## id -> {time_left, def}
 var _ability: Dictionary = {}
@@ -60,7 +58,6 @@ var _drone_cd: float = 1.0
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
-@onready var mount_visual: Sprite2D = $MountVisual
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
@@ -80,8 +77,6 @@ func _ready() -> void:
 	_apply_loadout()
 	hp = max_hp
 	health_changed.emit(hp, max_hp)
-	mount_visual.visible = false
-	_refresh_mount_visual()
 	_build_visuals()
 	if camera.has_method("set_target"):
 		camera.call("set_target", self)
@@ -89,7 +84,6 @@ func _ready() -> void:
 func _apply_loadout() -> void:
 	_char = GameState.get_character()
 	_weapon = GameState.weapon
-	_mount = GameState.mount
 	_armor = GameState.armor
 	_ability = _char.get("ability", {})
 	_refresh_run_stats(true)
@@ -122,18 +116,8 @@ func _sync_body_fov_scale() -> void:
 	body.scale = Vector2.ONE * _body_base_scale
 	_walk.set_base_scale(_body_base_scale)
 
-func _refresh_mount_visual() -> void:
-	var mid := str(_mount.get("id", "skateboard"))
-	var path := "res://assets/sprites/mounts/%s.png" % mid
-	if not ResourceLoader.exists(path):
-		path = "res://assets/sprites/mounts/skateboard.png"
-	mount_visual.texture = load(path)
-
-
 func _on_loadout_changed() -> void:
 	## In-run upgrade pick or meta refresh mid-match.
-	_mount = GameState.mount
-	_refresh_mount_visual()
 	var old_max := max_hp
 	_refresh_run_stats(false)
 	if max_hp > old_max:
@@ -235,10 +219,8 @@ func _current_speed() -> float:
 	var s := base_speed * move_mult * _buff_move()
 	if _rush_left > 0.0:
 		s *= float(_ability.get("speed_mult", 1.3))
-	if _mounted and float(_mount.get("fuel", 0)) > 0.0:
-		s *= float(_mount.get("speed_mult", 1.4))
 	## Slightly slower while shooting so dodging is a choice, not automatic.
-	if TouchInput.is_firing() and not _mounted:
+	if TouchInput.is_firing():
 		s *= 0.88
 	return s
 
@@ -258,11 +240,6 @@ func _update_movement(delta: float) -> void:
 		rate *= turn_boost
 	velocity = velocity.move_toward(target, rate * delta)
 	move_and_slide()
-	_try_mount_ram()
-	if _mounted:
-		_mount["fuel"] = float(_mount["fuel"]) - float(_mount.get("fuel_burn", 4.0)) * delta * (0.3 + dir.length())
-		if float(_mount["fuel"]) <= 0.0:
-			_set_mounted(false)
 
 func _update_aim_and_fire(_delta: float) -> void:
 	var aim_dir := _aim_direction()
@@ -286,8 +263,6 @@ func _update_aim_and_fire(_delta: float) -> void:
 		_start_reload()
 
 func _update_actions() -> void:
-	if Input.is_action_just_pressed("mount_toggle") or TouchInput.consume_mount():
-		_toggle_mount()
 	if Input.is_action_just_pressed("ability") or TouchInput.consume_ability():
 		_try_ability()
 	if TouchInput.consume_dash():
@@ -304,7 +279,7 @@ func _update_regen(delta: float) -> void:
 
 func _update_visuals(delta: float) -> void:
 	_attack_flash = maxf(0.0, _attack_flash - delta)
-	var moving := velocity.length() > 30.0 and not _mounted
+	var moving := velocity.length() > 30.0
 	## 4-frame walk strip + procedural bob/lean (sheet look locked).
 	_walk.tick(body, velocity if moving else Vector2.ZERO, delta, {
 		"move_thresh": 30.0,
@@ -409,37 +384,6 @@ func _spawn_afterimage() -> void:
 func get_dash_cooldown_ratio() -> float:
 	var cd := DASH_COOLDOWN * GameState.dash_cooldown_mult()
 	return clampf(_dash_cd / cd, 0.0, 1.0) if cd > 0.0 else 0.0
-
-## =============================================================================
-## Mount
-
-func _try_mount_ram() -> void:
-	if not _mounted:
-		return
-	for i in range(get_slide_collision_count()):
-		var collider := get_slide_collision(i).get_collider()
-		if collider and collider.is_in_group("breakables") and collider.has_method("take_damage"):
-			collider.take_damage(40.0)
-
-func can_mount() -> bool:
-	return bool(_mount.get("usable", false)) and float(_mount.get("fuel", 0)) > 0.0
-
-func _toggle_mount() -> void:
-	if not _mounted and not can_mount():
-		Juice.sfx("empty")
-		return
-	_set_mounted(not _mounted)
-
-func _set_mounted(on: bool) -> void:
-	_mounted = on
-	mount_visual.visible = _mounted
-	GameState.mount["mounted"] = _mounted
-	if on:
-		Juice.sfx("mount")
-		Juice.dust_puff(global_position + Vector2(0, 16), 6)
-
-func is_mounted() -> bool:
-	return _mounted
 
 ## =============================================================================
 ## Ability (data-driven from character_defs "ability")
@@ -771,7 +715,3 @@ func get_mag_size() -> int:
 func is_reloading() -> bool:
 	return _reload_left > 0.0
 
-func get_mount_text() -> String:
-	if not bool(_mount.get("usable", false)):
-		return "Mount locked"
-	return "%s · %d fuel%s" % [str(_mount.get("name", "Mount")), int(float(_mount.get("fuel", 0))), " (riding)" if _mounted else ""]

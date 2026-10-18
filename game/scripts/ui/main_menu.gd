@@ -98,13 +98,6 @@ func build(c: VBoxContainer) -> void:
 	else:
 		pv.add_child(UiTheme.body_label("Hangar empty — extract scrap, then Upgrade.", 12, UiTheme.TEXT_DIM))
 
-	var mount_name := "Skateboard" if GameState.mount_unlock_tier == 0 else "Scooter"
-	_stat(pv, "Mount", mount_name)
-	if GameState.mount_unlock_tier == 0:
-		pv.add_child(UiTheme.body_label(
-			"Scooter unlocks after %d more extract(s)." % maxi(0, 3 - GameState.successful_extracts),
-			12, UiTheme.TEXT_DIM
-		))
 	if not portrait:
 		right.add_child(spacer())
 

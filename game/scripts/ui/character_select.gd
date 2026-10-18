@@ -163,14 +163,13 @@ func _refresh() -> void:
 	_stat_bar("Mag", float(w.get("mag_size", 24)), 3.0, 40.0)
 	_stat_bar("Health", 100.0 + float(c["max_hp_bonus"]), 90.0, 130.0)
 	var pet := PetDefs.get_pet(GameState.selected_pet_id)
-	_loadout.text = "Loadout: %s (%s · %d rnd · %.1f/s) · %s · Pet: %s · Mount: %s" % [
+	_loadout.text = "Loadout: %s (%s · %d rnd · %.1f/s) · %s · Pet: %s" % [
 		w["name"],
 		w.get("category", "Gun"),
 		int(w.get("mag_size", 0)),
 		float(w.get("fire_rate", 0.0)),
 		LoadoutStubs.default_armor()["set_name"],
 		pet["name"],
-		LoadoutStubs.default_mount(GameState.mount_unlock_tier)["name"],
 	]
 	for pid in _pet_tabs.keys():
 		var pb: Button = _pet_tabs[pid]

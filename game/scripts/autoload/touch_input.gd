@@ -9,7 +9,6 @@ extends Node
 
 signal extract_pressed
 signal ability_pressed
-signal mount_pressed
 signal pause_pressed
 signal dash_pressed
 ## Emitted by clear_sticks() so TouchControls drops its tracked fingers too.
@@ -27,7 +26,6 @@ var aim_stick_firing: bool = false
 
 var _extract_just: bool = false
 var _ability_just: bool = false
-var _mount_just: bool = false
 var _pause_just: bool = false
 var _dash_just: bool = false
 
@@ -122,11 +120,6 @@ func pulse_ability() -> void:
 	ability_pressed.emit()
 
 
-func pulse_mount() -> void:
-	_mount_just = true
-	mount_pressed.emit()
-
-
 func pulse_pause() -> void:
 	_pause_just = true
 	pause_pressed.emit()
@@ -146,12 +139,6 @@ func consume_extract() -> bool:
 func consume_ability() -> bool:
 	var v := _ability_just
 	_ability_just = false
-	return v
-
-
-func consume_mount() -> bool:
-	var v := _mount_just
-	_mount_just = false
 	return v
 
 
