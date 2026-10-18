@@ -3,17 +3,19 @@
 MVP sprites under `assets/sprites/` are **original chunky pixel art** for Project Wanderer
 (**Dust Apothecary Wasteland** theme: dust ochre, rust scrap, copper-green / amber vials).
 
-Style is **inspired by** Crazy Gunner’s chunky-pixel / expressive-chibi readability
-(thick outlines, big-head silhouettes, high-contrast accents) but **does not copy**
-Crazy Gunner characters, weapons, stages, UI chrome, or other IP.
+Style is **inspired by** Crazy Gunner’s clean polished chibi pixel readability
+(thick outlines, big-head silhouettes, simple faces, chunky hair masses) but
+**does not copy** Crazy Gunner characters, weapons, stages, UI chrome, or other IP.
 
-## Humanize pass (faces + hair)
+## Clean chibi pass (CG quality bar)
 
-Playable heroes are authored so they read as **people**, not color blobs:
+Playable heroes target the polished selection-bar look:
 
-- Readable faces: eyes (sclera + pupil), brows, nose hint, mouth/expression
-- Hair with strand clumps / jagged silhouette — hats/hoods sit *with* visible hair
-- Native canvas **64×64** (nearest scale); in-match footprint locked to ~**48px** via
+- Large square/round heads, stubby bodies
+- **Simple faces** — two clear eye dots (or a visor bar); mouths/noses/brows absent
+- Hair as **chunky shaped masses** with jagged stair-step silhouette — not sparse strands
+- Thick dark outlines, one darker shade, vibrant readable colors
+- Native canvas **64×64** (nearest scale); in-match footprint ~**48px** via
   `Player._body_base_scale` so portrait FOV stays ~**1/12–1/15** screen width
 
 ## Wide-FOV pass (portrait survivor camera)
