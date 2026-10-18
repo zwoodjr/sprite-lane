@@ -11,11 +11,13 @@ Style is **inspired by** Crazy Gunner’s clean polished chibi pixel readability
 
 Playable heroes target the polished selection-bar look:
 
-- Large square/round heads, stubby bodies
+- Large square heads, stubby bodies with **clear limb separation**
+  (head / torso / arms / legs / weapon as separate masses — not a thumb blob)
+- Multi-pass outlines per limb so crotch/armpit gaps survive
 - **Simple faces** — two clear eye dots (or a visor bar); mouths/noses/brows absent
 - Hair as **chunky shaped masses** with jagged stair-step silhouette — not sparse strands
 - Thick dark outlines, one darker shade, vibrant readable colors
-- Native canvas **64×64** (nearest scale); in-match footprint ~**48px** via
+- Native canvas **96×96** (room for limb gaps); in-match footprint ~**48px** via
   `Player._body_base_scale` so portrait FOV stays ~**1/12–1/15** screen width
 
 ## Wide-FOV pass (portrait survivor camera)
@@ -25,7 +27,7 @@ Sprites are authored for **portrait 720×1280** with camera zoom **~1.12**:
 - Strong silhouettes + saturated accent blocks (scarf, medic cross, visor, vials)
 - Quiet ground tiles (soft patches, sparse grit — not specklemush)
 - Thick extract rings / bright pickups / chunkier breakables for findability
-- Unit scale: heroes **64×64** (drawn; ~48px on screen); common enemies **48×48**;
+- Unit scale: heroes **96×96** (drawn; ~48px on screen); common enemies **48×48**;
   brute **64×64**; pickups **48×48**
 
 Regenerate the full set with Pillow:

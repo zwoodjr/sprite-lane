@@ -20,7 +20,7 @@ All buttons are true multi-touch. Settings: twin-stick (optional restore), auto-
 
 ## Camera / FOV
 
-Portrait **720×1280**, orthographic camera zoom **1.12** so the player reads ~**1/13 of screen width** — matched to `docs/art-refs/fov-single-stick-ref.jpg` battlefield scale. Heroes are **64×64** clean polished chibi (2-dot faces, chunky hair masses) scaled in-match to a ~48px footprint; regenerate with `python3 tools/gen_sprites.py`.
+Portrait **720×1280**, orthographic camera zoom **1.12** so the player reads ~**1/13 of screen width** — matched to `docs/art-refs/fov-single-stick-ref.jpg` battlefield scale. Heroes are **96×96** anti-thumb chibi (multi-pass limbs, 2-dot faces, chunky hair) scaled in-match to a ~48px footprint; regenerate with `python3 tools/gen_sprites.py`.
 
 ## What's in
 

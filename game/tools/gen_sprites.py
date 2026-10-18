@@ -2,14 +2,14 @@
 """Generate Dust Apothecary chunky-pixel sprites for Wanderer MVP.
 
 Style target (inspiration only — original art, not Crazy Gunner IP):
-  clean polished chibi pixel — large square/round heads, stubby bodies,
-  simple faces (often just 2 eye pixels; mouths/noses minimal or absent),
-  hair as chunky shaped masses with jagged silhouette (NOT sparse strands),
-  thick dark outlines, one darker shade, vibrant readable colors.
+  clean polished chibi pixel — large square heads, stubby bodies with
+  CLEAR limb separation (head / torso / arms / legs / weapon as separate
+  masses — NOT a tapered thumb/sausage), simple 2-dot faces, hair as
+  chunky shaped masses, thick dark outlines, one darker shade.
 
 Tuned for portrait survivor FOV (camera zoom ~1.12, player ~1/12–1/15
-screen width): strong portrait-card silhouettes. Heroes authored at 64×64,
-scaled in-game to a ~48px footprint.
+screen width). Heroes authored at 96×96 so limbs have room; in-match
+scale keeps ~48px footprint via player.gd.
 
 Run from repo root or game/:
   python3 game/tools/gen_sprites.py
@@ -23,6 +23,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / "assets" / "sprites"
+HERO_SIZE = 96  # room for arm/leg gaps; FOV scale handles on-screen size
 
 # Palette — Dust Apothecary
 INK = (18, 14, 12, 255)
@@ -142,18 +143,37 @@ def hair_mass(p, rects, w, h) -> None:
         fill_rect(p, x0, y0, x1, y1, c, w, h)
 
 
+def _stamp(canvas: Image.Image, part: Image.Image, ox: int, oy: int) -> None:
+    """Alpha-composite an outlined part onto the hero canvas."""
+    canvas.alpha_composite(part, (ox, oy))
+
+
+def _outlined_part(w: int, h: int, paint, thickness: int = 2) -> Image.Image:
+    """Paint into a transparent layer, then outline THAT layer alone.
+
+    Critical anti-thumb trick: outlining limbs separately preserves crotch /
+    armpit gaps that a single global outline would flood-fill shut.
+    """
+    layer = new(w, h)
+    paint(layer.load(), w, h)
+    return add_outline(layer, thickness=thickness)
+
+
 # ---------------------------------------------------------------------------
-# Characters — clean polished chibi (64×64): 2-dot faces, chunky hair masses
+# Characters — 96×96 multi-pass chibi: separate head/torso/arms/legs masses
 # Scaled in-game so on-screen footprint stays ~48px (~1/13 screen width).
 # ---------------------------------------------------------------------------
 
 def make_rook() -> Image.Image:
-    """Rook Vex — dust scavenger: chunky blonde hair mass, olive scrap tunic,
-    rust scarf, taped SMG. Face = two eye dots only (no brows/nose/mouth)."""
-    img = new(64, 64)
-    p = img.load()
-    w, h = 64, 64
-    drop_shadow(img, 32, 58, 15, 4, 95)
+    """Rook Vex — dust scavenger OC.
+
+    CG-card silhouette grammar (original design, not a copy):
+      ~55% head · stubby narrower torso · hand-blocks as side masses ·
+      wide crotch gap · SMG as right-side mass. Face = two eye dots only.
+    """
+    S = HERO_SIZE
+    img = new(S, S)
+    drop_shadow(img, 48, 86, 24, 5, 95)
 
     olive = (92, 128, 72, 255)
     olive_lt = (128, 168, 100, 255)
@@ -163,107 +183,113 @@ def make_rook() -> Image.Image:
     hair = (228, 184, 72, 255)
     hair_lt = (248, 214, 120, 255)
     hair_dk = (176, 132, 48, 255)
+    pant = (110, 78, 52, 255)
 
-    # boots — stubby blocks
-    fill_rect(p, 21, 51, 28, 56, SCRAP_DK, w, h)
-    fill_rect(p, 35, 51, 42, 56, SCRAP_DK, w, h)
-    fill_rect(p, 21, 51, 28, 52, SCRAP, w, h)
-    fill_rect(p, 35, 51, 42, 52, SCRAP, w, h)
+    # Stubby CG legs — short pillars, stamped with a wide crotch gap.
+    def paint_leg(p, w, h):
+        fill_rect(p, 2, 0, 12, 8, pant, w, h)
+        fill_rect(p, 2, 0, 12, 2, shade(pant, 1.12), w, h)
+        fill_rect(p, 0, 8, 14, 16, SCRAP_DK, w, h)
+        fill_rect(p, 0, 8, 14, 10, SCRAP, w, h)
 
-    # legs
-    fill_rect(p, 22, 43, 29, 52, DUST_DK, w, h)
-    fill_rect(p, 34, 43, 41, 52, DUST_DK, w, h)
+    # Narrow torso (must read narrower than head).
+    def paint_torso(p, w, h):
+        fill_rect(p, 2, 4, 25, 22, olive, w, h)
+        fill_rect(p, 2, 4, 25, 8, olive_lt, w, h)
+        fill_rect(p, 2, 17, 25, 22, olive_dk, w, h)
+        for x in (7, 14, 21):
+            px(p, x, 12, olive_dk, w, h)
+        # rust scarf collar
+        fill_rect(p, 0, 0, 27, 6, scarf, w, h)
+        fill_rect(p, 0, 0, 27, 2, shade(scarf, 1.15), w, h)
+        fill_rect(p, 0, 4, 27, 6, scarf_dk, w, h)
+        # belt + buckle
+        fill_rect(p, 2, 16, 25, 20, SCRAP_DK, w, h)
+        fill_rect(p, 11, 16, 16, 20, GOLD, w, h)
 
-    # torso — compact olive scrap armor
-    fill_rect(p, 18, 28, 45, 45, olive, w, h)
-    fill_rect(p, 18, 28, 45, 32, olive_lt, w, h)
-    fill_rect(p, 18, 41, 45, 45, olive_dk, w, h)
-    for x in (24, 32, 40):
-        px(p, x, 35, olive_dk, w, h)
-    # left cape flap (portrait silhouette)
-    fill_rect(p, 11, 26, 19, 44, olive_dk, w, h)
-    fill_rect(p, 11, 26, 19, 30, olive, w, h)
+    # Left hand-block (CG style: small side mass, air-gapped from torso).
+    def paint_larm(p, w, h):
+        fill_rect(p, 4, 0, 14, 8, olive, w, h)
+        fill_rect(p, 4, 0, 14, 2, olive_lt, w, h)
+        fill_rect(p, 2, 6, 12, 12, olive_dk, w, h)
+        fill_rect(p, 0, 10, 12, 18, SKIN, w, h)
+        fill_rect(p, 0, 15, 12, 18, SKIN_DK, w, h)
 
-    # belt + buckle
-    fill_rect(p, 18, 39, 45, 42, SCRAP_DK, w, h)
-    fill_rect(p, 29, 39, 34, 42, GOLD, w, h)
-    # hip pouch
-    fill_rect(p, 14, 38, 21, 46, DUST_DK, w, h)
-    fill_rect(p, 14, 38, 21, 40, DUST, w, h)
+    # Right hand + SMG (weapon = unmistakable silhouette bump).
+    def paint_rarm_gun(p, w, h):
+        fill_rect(p, 0, 2, 8, 10, olive, w, h)
+        fill_rect(p, 0, 2, 8, 4, olive_lt, w, h)
+        fill_rect(p, 4, 8, 14, 16, SKIN, w, h)
+        fill_rect(p, 4, 13, 14, 16, SKIN_DK, w, h)
+        fill_rect(p, 10, 4, 36, 14, SCRAP_DK, w, h)
+        fill_rect(p, 10, 4, 36, 7, SCRAP, w, h)
+        fill_rect(p, 12, 0, 22, 4, SCRAP_LT, w, h)
+        fill_rect(p, 14, 14, 22, 22, SCRAP, w, h)
+        fill_rect(p, 14, 14, 22, 16, DUST, w, h)
+        fill_rect(p, 34, 2, 38, 16, AMBER_DK, w, h)
+        fill_rect(p, 34, 5, 37, 13, AMBER, w, h)
 
-    # scarf band (FOV accent)
-    fill_rect(p, 19, 24, 44, 30, scarf, w, h)
-    fill_rect(p, 19, 24, 44, 26, shade(scarf, 1.15), w, h)
-    fill_rect(p, 42, 27, 49, 36, scarf_dk, w, h)
-    fill_rect(p, 42, 27, 49, 30, scarf, w, h)
+    def paint_head(p, w, h):
+        # Large square face — clear skin band for eyes (no bangs over dots).
+        fill_rect(p, 8, 16, 45, 42, SKIN, w, h)
+        fill_rect(p, 8, 36, 45, 42, SKIN_DK, w, h)
+        hair_mass(p, [
+            (6, 4, 47, 18, hair),
+            (7, 4, 46, 10, hair_lt),
+            (6, 14, 47, 18, hair_dk),
+            (10, 0, 16, 5, hair_lt),
+            (11, 0, 15, 2, hair_lt),
+            (18, 0, 26, 5, hair),
+            (19, 0, 25, 2, hair),
+            (28, 0, 36, 5, hair_lt),
+            (29, 0, 35, 2, hair_lt),
+            (38, 0, 45, 5, hair),
+            (39, 0, 44, 2, hair),
+            # side locks stop above eye band so face reads clean
+            (2, 8, 10, 30, hair),
+            (2, 8, 6, 16, hair_lt),
+            (2, 24, 10, 30, hair_dk),
+            (43, 8, 51, 30, hair),
+            (47, 8, 51, 16, hair_lt),
+            (43, 24, 51, 30, hair_dk),
+            # bang shelf — ABOVE eyes only
+            (12, 14, 20, 19, hair),
+            (21, 12, 29, 17, hair_lt),
+            (30, 14, 38, 19, hair),
+            (39, 12, 46, 17, hair_dk),
+        ], w, h)
+        # olive dust-hood band
+        fill_rect(p, 14, 2, 39, 7, olive_dk, w, h)
+        fill_rect(p, 15, 2, 38, 5, olive, w, h)
+        fill_rect(p, 20, 1, 33, 3, olive_lt, w, h)
+        fill_rect(p, 18, 0, 22, 3, hair_lt, w, h)
+        fill_rect(p, 26, 0, 30, 3, hair, w, h)
+        fill_rect(p, 34, 0, 38, 3, hair_lt, w, h)
+        # 2-dot eyes on clear skin
+        eyes_dots(p, 16, 35, 26, w, h, INK, size=3)
 
-    # --- big square head ---
-    fill_rect(p, 17, 8, 46, 26, SKIN, w, h)
-    fill_rect(p, 17, 21, 46, 26, SKIN_DK, w, h)  # one shade under chin
+    # Layout (air gaps intentional — anti-thumb):
+    #   head ~x22-74  torso ~x34-62  legs 28/54  arms 10 / 62+gun
+    #   crotch core gap ≈ 10px before outlines.
+    _stamp(img, _outlined_part(16, 20, paint_leg), 26, 66)          # L leg
+    _stamp(img, _outlined_part(16, 20, paint_leg), 54, 66)          # R leg
+    _stamp(img, _outlined_part(16, 22, paint_larm), 10, 50)         # L arm OUT
+    _stamp(img, _outlined_part(42, 26, paint_rarm_gun), 60, 48)     # gun RIGHT
+    _stamp(img, _outlined_part(30, 26, paint_torso), 33, 46)        # narrow torso
+    _stamp(img, _outlined_part(54, 46, paint_head), 21, 4)          # big head
 
-    # chunky blonde hair mass — jagged stair-step silhouette, solid fill
-    hair_mass(p, [
-        # crown plate
-        (16, 3, 47, 12, hair),
-        (17, 3, 46, 7, hair_lt),
-        (16, 10, 47, 13, hair_dk),
-        # jagged top spikes (block steps, not strands)
-        (19, 1, 23, 4, hair_lt),
-        (20, 0, 22, 1, hair_lt),
-        (25, 1, 30, 4, hair),
-        (26, 0, 29, 1, hair),
-        (32, 1, 37, 4, hair_lt),
-        (33, 0, 36, 1, hair_lt),
-        (39, 1, 44, 4, hair),
-        (40, 0, 43, 1, hair),
-        # side masses
-        (13, 5, 18, 20, hair),
-        (13, 5, 16, 11, hair_lt),
-        (13, 16, 18, 20, hair_dk),
-        (45, 5, 50, 20, hair),
-        (47, 5, 50, 11, hair_lt),
-        (45, 16, 50, 20, hair_dk),
-        # bang shelf (solid mass over forehead — stops above eyes)
-        (20, 9, 25, 13, hair),
-        (26, 8, 31, 12, hair_lt),
-        (32, 9, 37, 13, hair),
-        (38, 8, 43, 12, hair_dk),
-    ], w, h)
-
-    # dust hood band pushed back on crown (sits ON hair mass)
-    fill_rect(p, 22, 1, 41, 5, olive_dk, w, h)
-    fill_rect(p, 23, 1, 40, 3, olive, w, h)
-    fill_rect(p, 27, 0, 36, 2, olive_lt, w, h)
-    # hair spikes re-assert above band as chunky blocks
-    fill_rect(p, 25, 0, 28, 2, hair_lt, w, h)
-    fill_rect(p, 31, 0, 34, 2, hair, w, h)
-    fill_rect(p, 36, 0, 39, 2, hair_lt, w, h)
-
-    # face — two clear eye dots only
-    eyes_dots(p, 24, 38, 15, w, h, INK, size=2)
-
-    # scrap SMG (chunky geometric)
-    fill_rect(p, 46, 29, 61, 36, SCRAP_DK, w, h)
-    fill_rect(p, 46, 29, 61, 31, SCRAP, w, h)
-    fill_rect(p, 48, 26, 55, 29, SCRAP_LT, w, h)
-    fill_rect(p, 48, 35, 54, 44, SCRAP, w, h)
-    fill_rect(p, 48, 35, 54, 37, DUST, w, h)
-    fill_rect(p, 58, 27, 61, 37, AMBER_DK, w, h)
-    fill_rect(p, 58, 29, 60, 35, AMBER, w, h)
-    # grip hand (tiny block)
-    fill_rect(p, 44, 34, 48, 39, SKIN, w, h)
-    fill_rect(p, 44, 37, 48, 39, SKIN_DK, w, h)
-
-    return add_outline(img, thickness=2)
+    return img
 
 
 def make_cinder() -> Image.Image:
-    """Sister Cinder — dust apothecary: chunky ash-auburn hair, teal cowl rim,
-    medic-cross apron, tonic blaster. Face = two eye dots only."""
-    img = new(64, 64)
-    p = img.load()
-    w, h = 64, 64
-    drop_shadow(img, 32, 58, 15, 4, 95)
+    """Sister Cinder — dust apothecary OC.
+
+    Same anti-thumb silhouette grammar as Rook, distinct colors/props:
+      ash-auburn hair · teal cowl rim · crimson cloak · medic cross · tonic blaster.
+    """
+    S = HERO_SIZE
+    img = new(S, S)
+    drop_shadow(img, 48, 86, 24, 5, 95)
 
     cloak = (168, 68, 58, 255)
     cloak_lt = (200, 96, 80, 255)
@@ -278,106 +304,100 @@ def make_cinder() -> Image.Image:
     hair = (132, 78, 62, 255)
     hair_lt = (168, 108, 86, 255)
     hair_dk = (88, 48, 40, 255)
+    pant = (72, 48, 42, 255)
+    boot_top = (120, 70, 60, 255)
 
-    # boots
-    fill_rect(p, 21, 51, 28, 56, SCRAP_DK, w, h)
-    fill_rect(p, 35, 51, 42, 56, SCRAP_DK, w, h)
-    fill_rect(p, 21, 51, 28, 52, (120, 70, 60, 255), w, h)
-    fill_rect(p, 35, 51, 42, 52, (120, 70, 60, 255), w, h)
+    def paint_leg(p, w, h):
+        fill_rect(p, 2, 0, 12, 8, pant, w, h)
+        fill_rect(p, 2, 0, 12, 2, shade(pant, 1.15), w, h)
+        fill_rect(p, 0, 8, 14, 16, SCRAP_DK, w, h)
+        fill_rect(p, 0, 8, 14, 10, boot_top, w, h)
 
-    # legs
-    fill_rect(p, 22, 43, 29, 52, (72, 48, 42, 255), w, h)
-    fill_rect(p, 34, 43, 41, 52, (72, 48, 42, 255), w, h)
+    def paint_torso(p, w, h):
+        fill_rect(p, 2, 2, 25, 22, cloak, w, h)
+        fill_rect(p, 2, 2, 25, 7, cloak_lt, w, h)
+        fill_rect(p, 2, 17, 25, 22, cloak_dk, w, h)
+        fill_rect(p, 6, 6, 21, 18, apron, w, h)
+        fill_rect(p, 11, 7, 16, 16, cross, w, h)
+        fill_rect(p, 7, 10, 20, 13, cross, w, h)
+        # vials sit on belt — keep inside torso width (don't bridge crotch)
+        fill_rect(p, 5, 18, 10, 24, VIAL_DK, w, h)
+        fill_rect(p, 6, 19, 9, 23, teal, w, h)
+        px(p, 6, 20, teal_lt, w, h)
+        fill_rect(p, 17, 18, 22, 24, AMBER_DK, w, h)
+        fill_rect(p, 18, 19, 21, 23, AMBER, w, h)
+        px(p, 18, 20, AMBER_LT, w, h)
 
-    # torso cloak
-    fill_rect(p, 18, 27, 45, 45, cloak, w, h)
-    fill_rect(p, 18, 27, 45, 31, cloak_lt, w, h)
-    fill_rect(p, 18, 41, 45, 45, cloak_dk, w, h)
-    # apron + medic cross
-    fill_rect(p, 23, 32, 40, 42, apron, w, h)
-    fill_rect(p, 29, 33, 34, 40, cross, w, h)
-    fill_rect(p, 25, 36, 38, 38, cross, w, h)
+    def paint_larm(p, w, h):
+        # satchel OUTBOARD of arm (extends left silhouette)
+        fill_rect(p, 0, 6, 8, 18, (100, 60, 42, 255), w, h)
+        fill_rect(p, 0, 6, 8, 9, (136, 86, 58, 255), w, h)
+        fill_rect(p, 2, 11, 6, 15, teal, w, h)
+        fill_rect(p, 6, 0, 16, 10, cloak, w, h)
+        fill_rect(p, 6, 0, 16, 3, cloak_lt, w, h)
+        fill_rect(p, 4, 8, 14, 14, cloak_dk, w, h)
+        fill_rect(p, 2, 12, 14, 20, SKIN, w, h)
+        fill_rect(p, 2, 17, 14, 20, SKIN_DK, w, h)
 
-    # right cloak flap
-    fill_rect(p, 44, 24, 52, 47, cloak_dk, w, h)
-    fill_rect(p, 44, 24, 52, 29, cloak, w, h)
+    def paint_rarm_gun(p, w, h):
+        fill_rect(p, 0, 2, 8, 10, cloak, w, h)
+        fill_rect(p, 0, 2, 8, 4, cloak_lt, w, h)
+        fill_rect(p, 4, 8, 14, 16, SKIN, w, h)
+        fill_rect(p, 4, 13, 14, 16, SKIN_DK, w, h)
+        fill_rect(p, 10, 6, 36, 16, SCRAP_DK, w, h)
+        fill_rect(p, 10, 6, 36, 9, SCRAP, w, h)
+        fill_rect(p, 14, 0, 26, 8, VIAL_DK, w, h)
+        fill_rect(p, 15, 1, 25, 7, teal, w, h)
+        px(p, 16, 2, teal_lt, w, h)
+        fill_rect(p, 18, 0, 22, 2, SCRAP_LT, w, h)
+        fill_rect(p, 34, 7, 38, 15, teal, w, h)
+        px(p, 35, 8, teal_lt, w, h)
 
-    # satchel
-    fill_rect(p, 10, 35, 19, 46, (100, 60, 42, 255), w, h)
-    fill_rect(p, 10, 35, 19, 38, (136, 86, 58, 255), w, h)
-    fill_rect(p, 13, 39, 16, 43, teal, w, h)
+    def paint_head(p, w, h):
+        fill_rect(p, 8, 16, 47, 42, SKIN, w, h)
+        fill_rect(p, 8, 36, 47, 42, SKIN_DK, w, h)
+        hair_mass(p, [
+            (6, 4, 49, 18, hair),
+            (7, 4, 48, 10, hair_lt),
+            (6, 14, 49, 18, hair_dk),
+            (10, 0, 17, 5, hair_lt),
+            (19, 0, 27, 5, hair),
+            (29, 0, 37, 5, hair_lt),
+            (39, 0, 47, 5, hair),
+            (1, 8, 10, 32, hair),
+            (1, 8, 5, 16, hair_lt),
+            (1, 26, 10, 32, hair_dk),
+            (45, 8, 54, 32, hair),
+            (50, 8, 54, 16, hair_lt),
+            (45, 26, 54, 32, hair_dk),
+            (12, 14, 20, 19, hair),
+            (21, 12, 30, 17, hair_lt),
+            (31, 14, 39, 19, hair),
+            (40, 12, 48, 17, hair_dk),
+        ], w, h)
+        # teal cowl rim — thin band + side clips (not a helmet blob)
+        fill_rect(p, 12, 2, 43, 7, hood, w, h)
+        fill_rect(p, 13, 2, 42, 4, hood_lt, w, h)
+        fill_rect(p, 12, 5, 43, 7, hood_dk, w, h)
+        fill_rect(p, 2, 12, 7, 22, hood, w, h)
+        fill_rect(p, 48, 12, 53, 22, hood, w, h)
+        fill_rect(p, 2, 12, 7, 15, hood_lt, w, h)
+        fill_rect(p, 48, 12, 53, 15, hood_lt, w, h)
+        fill_rect(p, 18, 0, 23, 3, hair_lt, w, h)
+        fill_rect(p, 27, 0, 32, 3, hair, w, h)
+        fill_rect(p, 36, 0, 41, 3, hair_lt, w, h)
+        fill_rect(p, 4, 12, 10, 28, hair, w, h)
+        fill_rect(p, 45, 12, 51, 28, hair, w, h)
+        eyes_dots(p, 17, 37, 26, w, h, INK, size=3)
 
-    # dual belt vials
-    fill_rect(p, 24, 40, 28, 47, VIAL_DK, w, h)
-    fill_rect(p, 25, 41, 27, 45, teal, w, h)
-    px(p, 25, 42, teal_lt, w, h)
-    fill_rect(p, 35, 40, 39, 47, AMBER_DK, w, h)
-    fill_rect(p, 36, 41, 38, 45, AMBER, w, h)
-    px(p, 36, 42, AMBER_LT, w, h)
+    _stamp(img, _outlined_part(16, 20, paint_leg), 26, 66)
+    _stamp(img, _outlined_part(16, 20, paint_leg), 54, 66)
+    _stamp(img, _outlined_part(18, 24, paint_larm), 8, 50)
+    _stamp(img, _outlined_part(42, 20, paint_rarm_gun), 60, 50)
+    _stamp(img, _outlined_part(30, 28, paint_torso), 33, 44)
+    _stamp(img, _outlined_part(56, 46, paint_head), 20, 4)
 
-    # --- big square head ---
-    fill_rect(p, 17, 8, 46, 26, SKIN, w, h)
-    fill_rect(p, 17, 21, 46, 26, SKIN_DK, w, h)
-
-    # chunky ash-auburn hair mass
-    hair_mass(p, [
-        (15, 2, 48, 13, hair),
-        (16, 2, 47, 6, hair_lt),
-        (15, 10, 48, 13, hair_dk),
-        # soft jagged crown steps
-        (18, 0, 23, 3, hair_lt),
-        (24, 0, 30, 3, hair),
-        (31, 0, 37, 3, hair_lt),
-        (38, 0, 44, 3, hair),
-        # side masses (wider than Rook)
-        (12, 5, 17, 22, hair),
-        (12, 5, 15, 11, hair_lt),
-        (12, 17, 17, 22, hair_dk),
-        (46, 5, 51, 22, hair),
-        (48, 5, 51, 11, hair_lt),
-        (46, 17, 51, 22, hair_dk),
-        # bang shelf
-        (20, 9, 25, 13, hair),
-        (26, 8, 32, 12, hair_lt),
-        (33, 9, 38, 13, hair),
-        (39, 8, 44, 12, hair_dk),
-    ], w, h)
-
-    # teal cowl rim — thin band + side flaps behind hair (not a helmet blob)
-    fill_rect(p, 18, 1, 45, 4, hood, w, h)
-    fill_rect(p, 19, 1, 44, 2, hood_lt, w, h)
-    fill_rect(p, 18, 3, 45, 4, hood_dk, w, h)
-    fill_rect(p, 11, 8, 15, 18, hood, w, h)
-    fill_rect(p, 48, 8, 52, 18, hood, w, h)
-    fill_rect(p, 11, 8, 15, 11, hood_lt, w, h)
-    fill_rect(p, 48, 8, 52, 11, hood_lt, w, h)
-    # hair re-assert over rim / flaps as solid chunks
-    fill_rect(p, 24, 0, 28, 2, hair_lt, w, h)
-    fill_rect(p, 30, 0, 34, 2, hair, w, h)
-    fill_rect(p, 36, 0, 40, 2, hair_lt, w, h)
-    fill_rect(p, 13, 8, 17, 18, hair, w, h)
-    fill_rect(p, 46, 8, 50, 18, hair, w, h)
-    fill_rect(p, 20, 9, 25, 13, hair, w, h)
-    fill_rect(p, 26, 8, 32, 12, hair_lt, w, h)
-    fill_rect(p, 33, 9, 38, 13, hair, w, h)
-    fill_rect(p, 39, 8, 44, 12, hair_dk, w, h)
-
-    # face — two clear eye dots only
-    eyes_dots(p, 24, 38, 15, w, h, INK, size=2)
-
-    # tonic blaster
-    fill_rect(p, 46, 28, 61, 36, SCRAP_DK, w, h)
-    fill_rect(p, 46, 28, 61, 30, SCRAP, w, h)
-    fill_rect(p, 49, 18, 57, 28, VIAL_DK, w, h)
-    fill_rect(p, 50, 19, 56, 25, teal, w, h)
-    px(p, 51, 20, teal_lt, w, h)
-    fill_rect(p, 52, 16, 55, 18, SCRAP_LT, w, h)
-    fill_rect(p, 58, 29, 61, 36, teal, w, h)
-    px(p, 59, 30, teal_lt, w, h)
-    fill_rect(p, 44, 33, 48, 39, SKIN, w, h)
-    fill_rect(p, 44, 36, 48, 39, SKIN_DK, w, h)
-
-    return add_outline(img, thickness=2)
+    return img
 
 
 # ---------------------------------------------------------------------------
@@ -391,24 +411,26 @@ def make_raider() -> Image.Image:
     w, h = 48, 48
     drop_shadow(img, 24, 42, 12, 3, 95)
 
-    # boots / legs
-    fill_rect(p, 15, 34, 20, 40, SCRAP_DK, w, h)
-    fill_rect(p, 27, 34, 32, 40, SCRAP_DK, w, h)
-    fill_rect(p, 15, 34, 20, 35, SCRAP, w, h)
-    fill_rect(p, 27, 34, 32, 35, SCRAP, w, h)
+    # boots / legs — wide crotch gap (anti-thumb)
+    fill_rect(p, 12, 34, 18, 41, SCRAP_DK, w, h)
+    fill_rect(p, 29, 34, 35, 41, SCRAP_DK, w, h)
+    fill_rect(p, 12, 34, 18, 36, SCRAP, w, h)
+    fill_rect(p, 29, 34, 35, 36, SCRAP, w, h)
+    fill_rect(p, 13, 30, 18, 35, DUST_DK, w, h)
+    fill_rect(p, 29, 30, 34, 35, DUST_DK, w, h)
 
-    # body rust scrap
-    fill_rect(p, 13, 16, 34, 35, RUST, w, h)
-    fill_rect(p, 13, 16, 34, 20, shade(RUST, 1.18), w, h)
-    fill_rect(p, 13, 30, 34, 35, RUST_DK, w, h)
-    fill_rect(p, 16, 18, 24, 26, DUST_DK, w, h)
-    fill_rect(p, 16, 18, 24, 20, DUST, w, h)
-    # shoulder plate
-    fill_rect(p, 8, 13, 15, 25, SCRAP, w, h)
-    fill_rect(p, 8, 13, 15, 16, SCRAP_LT, w, h)
-    # ammo pouch
-    fill_rect(p, 28, 27, 36, 35, DUST_DK, w, h)
-    fill_rect(p, 28, 27, 36, 29, DUST, w, h)
+    # body rust scrap (narrower so arms/legs read)
+    fill_rect(p, 15, 16, 32, 32, RUST, w, h)
+    fill_rect(p, 15, 16, 32, 20, shade(RUST, 1.18), w, h)
+    fill_rect(p, 15, 28, 32, 32, RUST_DK, w, h)
+    fill_rect(p, 17, 18, 24, 26, DUST_DK, w, h)
+    fill_rect(p, 17, 18, 24, 20, DUST, w, h)
+    # shoulder plate (left side mass)
+    fill_rect(p, 7, 14, 15, 26, SCRAP, w, h)
+    fill_rect(p, 7, 14, 15, 17, SCRAP_LT, w, h)
+    # ammo pouch (right hip, not bridging crotch)
+    fill_rect(p, 30, 24, 37, 32, DUST_DK, w, h)
+    fill_rect(p, 30, 24, 37, 26, DUST, w, h)
 
     # big head
     fill_rect(p, 15, 4, 32, 17, (178, 130, 98, 255), w, h)
@@ -445,18 +467,18 @@ def make_charger() -> Image.Image:
     w, h = 48, 48
     drop_shadow(img, 24, 42, 11, 3, 95)
 
-    # legs
-    fill_rect(p, 12, 34, 18, 41, (48, 32, 22, 255), w, h)
-    fill_rect(p, 25, 32, 31, 41, (48, 32, 22, 255), w, h)
+    # legs with clear crotch gap
+    fill_rect(p, 11, 33, 17, 41, (48, 32, 22, 255), w, h)
+    fill_rect(p, 28, 33, 34, 41, (48, 32, 22, 255), w, h)
 
-    # lean torso
-    fill_rect(p, 14, 15, 30, 34, (196, 112, 52, 255), w, h)
-    fill_rect(p, 14, 15, 30, 19, (230, 145, 70, 255), w, h)
-    fill_rect(p, 14, 28, 30, 34, (150, 80, 40, 255), w, h)
-    # shoulder spikes (blocky)
-    fill_rect(p, 10, 12, 15, 21, SCRAP_LT, w, h)
-    fill_rect(p, 11, 9, 13, 12, SCRAP_LT, w, h)
-    fill_rect(p, 28, 13, 33, 20, SCRAP, w, h)
+    # lean torso (narrower than head)
+    fill_rect(p, 15, 15, 30, 33, (196, 112, 52, 255), w, h)
+    fill_rect(p, 15, 15, 30, 19, (230, 145, 70, 255), w, h)
+    fill_rect(p, 15, 28, 30, 33, (150, 80, 40, 255), w, h)
+    # shoulder spikes (blocky side masses)
+    fill_rect(p, 8, 12, 15, 22, SCRAP_LT, w, h)
+    fill_rect(p, 9, 9, 12, 12, SCRAP_LT, w, h)
+    fill_rect(p, 30, 13, 36, 22, SCRAP, w, h)
 
     # head
     fill_rect(p, 15, 3, 32, 16, (178, 134, 104, 255), w, h)
@@ -1090,7 +1112,7 @@ def main() -> None:
 
     make_pickups()
     make_ui()
-    print("DONE — CG-quality clean chibi Dust Apothecary set →", OUT)
+    print("DONE — anti-thumb chibi Dust Apothecary set →", OUT)
 
 
 if __name__ == "__main__":

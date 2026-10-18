@@ -60,7 +60,7 @@ var _ability: Dictionary = {}
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
-## Keep ~48px on-screen footprint when character art is authored at 64×64 (FOV ~1/13).
+## Keep ~48px on-screen footprint (heroes authored at 96×96; FOV ~1/13).
 const BODY_FOV_PX := 48.0
 var _body_base_scale: float = 1.0
 
@@ -100,7 +100,7 @@ func _apply_loadout() -> void:
 
 
 func _sync_body_fov_scale() -> void:
-	## Native 64×64 heroes → scale so width ≈ BODY_FOV_PX at zoom 1.12 (~1/13 screen).
+	## Native 96×96 heroes → scale so width ≈ BODY_FOV_PX at zoom 1.12 (~1/13 screen).
 	var tw := 48.0
 	if body.texture != null:
 		tw = float(body.texture.get_width())
