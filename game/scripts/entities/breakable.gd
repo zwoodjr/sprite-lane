@@ -4,7 +4,6 @@ extends StaticBody2D
 
 signal broken(global_pos: Vector2)
 
-const PowerupDefs = preload("res://scripts/data/powerup_defs.gd")
 const PickupScene := preload("res://scenes/entities/powerup_pickup.tscn")
 
 @export var max_hp: float = 24.0
