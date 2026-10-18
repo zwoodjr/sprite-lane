@@ -4,8 +4,6 @@ extends Control
 ## actually do the thing (move, shoot, dash…) and points at where to do it.
 ## Marks GameState.tutorial_done when finished or when the run ends.
 
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
-
 const STEPS := [
 	{"id": "move", "text": "Drag on the lower half of the screen to MOVE. The stick appears under your thumb.", "target": "left"},
 	{"id": "shoot", "text": "Keep moving — you aim and shoot in the direction you run. Hold FIRE while standing still to hit the nearest enemy.", "target": "left"},
@@ -28,7 +26,6 @@ var _panel: PanelContainer
 var _text: Label
 var _counter: Label
 var _bar: ProgressBar
-
 
 func setup(hud: Node) -> void:
 	_hud = hud
@@ -60,11 +57,9 @@ func setup(hud: Node) -> void:
 		p.dashed.connect(func() -> void: _dashed = true)
 	_enter(0)
 
-
 func event(id: String) -> void:
 	if id == "extract_open":
 		_enter(STEPS.size() - 1)
-
 
 func _enter(i: int) -> void:
 	_step = i
@@ -83,7 +78,6 @@ func _enter(i: int) -> void:
 	_panel.create_tween().tween_property(_panel, "modulate:a", 1.0, 0.25)
 	queue_redraw()
 
-
 func _finish() -> void:
 	GameState.tutorial_done = true
 	GameState.save_profile()
@@ -91,13 +85,11 @@ func _finish() -> void:
 	tw.tween_property(self, "modulate:a", 0.0, 0.4)
 	tw.tween_callback(queue_free)
 
-
 func _exit_tree() -> void:
 	## Seeing the tutorial once (even partially) is enough.
 	if not GameState.tutorial_done:
 		GameState.tutorial_done = true
 		GameState.save_profile()
-
 
 func _process(delta: float) -> void:
 	_t += delta
@@ -136,7 +128,6 @@ func _process(delta: float) -> void:
 		else:
 			_enter(_step + 1)
 	queue_redraw()
-
 
 func _draw() -> void:
 	var target := str(STEPS[_step]["target"])

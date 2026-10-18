@@ -3,13 +3,6 @@ extends SceneTree
 ## Headless smoke: load defs + main menu scene, then quit.
 ## Usage: godot4 --headless --path game -s res://tools/smoke_test.gd
 
-const ModeDefs = preload("res://scripts/data/mode_defs.gd")
-const CharacterDefs = preload("res://scripts/data/character_defs.gd")
-const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
-const Progression = preload("res://scripts/data/progression.gd")
-const PetDefs = preload("res://scripts/data/pet_defs.gd")
-
-
 func _init() -> void:
 	var easy := ModeDefs.get_mode(ModeDefs.EASY_ID)
 	var med := ModeDefs.get_mode(ModeDefs.MEDIUM_ID)
@@ -18,14 +11,12 @@ func _init() -> void:
 	assert(CharacterDefs.all_characters().size() == 8)
 	assert(CharacterDefs.is_playable(CharacterDefs.ASH_ROOK_ID))
 	assert(str(CharacterDefs.get_character("rook_vex")["display_name"]) == "Ash Rook")
-	const EnemyDefs = preload("res://scripts/data/enemy_defs.gd")
 	assert(EnemyDefs.ids_for_tier(1).size() >= 8)
 	assert(EnemyDefs.ids_for_tier(2).size() >= 5)
 	assert(EnemyDefs.ids_for_tier(3).size() >= 4)
 	## Walk strips exist for sheet units (synthesized, look-locked).
 	assert(ResourceLoader.exists("res://assets/sprites/characters/ash_rook_walk.png"))
 	assert(ResourceLoader.exists("res://assets/sprites/enemies/rad_gator_walk.png"))
-	const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
 	var anim = UnitAnim.new()
 	anim.setup_from_walk_path("res://assets/sprites/characters/ash_rook_walk.png")
 	assert(anim.has_frames())

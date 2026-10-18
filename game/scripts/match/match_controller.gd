@@ -1,7 +1,5 @@
 extends Node2D
 
-const ModeDefs = preload("res://scripts/data/mode_defs.gd")
-const CharacterDefs = preload("res://scripts/data/character_defs.gd")
 const ExtractScatter = preload("res://scripts/world/extract_scatter.gd")
 const EnemyScene := preload("res://scenes/entities/enemy.tscn")
 const ExtractPadScene := preload("res://scenes/entities/extract_pad.tscn")
@@ -25,7 +23,6 @@ var _mode: Dictionary = {}
 var _ping_done_for_window: bool = false
 var _pads: Array = []
 var _match_time: float = 0.0
-
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -66,7 +63,6 @@ func _ready() -> void:
 	])
 	_match_time = 0.0
 
-
 func _spawn_pet() -> void:
 	if not is_instance_valid(player):
 		return
@@ -81,7 +77,6 @@ func _spawn_pet() -> void:
 	var ability := str(GameState.pet.get("ability_name", ""))
 	if ability != "":
 		hud.show_toast("%s ready — %s" % [pname, ability], UiTheme.AMBER)
-
 
 func _roll_extracts() -> void:
 	for c in pads_root.get_children():
@@ -99,14 +94,12 @@ func _roll_extracts() -> void:
 		_pads.append(pad)
 	GameState.extract_pad_info = rolled
 
-
 func _on_touch_extract() -> void:
 	if _ended or not _extract_open:
 		return
 	for pad in _pads:
 		if is_instance_valid(pad) and pad.has_method("try_touch_extract") and pad.try_touch_extract():
 			return
-
 
 func _process(delta: float) -> void:
 	if _ended:
@@ -125,7 +118,6 @@ func _process(delta: float) -> void:
 	hud.set_extract_open(_extract_open)
 	if _phase_time_left <= 0.0:
 		_advance_phase()
-
 
 func _start_phase(index: int) -> void:
 	_phase_index = index
@@ -156,7 +148,6 @@ func _start_phase(index: int) -> void:
 		Juice.sfx("seal")
 		hud.show_banner("SEALED", str(phase["label"]), UiTheme.AMBER)
 
-
 func _advance_phase() -> void:
 	if _current_window_was_open and not bool(_phases[_phase_index].get("is_last", false)):
 		GameState.on_window_skipped()
@@ -173,12 +164,10 @@ func _advance_phase() -> void:
 		return
 	_start_phase(_phase_index + 1)
 
-
 func _set_pads_open(is_open: bool) -> void:
 	for pad in _pads:
 		if is_instance_valid(pad) and pad.has_method("set_open"):
 			pad.set_open(is_open)
-
 
 func _update_spawns(delta: float) -> void:
 	var tl := ModeDefs.tl_table(GameState.threat_level)
@@ -192,7 +181,6 @@ func _update_spawns(delta: float) -> void:
 	if _spawn_accum >= interval:
 		_spawn_accum = 0.0
 		_spawn_enemy()
-
 
 func _spawn_enemy() -> void:
 	if not is_instance_valid(player):
@@ -223,7 +211,6 @@ func _spawn_enemy() -> void:
 	enemy.setup(spot, hp_m, dmg_m, 1.0, _roll_enemy_kind())
 	world.add_child(enemy)
 
-
 ## Drop stragglers far behind the player so T2/T3 pressure doesn't accumulate.
 func _cull_far_enemies() -> void:
 	if not is_instance_valid(player):
@@ -239,10 +226,8 @@ func _cull_far_enemies() -> void:
 			e.queue_free()
 			culled += 1
 
-
 ## Tier mix: T1 early → T2 as Threat rises → T3 on Last Extract.
 func _roll_enemy_kind() -> String:
-	const EnemyDefs = preload("res://scripts/data/enemy_defs.gd")
 	var progress := clampf(_match_time / 240.0, 0.0, 1.0)
 	var tl := float(GameState.threat_level)
 	var last_extract := false
@@ -271,11 +256,9 @@ func _roll_enemy_kind() -> String:
 		pool = EnemyDefs.ids_for_tier(1)
 	return pool[randi() % pool.size()]
 
-
 func _spawn_ambush() -> void:
 	for i in range(3 + GameState.threat_level):
 		_spawn_enemy()
-
 
 func _update_stay_bonus(delta: float) -> void:
 	if not _extract_open:
@@ -287,7 +270,6 @@ func _update_stay_bonus(delta: float) -> void:
 		GameState.stay_bonus += 0.05 * loot_w
 		GameState.add_run_xp(int(2 * loot_w))
 		GameState.add_scrap(1)
-
 
 func _on_extract_requested() -> void:
 	if _ended or not _extract_open:
@@ -304,10 +286,8 @@ func _on_extract_requested() -> void:
 	await get_tree().create_timer(1.6).timeout
 	GameState.go_result()
 
-
 func _on_player_died() -> void:
 	_finish_wipe("You went down in the dust.")
-
 
 func _finish_wipe(reason: String) -> void:
 	if _ended:
@@ -320,17 +300,14 @@ func _finish_wipe(reason: String) -> void:
 	await get_tree().create_timer(1.8).timeout
 	GameState.go_result()
 
-
 func get_phase_progress() -> float:
 	var dur := float(_phases[_phase_index]["duration"])
 	if dur <= 0.0:
 		return 1.0
 	return 1.0 - (_phase_time_left / dur)
 
-
 func is_extract_open() -> bool:
 	return _extract_open
-
 
 func get_pads() -> Array:
 	return _pads

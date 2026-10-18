@@ -9,9 +9,6 @@ extends CharacterBody2D
 signal died
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
-const EnemyDefs = preload("res://scripts/data/enemy_defs.gd")
-const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
-
 ## Built from EnemyDefs (sheet crops). Legacy raider/charger/brute still resolve.
 static var KINDS: Dictionary = {}
 
@@ -44,11 +41,9 @@ var _shadow: Polygon2D
 
 const BODY_FOV_PX := 44.0
 
-
 func _ensure_kinds() -> void:
 	if KINDS.is_empty():
 		KINDS = EnemyDefs.combat_kinds_table()
-
 
 func _archetype() -> String:
 	## Combat behavior bucket (raider / charger / brute). Kind id is the sheet slug.
@@ -60,7 +55,6 @@ func _archetype() -> String:
 		return kind
 	return "raider"
 
-
 func distract(seconds: float) -> void:
 	## Bentley bark — cancel wind-up / lunge and pause aggression briefly.
 	_distract_left = maxf(_distract_left, seconds)
@@ -69,7 +63,6 @@ func distract(seconds: float) -> void:
 	_fire_cd = maxf(_fire_cd, seconds)
 	if _warn:
 		_warn.color.a = 0.0
-
 
 func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float = 1.0, kind_id: String = "rad_gator") -> void:
 	global_position = spawn_pos
@@ -84,7 +77,6 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	_strafe_sign = -1.0 if randf() < 0.5 else 1.0
 	if is_inside_tree():
 		_apply_look()
-
 
 func _ready() -> void:
 	add_to_group("enemies")
@@ -111,7 +103,6 @@ func _ready() -> void:
 	tw.tween_property(body, "scale", spawn_scale, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	Juice.dust_puff(global_position + Vector2(0, 14), 6)
 
-
 func _apply_look() -> void:
 	if body:
 		var still_path := str(_def.get("sprite", "res://assets/sprites/enemies/rad_gator.png"))
@@ -124,7 +115,6 @@ func _apply_look() -> void:
 	if hp_bar:
 		hp_bar.max_value = max_hp
 		hp_bar.value = hp
-
 
 func _sync_body_scale() -> void:
 	var tw := 96.0
@@ -141,7 +131,6 @@ func _sync_body_scale() -> void:
 		body.scale = Vector2.ONE * _body_base_scale
 	_walk.set_base_scale(_body_base_scale)
 
-
 func _style_bar() -> void:
 	if hp_bar == null:
 		return
@@ -157,7 +146,6 @@ func _style_bar() -> void:
 	hp_bar.offset_top = -34.0
 	hp_bar.offset_bottom = -28.0
 	hp_bar.visible = false  ## only shown once damaged
-
 
 func _physics_process(delta: float) -> void:
 	if _dead:
@@ -240,7 +228,6 @@ func _physics_process(delta: float) -> void:
 		if randf() < 0.3:
 			_strafe_sign *= -1.0
 
-
 func _tick_walk_anim(delta: float, attacking: bool) -> void:
 	if body == null:
 		return
@@ -250,7 +237,6 @@ func _tick_walk_anim(delta: float, attacking: bool) -> void:
 		"bob_amp": 2.8,
 		"attack": attacking or _attack_flash > 0.0,
 	})
-
 
 func _separation() -> Vector2:
 	var push := Vector2.ZERO
@@ -262,7 +248,6 @@ func _separation() -> Vector2:
 		if l > 0.1 and l < 48.0:
 			push += d / l * (1.0 - l / 48.0)
 	return push.limit_length(1.0)
-
 
 func _attack(dir: Vector2) -> void:
 	_fire_cd = float(_def["cooldown"]) * randf_range(0.85, 1.2)
@@ -280,12 +265,10 @@ func _attack(dir: Vector2) -> void:
 			_fire(dir, 430.0)
 			Juice.sfx("enemy_shot", -6.0)
 
-
 func _fire(dir: Vector2, spd: float) -> void:
 	var bullet: Area2D = BulletScene.instantiate()
 	bullet.setup(global_position + dir * 18.0, dir, spd, damage, false, self)
 	get_tree().current_scene.add_child(bullet)
-
 
 func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 	if _dead:
@@ -302,7 +285,6 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 		_knock += from_dir.normalized() * 220.0 * resist
 	if hp <= 0.0:
 		_die()
-
 
 func _die() -> void:
 	_dead = true

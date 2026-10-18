@@ -5,7 +5,6 @@ extends CharacterBody2D
 signal rampage_started(target: Node)
 signal rampage_ended
 
-const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
 const BODY_FOV_PX := 42.0
 
 var _def: Dictionary = {}
@@ -31,13 +30,11 @@ var _walk_accent_path: String = ""
 @onready var body: Sprite2D = $Body
 @onready var name_label: Label = $NameLabel
 
-
 func setup(owner_player: Node2D, def: Dictionary) -> void:
 	_player = owner_player
 	_def = def.duplicate(true)
 	if is_inside_tree():
 		_apply_look()
-
 
 func _ready() -> void:
 	add_to_group("pets")
@@ -55,14 +52,11 @@ func _ready() -> void:
 	var tw := create_tween()
 	tw.tween_property(self, "modulate:a", 1.0, 0.25)
 
-
 func _ability_id() -> String:
 	return str(_def.get("ability_id", ""))
 
-
 func _accent_active() -> bool:
 	return _rampaging or _ram_left > 0.0 or _accent_left > 0.0
-
 
 func _apply_look() -> void:
 	var path := str(_def.get("sprite", "res://assets/sprites/pets/noel.png"))
@@ -91,7 +85,6 @@ func _apply_look() -> void:
 			col = Color(1.0, 0.85, 0.45)
 		name_label.add_theme_color_override("font_color", col)
 
-
 func _sync_body_scale() -> void:
 	var tw := 96.0
 	if body and body.texture != null:
@@ -105,7 +98,6 @@ func _sync_body_scale() -> void:
 	if body:
 		body.scale = Vector2.ONE * _body_base_scale
 	_walk.set_base_scale(_body_base_scale)
-
 
 func _physics_process(delta: float) -> void:
 	_bite_cd = maxf(0.0, _bite_cd - delta)
@@ -127,7 +119,6 @@ func _physics_process(delta: float) -> void:
 	_update_combat(delta)
 	_update_visuals(delta)
 
-
 func _refresh_rampage_target() -> void:
 	if not _rampaging:
 		return
@@ -136,7 +127,6 @@ func _refresh_rampage_target() -> void:
 		return
 	if not _target.is_in_group("enemies"):
 		_end_rampage()
-
 
 func _on_player_attacked(attacker: Node) -> void:
 	if attacker == null or not is_instance_valid(attacker):
@@ -147,7 +137,6 @@ func _on_player_attacked(attacker: Node) -> void:
 		_target = attacker as Node2D
 		return
 	_begin_rampage(attacker as Node2D)
-
 
 func _begin_rampage(attacker: Node2D) -> void:
 	_target = attacker
@@ -160,7 +149,6 @@ func _begin_rampage(attacker: Node2D) -> void:
 	Juice.shake(0.18)
 	rampage_started.emit(_target)
 
-
 func _end_rampage() -> void:
 	if not _rampaging:
 		_target = null
@@ -170,7 +158,6 @@ func _end_rampage() -> void:
 	_apply_look()
 	Juice.float_text(global_position + Vector2(0, -24), "Settled", Color(0.85, 0.8, 0.7), 14)
 	rampage_ended.emit()
-
 
 func _update_move(delta: float) -> void:
 	## Lillie ram charge overrides follow.
@@ -204,7 +191,6 @@ func _update_move(delta: float) -> void:
 	if body and to.length() > 4.0:
 		body.flip_h = to.x < 0.0
 
-
 func _update_combat(delta: float) -> void:
 	match _ability_id():
 		"territorial_rampage":
@@ -222,7 +208,6 @@ func _update_combat(delta: float) -> void:
 		_:
 			_idle_bite()
 
-
 func _idle_bite() -> void:
 	if _bite_cd > 0.0 or _ram_left > 0.0:
 		return
@@ -230,7 +215,6 @@ func _idle_bite() -> void:
 	if nearest == null:
 		return
 	_bite(nearest)
-
 
 func _tick_rampage_aoe() -> void:
 	if _aoe_cd > 0.0:
@@ -254,13 +238,11 @@ func _tick_rampage_aoe() -> void:
 		if global_position.distance_to(_target.global_position) <= radius:
 			_target.call("take_damage", dmg * 0.35, (_target.global_position - global_position).normalized())
 
-
 func _tick_bentley() -> void:
 	if _bark_cd <= 0.0:
 		_do_bark()
 	if _find_cd <= 0.0:
 		_do_find()
-
 
 func _do_bark() -> void:
 	_bark_cd = float(_def.get("bark_cooldown", 5.5))
@@ -282,7 +264,6 @@ func _do_bark() -> void:
 			n += 1
 	if n > 0:
 		Juice.shake(0.08)
-
 
 func _do_find() -> void:
 	_find_cd = float(_def.get("find_cooldown", 7.0))
@@ -315,7 +296,6 @@ func _do_find() -> void:
 	if pulled > 0:
 		Juice.burst(_player.global_position, Color(0.6, 1.0, 0.7), 10, 120.0, 0.4)
 
-
 func _try_start_ram() -> void:
 	if _ram_cd > 0.0:
 		return
@@ -332,7 +312,6 @@ func _try_start_ram() -> void:
 	Juice.sfx("dash", -2.0)
 	Juice.float_text(global_position + Vector2(0, -28), "LILLIE RAM!", Color(1.0, 0.55, 0.3), 16)
 	Juice.dust_puff(global_position + Vector2(0, 12), 8)
-
 
 func _tick_ram(delta: float) -> void:
 	_ram_left -= delta
@@ -367,7 +346,6 @@ func _tick_ram(delta: float) -> void:
 	if impact:
 		_ram_impact()
 
-
 func _ram_impact() -> void:
 	_ram_left = 0.0
 	var radius := float(_def.get("ram_impact_radius", 95.0))
@@ -387,7 +365,6 @@ func _ram_impact() -> void:
 	_target = null
 	_apply_look()
 
-
 func _bite(enemy: Node2D) -> void:
 	_bite_cd = float(_def.get("bite_cooldown", 0.6))
 	var dmg := float(_def.get("bite_damage", 8.0))
@@ -395,7 +372,6 @@ func _bite(enemy: Node2D) -> void:
 		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized())
 	Juice.sfx("hit", -10.0)
 	Juice.burst(enemy.global_position, Color(0.95, 0.75, 0.45), 6, 90.0, 0.25)
-
 
 func _nearest_enemy(max_d: float) -> Node2D:
 	var best: Node2D = null
@@ -408,7 +384,6 @@ func _nearest_enemy(max_d: float) -> Node2D:
 			best_d = d
 			best = n as Node2D
 	return best
-
 
 func _update_visuals(delta: float) -> void:
 	if body == null:
@@ -430,10 +405,8 @@ func _update_visuals(delta: float) -> void:
 	else:
 		body.modulate = Color.WHITE
 
-
 func is_rampaging() -> bool:
 	return _rampaging
-
 
 func get_pet_name() -> String:
 	return str(_def.get("name", "Pet"))

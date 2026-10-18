@@ -1,8 +1,5 @@
 extends "res://scripts/ui/menu_base.gd"
 
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
-
-
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
 	var row: BoxContainer
@@ -111,7 +108,6 @@ func build(c: VBoxContainer) -> void:
 	if not portrait:
 		right.add_child(spacer())
 
-
 func _stat(parent: Control, k: String, v: String) -> void:
 	var h := HBoxContainer.new()
 	var kl := UiTheme.body_label(k, 16, UiTheme.TEXT_DIM, false)
@@ -119,7 +115,6 @@ func _stat(parent: Control, k: String, v: String) -> void:
 	h.add_child(kl)
 	h.add_child(UiTheme.body_label(v, 16, UiTheme.TEXT, false))
 	parent.add_child(h)
-
 
 func _pulse(b: Control) -> void:
 	await get_tree().process_frame

@@ -6,7 +6,6 @@ extends CanvasLayer
 ##   Optional twin_stick: left half MOVE, right half AIM (push past ~⅓ to fire).
 ## Left-handed mode mirrors the button cluster (and stick halves in twin mode).
 
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const ActionButton = preload("res://scripts/ui/action_button.gd")
 
 const BASE_STICK_RADIUS := 96.0
@@ -44,7 +43,6 @@ var _twin: bool = false
 var _idle_t: float = 0.0
 var _player: Node = null
 
-
 func _ready() -> void:
 	layer = 20
 	process_mode = Node.PROCESS_MODE_PAUSABLE
@@ -76,7 +74,6 @@ func _ready() -> void:
 		for b in [btn_fire, btn_dash, btn_ability, btn_mount]:
 			b.visible = false
 
-
 func _make_button(text: String, sub: String, r: float, tint: Color) -> Control:
 	var b: Control = Control.new()
 	b.set_script(ActionButton)
@@ -88,10 +85,8 @@ func _make_button(text: String, sub: String, r: float, tint: Color) -> Control:
 	_buttons.append(b)
 	return b
 
-
 func _exit_tree() -> void:
 	TouchInput.clear_sticks()
-
 
 func _layout() -> void:
 	var m := MobileLayout.control_safe_margin()
@@ -111,7 +106,6 @@ func _layout() -> void:
 	_place(btn_mount, Vector2(w - 188, h - 188))
 	_place(btn_pause, Vector2(w - 34, 36), false)
 
-
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	var c := center
 	if mirror and _left_handed:
@@ -120,7 +114,6 @@ func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	b.size = Vector2(r * 2.0, r * 2.0)
 	b.pivot_offset = b.size * 0.5
 	b.position = c - b.size * 0.5
-
 
 ## --- Input routing -------------------------------------------------------------
 
@@ -137,7 +130,6 @@ func _input(event: InputEvent) -> void:
 		var sd := event as InputEventScreenDrag
 		if _drag_touch(sd.index, sd.position):
 			get_viewport().set_input_as_handled()
-
 
 func _begin_touch(index: int, pos: Vector2) -> bool:
 	## Buttons first (pick the closest one under the finger).
@@ -159,7 +151,6 @@ func _begin_touch(index: int, pos: Vector2) -> bool:
 		return _begin_twin(index, pos)
 	return _begin_single(index, pos)
 
-
 func _begin_single(index: int, pos: Vector2) -> bool:
 	var vp := get_viewport().get_visible_rect().size
 	## Keep top HUD clear; stick lives in the lower play field (survivor-style).
@@ -174,7 +165,6 @@ func _begin_single(index: int, pos: Vector2) -> bool:
 	TouchInput.set_move(Vector2.ZERO)
 	stick_draw.queue_redraw()
 	return true
-
 
 func _begin_twin(index: int, pos: Vector2) -> bool:
 	var half := get_viewport().get_visible_rect().size.x * 0.5
@@ -201,7 +191,6 @@ func _begin_twin(index: int, pos: Vector2) -> bool:
 	stick_draw.queue_redraw()
 	return true
 
-
 func _drag_touch(index: int, pos: Vector2) -> bool:
 	if index == _move_id:
 		_move_origin = _follow_origin(_move_origin, pos)
@@ -225,7 +214,6 @@ func _drag_touch(index: int, pos: Vector2) -> bool:
 			return true
 	return false
 
-
 func _end_touch(index: int) -> bool:
 	for b in _buttons:
 		if int(b.get("touch_index")) == index:
@@ -246,7 +234,6 @@ func _end_touch(index: int) -> bool:
 		return true
 	return false
 
-
 ## Dynamic stick: if the thumb drifts past the ring, the ring follows it,
 ## so you never "run out" of stick and reversing direction is instant.
 func _follow_origin(origin: Vector2, tip: Vector2) -> Vector2:
@@ -254,7 +241,6 @@ func _follow_origin(origin: Vector2, tip: Vector2) -> Vector2:
 	if d.length() > stick_radius:
 		return tip - d.normalized() * stick_radius
 	return origin
-
 
 func _vector_from(origin: Vector2, tip: Vector2, deadzone: float) -> Vector2:
 	var raw := (tip - origin) / stick_radius
@@ -265,7 +251,6 @@ func _vector_from(origin: Vector2, tip: Vector2, deadzone: float) -> Vector2:
 	## Slight ease-out: small pushes still move you at a usable pace.
 	t = 1.0 - pow(1.0 - t, 1.6)
 	return raw.normalized() * t
-
 
 ## --- Per-frame state from the player (cooldowns, availability) -------------
 
@@ -288,7 +273,6 @@ func _process(delta: float) -> void:
 	if not _move_active and not _aim_active:
 		stick_draw.queue_redraw()
 
-
 ## Called from StickDraw._draw().
 func paint_sticks(c: Control) -> void:
 	var o := c.get_global_transform_with_canvas().origin
@@ -309,7 +293,6 @@ func paint_sticks(c: Control) -> void:
 		elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
 			_paint_ghost(c, _ghost_pos(false) - o, aim_tint, "AIM + SHOOT" if GameState.settings.get("aim_autofire", true) else "AIM")
 
-
 func _ghost_pos(move_side: bool) -> Vector2:
 	var vp := c_vp()
 	if not _twin:
@@ -322,10 +305,8 @@ func _ghost_pos(move_side: bool) -> Vector2:
 		right.x = vp.x - right.x
 	return left if move_side else right
 
-
 func c_vp() -> Vector2:
 	return get_viewport().get_visible_rect().size
-
 
 func _paint_ghost(c: Control, center: Vector2, tint: Color, text: String) -> void:
 	var a := 0.16 + 0.06 * sin(_idle_t * 2.2)
@@ -335,7 +316,6 @@ func _paint_ghost(c: Control, center: Vector2, tint: Color, text: String) -> voi
 	var fs := 15
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	c.draw_string(font, center + Vector2(-w * 0.5, stick_radius + 22), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(tint.r, tint.g, tint.b, a * 3.0))
-
 
 func _paint_one(c: Control, origin: Vector2, knob: Vector2, tint: Color, alpha: float) -> void:
 	c.draw_circle(origin, stick_radius, Color(tint.r, tint.g, tint.b, alpha * 0.16))

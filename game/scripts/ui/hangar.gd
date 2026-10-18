@@ -2,11 +2,8 @@ extends "res://scripts/ui/menu_base.gd"
 
 ## Meta scrap shop — permanent upgrades between runs.
 
-const Progression = preload("res://scripts/data/progression.gd")
-
 var _scrap_label: Label
 var _list: VBoxContainer
-
 
 func build(c: VBoxContainer) -> void:
 	c.add_child(header("HANGAR", GameState.go_main_menu))
@@ -51,14 +48,12 @@ func build(c: VBoxContainer) -> void:
 	menu.pressed.connect(GameState.go_main_menu)
 	bottom.add_child(menu)
 
-
 func _rebuild() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	_scrap_label.text = "SCRAP %d" % GameState.account_scrap
 	for entry in Progression.hangar_catalog():
 		_list.add_child(_row(entry))
-
 
 func _row(entry: Dictionary) -> PanelContainer:
 	var id := str(entry["id"])

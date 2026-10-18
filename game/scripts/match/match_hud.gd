@@ -7,14 +7,11 @@ extends CanvasLayer
 ##   center     – phase banners, toasts, extract progress
 ## Keeps the public API match_controller.gd expects.
 
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const TouchControlsScene := preload("res://scenes/ui/touch_controls.tscn")
 const MinimapScript = preload("res://scripts/ui/minimap.gd")
 const ExtractArrowsScript = preload("res://scripts/ui/extract_arrows.gd")
 const PauseMenuScript = preload("res://scripts/ui/pause_menu.gd")
 const TutorialScript = preload("res://scripts/ui/tutorial_overlay.gd")
-const ModeDefs = preload("res://scripts/data/mode_defs.gd")
-
 var root: Control
 var _match: Node = null
 var _player: Node = null
@@ -70,7 +67,6 @@ const ROTATING_HINTS := [
 	"Standing on an open pad extracts you automatically.",
 ]
 
-
 func _ready() -> void:
 	layer = 10
 	root = Control.new()
@@ -79,7 +75,6 @@ func _ready() -> void:
 	add_child(root)
 	_build()
 	get_viewport().size_changed.connect(_layout)
-
 
 func setup(match_node: Node) -> void:
 	_match = match_node
@@ -95,7 +90,6 @@ func setup(match_node: Node) -> void:
 		root.add_child(tutorial)
 		tutorial.call("setup", self)
 	_layout()
-
 
 func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
 	_player = player
@@ -125,7 +119,6 @@ func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
 	on_health_changed(float(player.get("hp")), float(player.get("max_hp")))
 	_layout()
 
-
 ## ---------------------------------------------------------------------------
 ## Build
 
@@ -136,7 +129,6 @@ func _panel(alpha: float = 0.78) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", sb)
 	return p
 
-
 func _label(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
 	var l := Label.new()
 	l.text = text
@@ -144,7 +136,6 @@ func _label(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	return l
-
 
 func _build() -> void:
 	## Low-HP vignette (behind everything)
@@ -275,7 +266,6 @@ func _build() -> void:
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_hint_label)
 
-
 func _layout() -> void:
 	if root == null:
 		return
@@ -318,11 +308,9 @@ func _layout() -> void:
 	_hint_label.position = Vector2(vp.x * 0.1, m.position.y + m.size.y - 22)
 	_hint_label.size = Vector2(vp.x * 0.8, 20)
 
-
 func _open_pause() -> void:
 	if _pause and not get_tree().paused:
 		_pause.call("open")
-
 
 ## ---------------------------------------------------------------------------
 ## Per-frame
@@ -352,7 +340,6 @@ func _process(delta: float) -> void:
 	## Buff timers tick visibly
 	if _player and is_instance_valid(_player) and _player.has_method("get_active_buffs"):
 		_refresh_buffs(_player.call("get_active_buffs"))
-
 
 func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, player: Node) -> void:
 	_phase_label.text = str(phase.get("label", "")).to_upper()
@@ -407,7 +394,6 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 	if player and is_instance_valid(player) and not bool(player.call("is_reloading")):
 		_refresh_ammo()
 
-
 func _refresh_ammo() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
@@ -418,7 +404,6 @@ func _refresh_ammo() -> void:
 	_ammo_label.text = "AMMO  %d / %d" % [a, m]
 	_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if a <= m / 5 else UiTheme.TEXT)
 
-
 func set_extract_open(is_open: bool) -> void:
 	if is_open != _extract_open:
 		_extract_open = is_open
@@ -427,13 +412,11 @@ func set_extract_open(is_open: bool) -> void:
 	if _arrows and _arrows.has_method("set_extract_open"):
 		_arrows.set_extract_open(is_open)
 
-
 func _on_channel(ratio: float) -> void:
 	if ratio > 0.01:
 		_extract_prompt.text = "EXTRACTING… %d%%  — stay on the pad" % int(ratio * 100.0)
 	else:
 		_extract_prompt.text = ""
-
 
 func on_health_changed(current: float, maximum: float) -> void:
 	_hp_bar.max_value = maximum
@@ -447,10 +430,8 @@ func on_health_changed(current: float, maximum: float) -> void:
 		col = UiTheme.AMBER
 	_hp_bar.add_theme_stylebox_override("fill", UiTheme.box(col, Color(0, 0, 0, 0), 6, 0, 0))
 
-
 func on_buffs_changed(buffs: Dictionary) -> void:
 	_refresh_buffs(buffs)
-
 
 func _refresh_buffs(buffs: Dictionary) -> void:
 	var want := buffs.size()
@@ -472,7 +453,6 @@ func _refresh_buffs(buffs: Dictionary) -> void:
 		chip.add_theme_color_override("font_color", def.get("color", UiTheme.AMBER))
 		i += 1
 
-
 ## ---------------------------------------------------------------------------
 ## Messages
 
@@ -492,7 +472,6 @@ func show_banner(title: String, sub: String = "", color: Color = UiTheme.AMBER) 
 	tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
 	tw.tween_property(_banner_sub, "modulate:a", 0.0, 0.4)
 
-
 func show_toast(msg: String, color: Color = UiTheme.TEXT) -> void:
 	var l := _label(msg, 17, color)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -509,18 +488,15 @@ func show_toast(msg: String, color: Color = UiTheme.TEXT) -> void:
 	tw.tween_property(l, "modulate:a", 0.0, 0.5)
 	tw.tween_callback(l.queue_free)
 
-
 func _pulse(c: Control) -> void:
 	c.pivot_offset = c.size * 0.5
 	var tw := c.create_tween()
 	tw.tween_property(c, "scale", Vector2(1.15, 1.15), 0.1)
 	tw.tween_property(c, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
-
 func _fmt_time(seconds: float) -> String:
 	var s := maxi(0, int(ceil(seconds)))
 	return "%d:%02d" % [s / 60, s % 60]
-
 
 func _make_vignette() -> Texture2D:
 	var g := Gradient.new()

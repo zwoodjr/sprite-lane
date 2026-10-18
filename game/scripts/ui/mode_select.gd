@@ -1,11 +1,7 @@
 extends "res://scripts/ui/menu_base.gd"
 
-const ModeDefs = preload("res://scripts/data/mode_defs.gd")
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
-
 var _cards: Dictionary = {}
 var _fast: Button
-
 
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
@@ -51,7 +47,6 @@ func build(c: VBoxContainer) -> void:
 	next.pressed.connect(GameState.go_character_select)
 	bottom.add_child(next)
 	_refresh()
-
 
 func _mode_card(mode: Dictionary, portrait: bool = false) -> Control:
 	var id := str(mode["id"])
@@ -117,7 +112,6 @@ func _mode_card(mode: Dictionary, portrait: bool = false) -> Control:
 	_cards[id] = {"button": b, "tick": tick}
 	return b
 
-
 func _draw_timeline(c: Control, mode: Dictionary) -> void:
 	var total := 0.0
 	for p in mode["phases"]:
@@ -131,7 +125,6 @@ func _draw_timeline(c: Control, mode: Dictionary) -> void:
 			col = Color(0.95, 0.4, 0.3)
 		c.draw_rect(Rect2(x + 1, 4, pw - 2, c.size.y - 8), col)
 		x += pw
-
 
 func _refresh() -> void:
 	for id in _cards.keys():

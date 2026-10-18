@@ -10,8 +10,6 @@ signal ability_used(name: String)
 signal attacked(attacker: Node)
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
-const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
-
 ## --- Movement feel (tuned for thumbs) ---
 @export var base_speed: float = 235.0
 @export var accel: float = 2400.0       ## px/s² toward target velocity
@@ -74,7 +72,6 @@ var _muzzle: Polygon2D
 var _shadow: Polygon2D
 var _aim_line: Line2D
 
-
 func _ready() -> void:
 	add_to_group("player")
 	_apply_loadout()
@@ -85,7 +82,6 @@ func _ready() -> void:
 	_build_visuals()
 	if camera.has_method("set_target"):
 		camera.call("set_target", self)
-
 
 func _apply_loadout() -> void:
 	_char = GameState.get_character()
@@ -107,7 +103,6 @@ func _apply_loadout() -> void:
 	if not GameState.loadout_changed.is_connected(_on_loadout_changed):
 		GameState.loadout_changed.connect(_on_loadout_changed)
 
-
 func _sync_body_fov_scale() -> void:
 	## Walk frames are 96×96 cells; stills may vary — normalize to FOV footprint.
 	var tw := 96.0
@@ -124,7 +119,6 @@ func _sync_body_fov_scale() -> void:
 	body.scale = Vector2.ONE * _body_base_scale
 	_walk.set_base_scale(_body_base_scale)
 
-
 func _on_loadout_changed() -> void:
 	## In-run upgrade pick or meta refresh mid-match.
 	var old_max := max_hp
@@ -133,7 +127,6 @@ func _on_loadout_changed() -> void:
 		hp = minf(max_hp, hp + (max_hp - old_max))
 		health_changed.emit(hp, max_hp)
 	ammo_changed.emit(_ammo, _mag_size(), _reload_left > 0.0)
-
 
 func _refresh_run_stats(reset_ammo: bool) -> void:
 	var rm: Dictionary = GameState.run_mods
@@ -150,10 +143,8 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 	if reset_ammo:
 		_ammo = _mag_size()
 
-
 func _mag_size() -> int:
 	return int(_weapon.get("mag_size", 24)) + int(GameState.run_mods.get("mag", 0.0))
-
 
 func _build_visuals() -> void:
 	## "You are here" ring in the character's accent color (find yourself fast).
@@ -191,7 +182,6 @@ func _build_visuals() -> void:
 	gun.add_child(_aim_line)
 	gun.z_index = 1
 
-
 ## =============================================================================
 func _physics_process(delta: float) -> void:
 	_tick_timers(delta)
@@ -201,7 +191,6 @@ func _physics_process(delta: float) -> void:
 	_update_actions()
 	_update_regen(delta)
 	_update_visuals(delta)
-
 
 func _tick_timers(delta: float) -> void:
 	_fire_cd = maxf(0.0, _fire_cd - delta)
@@ -218,7 +207,6 @@ func _tick_timers(delta: float) -> void:
 			_ammo = _mag_size()
 			ammo_changed.emit(_ammo, _mag_size(), false)
 
-
 func _current_speed() -> float:
 	var s := base_speed * move_mult * _buff_move()
 	if _rush_left > 0.0:
@@ -229,7 +217,6 @@ func _current_speed() -> float:
 	if TouchInput.is_firing() and not _mounted:
 		s *= 0.88
 	return s
-
 
 func _update_movement(delta: float) -> void:
 	var dir := TouchInput.get_move()
@@ -253,7 +240,6 @@ func _update_movement(delta: float) -> void:
 		if float(_mount["fuel"]) <= 0.0:
 			_set_mounted(false)
 
-
 func _update_aim_and_fire(_delta: float) -> void:
 	var aim_dir := _aim_direction()
 	if aim_dir.length() > 0.01:
@@ -275,7 +261,6 @@ func _update_aim_and_fire(_delta: float) -> void:
 	if Input.is_action_just_pressed("reload") and _ammo < _mag_size() and _reload_left <= 0.0:
 		_start_reload()
 
-
 func _update_actions() -> void:
 	if Input.is_action_just_pressed("mount_toggle") or TouchInput.consume_mount():
 		_toggle_mount()
@@ -283,7 +268,6 @@ func _update_actions() -> void:
 		_try_ability()
 	if TouchInput.consume_dash():
 		_try_dash()
-
 
 func _update_regen(delta: float) -> void:
 	if velocity.length() < 10.0 and not TouchInput.is_firing():
@@ -293,7 +277,6 @@ func _update_regen(delta: float) -> void:
 	if _oos_timer > 1.5 and hp < max_hp:
 		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta)
 		health_changed.emit(hp, max_hp)
-
 
 func _update_visuals(delta: float) -> void:
 	_attack_flash = maxf(0.0, _attack_flash - delta)
@@ -320,17 +303,14 @@ func _update_visuals(delta: float) -> void:
 	else:
 		body.modulate.a = 1.0
 
-
 ## =============================================================================
 ## Buffs
 
 func _buff_move() -> float:
 	return 1.35 if _buffs.has("speed") else 1.0
 
-
 func _buff_damage() -> float:
 	return 1.45 if _buffs.has("damage") else 1.0
-
 
 func _buff_firerate() -> float:
 	var f := firerate_mult
@@ -339,7 +319,6 @@ func _buff_firerate() -> float:
 	if _buffs.has("rapid"):
 		f *= 1.75
 	return f
-
 
 func _tick_buffs(delta: float) -> void:
 	var changed := false
@@ -351,7 +330,6 @@ func _tick_buffs(delta: float) -> void:
 	resist_mult = 0.55 if _buffs.has("shield") else 1.0
 	if changed:
 		buffs_changed.emit(_buffs)
-
 
 func apply_powerup(def: Dictionary) -> void:
 	var id := str(def.get("id", ""))
@@ -370,10 +348,8 @@ func apply_powerup(def: Dictionary) -> void:
 	if id == "magnet":
 		GameState.add_scrap(randi_range(4, 8))
 
-
 func get_active_buffs() -> Dictionary:
 	return _buffs
-
 
 ## =============================================================================
 ## Dash
@@ -392,7 +368,6 @@ func _try_dash() -> void:
 	Juice.dust_puff(global_position + Vector2(0, 16), 8)
 	dashed.emit()
 
-
 func _spawn_afterimage() -> void:
 	var ghost := Sprite2D.new()
 	ghost.texture = body.texture
@@ -406,10 +381,8 @@ func _spawn_afterimage() -> void:
 	tw.tween_property(ghost, "modulate:a", 0.0, 0.22)
 	tw.tween_callback(ghost.queue_free)
 
-
 func get_dash_cooldown_ratio() -> float:
 	return _dash_cd / DASH_COOLDOWN
-
 
 ## =============================================================================
 ## Mount
@@ -422,17 +395,14 @@ func _try_mount_ram() -> void:
 		if collider and collider.is_in_group("breakables") and collider.has_method("take_damage"):
 			collider.take_damage(40.0)
 
-
 func can_mount() -> bool:
 	return bool(_mount.get("usable", false)) and float(_mount.get("fuel", 0)) > 0.0
-
 
 func _toggle_mount() -> void:
 	if not _mounted and not can_mount():
 		Juice.sfx("empty")
 		return
 	_set_mounted(not _mounted)
-
 
 func _set_mounted(on: bool) -> void:
 	_mounted = on
@@ -442,10 +412,8 @@ func _set_mounted(on: bool) -> void:
 		Juice.sfx("mount")
 		Juice.dust_puff(global_position + Vector2(0, 16), 6)
 
-
 func is_mounted() -> bool:
 	return _mounted
-
 
 ## =============================================================================
 ## Ability (data-driven from character_defs "ability")
@@ -453,21 +421,17 @@ func is_mounted() -> bool:
 func has_ability() -> bool:
 	return not _ability.is_empty()
 
-
 func get_ability_short_name() -> String:
 	return str(_ability.get("short", "ABILITY"))
-
 
 func _ability_cooldown() -> float:
 	var cd := float(_ability.get("cooldown", 12.0))
 	var reduce := float(GameState.run_mods.get("ability_cd", 0.0))
 	return cd * maxf(0.4, 1.0 - reduce)
 
-
 func get_ability_cooldown_ratio() -> float:
 	var cd := _ability_cooldown()
 	return _ability_cd / cd if cd > 0.0 else 0.0
-
 
 func _try_ability() -> void:
 	if not has_ability():
@@ -496,7 +460,6 @@ func _try_ability() -> void:
 			pass
 	Juice.sfx("ability")
 	ability_used.emit(str(_ability.get("name", "Ability")))
-
 
 ## =============================================================================
 ## Aiming & shooting
@@ -543,7 +506,6 @@ func _aim_direction() -> Vector2:
 		return velocity.normalized()
 	return _last_aim
 
-
 func _assisted(stick: Vector2) -> Vector2:
 	var strength := float(GameState.settings.get("aim_assist", 0.6))
 	if strength <= 0.01:
@@ -569,7 +531,6 @@ func _assisted(stick: Vector2) -> Vector2:
 		return stick
 	return stick.slerp(best, 0.55 + 0.35 * strength).normalized()
 
-
 func _nearest_enemy_dir(max_d: float) -> Vector2:
 	var best: Node2D = null
 	var best_d := max_d
@@ -583,7 +544,6 @@ func _nearest_enemy_dir(max_d: float) -> Vector2:
 	if best == null:
 		return Vector2.ZERO
 	return (best.global_position - global_position).normalized()
-
 
 func _try_shoot() -> void:
 	if _fire_cd > 0.0:
@@ -623,7 +583,6 @@ func _try_shoot() -> void:
 	if _ammo <= 0:
 		_start_reload()
 
-
 func _start_reload() -> void:
 	if _reload_left > 0.0:
 		return
@@ -631,11 +590,9 @@ func _start_reload() -> void:
 	Juice.sfx("reload")
 	ammo_changed.emit(0, _mag_size(), true)
 
-
 func get_reload_ratio() -> float:
 	var t := float(_weapon.get("reload_time", 1.4))
 	return 1.0 - _reload_left / t if _reload_left > 0.0 else 1.0
-
 
 ## =============================================================================
 ## Damage
@@ -670,10 +627,8 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		visible = false
 		collision_layer = 0
 
-
 func is_dashing() -> bool:
 	return _dash_left > 0.0
-
 
 ## =============================================================================
 ## HUD text helpers
@@ -683,18 +638,14 @@ func get_ammo_text() -> String:
 		return "RELOADING"
 	return "%d / %d" % [_ammo, _mag_size()]
 
-
 func get_ammo() -> int:
 	return _ammo
-
 
 func get_mag_size() -> int:
 	return _mag_size()
 
-
 func is_reloading() -> bool:
 	return _reload_left > 0.0
-
 
 func get_mount_text() -> String:
 	if not bool(_mount.get("usable", false)):

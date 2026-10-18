@@ -4,11 +4,8 @@ extends Control
 ## Subclasses override build(content: VBoxContainer).
 
 const MenuBg = preload("res://scripts/ui/menu_bg.gd")
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
-
 var frame: MarginContainer
 var content: VBoxContainer
-
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -28,7 +25,6 @@ func _ready() -> void:
 	content.modulate.a = 0.0
 	create_tween().tween_property(content, "modulate:a", 1.0, 0.25)
 
-
 func _apply_margins() -> void:
 	var m := MobileLayout.control_safe_margin()
 	var vp := get_viewport_rect().size
@@ -37,10 +33,8 @@ func _apply_margins() -> void:
 	frame.add_theme_constant_override("margin_top", int(m.position.y + 6))
 	frame.add_theme_constant_override("margin_bottom", int(vp.y - m.position.y - m.size.y + 6))
 
-
 func build(_c: VBoxContainer) -> void:
 	pass
-
 
 func header(title: String, back_cb: Callable = Callable()) -> HBoxContainer:
 	var h := HBoxContainer.new()
@@ -56,14 +50,12 @@ func header(title: String, back_cb: Callable = Callable()) -> HBoxContainer:
 	h.add_child(t)
 	return h
 
-
 func spacer(expand: bool = true, h: float = 0.0) -> Control:
 	var s := Control.new()
 	if expand:
 		s.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	s.custom_minimum_size = Vector2(0, h)
 	return s
-
 
 func card(border: Color = UiTheme.LINE, bg: Color = UiTheme.PANEL) -> PanelContainer:
 	var p := PanelContainer.new()

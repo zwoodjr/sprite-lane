@@ -1,10 +1,5 @@
 extends "res://scripts/ui/menu_base.gd"
 
-const CharacterDefs = preload("res://scripts/data/character_defs.gd")
-const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
-const PetDefs = preload("res://scripts/data/pet_defs.gd")
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
-
 var _tabs: Dictionary = {}
 var _pet_tabs: Dictionary = {}
 var _portrait: TextureRect
@@ -15,7 +10,6 @@ var _perks: VBoxContainer
 var _stats: VBoxContainer
 var _loadout: Label
 var _pet_blurb: Label
-
 
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
@@ -100,7 +94,6 @@ func build(c: VBoxContainer) -> void:
 	bottom.add_child(deploy)
 	_refresh()
 
-
 func _pet_tile(def: Dictionary) -> Control:
 	var id := str(def["id"])
 	var b := Button.new()
@@ -118,7 +111,6 @@ func _pet_tile(def: Dictionary) -> Control:
 	)
 	_pet_tabs[id] = b
 	return b
-
 
 func _roster_tile(id: String) -> Control:
 	var def := CharacterDefs.get_character(id)
@@ -141,7 +133,6 @@ func _roster_tile(id: String) -> Control:
 		)
 	_tabs[id] = b
 	return b
-
 
 func _refresh() -> void:
 	var c := GameState.get_character()
@@ -181,7 +172,6 @@ func _refresh() -> void:
 		for s in ["normal", "hover", "pressed", "hover_pressed"]:
 			pb.add_theme_stylebox_override(s, UiTheme.box(Color(0.2, 0.15, 0.1), col, 12, 4 if on else 2, 6))
 	_pet_blurb.text = "%s — %s" % [pet.get("ability_name", ""), pet.get("ability_desc", "")]
-
 
 func _stat_bar(label: String, v: float, lo: float, hi: float) -> void:
 	var h := HBoxContainer.new()

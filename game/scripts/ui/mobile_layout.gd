@@ -2,7 +2,7 @@ class_name MobileLayout
 extends RefCounted
 
 ## Safe-area + touch-friendly sizing helpers for iPhone-first UI.
-## Design size is portrait 720×1280 (survivor FOV + single stick).
+## Design size is portrait 720x1280 (survivor FOV + single stick).
 
 
 static func is_touch_ui() -> bool:
@@ -22,7 +22,7 @@ static func safe_margin() -> Rect2:
 
 
 static func control_safe_margin() -> Rect2:
-	## Extra padding for thumbs / notch / home indicator — used by controls & HUD text only.
+	## Extra padding for thumbs / notch / home indicator - used by controls & HUD text only.
 	## Game world should still render edge-to-edge behind the HUD.
 	## Safe area comes back in real window pixels; the UI lives in stretched
 	## viewport space, so convert before using it.

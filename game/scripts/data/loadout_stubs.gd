@@ -4,8 +4,6 @@ extends RefCounted
 ## Thin architecture stubs so Armor / Weapons / Pets / Mounts match the design.
 ## Shallow effects only — enough for the MVP vertical slice.
 
-const PetDefs = preload("res://scripts/data/pet_defs.gd")
-
 static func default_armor() -> Dictionary:
 	return {
 		"set_id": "scrap_sentinel",
@@ -19,7 +17,6 @@ static func default_armor() -> Dictionary:
 		"flat_armor": 20,
 		"regen_oos": 2.0,
 	}
-
 
 static func default_weapon() -> Dictionary:
 	return {
@@ -39,17 +36,14 @@ static func default_weapon() -> Dictionary:
 		],
 	}
 
-
 static func default_pet(pet_id: String = "") -> Dictionary:
 	var id := pet_id if pet_id != "" else PetDefs.default_id()
 	var pet := PetDefs.get_pet(id)
 	pet["active"] = true
 	return pet
 
-
 static func available_pets() -> Array[Dictionary]:
 	return PetDefs.all_pets()
-
 
 static func default_mount(unlocked_tier: int = 0) -> Dictionary:
 	var ladder := mount_ladder()
@@ -58,7 +52,6 @@ static func default_mount(unlocked_tier: int = 0) -> Dictionary:
 	mount["unlocked_tier"] = unlocked_tier
 	mount["mounted"] = false
 	return mount
-
 
 static func mount_ladder() -> Array[Dictionary]:
 	return [
@@ -96,7 +89,6 @@ static func mount_ladder() -> Array[Dictionary]:
 			"unlock": "Scooter mastery + landmark clears (stub — locked)",
 		},
 	]
-
 
 ## Tank is not for players — kept behind unused flag only.
 static func tank_entry() -> Dictionary:

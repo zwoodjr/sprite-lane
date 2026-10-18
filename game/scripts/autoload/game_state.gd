@@ -11,12 +11,6 @@ signal run_xp_changed(run_xp: int, run_level: int)
 signal run_level_up(new_level: int, choices: Array)
 signal meta_changed
 
-const CharacterDefs = preload("res://scripts/data/character_defs.gd")
-const ModeDefs = preload("res://scripts/data/mode_defs.gd")
-const LoadoutStubs = preload("res://scripts/data/loadout_stubs.gd")
-const Progression = preload("res://scripts/data/progression.gd")
-const PetDefs = preload("res://scripts/data/pet_defs.gd")
-
 var selected_mode_id: String = ModeDefs.EASY_ID
 var selected_character_id: String = CharacterDefs.ROOK_ID
 var selected_pet_id: String = PetDefs.NOEL_ID
@@ -113,11 +107,9 @@ var result_lost_keys: PackedStringArray = []
 var result_kept_keys: PackedStringArray = []
 var result_unlocks: PackedStringArray = []
 
-
 func _ready() -> void:
 	load_profile()
 	reset_loadout_to_defaults()
-
 
 func save_profile() -> void:
 	_sync_account_level()
@@ -143,7 +135,6 @@ func save_profile() -> void:
 		push_warning("Save failed: %s" % FileAccess.get_open_error())
 		return
 	f.store_string(JSON.stringify(data, "\t"))
-
 
 func load_profile() -> void:
 	if not FileAccess.file_exists(SAVE_PATH):
@@ -188,43 +179,33 @@ func load_profile() -> void:
 	if PetDefs.is_equipable(pet_id):
 		selected_pet_id = pet_id
 
-
 func _sync_account_level() -> void:
 	account_level = Progression.account_level_from_xp(account_xp)
-
 
 func account_bar_state() -> Dictionary:
 	return Progression.account_progress(account_xp)
 
-
 func run_bar_state() -> Dictionary:
 	return Progression.run_progress(run_xp, run_level)
-
 
 func meta_rank(id: String) -> int:
 	return int(meta_upgrades.get(id, 0))
 
-
 func scrap_find_mult() -> float:
 	return 1.0 + Progression.meta_bonus(meta_upgrades, "scrap_find")
-
 
 func starting_hp_bonus() -> float:
 	return Progression.meta_bonus(meta_upgrades, "max_hp")
 
-
 func starting_damage_bonus() -> float:
 	return Progression.meta_bonus(meta_upgrades, "damage")
-
 
 func insurance_bonus_slots() -> int:
 	return int(Progression.meta_bonus(meta_upgrades, "insurance"))
 
-
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
 	save_profile()
-
 
 func reset_profile() -> void:
 	tutorial_done = false
@@ -240,14 +221,11 @@ func reset_profile() -> void:
 	save_profile()
 	meta_changed.emit()
 
-
 func get_mode() -> Dictionary:
 	return ModeDefs.get_mode(selected_mode_id)
 
-
 func get_character() -> Dictionary:
 	return CharacterDefs.get_character(selected_character_id)
-
 
 func reset_loadout_to_defaults() -> void:
 	armor = LoadoutStubs.default_armor()
@@ -266,7 +244,6 @@ func reset_loadout_to_defaults() -> void:
 	if slots >= 4:
 		insured_slots.append("mount")
 	loadout_changed.emit()
-
 
 func begin_run() -> void:
 	threat_level = 0
@@ -297,7 +274,6 @@ func begin_run() -> void:
 	run_reset.emit()
 	run_xp_changed.emit(run_xp, run_level)
 
-
 func _clear_result_meta() -> void:
 	result_scrap_before = 0
 	result_scrap_banked = 0
@@ -310,18 +286,15 @@ func _clear_result_meta() -> void:
 	result_kept_keys = PackedStringArray()
 	result_unlocks = PackedStringArray()
 
-
 func on_window_skipped() -> void:
 	windows_skipped += 1
 	threat_level += 1
-
 
 ## Add bag scrap with meta magnet applied.
 func add_scrap(amount: int) -> int:
 	var gained := maxi(0, int(round(float(amount) * scrap_find_mult())))
 	scrap_found += gained
 	return gained
-
 
 ## In-run XP → levels → upgrade picker. Does NOT become permanent power.
 func add_run_xp(amount: int) -> void:
@@ -346,7 +319,6 @@ func add_run_xp(amount: int) -> void:
 	if not leveled and run_level >= Progression.RUN_LEVEL_CAP:
 		run_xp = 0
 
-
 func apply_run_upgrade(upgrade: Dictionary) -> void:
 	var stat := str(upgrade.get("stat", ""))
 	var add := float(upgrade.get("add", 0.0))
@@ -358,7 +330,6 @@ func apply_run_upgrade(upgrade: Dictionary) -> void:
 	pending_run_choices.clear()
 	run_level_paused = false
 	loadout_changed.emit()
-
 
 func try_buy_hangar(entry_id: String) -> bool:
 	var entry: Dictionary = {}
@@ -381,7 +352,6 @@ func try_buy_hangar(entry_id: String) -> bool:
 	save_profile()
 	meta_changed.emit()
 	return true
-
 
 func on_extract_success() -> void:
 	extracted = true
@@ -426,7 +396,6 @@ func on_extract_success() -> void:
 	_reset_run_power_after_end()
 	save_profile()
 
-
 func on_wipe() -> void:
 	extracted = false
 	wiped = true
@@ -462,7 +431,6 @@ func on_wipe() -> void:
 	_reset_run_power_after_end()
 	save_profile()
 
-
 func _reset_run_power_after_end() -> void:
 	## Permanent power never comes from run levels — clear after banking rewards.
 	run_xp = 0
@@ -471,38 +439,30 @@ func _reset_run_power_after_end() -> void:
 	pending_run_choices.clear()
 	run_level_paused = false
 
-
 func timer_scale() -> float:
 	return FAST_TIMER_SCALE if fast_timers else 1.0
-
 
 func go_main_menu() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
-
 func go_mode_select() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/mode_select.tscn")
-
 
 func go_character_select() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/character_select.tscn")
 
-
 func go_how_to_play() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/how_to_play.tscn")
 
-
 func go_settings() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/settings_menu.tscn")
-
 
 func go_hangar() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
 	get_tree().change_scene_to_file("res://scenes/ui/hangar.tscn")
-
 
 func go_match() -> void:
 	get_tree().paused = false
@@ -510,7 +470,6 @@ func go_match() -> void:
 	save_profile()
 	begin_run()
 	get_tree().change_scene_to_file("res://scenes/match/match.tscn")
-
 
 func go_result() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/result_screen.tscn")

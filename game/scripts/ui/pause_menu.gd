@@ -5,13 +5,10 @@ extends CanvasLayer
 
 const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 const HelpViewer = preload("res://scripts/ui/help_viewer.gd")
-const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
-
 var _dim: ColorRect
 var _frame: MarginContainer
 var _content: Control
 var _confirm_abandon: bool = false
-
 
 func _ready() -> void:
 	layer = 40
@@ -25,24 +22,20 @@ func _ready() -> void:
 	_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_frame)
 
-
 func open() -> void:
 	get_tree().paused = true
 	TouchInput.clear_sticks()
 	visible = true
 	_show_main()
 
-
 func close() -> void:
 	get_tree().paused = false
 	visible = false
-
 
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("pause_menu"):
 		close()
 		get_viewport().set_input_as_handled()
-
 
 func _set_content(c: Control) -> void:
 	for ch in _frame.get_children():
@@ -55,7 +48,6 @@ func _set_content(c: Control) -> void:
 	_frame.add_theme_constant_override("margin_bottom", int(vp.y - m.position.y - m.size.y + 10))
 	_frame.add_child(c)
 	_content = c
-
 
 func _show_main() -> void:
 	_confirm_abandon = false
@@ -96,7 +88,6 @@ func _show_main() -> void:
 	v.add_child(quit)
 	_set_content(center)
 
-
 func _show_help() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
@@ -109,7 +100,6 @@ func _show_help() -> void:
 	back.pressed.connect(_show_main)
 	v.add_child(back)
 	_set_content(v)
-
 
 func _show_settings() -> void:
 	var v := VBoxContainer.new()

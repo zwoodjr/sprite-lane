@@ -4,11 +4,8 @@ extends CanvasLayer
 
 signal chosen(upgrade: Dictionary)
 
-const Progression = preload("res://scripts/data/progression.gd")
-
 var _root: Control
 var _open: bool = false
-
 
 func _ready() -> void:
 	layer = 40
@@ -21,10 +18,8 @@ func _ready() -> void:
 	if not GameState.run_level_up.is_connected(_on_level_up):
 		GameState.run_level_up.connect(_on_level_up)
 
-
 func _on_level_up(new_level: int, choices: Array) -> void:
 	open(new_level, choices)
-
 
 func open(new_level: int, choices: Array) -> void:
 	if _open:
@@ -74,7 +69,6 @@ func open(new_level: int, choices: Array) -> void:
 	Juice.sfx("ui_tap")
 	Juice.haptic(35)
 
-
 func _choice_btn(upgrade: Dictionary) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
@@ -87,14 +81,12 @@ func _choice_btn(upgrade: Dictionary) -> Button:
 	b.pressed.connect(func() -> void: _pick(upgrade))
 	return b
 
-
 func _pick(upgrade: Dictionary) -> void:
 	GameState.apply_run_upgrade(upgrade)
 	Juice.sfx("pickup")
 	Juice.haptic(25)
 	chosen.emit(upgrade)
 	close()
-
 
 func close() -> void:
 	_open = false
