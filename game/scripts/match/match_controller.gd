@@ -195,7 +195,7 @@ func _apply_event(ev: Dictionary) -> void:
 				hud.show_toast("Pads heating early!", UiTheme.RUST)
 			_spawn_ambush()
 		"supply_crash":
-			GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
+			GameState.activate_special_ammo(GameState.roll_special_ammo())
 			GameState.add_run_gear(GearDefs.make_loose_armor("chest", "epic"))
 			hud.show_toast("Supply crash — Epic gear + special ammo!", UiTheme.AMBER)
 			_spawn_ambush()

@@ -446,8 +446,10 @@ func _die() -> void:
 		GameState.record_boss_kill(kind)
 		Juice.float_text(global_position + Vector2(0, -56), "BOSS DOWN ×+0.5", Color(1.0, 0.7, 0.3), 18)
 	## Ammo Bench special-ammo drops.
-	if GameState.ammo_bench_rank() > 0 and randf() < SpecialAmmoDefs.drop_chance(GameState.ammo_bench_rank()):
-		GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
+	var bench := GameState.ammo_bench_rank()
+	var drop_chance := 0.0 if bench <= 0 else clampf(0.04 + 0.03 * float(bench), 0.04, 0.18)
+	if drop_chance > 0.0 and randf() < drop_chance:
+		GameState.activate_special_ammo(GameState.roll_special_ammo())
 		Juice.float_text(global_position + Vector2(0, -70), "SPECIAL AMMO", Color(0.5, 0.85, 1.0), 14)
 	Juice.shake(0.12 if _archetype() != "brute" else 0.3)
 	if _archetype() == "brute":

@@ -610,11 +610,28 @@ func grant_boss_loot_boost() -> void:
 	loot_multiplier = minf(cap + 0.5, loot_multiplier) ## boss bump can briefly exceed
 
 
+
+func roll_special_ammo() -> Dictionary:
+	## Inline pool — avoids Xogot class_name cache misses that crashed Helm's DRONE.
+	var pool: Array = [
+		{"id": "incendiary", "name": "Incendiary", "duration": 15.0, "dot": 4.0, "dot_ticks": 3},
+		{"id": "shock", "name": "Shock", "duration": 15.0, "stun": 0.55},
+		{"id": "explosive", "name": "Explosive", "duration": 15.0, "splash_radius": 55.0, "splash_mult": 0.45},
+		{"id": "frost", "name": "Frost", "duration": 15.0, "slow": 0.55, "slow_sec": 1.4},
+	]
+	return (pool[randi() % pool.size()] as Dictionary).duplicate(true)
+
+
+func special_ammo_duration(base: float) -> float:
+	var rank := ammo_bench_rank()
+	return base * (1.0 + 0.12 * float(rank))
+
+
 func activate_special_ammo(def: Dictionary) -> void:
 	if def.is_empty():
 		return
 	var rank := meta_rank("ammo_bench")
-	var dur: float = SpecialAmmoDefs.duration_for_rank(float(def.get("duration", 15.0)), rank)
+	var dur: float = special_ammo_duration(float(def.get("duration", 15.0)))
 	special_ammo = def.duplicate(true)
 	special_ammo["time_left"] = dur
 

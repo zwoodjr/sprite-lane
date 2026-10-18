@@ -10,6 +10,7 @@ signal ability_used(name: String)
 signal attacked(attacker: Node)
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
+const DroneScene := preload("res://scenes/entities/drone.tscn")
 ## --- Movement feel (tuned for thumbs) ---
 @export var base_speed: float = 235.0
 @export var accel: float = 2400.0       ## px/s² toward target velocity
@@ -67,6 +68,7 @@ var _planted_t: float = 0.0 ## Bell Tower charge while standing still
 var _quarry_hits: int = 0
 var _supply_cd: float = 18.0
 var _firewalk_spots: Array = [] ## recent fire trail positions
+var _drone: Node2D = null ## visible scrap / wingman companion
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -572,9 +574,10 @@ func _try_ability() -> void:
 		"rig_assist":
 			_buffs["rapid"] = float(_ability.get("duration", 4.0))
 			_buffs["speed"] = float(_ability.get("duration", 4.0))
-			## Supply Drop: call in special ammo.
-			GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
-			Juice.float_text(global_position + Vector2(0, -40), "SUPPLY!", UiTheme.AMBER, 16)
+			## Summon / refresh visible wingman drone + supply ammo crate.
+			_ensure_drone("wingman", float(_weapon.get("drone_assist_damage", 10.0)) * 1.15, 0.7, 12.0)
+			GameState.activate_special_ammo(GameState.roll_special_ammo())
+			Juice.float_text(global_position + Vector2(0, -40), "WINGMAN!", UiTheme.AMBER, 16)
 		"blade_rush":
 			_rush_left = float(_ability.get("duration", 0.55))
 			_iframes = maxf(_iframes, 0.2)
@@ -891,42 +894,42 @@ func _nearest_enemy_in_range(radius: float) -> Node2D:
 
 
 func _tick_drone_assist() -> void:
-	var interval := float(_weapon.get("drone_assist_interval", 0.0))
-	## Wingman class also enables a drone.
-	if interval <= 0.0 and float(GameState.run_mods.get("class_wingman", 0.0)) > 0.0:
+	## Helm passive / Wingman class: keep a visible drone flying with you.
+	var wants := float(_weapon.get("drone_assist_interval", 0.0)) > 0.0 \
+		or float(GameState.run_mods.get("class_wingman", 0.0)) > 0.0
+	if not wants or hp <= 0.0:
+		return
+	var interval := float(_weapon.get("drone_assist_interval", 0.85))
+	if interval <= 0.0:
 		interval = 0.85
-	if interval <= 0.0 or _drone_cd > 0.0 or hp <= 0.0:
-		return
-	if _reload_left > 0.0 or _dash_left > 0.0:
-		return
-	var foe := _nearest_enemy_in_range(420.0)
-	if foe == null:
-		return
-	_drone_cd = interval
-	_spawn_assist_shot(foe, float(_weapon.get("drone_assist_damage", 8.0)) * 0.85, "DRONE")
+	var dmg := float(_weapon.get("drone_assist_damage", 8.0)) * damage_mult
+	_ensure_drone("wingman", dmg, interval, -1.0)
 
 
 func _tick_scrap_drone() -> void:
-	if float(GameState.run_mods.get("drone", 0.0)) <= 0.0:
+	var stacks := float(GameState.run_mods.get("drone", 0.0))
+	if stacks <= 0.0 or hp <= 0.0:
 		return
-	if _scrap_drone_cd > 0.0 or hp <= 0.0:
-		return
-	var foe := _nearest_enemy_in_range(380.0)
-	if foe == null:
-		return
-	_scrap_drone_cd = 0.9 / (1.0 + 0.25 * float(GameState.run_mods.get("drone", 1.0)))
-	_spawn_assist_shot(foe, 7.0 * float(GameState.run_mods.get("drone", 1.0)), "SCRAP")
+	var interval := 0.9 / (1.0 + 0.25 * stacks)
+	var dmg := 7.0 * stacks * damage_mult
+	_ensure_drone("scrap", dmg, interval, -1.0)
 
 
-func _spawn_assist_shot(foe: Node2D, dmg: float, label: String) -> void:
-	var aim := (foe.global_position - global_position).normalized()
-	if aim.length_squared() < 0.01:
-		aim = _last_aim
-	var bullet: Area2D = BulletScene.instantiate()
-	bullet.setup(global_position + aim * 36.0, aim, 900.0, dmg * damage_mult, true, self, 0.9, 0.0, 0.0)
-	get_tree().current_scene.add_child(bullet)
-	Juice.sfx("shot", -10.0)
-	Juice.float_text(global_position + Vector2(0, -36), label, UiTheme.TEAL, 12)
+func _ensure_drone(kind: String, dmg: float, interval: float, life: float) -> void:
+	if _drone != null and is_instance_valid(_drone):
+		if _drone.has_method("setup"):
+			_drone.call("setup", self, dmg, interval, kind, life if life > 0.0 else -1.0)
+		if life > 0.0 and _drone.has_method("refresh_life"):
+			_drone.call("refresh_life", life)
+		return
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	_drone = DroneScene.instantiate()
+	scene.add_child(_drone)
+	_drone.call("setup", self, dmg, interval, kind, life)
+	Juice.burst(global_position + Vector2(30, -24), Color(0.55, 0.9, 0.75), 12, 90.0, 0.4)
+	Juice.float_text(global_position + Vector2(0, -36), "DRONE ONLINE", UiTheme.TEAL, 14)
 
 
 func _tick_spore_mines(delta: float) -> void:
@@ -988,7 +991,7 @@ func _tick_supply_drop() -> void:
 	if _supply_cd > 0.0 or hp <= 0.0:
 		return
 	_supply_cd = 20.0
-	GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
+	GameState.activate_special_ammo(GameState.roll_special_ammo())
 	Juice.float_text(global_position + Vector2(0, -44), "SUPPLY DROP", UiTheme.AMBER, 16)
 
 
