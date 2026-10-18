@@ -27,6 +27,8 @@ var _prop_scrap: Texture2D
 var _prop_drum: Texture2D
 var _prop_chest: Texture2D
 var _prop_vial: Texture2D
+var _prop_wall: Texture2D
+var _prop_pillar: Texture2D
 var _chunks_root: Node2D
 var _props_root: Node2D
 const BreakableScene := preload("res://scenes/entities/breakable.tscn")
@@ -54,7 +56,11 @@ func _load_textures() -> void:
 	for i in range(6):
 		_tile_tex.append(load("res://assets/sprites/tiles/ground_%d.png" % i) as Texture2D)
 	_decor.clear()
-	for n in ["rock_small", "rock_small", "rock_large", "dead_bush", "dead_bush", "bones", "tire", "cactus", "sign_post", "scrap_pile"]:
+	for n in [
+		"rock_small", "rock_small", "rock_large", "dead_bush", "dead_bush",
+		"bones", "tire", "cactus", "sign_post", "scrap_pile",
+		"wall_ruin", "barrier_scrap", "ruin_pillar",
+	]:
 		_decor.append(load("res://assets/sprites/props/%s.png" % n) as Texture2D)
 	terrain_noise = FastNoiseLite.new()
 	terrain_noise.seed = run_seed
@@ -67,6 +73,8 @@ func _load_textures() -> void:
 	_prop_drum = load("res://assets/sprites/props/scrap_drum.png")
 	_prop_chest = load("res://assets/sprites/props/apothecary_chest.png")
 	_prop_vial = load("res://assets/sprites/props/vial_crate.png")
+	_prop_wall = load("res://assets/sprites/props/wall_ruin.png")
+	_prop_pillar = load("res://assets/sprites/props/ruin_pillar.png")
 
 
 func _build_landmark_catalog() -> void:
@@ -194,7 +202,16 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 		var lc := _chunk_coord(lp)
 		if lc == coord:
 			var sp := Sprite2D.new()
-			sp.texture = _prop_tower if int(lm["kind"]) == 2 else _prop_wreck
+			## kind: 0 wreck · 1 wall/garage · 2 tower · 3 market pillar
+			var k := int(lm["kind"])
+			if k == 2:
+				sp.texture = _prop_tower
+			elif k == 1:
+				sp.texture = _prop_wall
+			elif k == 3:
+				sp.texture = _prop_pillar
+			else:
+				sp.texture = _prop_wreck
 			sp.position = lp - chunk.position
 			sp.centered = true
 			sp.scale = Vector2(1.4, 1.4)
