@@ -54,6 +54,9 @@ var _mount: Dictionary = {}
 var _armor: Dictionary = {}
 var _buffs: Dictionary = {}  ## id -> {time_left, def}
 var _ability: Dictionary = {}
+var _burst_left: int = 0
+var _burst_gap_left: float = 0.0
+var _drone_cd: float = 1.0
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -212,12 +215,21 @@ func _tick_timers(delta: float) -> void:
 	_iframes = maxf(0.0, _iframes - delta)
 	_dash_cd = maxf(0.0, _dash_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
+	_drone_cd = maxf(0.0, _drone_cd - delta)
+	if _burst_left > 0:
+		_burst_gap_left = maxf(0.0, _burst_gap_left - delta)
+		if _burst_gap_left <= 0.0 and _reload_left <= 0.0 and _dash_left <= 0.0:
+			_fire_one_shot(false)
+			_burst_left -= 1
+			if _burst_left > 0:
+				_burst_gap_left = float(_weapon.get("burst_gap", 0.05))
 	if _reload_left > 0.0:
 		_reload_left -= delta
 		if _reload_left <= 0.0:
 			_reload_left = 0.0
 			_ammo = _mag_size()
 			ammo_changed.emit(_ammo, _mag_size(), false)
+	_tick_drone_assist()
 
 func _current_speed() -> float:
 	var s := base_speed * move_mult * _buff_move()
@@ -560,54 +572,134 @@ func _nearest_enemy_dir(max_d: float) -> Vector2:
 	return (best.global_position - global_position).normalized()
 
 func _try_shoot() -> void:
-	if _fire_cd > 0.0:
+	if _fire_cd > 0.0 or _burst_left > 0:
 		return
 	if _ammo <= 0:
 		_start_reload()
 		return
 	var rate := float(_weapon.get("fire_rate", 8.0)) * _buff_firerate()
 	_fire_cd = 1.0 / maxf(0.1, rate)
+	var burst := maxi(1, int(_weapon.get("burst_count", 1)))
+	_fire_one_shot(true)
+	if burst > 1 and _ammo > 0:
+		_burst_left = mini(burst - 1, _ammo)
+		_burst_gap_left = float(_weapon.get("burst_gap", 0.05))
+
+
+func _fire_one_shot(counts_as_trigger: bool) -> void:
+	if _ammo <= 0:
+		_start_reload()
+		return
 	_ammo -= 1
-	var aim := _last_aim
-	var spread := deg_to_rad(float(_weapon.get("spread_deg", 6.0)))
+	var pellets := maxi(1, int(_weapon.get("pellets", 1)))
+	var base_spread := deg_to_rad(float(_weapon.get("spread_deg", 6.0)))
 	if _buffs.has("quiet"):
-		spread *= 0.7
+		base_spread *= 0.7
 	## Tighter while standing still — rewards planting your feet.
 	if velocity.length() < 30.0:
-		spread *= 0.6
-	aim = aim.rotated(randf_range(-spread, spread))
-	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage()
-	var crit := false
-	if randf() < GameState.crit_chance():
-		crit = true
-		dmg *= 1.5 + GameState.crit_damage_bonus()
-	var bullet: Area2D = BulletScene.instantiate()
-	bullet.setup(
-		global_position + aim * 28.0,
-		aim,
-		float(_weapon.get("projectile_speed", 720.0)),
-		dmg,
-		true,
-		self
-	)
-	get_tree().current_scene.add_child(bullet)
-	_recoil = 5.0
+		base_spread *= 0.6
+	var crit_any := false
+	var aim_for_fx := _last_aim
+	for i in range(pellets):
+		var aim := _last_aim
+		var spread := base_spread
+		if pellets > 1:
+			## Dual blades: fan the pair so both slashes read.
+			var fan := deg_to_rad(10.0)
+			aim = aim.rotated(lerpf(-fan, fan, float(i) / float(maxi(1, pellets - 1))))
+		aim = aim.rotated(randf_range(-spread, spread))
+		aim_for_fx = aim
+		var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage()
+		var close_r := float(_weapon.get("close_bonus_range", 0.0))
+		if close_r > 0.0:
+			var foe := _nearest_enemy_in_range(close_r)
+			if foe != null:
+				dmg *= float(_weapon.get("close_bonus_mult", 1.25))
+		var crit := false
+		if randf() < GameState.crit_chance():
+			crit = true
+			crit_any = true
+			dmg *= 1.5 + GameState.crit_damage_bonus()
+		var bullet: Area2D = BulletScene.instantiate()
+		bullet.setup(
+			global_position + aim * 28.0,
+			aim,
+			float(_weapon.get("projectile_speed", 720.0)),
+			dmg,
+			true,
+			self,
+			float(_weapon.get("lifetime", -1.0)),
+			float(_weapon.get("splash_radius", 0.0)),
+			float(_weapon.get("splash_mult", 0.5))
+		)
+		get_tree().current_scene.add_child(bullet)
+	_recoil = float(_weapon.get("recoil", 5.0))
 	_flash_left = 0.045
 	_attack_flash = 0.12
 	Juice.sfx("shot", -4.0)
-	Juice.shake(0.05 if crit else 0.035)
-	if crit:
-		Juice.float_text(global_position + aim * 40.0, "CRIT", UiTheme.AMBER, 14)
+	var shake := float(_weapon.get("shake", 0.035))
+	Juice.shake(shake * (1.35 if crit_any else 1.0))
+	if crit_any:
+		Juice.float_text(global_position + aim_for_fx * 40.0, "CRIT", UiTheme.AMBER, 14)
 	ammo_changed.emit(_ammo, _mag_size(), false)
-	GameState.weapon["weapon_xp"] = int(GameState.weapon.get("weapon_xp", 0)) + 1
-	if int(GameState.weapon["weapon_xp"]) >= 20 * int(GameState.weapon.get("weapon_level", 1)):
-		GameState.weapon["weapon_level"] = int(GameState.weapon.get("weapon_level", 1)) + 1
+	if counts_as_trigger:
+		GameState.weapon["weapon_xp"] = int(GameState.weapon.get("weapon_xp", 0)) + 1
+		if int(GameState.weapon["weapon_xp"]) >= 20 * int(GameState.weapon.get("weapon_level", 1)):
+			GameState.weapon["weapon_level"] = int(GameState.weapon.get("weapon_level", 1)) + 1
 	if _ammo <= 0:
+		_burst_left = 0
 		_start_reload()
+
+
+func _nearest_enemy_in_range(radius: float) -> Node2D:
+	var best: Node2D = null
+	var best_d := radius * radius
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(n) or not (n is Node2D):
+			continue
+		var e := n as Node2D
+		var d := global_position.distance_squared_to(e.global_position)
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
+
+
+func _tick_drone_assist() -> void:
+	var interval := float(_weapon.get("drone_assist_interval", 0.0))
+	if interval <= 0.0 or _drone_cd > 0.0 or hp <= 0.0:
+		return
+	if _reload_left > 0.0 or _dash_left > 0.0:
+		return
+	var foe := _nearest_enemy_in_range(420.0)
+	if foe == null:
+		return
+	_drone_cd = interval
+	var aim := (foe.global_position - global_position).normalized()
+	if aim.length_squared() < 0.01:
+		aim = _last_aim
+	var dmg := float(_weapon.get("drone_assist_damage", 8.0)) * damage_mult * 0.85
+	var bullet: Area2D = BulletScene.instantiate()
+	bullet.setup(
+		global_position + aim * 36.0,
+		aim,
+		900.0,
+		dmg,
+		true,
+		self,
+		0.9,
+		0.0,
+		0.0
+	)
+	get_tree().current_scene.add_child(bullet)
+	Juice.sfx("shot", -10.0)
+	Juice.float_text(global_position + Vector2(0, -36), "DRONE", UiTheme.TEAL, 12)
+
 
 func _start_reload() -> void:
 	if _reload_left > 0.0:
 		return
+	_burst_left = 0
 	_reload_left = float(_weapon.get("reload_time", 1.4))
 	Juice.sfx("reload")
 	ammo_changed.emit(0, _mag_size(), true)

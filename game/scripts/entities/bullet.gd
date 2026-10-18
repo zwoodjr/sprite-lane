@@ -9,6 +9,8 @@ var from_player: bool = true
 var lifetime: float = 1.1
 ## Who fired — used to ignore self-hits and for pet enrage attribution.
 var source: Node = null
+var splash_radius: float = 0.0
+var splash_mult: float = 0.5
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -17,16 +19,31 @@ var _hit: bool = false
 var _arm_left: float = 0.04 ## brief spawn grace so muzzle overlap can't self-hit
 
 
-func setup(origin: Vector2, dir: Vector2, spd: float, dmg: float, player_shot: bool, src: Node = null) -> void:
+func setup(
+	origin: Vector2,
+	dir: Vector2,
+	spd: float,
+	dmg: float,
+	player_shot: bool,
+	src: Node = null,
+	life: float = -1.0,
+	splash_r: float = 0.0,
+	splash_m: float = 0.5
+) -> void:
 	global_position = origin
 	direction = dir.normalized()
 	speed = spd
 	damage = dmg
 	from_player = player_shot
 	source = src
+	splash_radius = splash_r
+	splash_mult = splash_m
 	rotation = direction.angle()
 	## Enemy bullets live longer but are slower — readable and dodgeable.
-	lifetime = 1.0 if player_shot else 1.8
+	if life > 0.0:
+		lifetime = life
+	else:
+		lifetime = 1.0 if player_shot else 1.8
 	## Set masks before enter-tree so the first overlap uses the right team.
 	_apply_team_collision()
 
@@ -100,11 +117,14 @@ func _on_body_entered(body: Node2D) -> void:
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
 			## Enemy signature: (float, Vector2 knock dir)
 			body.take_damage(damage, direction)
+			_apply_splash(body)
 			_impact(Color(1, 0.85, 0.45))
 		elif body.is_in_group("breakables") and body.has_method("take_damage"):
 			body.take_damage(damage)
+			_apply_splash(body)
 			_impact(Color(1, 0.85, 0.45))
 		elif body is StaticBody2D or body is TileMap:
+			_apply_splash(null)
 			_impact(Color(0.8, 0.7, 0.55))
 	else:
 		if body.is_in_group("player"):
@@ -119,9 +139,42 @@ func _on_body_entered(body: Node2D) -> void:
 			_impact(Color(0.8, 0.7, 0.55))
 
 
+func _apply_splash(primary: Node) -> void:
+	if splash_radius <= 0.0 or not from_player:
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	var splash_dmg := damage * splash_mult * GameState.aoe_damage_mult()
+	var r2 := splash_radius * splash_radius
+	for n in tree.get_nodes_in_group("enemies"):
+		if n == primary or not is_instance_valid(n):
+			continue
+		if not (n is Node2D) or not n.has_method("take_damage"):
+			continue
+		var other := n as Node2D
+		if global_position.distance_squared_to(other.global_position) > r2:
+			continue
+		var knock := (other.global_position - global_position).normalized()
+		if knock.length_squared() < 0.01:
+			knock = direction
+		other.take_damage(splash_dmg, knock)
+	for n in tree.get_nodes_in_group("breakables"):
+		if n == primary or not is_instance_valid(n):
+			continue
+		if not (n is Node2D) or not n.has_method("take_damage"):
+			continue
+		var crate := n as Node2D
+		if global_position.distance_squared_to(crate.global_position) > r2:
+			continue
+		crate.take_damage(splash_dmg)
+
+
 func _impact(col: Color) -> void:
 	_hit = true
-	Juice.burst(global_position, col, 6, 140.0, 0.25, 0.8)
+	var amount := 10 if splash_radius > 0.0 else 6
+	var spd := 180.0 if splash_radius > 0.0 else 140.0
+	Juice.burst(global_position, col, amount, spd, 0.28, 1.1 if splash_radius > 0.0 else 0.8)
 	_cleanup()
 
 

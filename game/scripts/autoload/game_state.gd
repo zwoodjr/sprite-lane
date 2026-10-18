@@ -278,7 +278,8 @@ func get_character() -> Dictionary:
 
 func reset_loadout_to_defaults() -> void:
 	armor = LoadoutStubs.default_armor()
-	weapon = LoadoutStubs.default_weapon()
+	## Kit follows the selected hero — never the old shared Scrap SMG.
+	weapon = LoadoutStubs.weapon_for_character(selected_character_id)
 	pet = LoadoutStubs.default_pet(selected_pet_id)
 	mount = LoadoutStubs.default_mount(mount_unlock_tier)
 	insured_slots.clear()

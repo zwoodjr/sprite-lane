@@ -36,6 +36,28 @@ func _init() -> void:
 	assert(PetDefs.get_pet(PetDefs.BENTLEY_ID)["ability_id"] == "talker_finder")
 	assert(PetDefs.get_pet(PetDefs.LILLIE_ID)["ability_id"] == "ram_headbutt")
 	assert(str(LoadoutStubs.default_pet(PetDefs.NOEL_ID)["name"]) == "Noel")
+	## Each hero ships a distinct kit — no shared Scrap SMG cadence.
+	var rates: Dictionary = {}
+	var mags: Dictionary = {}
+	for cid in CharacterDefs.PLAYABLE_IDS:
+		var w: Dictionary = LoadoutStubs.weapon_for_character(cid)
+		assert(not w.is_empty())
+		assert(str(w.get("id", "")) != "")
+		assert(float(w.get("fire_rate", 0.0)) > 0.0)
+		assert(int(w.get("mag_size", 0)) > 0)
+		var rk := "%.2f" % float(w["fire_rate"])
+		var mk := str(int(w["mag_size"]))
+		assert(not rates.has(rk), "duplicate fire_rate %s on %s" % [rk, cid])
+		rates[rk] = cid
+		assert(not mags.has(mk), "duplicate mag_size %s on %s" % [mk, cid])
+		mags[mk] = cid
+	var ash := LoadoutStubs.weapon_for_character(CharacterDefs.ASH_ROOK_ID)
+	assert(float(ash["fire_rate"]) < 2.5 and int(ash["mag_size"]) <= 6)
+	assert(float(ash.get("splash_radius", 0.0)) > 0.0)
+	var cinder := LoadoutStubs.weapon_for_character(CharacterDefs.CINDER_ID)
+	assert(float(cinder["fire_rate"]) >= 12.0 and int(cinder["mag_size"]) >= 36)
+	var vesper := LoadoutStubs.weapon_for_character(CharacterDefs.VESPER_THORN_ID)
+	assert(int(vesper["mag_size"]) <= 4 and float(vesper["damage"]) >= 40.0)
 	## Scene loads need GameState autoload — use:
 	##   godot4 --headless --path game --quit-after 3
 	## for full project boot. This script only validates data stubs.
