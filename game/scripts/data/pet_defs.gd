@@ -16,7 +16,7 @@ static func all_pets() -> Array[Dictionary]:
 			"id": NOEL_ID,
 			"name": "Noel",
 			"kind": "animal",
-			"branch": "Guard",
+			"branch": "Merle Guard",
 			"species": "merle doodle",
 			"damage": 8,
 			"loyalty": 70,
@@ -69,7 +69,7 @@ static func all_pets() -> Array[Dictionary]:
 			"id": LILLIE_ID,
 			"name": "Lillie",
 			"kind": "animal",
-			"branch": "Guard",
+			"branch": "Tank",
 			"species": "ginger parti doodle",
 			"damage": 12,
 			"loyalty": 80,
@@ -93,7 +93,7 @@ static func all_pets() -> Array[Dictionary]:
 			"ram_contact_radius": 48.0,
 			"ram_impact_damage": 42.0,
 			"ram_impact_radius": 95.0,
-			"note": "Tank build — sturdy parti ginger/white.",
+			"note": "Tank — scrap shoulder plate, studded collar. Hits way too hard.",
 		},
 	]
 
