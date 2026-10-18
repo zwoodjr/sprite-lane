@@ -309,8 +309,14 @@ func _layout() -> void:
 	_hint_label.size = Vector2(vp.x * 0.8, 20)
 
 func _open_pause() -> void:
-	if _pause and not get_tree().paused:
-		_pause.call("open")
+	if _pause == null or get_tree().paused:
+		return
+	if _match and is_instance_valid(_match) and _match.has_method("is_run_over") and bool(_match.call("is_run_over")):
+		return
+	_pause.call("open")
+
+func open_pause() -> void:
+	_open_pause()
 
 ## ---------------------------------------------------------------------------
 ## Per-frame

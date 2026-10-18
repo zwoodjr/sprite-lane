@@ -23,6 +23,8 @@ func _ready() -> void:
 	add_child(_frame)
 
 func open() -> void:
+	if GameState.run_finished:
+		return
 	get_tree().paused = true
 	TouchInput.clear_sticks()
 	visible = true
@@ -80,9 +82,9 @@ func _show_main() -> void:
 			_confirm_abandon = true
 			quit.text = "TAP AGAIN — counts as a wipe"
 			return
-		GameState.on_wipe()
-		GameState.result_summary = "Abandoned the run.\n" + GameState.result_summary
-		get_tree().paused = false
+		if not GameState.run_finished:
+			GameState.on_wipe()
+			GameState.result_summary = "Abandoned the run.\n" + GameState.result_summary
 		GameState.go_result()
 	)
 	v.add_child(quit)

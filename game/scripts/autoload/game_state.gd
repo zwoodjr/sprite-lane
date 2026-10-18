@@ -17,6 +17,9 @@ var selected_pet_id: String = PetDefs.NOEL_ID
 
 ## Dev-only: compress phase timers for quick playtests (default off).
 var fast_timers: bool = false
+## Debug flag: shows dev toggles (quick-test timers) in menus. Off for players;
+## flip here or launch with `-- --dev` to get them back.
+var dev_tools: bool = false
 const FAST_TIMER_SCALE := 0.12
 
 ## Classic insurance stub — slots from mode + meta; marks brought-in items.
@@ -53,6 +56,8 @@ var settings: Dictionary = {
 	"show_hints": true,
 }
 var tutorial_done: bool = false
+## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.
+var migrated_v3: bool = false
 var best_payout: int = 0
 var total_runs: int = 0
 
@@ -71,6 +76,8 @@ var scrap_found: int = 0
 var kills: int = 0
 var extracted: bool = false
 var wiped: bool = false
+## True once this run has been banked (extract / wipe / abandon). Guards double-counting.
+var run_finished: bool = false
 var result_summary: String = ""
 var last_phase_label: String = ""
 var run_seed: int = 0
@@ -108,6 +115,8 @@ var result_kept_keys: PackedStringArray = []
 var result_unlocks: PackedStringArray = []
 
 func _ready() -> void:
+	if "--dev" in OS.get_cmdline_user_args():
+		dev_tools = true
 	load_profile()
 	reset_loadout_to_defaults()
 
@@ -117,6 +126,7 @@ func save_profile() -> void:
 		"version": SAVE_VERSION,
 		"settings": settings,
 		"tutorial_done": tutorial_done,
+		"migrated_v3": migrated_v3,
 		"account_scrap": account_scrap,
 		"account_xp": account_xp,
 		"account_level": account_level,
@@ -155,9 +165,13 @@ func load_profile() -> void:
 	account_scrap = int(d.get("account_scrap", 0))
 	## Migrate v1/v2: old saves had account_xp as pseudo-power; keep XP, prefer scrap.
 	account_xp = int(d.get("account_xp", 0))
-	if account_scrap <= 0 and d.has("garage_tokens"):
-		## Soft migrate: leftover garage tokens → a bit of scrap so hangar isn't empty.
-		account_scrap = int(d.get("garage_tokens", 0)) * 10
+	migrated_v3 = bool(d.get("migrated_v3", false))
+	if not migrated_v3:
+		## One-time soft migrate: leftover garage tokens → a bit of scrap. Never repeats,
+		## so spending to 0 scrap can't re-mint free scrap on the next launch.
+		if account_scrap <= 0 and int(d.get("version", 0)) < SAVE_VERSION and d.has("garage_tokens"):
+			account_scrap = int(d.get("garage_tokens", 0)) * 10
+		migrated_v3 = true
 	var mu: Variant = d.get("meta_upgrades", {})
 	if typeof(mu) == TYPE_DICTIONARY:
 		meta_upgrades = (mu as Dictionary).duplicate()
@@ -258,6 +272,7 @@ func set_setting(key: String, value: Variant) -> void:
 
 func reset_profile() -> void:
 	tutorial_done = false
+	migrated_v3 = true
 	account_scrap = 0
 	account_xp = 0
 	account_level = 1
@@ -304,6 +319,7 @@ func begin_run() -> void:
 	kills = 0
 	extracted = false
 	wiped = false
+	run_finished = false
 	result_summary = ""
 	last_phase_label = ""
 	account_xp_this_run = 0
@@ -407,6 +423,9 @@ func try_buy_hangar(entry_id: String) -> bool:
 	return true
 
 func on_extract_success() -> void:
+	if run_finished:
+		return
+	run_finished = true
 	extracted = true
 	wiped = false
 	_clear_result_meta()
@@ -452,6 +471,9 @@ func on_extract_success() -> void:
 	save_profile()
 
 func on_wipe() -> void:
+	if run_finished:
+		return
+	run_finished = true
 	extracted = false
 	wiped = true
 	_clear_result_meta()
@@ -527,4 +549,7 @@ func go_match() -> void:
 	get_tree().change_scene_to_file("res://scenes/match/match.tscn")
 
 func go_result() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	TouchInput.clear_sticks()
 	get_tree().change_scene_to_file("res://scenes/ui/result_screen.tscn")

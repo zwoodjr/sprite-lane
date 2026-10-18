@@ -110,6 +110,10 @@ func _on_touch_extract() -> void:
 func _process(delta: float) -> void:
 	if _ended:
 		return
+	if GameState.run_finished:
+		## Banked elsewhere (e.g. Abandon from the pause menu) — stop the sim here.
+		_ended = true
+		return
 	_phase_time_left -= delta
 	_match_time += delta
 	_maybe_radio_stub()
@@ -304,8 +308,26 @@ func _on_extract_requested() -> void:
 		Juice.burst(player.global_position, Color(1, 0.85, 0.4), 40, 260.0, 0.9, 1.4)
 		var tw := player.create_tween()
 		tw.tween_property(player, "modulate:a", 0.0, 0.8)
-	await get_tree().create_timer(1.6).timeout
-	GameState.go_result()
+	_go_result_after(1.6)
+
+## Timer callback bound to this node: if the scene is already gone (Abandon,
+## quit), the connection dies with it — no double go_result.
+func _go_result_after(sec: float) -> void:
+	get_tree().create_timer(sec).timeout.connect(_go_result_now)
+
+func _go_result_now() -> void:
+	if is_inside_tree() and get_tree().current_scene == self:
+		GameState.go_result()
+
+func is_run_over() -> bool:
+	return _ended or GameState.run_finished
+
+## App went to background (TouchInput) — open the pause menu if the run is live.
+func request_auto_pause() -> void:
+	if is_run_over():
+		return
+	if hud and hud.has_method("open_pause"):
+		hud.call("open_pause")
 
 func _on_player_died() -> void:
 	_finish_wipe("You went down in the dust.")
@@ -318,8 +340,7 @@ func _finish_wipe(reason: String) -> void:
 	GameState.result_summary = reason + "\n" + GameState.result_summary
 	Juice.sfx("wipe")
 	hud.show_banner("WIPED", reason, UiTheme.DANGER)
-	await get_tree().create_timer(1.8).timeout
-	GameState.go_result()
+	_go_result_after(1.8)
 
 func get_phase_progress() -> float:
 	var dur := float(_phases[_phase_index]["duration"])
