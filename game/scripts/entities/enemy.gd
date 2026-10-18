@@ -41,6 +41,9 @@ var _shadow: Polygon2D
 
 ## Slightly larger than heroes (52) so wasteland sheet mobs read at survivor FOV.
 const BODY_FOV_PX := 58.0
+## Charger lunge: speed multiplier and contact radius (player r14 + mob ~16 + slack).
+const LUNGE_SPEED_MULT := 3.4
+const LUNGE_HIT_RADIUS := 38.0
 
 func _ensure_kinds() -> void:
 	if KINDS.is_empty():
@@ -195,16 +198,15 @@ func _physics_process(delta: float) -> void:
 
 	if _lunge_left > 0.0:
 		_lunge_left -= delta
-		velocity = _lunge_dir * speed * 3.4
+		velocity = _lunge_dir * speed * LUNGE_SPEED_MULT
 		move_and_slide()
-		for i in range(get_slide_collision_count()):
-			var col := get_slide_collision(i).get_collider()
-			if col and col.is_in_group("player") and col.has_method("take_damage"):
-				col.take_damage(damage, self)
-				_lunge_left = 0.0
-		if dist < 26.0 and _player.has_method("take_damage"):
+		## Enemies don't collide with the player layer, so test contact by
+		## distance after the move: player radius (14) + body half-width + slack.
+		var contact := global_position.distance_to(_player.global_position)
+		if contact <= LUNGE_HIT_RADIUS * float(_def.get("scale", 1.0)) and _player.has_method("take_damage"):
 			_player.take_damage(damage, self)
 			_lunge_left = 0.0
+			_knock = -_lunge_dir * 160.0
 		_tick_walk_anim(delta, true)
 		return
 
@@ -256,7 +258,9 @@ func _attack(dir: Vector2) -> void:
 	match _archetype():
 		"charger":
 			_lunge_dir = dir
-			_lunge_left = 0.22
+			## Long enough to actually reach where the player stood (+ a little overshoot).
+			var to_p := _player.global_position.distance_to(global_position) if _player else 120.0
+			_lunge_left = clampf((to_p + 30.0) / maxf(speed * LUNGE_SPEED_MULT, 1.0), 0.18, 0.4)
 			Juice.dust_puff(global_position + Vector2(0, 14), 5)
 		"brute":
 			for a in [-0.22, 0.0, 0.22]:
