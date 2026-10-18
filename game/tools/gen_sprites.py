@@ -253,6 +253,10 @@ def make_rook() -> Image.Image:
         fill_rect(p, 16, 1, 24, 3, olive_lt, w, h)
         # 2-dot eyes only (Noel-clean face — no mouth)
         eyes_dots(p, 12, 26, 22, w, h, INK, size=3)
+        # Scarf sits on chin/neck of the head layer so it isn't buried under the head stamp
+        fill_rect(p, 8, 36, 32, 41, scarf, w, h)
+        fill_rect(p, 8, 36, 32, 37, shade(scarf, 1.15), w, h)
+        fill_rect(p, 8, 39, 32, 41, scarf_dk, w, h)
 
     # Same stamp order / gaps as Noel family
     _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 18, 46)
