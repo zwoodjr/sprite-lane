@@ -11,9 +11,9 @@ Tuned for portrait survivor FOV (camera zoom ~1.12, player ~1/12–1/15
 screen width). Heroes authored at 96×96 so limbs have room; in-match
 scale keeps ~48px footprint via player.gd.
 
-Detail bar: match the approved 64×64 dog-face pixelation density —
-deliberate chunky blocks, clean thick outlines, no thumb blobs, no
-uncanny face detail. Pets (Noel) authored at 64×64 with the same craft.
+Style bible: the shipped **Noel** pet (clean white chibi, red collar,
+dark eye patches, thick outlines). All pets + heroes should read as the
+same family — Crazy Gunner card vibe — not photographic likeness.
 
 Run from repo root or game/:
   python3 game/tools/gen_sprites.py
@@ -170,125 +170,97 @@ def _outlined_part(w: int, h: int, paint, thickness: int = 2) -> Image.Image:
 # ---------------------------------------------------------------------------
 
 def make_rook() -> Image.Image:
-    """Rook Vex — dust scavenger OC.
+    """Rook Vex — Noel-style bible (same family as shipped Noel pet).
 
-    CG-card silhouette grammar (original design, not a copy):
-      ~55% head · stubby narrower torso · hand-blocks as side masses ·
-      wide crotch gap · SMG as right-side mass. Face = two eye dots only.
+    Clean chibi: big round head, stubby body, short legs, thick outlines,
+    flat fills + one shade. Identity: blonde bowl, olive band, orange scarf,
+    green tunic, gold buckle, chunky SMG. Authored at 64×64 like Noel.
     """
-    S = HERO_SIZE
+    S = 64  # match Noel canvas / family
     img = new(S, S)
-    drop_shadow(img, 48, 86, 24, 5, 95)
+    drop_shadow(img, 32, 58, 16, 4, 90)
 
     olive = (92, 128, 72, 255)
-    olive_lt = (128, 168, 100, 255)
+    olive_lt = (120, 156, 92, 255)
     olive_dk = (62, 88, 48, 255)
-    scarf = (220, 104, 52, 255)
+    scarf = (220, 104, 52, 255)  # same red-orange family as Noel collar
     scarf_dk = (168, 72, 36, 255)
-    hair = (228, 184, 72, 255)
-    hair_lt = (248, 214, 120, 255)
-    hair_dk = (176, 132, 48, 255)
-    pant = (110, 78, 52, 255)
+    hair = (236, 196, 88, 255)
+    hair_lt = (248, 220, 130, 255)
+    hair_dk = (180, 140, 52, 255)
+    pant = (96, 72, 52, 255)
 
-    # Stubby CG legs — short pillars, stamped with a wide crotch gap.
+    # Short stubby legs — Noel paw grammar
     def paint_leg(p, w, h):
-        fill_rect(p, 2, 0, 12, 8, pant, w, h)
-        fill_rect(p, 2, 0, 12, 2, shade(pant, 1.12), w, h)
-        fill_rect(p, 0, 8, 14, 16, SCRAP_DK, w, h)
-        fill_rect(p, 0, 8, 14, 10, SCRAP, w, h)
+        fill_rect(p, 1, 0, 7, 8, pant, w, h)
+        fill_rect(p, 1, 0, 7, 2, shade(pant, 1.12), w, h)
+        fill_rect(p, 0, 7, 8, 12, SCRAP_DK, w, h)
+        fill_rect(p, 0, 7, 8, 8, SCRAP, w, h)
 
-    # Narrow torso (must read narrower than head).
-    def paint_torso(p, w, h):
-        fill_rect(p, 2, 4, 25, 22, olive, w, h)
-        fill_rect(p, 2, 4, 25, 8, olive_lt, w, h)
-        fill_rect(p, 2, 17, 25, 22, olive_dk, w, h)
-        for x in (7, 14, 21):
-            px(p, x, 12, olive_dk, w, h)
-        # rust scarf collar
-        fill_rect(p, 0, 0, 27, 6, scarf, w, h)
-        fill_rect(p, 0, 0, 27, 2, shade(scarf, 1.15), w, h)
-        fill_rect(p, 0, 4, 27, 6, scarf_dk, w, h)
-        # belt + buckle
-        fill_rect(p, 2, 16, 25, 20, SCRAP_DK, w, h)
-        fill_rect(p, 11, 16, 16, 20, GOLD, w, h)
+    def paint_body(p, w, h):
+        # Narrower cylinder under big head (Noel body proportion)
+        fill_ellipse(p, 2, 4, 25, 22, olive, w, h)
+        fill_ellipse(p, 4, 5, 23, 14, olive_lt, w, h)
+        fill_ellipse(p, 4, 15, 23, 22, olive_dk, w, h)
+        # orange scarf = Noel collar weight (thick, readable red-orange band)
+        fill_rect(p, 1, 0, 26, 8, scarf, w, h)
+        fill_rect(p, 1, 0, 26, 3, shade(scarf, 1.18), w, h)
+        fill_rect(p, 1, 6, 26, 8, scarf_dk, w, h)
+        # belt + gold buckle (Noel tag grammar)
+        fill_rect(p, 4, 16, 23, 20, SCRAP_DK, w, h)
+        fill_rect(p, 11, 16, 16, 21, GOLD, w, h)
+        fill_rect(p, 12, 17, 15, 19, AMBER_LT, w, h)
 
-    # Left hand-block (CG style: small side mass, air-gapped from torso).
     def paint_larm(p, w, h):
-        fill_rect(p, 4, 0, 14, 8, olive, w, h)
-        fill_rect(p, 4, 0, 14, 2, olive_lt, w, h)
-        fill_rect(p, 2, 6, 12, 12, olive_dk, w, h)
-        fill_rect(p, 0, 10, 12, 18, SKIN, w, h)
-        fill_rect(p, 0, 15, 12, 18, SKIN_DK, w, h)
+        fill_rect(p, 2, 0, 10, 8, olive, w, h)
+        fill_rect(p, 2, 0, 10, 2, olive_lt, w, h)
+        fill_rect(p, 0, 6, 10, 14, SKIN, w, h)
+        fill_rect(p, 0, 11, 10, 14, SKIN_DK, w, h)
 
-    # Right hand + SMG (weapon = unmistakable silhouette bump).
-    def paint_rarm_gun(p, w, h):
-        fill_rect(p, 0, 2, 8, 10, olive, w, h)
-        fill_rect(p, 0, 2, 8, 4, olive_lt, w, h)
-        fill_rect(p, 4, 8, 14, 16, SKIN, w, h)
-        fill_rect(p, 4, 13, 14, 16, SKIN_DK, w, h)
-        fill_rect(p, 10, 4, 36, 14, SCRAP_DK, w, h)
-        fill_rect(p, 10, 4, 36, 7, SCRAP, w, h)
-        fill_rect(p, 12, 0, 22, 4, SCRAP_LT, w, h)
-        fill_rect(p, 14, 14, 22, 22, SCRAP, w, h)
-        fill_rect(p, 14, 14, 22, 16, DUST, w, h)
-        fill_rect(p, 34, 2, 38, 16, AMBER_DK, w, h)
-        fill_rect(p, 34, 5, 37, 13, AMBER, w, h)
+    def paint_gun(p, w, h):
+        fill_rect(p, 0, 2, 6, 10, olive, w, h)
+        fill_rect(p, 2, 8, 10, 14, SKIN, w, h)
+        fill_rect(p, 8, 4, 28, 12, SCRAP_DK, w, h)
+        fill_rect(p, 8, 4, 28, 7, SCRAP, w, h)
+        fill_rect(p, 10, 1, 18, 4, SCRAP_LT, w, h)
+        fill_rect(p, 12, 12, 18, 18, SCRAP, w, h)
+        fill_rect(p, 26, 3, 30, 13, AMBER_DK, w, h)
+        fill_rect(p, 26, 5, 29, 11, AMBER, w, h)
 
     def paint_head(p, w, h):
-        # Large square face — clear skin band for eyes (no bangs over dots).
-        fill_rect(p, 8, 16, 45, 42, SKIN, w, h)
-        fill_rect(p, 8, 36, 45, 42, SKIN_DK, w, h)
+        # Big round head mass — Noel head grammar (soft chin shade, NOT a beard)
+        fill_ellipse(p, 4, 10, 35, 38, SKIN, w, h)
+        fill_ellipse(p, 6, 12, 33, 28, SKIN_LT, w, h)
+        fill_ellipse(p, 10, 32, 30, 38, shade(SKIN, 0.92), w, h)
+        # Blonde bowl — chunky clean blocks (not strand noise)
         hair_mass(p, [
-            (6, 4, 47, 18, hair),
-            (7, 4, 46, 10, hair_lt),
-            (6, 14, 47, 18, hair_dk),
+            (6, 4, 33, 16, hair),
+            (7, 4, 32, 10, hair_lt),
+            (6, 12, 33, 16, hair_dk),
             (10, 0, 16, 5, hair_lt),
-            (11, 0, 15, 2, hair_lt),
             (18, 0, 26, 5, hair),
-            (19, 0, 25, 2, hair),
-            (28, 0, 36, 5, hair_lt),
-            (29, 0, 35, 2, hair_lt),
-            (38, 0, 45, 5, hair),
-            (39, 0, 44, 2, hair),
-            # side locks stop above eye band so face reads clean
-            (2, 8, 10, 30, hair),
-            (2, 8, 6, 16, hair_lt),
-            (2, 24, 10, 30, hair_dk),
-            (43, 8, 51, 30, hair),
-            (47, 8, 51, 16, hair_lt),
-            (43, 24, 51, 30, hair_dk),
-            # bang shelf — ABOVE eyes only
-            (12, 14, 20, 19, hair),
-            (21, 12, 29, 17, hair_lt),
-            (30, 14, 38, 19, hair),
-            (39, 12, 46, 17, hair_dk),
+            (26, 0, 32, 5, hair_lt),
+            (2, 8, 9, 24, hair),
+            (2, 8, 5, 14, hair_lt),
+            (31, 8, 38, 24, hair),
+            (34, 8, 38, 14, hair_lt),
+            (12, 12, 18, 16, hair),
+            (20, 11, 28, 15, hair_lt),
         ], w, h)
-        # olive dust-hood band
-        fill_rect(p, 14, 2, 39, 7, olive_dk, w, h)
-        fill_rect(p, 15, 2, 38, 5, olive, w, h)
-        fill_rect(p, 20, 1, 33, 3, olive_lt, w, h)
-        fill_rect(p, 18, 0, 22, 3, hair_lt, w, h)
-        fill_rect(p, 26, 0, 30, 3, hair, w, h)
-        fill_rect(p, 34, 0, 38, 3, hair_lt, w, h)
-        # 2-dot eyes on clear skin (64px-density: clean dots, no face noise)
-        eyes_dots(p, 16, 35, 26, w, h, INK, size=3)
-        # cheek shade + ear tip (64×64 craft density without uncanny features)
-        fill_rect(p, 10, 32, 14, 36, SKIN_DK, w, h)
-        fill_rect(p, 39, 32, 43, 36, SKIN_DK, w, h)
-        px(p, 18, 30, SKIN_LT, w, h)
-        px(p, 37, 30, SKIN_LT, w, h)
-        # scarf knot pixel + vial glint on belt buckle shadow
-        fill_rect(p, 22, 38, 30, 42, scarf, w, h)
+        # olive dust-hood band on top
+        fill_rect(p, 12, 2, 28, 7, olive_dk, w, h)
+        fill_rect(p, 13, 2, 27, 5, olive, w, h)
+        fill_rect(p, 16, 1, 24, 3, olive_lt, w, h)
+        # 2-dot eyes only (Noel-clean face — no mouth)
+        eyes_dots(p, 12, 26, 22, w, h, INK, size=3)
 
-    # Layout (air gaps intentional — anti-thumb):
-    #   head ~x22-74  torso ~x34-62  legs 28/54  arms 10 / 62+gun
-    #   crotch core gap ≈ 10px before outlines.
-    _stamp(img, _outlined_part(16, 20, paint_leg), 26, 66)          # L leg
-    _stamp(img, _outlined_part(16, 20, paint_leg), 54, 66)          # R leg
-    _stamp(img, _outlined_part(16, 22, paint_larm), 10, 50)         # L arm OUT
-    _stamp(img, _outlined_part(42, 26, paint_rarm_gun), 60, 48)     # gun RIGHT
-    _stamp(img, _outlined_part(30, 26, paint_torso), 33, 46)        # narrow torso
-    _stamp(img, _outlined_part(54, 46, paint_head), 21, 4)          # big head
+    # Same stamp order / gaps as Noel family
+    _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 18, 46)
+    _stamp(img, _outlined_part(10, 14, paint_leg, thickness=2), 36, 46)
+    _stamp(img, _outlined_part(12, 16, paint_larm, thickness=2), 8, 34)
+    _stamp(img, _outlined_part(32, 20, paint_gun, thickness=2), 40, 32)
+    _stamp(img, _outlined_part(28, 26, paint_body, thickness=2), 18, 30)
+    _stamp(img, _outlined_part(40, 42, paint_head, thickness=2), 12, 2)
 
     return img
 
@@ -535,8 +507,9 @@ def make_noel(rampage: bool = False) -> Image.Image:
     return img
 
 
+
 def make_dust_hound() -> Image.Image:
-    """Dust Hound — scrap-mutt filler pet (Hunt stub). Leaner, dust-brown."""
+    """Dust Hound — scrap-mutt filler; same Noel-family silhouette."""
     S = PET_SIZE
     img = new(S, S)
     drop_shadow(img, 32, 58, 15, 4, 90)
