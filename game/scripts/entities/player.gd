@@ -10,6 +10,7 @@ signal ability_used(name: String)
 signal attacked(attacker: Node)
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
+const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
 
 ## --- Movement feel (tuned for thumbs) ---
 @export var base_speed: float = 235.0
@@ -65,6 +66,8 @@ var _ability: Dictionary = {}
 ## Keep ~48px on-screen footprint (heroes authored at 96×96; FOV ~1/13).
 const BODY_FOV_PX := 48.0
 var _body_base_scale: float = 1.0
+var _walk: RefCounted = UnitAnim.new()
+var _attack_flash: float = 0.0
 
 var _gun_poly: Polygon2D
 var _muzzle: Polygon2D
@@ -92,7 +95,11 @@ func _apply_loadout() -> void:
 	_ability = _char.get("ability", {})
 	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
-	body.texture = load(str(_char.get("sprite", "res://assets/sprites/characters/ash_rook.png"))) as Texture2D
+	var still_path := str(_char.get("sprite", "res://assets/sprites/characters/ash_rook.png"))
+	var still := load(still_path) as Texture2D
+	body.texture = still
+	var walk_path := still_path.replace(".png", "_walk.png")
+	_walk.setup_from_walk_path(walk_path, still)
 	_sync_body_fov_scale()
 	label.text = str(_char.get("display_name", "Wanderer"))
 	label.add_theme_font_size_override("font_size", 11)
@@ -102,12 +109,20 @@ func _apply_loadout() -> void:
 
 
 func _sync_body_fov_scale() -> void:
-	## Native 96×96 heroes → scale so width ≈ BODY_FOV_PX at zoom 1.12 (~1/13 screen).
-	var tw := 48.0
+	## Walk frames are 96×96 cells; stills may vary — normalize to FOV footprint.
+	var tw := 96.0
 	if body.texture != null:
-		tw = float(body.texture.get_width())
+		## If using atlas, region width is what matters.
+		if body.texture is AtlasTexture:
+			tw = (body.texture as AtlasTexture).region.size.x
+		else:
+			tw = float(body.texture.get_width())
+			## Full walk strip? use one cell.
+			if tw >= 192.0:
+				tw = 96.0
 	_body_base_scale = BODY_FOV_PX / maxf(tw, 1.0)
 	body.scale = Vector2.ONE * _body_base_scale
+	_walk.set_base_scale(_body_base_scale)
 
 
 func _on_loadout_changed() -> void:
@@ -244,7 +259,11 @@ func _update_aim_and_fire(_delta: float) -> void:
 	if aim_dir.length() > 0.01:
 		_last_aim = aim_dir
 	gun.rotation = lerp_angle(gun.rotation, _last_aim.angle(), 0.55)
-	body.flip_h = _last_aim.x < 0.0
+	## Face travel when running; face aim when standing / firing.
+	if velocity.length() > 40.0 and not TouchInput.is_firing():
+		body.flip_h = velocity.x < 0.0
+	else:
+		body.flip_h = _last_aim.x < 0.0
 	gun.z_index = -1 if _last_aim.y < -0.3 else 1
 	## Show aim guide while twin-stick aiming, or while single-stick run-firing.
 	var show_guide := TouchInput.aim_vector.length() > 0.01
@@ -277,23 +296,20 @@ func _update_regen(delta: float) -> void:
 
 
 func _update_visuals(delta: float) -> void:
-	var moving := velocity.length() > 30.0
-	var bs := _body_base_scale
-	## Walk bob + squash (relative to FOV base scale)
-	if moving and not _mounted:
-		_bob_t += delta * 14.0 * clampf(velocity.length() / base_speed, 0.5, 1.6)
-		body.position.y = -absf(sin(_bob_t)) * 3.0
-		body.scale = Vector2(
-			bs * (1.0 + sin(_bob_t * 2.0) * 0.03),
-			bs * (1.0 - sin(_bob_t * 2.0) * 0.03)
-		)
+	_attack_flash = maxf(0.0, _attack_flash - delta)
+	var moving := velocity.length() > 30.0 and not _mounted
+	## 4-frame walk strip + procedural bob/lean (sheet look locked).
+	_walk.tick(body, velocity if moving else Vector2.ZERO, delta, {
+		"move_thresh": 30.0,
+		"speed_ref": base_speed,
+		"bob_amp": 3.5,
+		"attack": _attack_flash > 0.0,
+	})
+	if moving:
 		_step_t += delta
 		if _step_t > 0.26:
 			_step_t = 0.0
 			Juice.dust_puff(global_position + Vector2(0, 18), 3)
-	else:
-		body.position.y = lerpf(body.position.y, 0.0, 0.3)
-		body.scale = body.scale.lerp(Vector2.ONE * bs, 0.3)
 	## Recoil
 	_recoil = lerpf(_recoil, 0.0, clampf(delta * 18.0, 0.0, 1.0))
 	_gun_poly.position.x = -_recoil
@@ -597,6 +613,7 @@ func _try_shoot() -> void:
 	get_tree().current_scene.add_child(bullet)
 	_recoil = 5.0
 	_flash_left = 0.045
+	_attack_flash = 0.12
 	Juice.sfx("shot", -4.0)
 	Juice.shake(0.035)
 	ammo_changed.emit(_ammo, _mag_size(), false)

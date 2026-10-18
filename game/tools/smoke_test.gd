@@ -22,6 +22,13 @@ func _init() -> void:
 	assert(EnemyDefs.ids_for_tier(1).size() >= 8)
 	assert(EnemyDefs.ids_for_tier(2).size() >= 5)
 	assert(EnemyDefs.ids_for_tier(3).size() >= 4)
+	## Walk strips exist for sheet units (synthesized, look-locked).
+	assert(ResourceLoader.exists("res://assets/sprites/characters/ash_rook_walk.png"))
+	assert(ResourceLoader.exists("res://assets/sprites/enemies/rad_gator_walk.png"))
+	const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
+	var anim = UnitAnim.new()
+	anim.setup_from_walk_path("res://assets/sprites/characters/ash_rook_walk.png")
+	assert(anim.has_frames())
 	assert(LoadoutStubs.mount_ladder().size() == 3)
 	assert(bool(LoadoutStubs.tank_entry()["dev_only"]))
 	assert(Progression.run_xp_to_next(1) == 30)

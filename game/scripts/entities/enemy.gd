@@ -10,6 +10,7 @@ signal died
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
 const EnemyDefs = preload("res://scripts/data/enemy_defs.gd")
+const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
 
 ## Built from EnemyDefs (sheet crops). Legacy raider/charger/brute still resolve.
 static var KINDS: Dictionary = {}
@@ -31,12 +32,17 @@ var _dead: bool = false
 var _spawn_in: float = 0.35
 var _bob_t: float = 0.0
 var _distract_left: float = 0.0
+var _walk: RefCounted = UnitAnim.new()
+var _attack_flash: float = 0.0
+var _body_base_scale: float = 1.0
 
 @onready var body: Sprite2D = $Body
 @onready var hp_bar: ProgressBar = $HpBar
 
 var _warn: Polygon2D
 var _shadow: Polygon2D
+
+const BODY_FOV_PX := 40.0
 
 
 func _ensure_kinds() -> void:
@@ -97,20 +103,43 @@ func _ready() -> void:
 	_apply_look()
 	## Spawn-in: rise out of the dust
 	modulate.a = 0.0
-	body.scale = Vector2(0.6, 0.6)
+	_sync_body_scale()
+	var spawn_scale := body.scale
+	body.scale = spawn_scale * 0.6
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(self, "modulate:a", 1.0, 0.3)
-	tw.tween_property(body, "scale", Vector2.ONE * float(_def.get("scale", 1.0)), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(body, "scale", spawn_scale, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	Juice.dust_puff(global_position + Vector2(0, 14), 6)
 
 
 func _apply_look() -> void:
 	if body:
-		body.texture = load(str(_def.get("sprite", "res://assets/sprites/enemies/raider.png")))
+		var still_path := str(_def.get("sprite", "res://assets/sprites/enemies/rad_gator.png"))
+		var still := load(still_path) as Texture2D
+		body.texture = still
 		body.self_modulate = _def.get("tint", Color.WHITE)
+		var walk_path := still_path.replace(".png", "_walk.png")
+		_walk.setup_from_walk_path(walk_path, still)
+		_sync_body_scale()
 	if hp_bar:
 		hp_bar.max_value = max_hp
 		hp_bar.value = hp
+
+
+func _sync_body_scale() -> void:
+	var tw := 96.0
+	if body and body.texture != null:
+		if body.texture is AtlasTexture:
+			tw = (body.texture as AtlasTexture).region.size.x
+		else:
+			tw = float(body.texture.get_width())
+			if tw >= 192.0:
+				tw = 96.0
+	var def_scale := float(_def.get("scale", 1.0))
+	_body_base_scale = (BODY_FOV_PX / maxf(tw, 1.0)) * def_scale
+	if body:
+		body.scale = Vector2.ONE * _body_base_scale
+	_walk.set_base_scale(_body_base_scale)
 
 
 func _style_bar() -> void:
@@ -138,10 +167,12 @@ func _physics_process(delta: float) -> void:
 		return
 	_fire_cd = maxf(0.0, _fire_cd - delta)
 	_distract_left = maxf(0.0, _distract_left - delta)
+	_attack_flash = maxf(0.0, _attack_flash - delta)
 	_player = get_tree().get_first_node_in_group("player") as Node2D
 	if _player == null:
 		velocity = velocity.move_toward(Vector2.ZERO, 600.0 * delta)
 		move_and_slide()
+		_tick_walk_anim(delta, false)
 		return
 	var to_player := _player.global_position - global_position
 	var dist := to_player.length()
@@ -152,6 +183,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		if body:
 			body.modulate = Color(1.15, 1.05, 0.7)
+		_tick_walk_anim(delta, false)
 		return
 	elif body:
 		body.modulate = Color.WHITE
@@ -166,6 +198,7 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.move_toward(Vector2.ZERO, 900.0 * delta) + _knock
 		move_and_slide()
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
+		_tick_walk_anim(delta, true)
 		if _windup_left <= 0.0:
 			_warn.color.a = 0.0
 			_attack(dir)
@@ -183,6 +216,7 @@ func _physics_process(delta: float) -> void:
 		if dist < 26.0 and _player.has_method("take_damage"):
 			_player.take_damage(damage, self)
 			_lunge_left = 0.0
+		_tick_walk_anim(delta, true)
 		return
 
 	var chase := speed
@@ -200,14 +234,22 @@ func _physics_process(delta: float) -> void:
 	velocity = velocity.move_toward(want, 900.0 * delta) + _knock
 	_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
-	if body:
-		body.flip_h = dir.x < 0.0
-		_bob_t += delta * 10.0
-		body.position.y = -absf(sin(_bob_t)) * 2.0
+	_tick_walk_anim(delta, false)
 	if dist <= float(_def["range"]) and _fire_cd <= 0.0:
 		_windup_left = float(_def["windup"])
 		if randf() < 0.3:
 			_strafe_sign *= -1.0
+
+
+func _tick_walk_anim(delta: float, attacking: bool) -> void:
+	if body == null:
+		return
+	_walk.tick(body, velocity, delta, {
+		"move_thresh": 20.0,
+		"speed_ref": maxf(speed, 80.0),
+		"bob_amp": 2.8,
+		"attack": attacking or _attack_flash > 0.0,
+	})
 
 
 func _separation() -> Vector2:
@@ -224,6 +266,7 @@ func _separation() -> Vector2:
 
 func _attack(dir: Vector2) -> void:
 	_fire_cd = float(_def["cooldown"]) * randf_range(0.85, 1.2)
+	_attack_flash = 0.14
 	match _archetype():
 		"charger":
 			_lunge_dir = dir
