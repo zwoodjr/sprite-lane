@@ -217,18 +217,36 @@ func _spawn_enemy() -> void:
 	world.add_child(enemy)
 
 
-## Mix shifts toward chargers/brutes as the match runs and Threat rises.
+## Tier mix: T1 early → T2 as Threat rises → T3 on Last Extract.
 func _roll_enemy_kind() -> String:
+	const EnemyDefs = preload("res://scripts/data/enemy_defs.gd")
 	var progress := clampf(_match_time / 240.0, 0.0, 1.0)
 	var tl := float(GameState.threat_level)
-	var w_brute := 0.04 + 0.12 * progress + 0.06 * tl
-	var w_charger := 0.10 + 0.20 * progress + 0.05 * tl
+	var last_extract := false
+	if _phase_index >= 0 and _phase_index < _phases.size():
+		var ph: Dictionary = _phases[_phase_index]
+		last_extract = bool(ph.get("is_last", false)) or str(ph.get("id", "")) == "last_extract"
+	## Weights
+	var w3 := 0.0
+	var w2 := 0.05 + 0.18 * progress + 0.12 * tl
+	if last_extract:
+		w3 = 0.45 + 0.1 * tl
+		w2 = 0.35
+	elif tl >= 2.0:
+		w3 = 0.04 + 0.06 * (tl - 1.0)
+	var w1 := 1.0 - w2 - w3
 	var r := randf()
-	if r < w_brute:
-		return "brute"
-	if r < w_brute + w_charger:
-		return "charger"
-	return "raider"
+	var tier := 1
+	if r < w3:
+		tier = 3
+	elif r < w3 + w2:
+		tier = 2
+	else:
+		tier = 1
+	var pool: Array[String] = EnemyDefs.ids_for_tier(tier)
+	if pool.is_empty():
+		pool = EnemyDefs.ids_for_tier(1)
+	return pool[randi() % pool.size()]
 
 
 func _spawn_ambush() -> void:

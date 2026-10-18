@@ -1,6 +1,6 @@
 extends CharacterBody2D
 
-## Wasteland enemy with a few data-driven archetypes.
+## Wasteland enemy — sheet-locked looks via EnemyDefs; combat archetypes:
 ##   raider  – keeps mid range, telegraphs then fires single shots
 ##   charger – sprints in, winds up, lunges for contact damage
 ##   brute   – slow tank, fires a 3-bullet spread
@@ -9,24 +9,10 @@ extends CharacterBody2D
 signal died
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
+const EnemyDefs = preload("res://scripts/data/enemy_defs.gd")
 
-const KINDS := {
-	"raider": {
-		"hp": 40.0, "speed": 115.0, "damage": 8.0, "range": 300.0, "pref": 190.0,
-		"cooldown": 1.3, "windup": 0.38, "scale": 1.0, "tint": Color(1, 1, 1), "sprite": "res://assets/sprites/enemies/raider.png",
-		"scrap": Vector2i(1, 3), "xp": 3,
-	},
-	"charger": {
-		"hp": 28.0, "speed": 170.0, "damage": 14.0, "range": 140.0, "pref": 0.0,
-		"cooldown": 1.6, "windup": 0.45, "scale": 1.0, "tint": Color(1, 1, 1), "sprite": "res://assets/sprites/enemies/charger.png",
-		"scrap": Vector2i(1, 2), "xp": 3,
-	},
-	"brute": {
-		"hp": 130.0, "speed": 70.0, "damage": 7.0, "range": 330.0, "pref": 230.0,
-		"cooldown": 2.0, "windup": 0.6, "scale": 1.0, "tint": Color(1, 1, 1), "sprite": "res://assets/sprites/enemies/brute.png",
-		"scrap": Vector2i(3, 6), "xp": 8,
-	},
-}
+## Built from EnemyDefs (sheet crops). Legacy raider/charger/brute still resolve.
+static var KINDS: Dictionary = {}
 
 var kind: String = "raider"
 var hp: float = 40.0
@@ -53,6 +39,22 @@ var _warn: Polygon2D
 var _shadow: Polygon2D
 
 
+func _ensure_kinds() -> void:
+	if KINDS.is_empty():
+		KINDS = EnemyDefs.combat_kinds_table()
+
+
+func _archetype() -> String:
+	## Combat behavior bucket (raider / charger / brute). Kind id is the sheet slug.
+	var a := str(_def.get("archetype", ""))
+	if a != "":
+		return a
+	## Legacy ids
+	if kind in ["charger", "brute", "raider"]:
+		return kind
+	return "raider"
+
+
 func distract(seconds: float) -> void:
 	## Bentley bark — cancel wind-up / lunge and pause aggression briefly.
 	_distract_left = maxf(_distract_left, seconds)
@@ -63,9 +65,10 @@ func distract(seconds: float) -> void:
 		_warn.color.a = 0.0
 
 
-func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float = 1.0, kind_id: String = "raider") -> void:
+func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float = 1.0, kind_id: String = "rad_gator") -> void:
 	global_position = spawn_pos
-	kind = kind_id if KINDS.has(kind_id) else "raider"
+	_ensure_kinds()
+	kind = kind_id if KINDS.has(kind_id) else "rad_gator"
 	_def = KINDS[kind]
 	max_hp = float(_def["hp"]) * hp_mult
 	hp = max_hp
@@ -79,10 +82,11 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 
 func _ready() -> void:
 	add_to_group("enemies")
+	_ensure_kinds()
 	if _def.is_empty():
-		_def = KINDS["raider"]
+		_def = KINDS.get("rad_gator", {})
 	if body and body.texture == null:
-		body.texture = load("res://assets/sprites/enemies/raider.png")
+		body.texture = load(str(_def.get("sprite", "res://assets/sprites/enemies/rad_gator.png")))
 	## Wind-up warning: a pulsing red wedge toward the player.
 	_warn = Polygon2D.new()
 	_warn.polygon = PackedVector2Array([Vector2(16, -10), Vector2(70, 0), Vector2(16, 10)])
@@ -186,7 +190,7 @@ func _physics_process(delta: float) -> void:
 		chase *= 0.75
 	var pref := float(_def["pref"])
 	var want := Vector2.ZERO
-	if kind == "charger" or dist > pref:
+	if _archetype() == "charger" or dist > pref:
 		want = dir * chase
 	elif dist < pref * 0.6:
 		want = -dir * chase * 0.7
@@ -220,7 +224,7 @@ func _separation() -> Vector2:
 
 func _attack(dir: Vector2) -> void:
 	_fire_cd = float(_def["cooldown"]) * randf_range(0.85, 1.2)
-	match kind:
+	match _archetype():
 		"charger":
 			_lunge_dir = dir
 			_lunge_left = 0.22
@@ -251,7 +255,7 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 	Juice.float_text(global_position + Vector2(0, -26), str(int(round(amount))), Color(1, 0.92, 0.6), 16)
 	Juice.sfx("hit", -8.0)
 	if from_dir.length() > 0.01:
-		var resist := 0.35 if kind == "brute" else 1.0
+		var resist := 0.35 if _archetype() == "brute" else 1.0
 		_knock += from_dir.normalized() * 220.0 * resist
 	if hp <= 0.0:
 		_die()
@@ -268,8 +272,8 @@ func _die() -> void:
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
 	Juice.float_text(global_position + Vector2(0, -40), "+%d scrap" % scrap, UiTheme.AMBER, 15)
-	Juice.shake(0.12 if kind != "brute" else 0.3)
-	if kind == "brute":
+	Juice.shake(0.12 if _archetype() != "brute" else 0.3)
+	if _archetype() == "brute":
 		Juice.hitstop(0.06)
 	died.emit()
 	collision_layer = 0

@@ -180,6 +180,8 @@ func load_profile() -> void:
 	if mode_id in [ModeDefs.EASY_ID, ModeDefs.MEDIUM_ID]:
 		selected_mode_id = mode_id
 	var char_id := str(d.get("selected_character_id", selected_character_id))
+	if char_id == "rook_vex":
+		char_id = CharacterDefs.ASH_ROOK_ID
 	if CharacterDefs.is_playable(char_id):
 		selected_character_id = char_id
 	var pet_id := str(d.get("selected_pet_id", selected_pet_id))

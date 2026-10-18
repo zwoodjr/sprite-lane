@@ -92,7 +92,7 @@ func _apply_loadout() -> void:
 	_ability = _char.get("ability", {})
 	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
-	body.texture = load(str(_char.get("sprite", "res://assets/sprites/characters/rook_vex.png"))) as Texture2D
+	body.texture = load(str(_char.get("sprite", "res://assets/sprites/characters/ash_rook.png"))) as Texture2D
 	_sync_body_fov_scale()
 	label.text = str(_char.get("display_name", "Wanderer"))
 	label.add_theme_font_size_override("font_size", 11)

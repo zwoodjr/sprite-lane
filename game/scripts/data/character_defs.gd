@@ -1,31 +1,37 @@
 class_name CharacterDefs
 extends RefCounted
 
-## Data-driven character table. MVP playable = Rook + Cinder only.
-## Future roster IDs are stubbed (locked) so adding a character is mostly data.
+## Sheet-look roster (locked crops) with Wanderer names.
+## Source: wasteland-select-white-bg.jpg slots 1–8.
 
-const ROOK_ID := "rook_vex"
+const ASH_ROOK_ID := "ash_rook"
+const VESPER_THORN_ID := "vesper_thorn"
+const PEBBLE_ID := "pebble"
+const BOLT_JUNO_ID := "bolt_juno"
 const CINDER_ID := "sister_cinder"
+const QUILL_MARROW_ID := "quill_marrow"
+const NYX_CALDERA_ID := "nyx_caldera"
+const HELM_WISP_ID := "helm_wisp"
 
-## Playable in MVP character select.
-const PLAYABLE_IDS: Array[String] = [ROOK_ID, CINDER_ID]
+## Legacy alias — old saves / scripts that still say rook_vex.
+const ROOK_ID := ASH_ROOK_ID
 
-## Long-term roster stubs (≥10). Unique abilities + specialized gear unlocks TBD in design.
-## Do not expose locked entries in UI until implemented.
-const FUTURE_IDS: Array[String] = [
-	"ash_kestrel",
-	"quill_marrow",
-	"iron_brig",
-	"salt_widow",
-	"glow_wick",
-	"tinker_mole",
-	"red_circuit",
-	"dust_oracle",
+const PLAYABLE_IDS: Array[String] = [
+	ASH_ROOK_ID,
+	VESPER_THORN_ID,
+	PEBBLE_ID,
+	BOLT_JUNO_ID,
+	CINDER_ID,
+	QUILL_MARROW_ID,
+	NYX_CALDERA_ID,
+	HELM_WISP_ID,
 ]
+
+## Deprecated stubs kept so old profile keys resolve without crashing.
+const FUTURE_IDS: Array[String] = []
 
 
 static func all_characters() -> Array[Dictionary]:
-	## MVP select list only.
 	var out: Array[Dictionary] = []
 	for id in PLAYABLE_IDS:
 		out.append(get_character(id))
@@ -33,60 +39,151 @@ static func all_characters() -> Array[Dictionary]:
 
 
 static func all_known_ids() -> Array[String]:
-	var out: Array[String] = []
-	out.append_array(PLAYABLE_IDS)
-	out.append_array(FUTURE_IDS)
-	return out
+	return PLAYABLE_IDS.duplicate()
 
 
 static func is_playable(char_id: String) -> bool:
-	return char_id in PLAYABLE_IDS
+	var id := _canonicalize(char_id)
+	return id in PLAYABLE_IDS
 
 
 static func get_character(char_id: String) -> Dictionary:
+	var id := _canonicalize(char_id)
 	var table := _table()
-	if table.has(char_id):
-		return (table[char_id] as Dictionary).duplicate(true)
-	## Fallback Rook
-	return (table[ROOK_ID] as Dictionary).duplicate(true)
+	if table.has(id):
+		return (table[id] as Dictionary).duplicate(true)
+	return (table[ASH_ROOK_ID] as Dictionary).duplicate(true)
+
+
+static func _canonicalize(char_id: String) -> String:
+	if char_id == "rook_vex":
+		return ASH_ROOK_ID
+	return char_id
 
 
 static func _table() -> Dictionary:
 	return {
-		ROOK_ID: {
-			"id": ROOK_ID,
-			"display_name": "Rook Vex",
-			"fantasy": "Wasteland scavenger — smells Scrap before the smoke clears",
+		ASH_ROOK_ID: {
+			"id": ASH_ROOK_ID,
+			"display_name": "Ash Rook",
+			"fantasy": "Heavy ordnance scavenger — scrap boom, long wind-up",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/rook_vex.png",
-			"color": Color(0.55, 0.62, 0.45),
-			"accent": Color(0.90, 0.72, 0.28),
+			"sprite": "res://assets/sprites/characters/ash_rook.png",
+			"color": Color(0.75, 0.35, 0.28),
+			"accent": Color(0.95, 0.55, 0.25),
 			"perks": [
+				{"id": "scrap_boom", "name": "Scrap Boom", "desc": "Launcher hits splash a little harder."},
 				{"id": "pocket_rattle", "name": "Pocket Rattle", "desc": "+rare-drop weight while Stay Bonus ticks."},
-				{"id": "strip_stash", "name": "Strip & Stash", "desc": "Slightly faster loot / move when near crates."},
 				{"id": "second_glance", "name": "Second Glance", "desc": "Free crate ping each extract window."},
 			],
-			"equipment_unlocks": [], ## specialized gear hooks later
+			"equipment_unlocks": [],
 			"ability": {
 				"id": "rattle_rush", "name": "Rattle Rush", "short": "RUSH",
 				"desc": "3s sprint burst + pings every crate within 90m.",
 				"cooldown": 14.0, "duration": 3.0, "speed_mult": 1.45,
 			},
-			"move_speed_mult": 1.06,
-			"max_hp_bonus": 0,
-			"damage_mult": 1.05,
+			"move_speed_mult": 0.96,
+			"max_hp_bonus": 10,
+			"damage_mult": 1.12,
 			"heal_amount": 0,
 			"heal_cd": 999.0,
 			"post_heal_firerate_mult": 1.0,
 			"post_heal_duration": 0.0,
 			"has_last_stitch": false,
 			"loot_weight_bonus": 0.15,
-			"interact_speed_mult": 1.2,
+			"interact_speed_mult": 1.15,
+		},
+		VESPER_THORN_ID: {
+			"id": VESPER_THORN_ID,
+			"display_name": "Vesper Thorn",
+			"fantasy": "Dust-apothecary marksman — coated rounds from the belt vials",
+			"playable": true,
+			"sprite": "res://assets/sprites/characters/vesper_thorn.png",
+			"color": Color(0.55, 0.35, 0.70),
+			"accent": Color(0.70, 0.45, 0.90),
+			"perks": [
+				{"id": "coated_rounds", "name": "Coated Rounds", "desc": "Shots apply a light DoT tick."},
+				{"id": "steady_scope", "name": "Steady Scope", "desc": "Slightly longer effective range."},
+			],
+			"equipment_unlocks": [],
+			"ability": {
+				"id": "vial_shot", "name": "Vial Shot", "short": "COAT",
+				"desc": "Next magazine deals bonus toxin damage for 4s.",
+				"cooldown": 13.0, "duration": 4.0, "damage_mult": 1.35,
+			},
+			"move_speed_mult": 1.0,
+			"max_hp_bonus": 0,
+			"damage_mult": 1.08,
+			"heal_amount": 0,
+			"heal_cd": 999.0,
+			"post_heal_firerate_mult": 1.0,
+			"post_heal_duration": 0.0,
+			"has_last_stitch": false,
+			"loot_weight_bonus": 0.05,
+			"interact_speed_mult": 1.0,
+		},
+		PEBBLE_ID: {
+			"id": PEBBLE_ID,
+			"display_name": "Pebble",
+			"fantasy": "Small frame, oversized scrap hammer — crack the line",
+			"playable": true,
+			"sprite": "res://assets/sprites/characters/pebble.png",
+			"color": Color(0.85, 0.80, 0.75),
+			"accent": Color(0.95, 0.45, 0.55),
+			"perks": [
+				{"id": "heavy_swing", "name": "Heavy Swing", "desc": "Melee-range shots hit harder."},
+				{"id": "low_profile", "name": "Low Profile", "desc": "Slightly smaller hitbox feel (speed on)."},
+			],
+			"equipment_unlocks": [],
+			"ability": {
+				"id": "maul_slam", "name": "Maul Slam", "short": "SLAM",
+				"desc": "Dash forward and smash — burst damage nearby foes.",
+				"cooldown": 11.0, "duration": 0.6, "speed_mult": 1.6,
+			},
+			"move_speed_mult": 1.08,
+			"max_hp_bonus": 5,
+			"damage_mult": 1.15,
+			"heal_amount": 0,
+			"heal_cd": 999.0,
+			"post_heal_firerate_mult": 1.0,
+			"post_heal_duration": 0.0,
+			"has_last_stitch": false,
+			"loot_weight_bonus": 0.0,
+			"interact_speed_mult": 1.05,
+		},
+		BOLT_JUNO_ID: {
+			"id": BOLT_JUNO_ID,
+			"display_name": "Bolt Juno",
+			"fantasy": "Boosted scrap-fist + flail pull — yank, then punch",
+			"playable": true,
+			"sprite": "res://assets/sprites/characters/bolt_juno.png",
+			"color": Color(0.80, 0.25, 0.22),
+			"accent": Color(0.95, 0.40, 0.30),
+			"perks": [
+				{"id": "chain_pull", "name": "Chain Pull", "desc": "Abilities drag foes slightly closer."},
+				{"id": "gauntlet", "name": "Gauntlet", "desc": "+armor feel via extra HP."},
+			],
+			"equipment_unlocks": [],
+			"ability": {
+				"id": "flail_yank", "name": "Flail Yank", "short": "YANK",
+				"desc": "Pull nearest foe and punch — brief damage spike.",
+				"cooldown": 12.0, "duration": 1.2, "damage_mult": 1.4,
+			},
+			"move_speed_mult": 1.02,
+			"max_hp_bonus": 20,
+			"damage_mult": 1.05,
+			"heal_amount": 0,
+			"heal_cd": 999.0,
+			"post_heal_firerate_mult": 1.0,
+			"post_heal_duration": 0.0,
+			"has_last_stitch": false,
+			"loot_weight_bonus": 0.0,
+			"interact_speed_mult": 1.0,
 		},
 		CINDER_ID: {
 			"id": CINDER_ID,
 			"display_name": "Sister Cinder",
-			"fantasy": "Road sawbones — bandage, tonic, and bolt-gun triage",
+			"fantasy": "Field medic — medkit + bayonet spray",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/sister_cinder.png",
 			"color": Color(0.85, 0.45, 0.35),
@@ -113,38 +210,91 @@ static func _table() -> Dictionary:
 			"loot_weight_bonus": 0.0,
 			"interact_speed_mult": 1.0,
 		},
-		## --- Locked stubs (not in select UI) ---
-		"ash_kestrel": _stub("ash_kestrel", "Ash Kestrel", "Outrider — convoy ghost"),
-		"quill_marrow": _stub("quill_marrow", "Quill Marrow", "Alchemist-gunner"),
-		"iron_brig": _stub("iron_brig", "Iron Brig", "Scrap bulwark"),
-		"salt_widow": _stub("salt_widow", "Salt Widow", "Long-range dust sniper"),
-		"glow_wick": _stub("glow_wick", "Glow Wick", "Lantern mystic"),
-		"tinker_mole": _stub("tinker_mole", "Tinker Mole", "Trapwright"),
-		"red_circuit": _stub("red_circuit", "Red Circuit", "Jury-rigged drone caller"),
-		"dust_oracle": _stub("dust_oracle", "Dust Oracle", "Threat-reader"),
-	}
-
-
-static func _stub(id: String, name: String, fantasy: String) -> Dictionary:
-	return {
-		"id": id,
-		"display_name": name,
-		"fantasy": fantasy,
-		"playable": false,
-		"sprite": "res://assets/sprites/characters/rook_vex.png",
-		"color": Color(0.5, 0.5, 0.5),
-		"accent": Color(0.7, 0.7, 0.7),
-		"perks": [],
-		"equipment_unlocks": [],
-		"move_speed_mult": 1.0,
-		"max_hp_bonus": 0,
-		"damage_mult": 1.0,
-		"heal_amount": 0,
-		"heal_cd": 999.0,
-		"post_heal_firerate_mult": 1.0,
-		"post_heal_duration": 0.0,
-		"has_last_stitch": false,
-		"loot_weight_bonus": 0.0,
-		"interact_speed_mult": 1.0,
-		"locked": true,
+		QUILL_MARROW_ID: {
+			"id": QUILL_MARROW_ID,
+			"display_name": "Quill Marrow",
+			"fantasy": "Dustcoat swordsman — slash dash through the pack",
+			"playable": true,
+			"sprite": "res://assets/sprites/characters/quill_marrow.png",
+			"color": Color(0.55, 0.42, 0.28),
+			"accent": Color(0.90, 0.78, 0.40),
+			"perks": [
+				{"id": "slash_dash", "name": "Slash Dash", "desc": "Dash leaves a brief damage trail."},
+				{"id": "dustcoat", "name": "Dustcoat", "desc": "Slightly faster move."},
+			],
+			"equipment_unlocks": [],
+			"ability": {
+				"id": "blade_rush", "name": "Blade Rush", "short": "SLASH",
+				"desc": "Dash through foes, damaging what you pass.",
+				"cooldown": 10.0, "duration": 0.55, "speed_mult": 1.85,
+			},
+			"move_speed_mult": 1.1,
+			"max_hp_bonus": 0,
+			"damage_mult": 1.1,
+			"heal_amount": 0,
+			"heal_cd": 999.0,
+			"post_heal_firerate_mult": 1.0,
+			"post_heal_duration": 0.0,
+			"has_last_stitch": false,
+			"loot_weight_bonus": 0.0,
+			"interact_speed_mult": 1.0,
+		},
+		NYX_CALDERA_ID: {
+			"id": NYX_CALDERA_ID,
+			"display_name": "Nyx Caldera",
+			"fantasy": "Heavy rifle — suppress & advance",
+			"playable": true,
+			"sprite": "res://assets/sprites/characters/nyx_caldera.png",
+			"color": Color(0.30, 0.45, 0.75),
+			"accent": Color(0.45, 0.65, 0.95),
+			"perks": [
+				{"id": "suppress", "name": "Suppress", "desc": "Sustained fire slows nearby foes slightly."},
+				{"id": "advance", "name": "Advance", "desc": "Moving while shooting loses less accuracy feel."},
+			],
+			"equipment_unlocks": [],
+			"ability": {
+				"id": "suppressing_fire", "name": "Suppressing Fire", "short": "SUPP",
+				"desc": "5s fire-rate surge — lock the lane down.",
+				"cooldown": 14.0, "duration": 5.0,
+			},
+			"move_speed_mult": 0.97,
+			"max_hp_bonus": 8,
+			"damage_mult": 1.1,
+			"heal_amount": 0,
+			"heal_cd": 999.0,
+			"post_heal_firerate_mult": 1.0,
+			"post_heal_duration": 0.0,
+			"has_last_stitch": false,
+			"loot_weight_bonus": 0.0,
+			"interact_speed_mult": 1.0,
+		},
+		HELM_WISP_ID: {
+			"id": HELM_WISP_ID,
+			"display_name": "Helm Wisp",
+			"fantasy": "Pilot-rig drone assist + sidearm",
+			"playable": true,
+			"sprite": "res://assets/sprites/characters/helm_wisp.png",
+			"color": Color(0.40, 0.55, 0.40),
+			"accent": Color(0.55, 0.85, 0.55),
+			"perks": [
+				{"id": "drone_spot", "name": "Drone Spot", "desc": "Periodically reveals nearest crate."},
+				{"id": "sidearm", "name": "Sidearm", "desc": "Slight fire-rate bump."},
+			],
+			"equipment_unlocks": [],
+			"ability": {
+				"id": "rig_assist", "name": "Rig Assist", "short": "DRONE",
+				"desc": "Call a brief drone buff: +move and +fire rate for 4s.",
+				"cooldown": 13.0, "duration": 4.0, "speed_mult": 1.25,
+			},
+			"move_speed_mult": 1.04,
+			"max_hp_bonus": 0,
+			"damage_mult": 1.0,
+			"heal_amount": 0,
+			"heal_cd": 999.0,
+			"post_heal_firerate_mult": 1.0,
+			"post_heal_duration": 0.0,
+			"has_last_stitch": false,
+			"loot_weight_bonus": 0.08,
+			"interact_speed_mult": 1.1,
+		},
 	}

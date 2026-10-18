@@ -44,7 +44,7 @@ func _run() -> void:
 		await get_tree().process_frame
 	print("MENUS_OK")
 	## 3. Match with a bot, per character and mode
-	var chars: Array = ["rook_vex", "sister_cinder"]
+	var chars: Array = ["ash_rook", "sister_cinder"]
 	var modes: Array = ["easy", "medium"]
 	for i in range(2):
 		GameState.selected_character_id = chars[i]
