@@ -78,7 +78,7 @@ func _ready() -> void:
 	hp = max_hp
 	health_changed.emit(hp, max_hp)
 	mount_visual.visible = false
-	mount_visual.texture = load("res://assets/sprites/mounts/skateboard.png")
+	_refresh_mount_visual()
 	_build_visuals()
 	if camera.has_method("set_target"):
 		camera.call("set_target", self)
@@ -119,8 +119,18 @@ func _sync_body_fov_scale() -> void:
 	body.scale = Vector2.ONE * _body_base_scale
 	_walk.set_base_scale(_body_base_scale)
 
+func _refresh_mount_visual() -> void:
+	var mid := str(_mount.get("id", "skateboard"))
+	var path := "res://assets/sprites/mounts/%s.png" % mid
+	if not ResourceLoader.exists(path):
+		path = "res://assets/sprites/mounts/skateboard.png"
+	mount_visual.texture = load(path)
+
+
 func _on_loadout_changed() -> void:
 	## In-run upgrade pick or meta refresh mid-match.
+	_mount = GameState.mount
+	_refresh_mount_visual()
 	var old_max := max_hp
 	_refresh_run_stats(false)
 	if max_hp > old_max:
@@ -568,7 +578,8 @@ func _try_shoot() -> void:
 		aim,
 		float(_weapon.get("projectile_speed", 720.0)),
 		float(_weapon.get("damage", 12)) * damage_mult * _buff_damage(),
-		true
+		true,
+		self
 	)
 	get_tree().current_scene.add_child(bullet)
 	_recoil = 5.0
@@ -600,10 +611,10 @@ func get_reload_ratio() -> float:
 func take_damage(amount: float, attacker: Node = null) -> void:
 	if _iframes > 0.0 or hp <= 0.0:
 		return
-	var dmg := amount * resist_mult
+	var dmg := float(amount) * resist_mult
 	hp -= dmg
 	_iframes = 0.12
-	if attacker != null and is_instance_valid(attacker):
+	if attacker != null and is_instance_valid(attacker) and attacker != self:
 		attacked.emit(attacker)
 	Juice.sfx("hurt")
 	Juice.shake(0.28)
