@@ -80,8 +80,10 @@ func _show_main() -> void:
 			_confirm_abandon = true
 			quit.text = "TAP AGAIN — counts as a wipe"
 			return
-		GameState.on_wipe()
-		GameState.result_summary = "Abandoned the run.\n" + GameState.result_summary
+		## If extract/wipe already banked during the end delay, don't double-count.
+		if not GameState.run_already_ended():
+			GameState.on_wipe()
+			GameState.result_summary = "Abandoned the run.\n" + GameState.result_summary
 		get_tree().paused = false
 		GameState.go_result()
 	)

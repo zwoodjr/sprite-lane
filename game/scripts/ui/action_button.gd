@@ -76,16 +76,17 @@ func _draw() -> void:
 	var fill := tint.darkened(0.55 if not held else 0.3)
 	draw_circle(c, r, Color(fill.r, fill.g, fill.b, 0.82 * a))
 	draw_arc(c, r - 1.5, 0.0, TAU, 48, Color(tint.r, tint.g, tint.b, a), 3.0, true)
-	## Cooldown sweep
-	if cooldown_ratio > 0.01:
-		var pts := PackedVector2Array([c])
+	## Cooldown sweep — skip hairline wedges (Godot triangulator errors on degenerate polys).
+	if cooldown_ratio > 0.04:
 		var start := -PI * 0.5
-		var end := start + TAU * cooldown_ratio
-		var steps := 32
+		var span := TAU * clampf(cooldown_ratio, 0.0, 1.0)
+		var steps := maxi(3, int(ceil(span / (TAU / 32.0))))
+		var pts := PackedVector2Array([c])
 		for i in range(steps + 1):
-			var ang := lerpf(start, end, float(i) / steps)
+			var ang := start + span * (float(i) / float(steps))
 			pts.append(c + Vector2(cos(ang), sin(ang)) * (r - 3.0))
-		draw_colored_polygon(pts, Color(0, 0, 0, 0.55))
+		if pts.size() >= 3:
+			draw_colored_polygon(pts, Color(0, 0, 0, 0.55))
 	## Text
 	var font := ThemeDB.fallback_font
 	var fs := int(r * 0.36)

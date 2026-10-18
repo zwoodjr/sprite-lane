@@ -65,7 +65,8 @@ var _drone_cd: float = 1.0
 @onready var camera: Camera2D = $Camera2D
 
 ## Sheet-detail heroes at survivor portrait FOV (~1/14 of 720-wide).
-const BODY_FOV_PX := 52.0
+## Slightly larger heroes for readability (Phase 1).
+const BODY_FOV_PX := 60.0
 var _body_base_scale: float = 1.0
 var _walk: RefCounted = UnitAnim.new()
 var _attack_flash: float = 0.0
@@ -280,7 +281,15 @@ func _update_aim_and_fire(_delta: float) -> void:
 	if TouchInput.is_single_stick() and TouchInput.is_move_aiming() and TouchInput.is_auto_fire():
 		show_guide = true
 	_aim_line.visible = show_guide
-	if TouchInput.is_firing() and _reload_left <= 0.0 and _dash_left <= 0.0:
+	var want_fire := TouchInput.is_firing() and _reload_left <= 0.0 and _dash_left <= 0.0
+	## Auto-fire only when an enemy is on screen (no dumping mag into empty dust).
+	if want_fire and TouchInput.is_auto_fire() and not TouchInput.fire_held and not TouchInput.aim_stick_firing:
+		if not _has_on_screen_enemy():
+			want_fire = false
+			## Idle / no target: start reload instead of dry-firing the mag empty.
+			if _ammo < _mag_size() and _reload_left <= 0.0 and velocity.length() < 40.0:
+				_start_reload()
+	if want_fire:
 		_try_shoot()
 	if Input.is_action_just_pressed("reload") and _ammo < _mag_size() and _reload_left <= 0.0:
 		_start_reload()
@@ -537,12 +546,16 @@ func _assisted(stick: Vector2) -> Vector2:
 	if strength <= 0.01:
 		return stick
 	var cone := deg_to_rad(8.0 + 14.0 * strength)
+	var view := _camera_view_rect().grow(24.0)
 	var best: Vector2 = Vector2.ZERO
 	var best_score := INF
 	for n in get_tree().get_nodes_in_group("enemies"):
 		if not (n is Node2D) or not is_instance_valid(n):
 			continue
-		var to := (n as Node2D).global_position - global_position
+		var e := n as Node2D
+		if not view.has_point(e.global_position):
+			continue
+		var to := e.global_position - global_position
 		var d := to.length()
 		if d > 620.0 or d < 1.0:
 			continue
@@ -558,18 +571,43 @@ func _assisted(stick: Vector2) -> Vector2:
 	return stick.slerp(best, 0.55 + 0.35 * strength).normalized()
 
 func _nearest_enemy_dir(max_d: float) -> Vector2:
+	## Auto-aim must not target off-screen enemies.
+	var best: Node2D = _nearest_on_screen_enemy(max_d)
+	if best == null:
+		return Vector2.ZERO
+	return (best.global_position - global_position).normalized()
+
+
+func _camera_view_rect() -> Rect2:
+	var cam := get_viewport().get_camera_2d()
+	if cam == null:
+		## Fallback: generous circle around the player.
+		return Rect2(global_position - Vector2(400, 700), Vector2(800, 1400))
+	var vp := get_viewport().get_visible_rect().size
+	var half := (vp / cam.zoom) * 0.5
+	var center: Vector2 = cam.get_screen_center_position() if cam.has_method("get_screen_center_position") else cam.global_position
+	return Rect2(center - half, half * 2.0)
+
+
+func _has_on_screen_enemy() -> bool:
+	return _nearest_on_screen_enemy(2400.0) != null
+
+
+func _nearest_on_screen_enemy(max_d: float) -> Node2D:
+	var view := _camera_view_rect().grow(24.0)
 	var best: Node2D = null
 	var best_d := max_d
 	for n in get_tree().get_nodes_in_group("enemies"):
 		if not (n is Node2D) or not is_instance_valid(n):
 			continue
-		var d := global_position.distance_to((n as Node2D).global_position)
+		var e := n as Node2D
+		if not view.has_point(e.global_position):
+			continue
+		var d := global_position.distance_to(e.global_position)
 		if d < best_d:
 			best_d = d
-			best = n as Node2D
-	if best == null:
-		return Vector2.ZERO
-	return (best.global_position - global_position).normalized()
+			best = e
+	return best
 
 func _try_shoot() -> void:
 	if _fire_cd > 0.0 or _burst_left > 0:
@@ -716,7 +754,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		return
 	## Dust Sidestep — full avoid (soft-capped in GameState).
 	if randf() < GameState.dodge_chance():
-		_iframes = 0.08
+		_iframes = 0.35
 		Juice.float_text(global_position + Vector2(0, -30), "DODGE", UiTheme.TEAL, 16)
 		Juice.sfx("dash", -8.0)
 		return
@@ -726,7 +764,8 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		dmg *= 0.5
 		Juice.float_text(global_position + Vector2(0, -42), "BLOCK", UiTheme.AMBER, 14)
 	hp -= dmg
-	_iframes = 0.12
+	## Fair hits: ~0.5s i-frames so one mistake isn't a full wipe (was 0.12s).
+	_iframes = 0.5
 	if attacker != null and is_instance_valid(attacker) and attacker != self:
 		attacked.emit(attacker)
 	Juice.sfx("hurt")

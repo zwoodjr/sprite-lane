@@ -5,8 +5,8 @@ extends CharacterBody2D
 signal rampage_started(target: Node)
 signal rampage_ended
 
-## Pets sit near hero FOV so companions aren't tiny ants beside the cast.
-const BODY_FOV_PX := 50.0
+## Pets must read smaller than heroes (were oversized vs 60px heroes).
+const BODY_FOV_PX := 38.0
 
 var _def: Dictionary = {}
 var _player: Node2D

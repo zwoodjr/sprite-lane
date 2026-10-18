@@ -9,6 +9,7 @@ extends CharacterBody2D
 signal died
 
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
+const PickupScene := preload("res://scenes/entities/powerup_pickup.tscn")
 ## Built from EnemyDefs (sheet crops). Legacy raider/charger/brute still resolve.
 static var KINDS: Dictionary = {}
 
@@ -36,7 +37,9 @@ var _body_base_scale: float = 1.0
 @onready var body: Sprite2D = $Body
 @onready var hp_bar: ProgressBar = $HpBar
 
-var _warn: Polygon2D
+var _warn: Node2D
+var _warn_alpha: float = 0.0
+var _warn_scale_x: float = 1.0
 var _shadow: Polygon2D
 
 ## Slightly larger than heroes (52) so wasteland sheet mobs read at survivor FOV.
@@ -63,7 +66,8 @@ func distract(seconds: float) -> void:
 	_lunge_left = 0.0
 	_fire_cd = maxf(_fire_cd, seconds)
 	if _warn:
-		_warn.color.a = 0.0
+		_warn_alpha = 0.0
+		_warn.queue_redraw()
 
 func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float = 1.0, kind_id: String = "rad_gator") -> void:
 	global_position = spawn_pos
@@ -86,11 +90,10 @@ func _ready() -> void:
 		_def = KINDS.get("rad_gator", {})
 	if body and body.texture == null:
 		body.texture = load(str(_def.get("sprite", "res://assets/sprites/enemies/rad_gator.png")))
-	## Wind-up warning: a pulsing red wedge toward the player.
-	_warn = Polygon2D.new()
-	_warn.polygon = PackedVector2Array([Vector2(16, -10), Vector2(70, 0), Vector2(16, 10)])
-	_warn.color = Color(1.0, 0.25, 0.15, 0.0)
+	## Wind-up warning: drawn wedge (avoid Polygon2D triangulation failures on thin scales).
+	_warn = Node2D.new()
 	_warn.z_index = 2
+	_warn.draw.connect(_draw_warn)
 	add_child(_warn)
 	_style_bar()
 	_apply_look()
@@ -182,14 +185,16 @@ func _physics_process(delta: float) -> void:
 		_windup_left -= delta
 		_warn.rotation = dir.angle()
 		var k := 1.0 - _windup_left / float(_def["windup"])
-		_warn.color.a = 0.25 + 0.55 * k
-		_warn.scale = Vector2(0.6 + 0.6 * k, 1.0)
+		_warn_alpha = 0.35 + 0.55 * k
+		_warn_scale_x = 0.75 + 0.45 * k
+		_warn.queue_redraw()
 		velocity = velocity.move_toward(Vector2.ZERO, 900.0 * delta) + _knock
 		move_and_slide()
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 		_tick_walk_anim(delta, true)
 		if _windup_left <= 0.0:
-			_warn.color.a = 0.0
+			_warn_alpha = 0.0
+			_warn.queue_redraw()
 			_attack(dir)
 		return
 
@@ -197,12 +202,17 @@ func _physics_process(delta: float) -> void:
 		_lunge_left -= delta
 		velocity = _lunge_dir * speed * 3.4
 		move_and_slide()
+		## Refresh dist after the slide — lunge closes far more than the old 26px check.
+		if _player != null and is_instance_valid(_player):
+			dist = global_position.distance_to(_player.global_position)
 		for i in range(get_slide_collision_count()):
 			var col := get_slide_collision(i).get_collider()
 			if col and col.is_in_group("player") and col.has_method("take_damage"):
 				col.take_damage(damage, self)
 				_lunge_left = 0.0
-		if dist < 26.0 and _player.has_method("take_damage"):
+		## Contact radius covers player (14) + enemy body (~16) + lunge overshoot.
+		const LUNGE_HIT_RANGE := 52.0
+		if dist < LUNGE_HIT_RANGE and _player != null and _player.has_method("take_damage"):
 			_player.take_damage(damage, self)
 			_lunge_left = 0.0
 		_tick_walk_anim(delta, true)
@@ -228,6 +238,24 @@ func _physics_process(delta: float) -> void:
 		_windup_left = float(_def["windup"])
 		if randf() < 0.3:
 			_strafe_sign *= -1.0
+
+func _draw_warn() -> void:
+	if _warn_alpha <= 0.01:
+		return
+	var sx := maxf(_warn_scale_x, 0.7)
+	var tip := Vector2(72.0 * sx, 0.0)
+	var left := Vector2(14.0, -12.0)
+	var right := Vector2(14.0, 12.0)
+	## Bright outline flash so telegraphs read on dusty ground.
+	_warn.draw_colored_polygon(
+		PackedVector2Array([left - Vector2(2, 0), tip + Vector2(4, 0), right - Vector2(2, 0)]),
+		Color(1.0, 0.95, 0.55, _warn_alpha * 0.55)
+	)
+	_warn.draw_colored_polygon(
+		PackedVector2Array([left, tip, right]),
+		Color(1.0, 0.22, 0.12, _warn_alpha)
+	)
+
 
 func _tick_walk_anim(delta: float, attacking: bool) -> void:
 	if body == null:
@@ -287,6 +315,19 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 	if hp <= 0.0:
 		_die()
 
+func _spawn_health_drop() -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var pickup: Area2D = PickupScene.instantiate()
+	scene.add_child(pickup)
+	pickup.global_position = global_position + Vector2(randf_range(-12, 12), randf_range(-8, 8))
+	var heal := PowerupDefs.get_by_id("heal")
+	heal["instant_heal"] = 12.0
+	heal["name"] = "Scrap Salve"
+	pickup.call("setup", heal)
+
+
 func _die() -> void:
 	_dead = true
 	remove_from_group("enemies")
@@ -298,13 +339,18 @@ func _die() -> void:
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
 	Juice.float_text(global_position + Vector2(0, -40), "+%d scrap" % scrap, UiTheme.AMBER, 15)
+	## Small health drops from kills (Phase 1 fair-hits loop).
+	if randf() < 0.22:
+		_spawn_health_drop.call_deferred()
 	Juice.shake(0.12 if _archetype() != "brute" else 0.3)
 	if _archetype() == "brute":
 		Juice.hitstop(0.06)
 	died.emit()
 	collision_layer = 0
-	_warn.visible = false
-	hp_bar.visible = false
+	if _warn:
+		_warn.visible = false
+	if hp_bar:
+		hp_bar.visible = false
 	var tw := create_tween().set_parallel(true)
 	var sc := float(_def.get("scale", 1.0))
 	tw.tween_property(body, "scale", Vector2(1.4, 0.2) * sc, 0.16)

@@ -121,7 +121,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "endurance",
 			"name": "Dust Lungs",
-			"desc": "+4% dash i-frame length per rank (stamina stub until a stamina bar ships)",
+			"desc": "+4% dash i-frame length per rank",
 			"cost": 80,
 			"cost_step": 48,
 			"cost_curve": 1.38,
@@ -133,7 +133,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "scrap_find",
 			"name": "Magnet Fingers",
-			"desc": "+8% scrap found in-run per rank (diminishing feel via cost curve)",
+			"desc": "+8% scrap found in-run per rank",
 			"cost": 75,
 			"cost_step": 50,
 			"cost_curve": 1.4,
@@ -299,22 +299,10 @@ static func hangar_catalog() -> Array[Dictionary]:
 			"per_rank": 0.05,
 		},
 		{
-			"id": "hangar_notes",
-			"name": "Field Notes",
-			"desc": "Unlock stub — hangar lore scrap (cosmetic for now)",
-			"cost": 60,
-			"cost_step": 40,
-			"cost_curve": 1.2,
-			"max_rank": 3,
-			"min_account_level": 1,
-			"effect": "notes",
-			"per_rank": 1.0,
-		},
-		{
 			## Hidden until a real loadout / stash screen ships — buying slots with nowhere to assign them is confusing.
 			"id": "insurance_slot",
 			"name": "Extra Tape",
-			"desc": "+1 insurance slot (needs Loadout screen — coming later)",
+			"desc": "+1 insurance slot",
 			"cost": 200,
 			"cost_step": 120,
 			"cost_curve": 1.5,

@@ -1,7 +1,6 @@
 extends "res://scripts/ui/menu_base.gd"
 
 var _cards: Dictionary = {}
-var _fast: Button
 
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
@@ -28,17 +27,6 @@ func build(c: VBoxContainer) -> void:
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 14)
 	c.add_child(bottom)
-	_fast = Button.new()
-	_fast.toggle_mode = true
-	_fast.focus_mode = Control.FOCUS_NONE
-	_fast.button_pressed = GameState.fast_timers
-	_fast.custom_minimum_size = Vector2(0, 52)
-	_fast.add_theme_font_size_override("font_size", 14)
-	_fast.toggled.connect(func(on: bool) -> void:
-		GameState.fast_timers = on
-		_refresh()
-	)
-	bottom.add_child(_fast)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(sp)
@@ -135,4 +123,3 @@ func _refresh() -> void:
 		for s in ["normal", "hover", "pressed", "hover_pressed"]:
 			b.add_theme_stylebox_override(s, UiTheme.box(bg, col, 20, 4 if on else 2, 18))
 		(_cards[id]["tick"] as Label).text = "✓ SELECTED" if on else ""
-	_fast.text = "Dev: quick-test timers %s" % ("ON (12%)" if GameState.fast_timers else "OFF")

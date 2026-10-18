@@ -69,6 +69,18 @@ func _ready() -> void:
 	if GameState.fast_timers:
 		_radio_ping_at = 1.2
 
+
+func _notification(what: int) -> void:
+	## Auto-pause when the app backgrounds (iOS home / Xogot switch).
+	if _ended:
+		return
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		if is_instance_valid(hud) and hud.has_method("_open_pause"):
+			hud.call("_open_pause")
+		elif not get_tree().paused:
+			get_tree().paused = true
+			TouchInput.clear_sticks()
+
 func _spawn_pet() -> void:
 	if not is_instance_valid(player):
 		return

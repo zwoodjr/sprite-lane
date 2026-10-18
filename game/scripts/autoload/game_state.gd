@@ -37,7 +37,9 @@ var tank_dev_flag: bool = false
 
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
+## One-time garage_tokens → scrap migration (never re-run when scrap hits 0).
+var garage_tokens_migrated: bool = false
 var settings: Dictionary = {
 	"sfx": true,
 	"haptics": true,
@@ -122,6 +124,7 @@ func save_profile() -> void:
 		"account_level": account_level,
 		"meta_upgrades": meta_upgrades,
 		"garage_tokens": garage_tokens,
+		"garage_tokens_migrated": garage_tokens_migrated,
 		"successful_extracts": successful_extracts,
 		"mount_unlock_tier": mount_unlock_tier,
 		"best_payout": best_payout,
@@ -155,13 +158,20 @@ func load_profile() -> void:
 	account_scrap = int(d.get("account_scrap", 0))
 	## Migrate v1/v2: old saves had account_xp as pseudo-power; keep XP, prefer scrap.
 	account_xp = int(d.get("account_xp", 0))
-	if account_scrap <= 0 and d.has("garage_tokens"):
-		## Soft migrate: leftover garage tokens → a bit of scrap so hangar isn't empty.
-		account_scrap = int(d.get("garage_tokens", 0)) * 10
+	garage_tokens_migrated = bool(d.get("garage_tokens_migrated", false))
+	garage_tokens = int(d.get("garage_tokens", 0))
+	## Soft migrate once: leftover garage tokens → scrap so hangar isn't empty.
+	## Gate so spending scrap to 0 never re-grants free scrap on every load.
+	if not garage_tokens_migrated and d.has("garage_tokens"):
+		if account_scrap <= 0 and garage_tokens > 0:
+			account_scrap = garage_tokens * 10
+		garage_tokens_migrated = true
+	elif not garage_tokens_migrated:
+		## New / already-scrap saves: mark done so a future zero-scrap load is safe.
+		garage_tokens_migrated = true
 	var mu: Variant = d.get("meta_upgrades", {})
 	if typeof(mu) == TYPE_DICTIONARY:
 		meta_upgrades = (mu as Dictionary).duplicate()
-	garage_tokens = int(d.get("garage_tokens", 0))
 	successful_extracts = int(d.get("successful_extracts", 0))
 	mount_unlock_tier = int(d.get("mount_unlock_tier", 0))
 	best_payout = int(d.get("best_payout", 0))
@@ -527,4 +537,12 @@ func go_match() -> void:
 	get_tree().change_scene_to_file("res://scenes/match/match.tscn")
 
 func go_result() -> void:
+	## Always unpause — extract/wipe delay can leave the tree paused (result freezes).
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	TouchInput.clear_sticks()
 	get_tree().change_scene_to_file("res://scenes/ui/result_screen.tscn")
+
+
+func run_already_ended() -> bool:
+	return extracted or wiped
