@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://wanderer_pet_lillie"
-path="res://.godot/imported/lillie.png-pet.ctex"
+uid="uid://p9ed4f70eaad18ed"
+path="res://.godot/imported/lillie.png-9ed4f70eaad18ed90a8baa86109d8161.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/sprites/pets/lillie.png"
-dest_files=["res://.godot/imported/lillie.png-pet.ctex"]
+dest_files=["res://.godot/imported/lillie.png-9ed4f70eaad18ed90a8baa86109d8161.ctex"]
 
 [params]
 

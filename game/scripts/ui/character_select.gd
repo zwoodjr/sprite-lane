@@ -21,10 +21,15 @@ func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
 	c.add_child(header("CHOOSE YOUR WANDERER", GameState.go_mode_select))
 
-	## Roster strip: playable + locked silhouettes
+	## Roster strip: 8 sheet heroes — scrollable on narrow portrait phones.
+	var strip_scroll := ScrollContainer.new()
+	strip_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	strip_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	strip_scroll.custom_minimum_size = Vector2(0, 78)
+	c.add_child(strip_scroll)
 	var strip := HBoxContainer.new()
-	strip.add_theme_constant_override("separation", 10)
-	c.add_child(strip)
+	strip.add_theme_constant_override("separation", 8)
+	strip_scroll.add_child(strip)
 	for id in CharacterDefs.all_known_ids():
 		strip.add_child(_roster_tile(id))
 
@@ -120,7 +125,8 @@ func _roster_tile(id: String) -> Control:
 	var playable := CharacterDefs.is_playable(id)
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(64, 64)
+	## Compact tiles so 8 heroes fit a portrait strip without crushing.
+	b.custom_minimum_size = Vector2(56, 56)
 	b.icon = load(str(def["sprite"])) if playable else null
 	b.expand_icon = true
 	b.text = "" if playable else "?"

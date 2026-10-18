@@ -42,7 +42,7 @@ var _body_base_scale: float = 1.0
 var _warn: Polygon2D
 var _shadow: Polygon2D
 
-const BODY_FOV_PX := 40.0
+const BODY_FOV_PX := 44.0
 
 
 func _ensure_kinds() -> void:

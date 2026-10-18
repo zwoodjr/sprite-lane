@@ -63,8 +63,8 @@ var _ability: Dictionary = {}
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
-## Keep ~48px on-screen footprint (heroes authored at 96×96; FOV ~1/13).
-const BODY_FOV_PX := 48.0
+## Sheet-detail heroes at survivor portrait FOV (~1/14 of 720-wide).
+const BODY_FOV_PX := 52.0
 var _body_base_scale: float = 1.0
 var _walk: RefCounted = UnitAnim.new()
 var _attack_flash: float = 0.0

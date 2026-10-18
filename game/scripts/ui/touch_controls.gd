@@ -9,12 +9,12 @@ extends CanvasLayer
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const ActionButton = preload("res://scripts/ui/action_button.gd")
 
-const BASE_STICK_RADIUS := 92.0
-const KNOB_RADIUS := 38.0
-const MOVE_DEADZONE := 0.08
-const AIM_DEADZONE := 0.12
-## Single-stick: ignore stick starts in the top HUD band.
-const SINGLE_STICK_TOP_FRAC := 0.32
+const BASE_STICK_RADIUS := 96.0
+const KNOB_RADIUS := 40.0
+const MOVE_DEADZONE := 0.12 ## ignore micro-drifts; floating origin still snappy past this
+const AIM_DEADZONE := 0.14
+## Single-stick: ignore stick starts in the top HUD band (safe-area aware).
+const SINGLE_STICK_TOP_FRAC := 0.30
 
 @onready var root: Control = $Root
 @onready var stick_draw: Control = $Root/StickDraw

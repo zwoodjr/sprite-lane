@@ -1,11 +1,12 @@
 extends CharacterBody2D
 
-## Active companion — Noel / Bentley / Lillie kits.
+## Active companion — Noel / Bentley / Lillie kits (wasteland sheet style).
 
 signal rampage_started(target: Node)
 signal rampage_ended
 
-const BODY_FOV_PX := 40.0
+const UnitAnim = preload("res://scripts/fx/unit_anim.gd")
+const BODY_FOV_PX := 42.0
 
 var _def: Dictionary = {}
 var _player: Node2D
@@ -23,6 +24,9 @@ var _accent_left: float = 0.0
 var _bob_t: float = 0.0
 var _body_base_scale: float = 1.0
 var _flash_left: float = 0.0
+var _walk: RefCounted = UnitAnim.new()
+var _walk_calm_path: String = ""
+var _walk_accent_path: String = ""
 
 @onready var body: Sprite2D = $Body
 @onready var name_label: Label = $NameLabel
@@ -64,11 +68,18 @@ func _apply_look() -> void:
 	var path := str(_def.get("sprite", "res://assets/sprites/pets/noel.png"))
 	## Prefer sprite_accent; fall back to legacy sprite_rampage key.
 	var accent := str(_def.get("sprite_accent", _def.get("sprite_rampage", "")))
+	_walk_calm_path = path.replace(".png", "_walk.png")
+	_walk_accent_path = accent.replace(".png", "_walk.png") if accent != "" else ""
 	if _accent_active() and accent != "":
 		path = accent
 	var tex := load(path) as Texture2D
 	if body and tex:
 		body.texture = tex
+	## Walk strip from calm art (accent uses same walk + modulate punch).
+	var walk_path := _walk_calm_path
+	if _accent_active() and _walk_accent_path != "" and ResourceLoader.exists(_walk_accent_path):
+		walk_path = _walk_accent_path
+	_walk.setup_from_walk_path(walk_path, tex)
 	_sync_body_scale()
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
@@ -82,12 +93,18 @@ func _apply_look() -> void:
 
 
 func _sync_body_scale() -> void:
-	var tw := 48.0
+	var tw := 96.0
 	if body and body.texture != null:
-		tw = float(body.texture.get_width())
+		if body.texture is AtlasTexture:
+			tw = (body.texture as AtlasTexture).region.size.x
+		else:
+			tw = float(body.texture.get_width())
+			if tw >= 192.0:
+				tw = 96.0
 	_body_base_scale = BODY_FOV_PX / maxf(tw, 1.0)
 	if body:
 		body.scale = Vector2.ONE * _body_base_scale
+	_walk.set_base_scale(_body_base_scale)
 
 
 func _physics_process(delta: float) -> void:
@@ -396,15 +413,17 @@ func _nearest_enemy(max_d: float) -> Node2D:
 func _update_visuals(delta: float) -> void:
 	if body == null:
 		return
-	var bs := _body_base_scale
 	var hot := _rampaging or _ram_left > 0.0
-	_bob_t += delta * (18.0 if hot else 12.0)
-	body.position.y = -absf(sin(_bob_t)) * (4.0 if hot else 2.0)
-	var pulse := 1.0 + (0.08 if hot else 0.0) * sin(_bob_t * 2.0)
-	body.scale = Vector2.ONE * bs * pulse
+	_walk.tick(body, velocity, delta, {
+		"move_thresh": 24.0,
+		"speed_ref": float(_def.get("follow_speed", 260.0)),
+		"bob_amp": 3.2 if hot else 2.4,
+		"attack": hot or _accent_left > 0.0,
+	})
 	if _ram_left > 0.0:
 		body.modulate = Color(1.4, 0.9, 0.7)
 	elif _rampaging:
+		_bob_t += delta * 18.0
 		body.modulate = Color(1.35, 0.75, 0.65) if int(_bob_t * 8.0) % 2 == 0 else Color(1.15, 0.85, 0.8)
 	elif _flash_left > 0.0 or _accent_left > 0.0:
 		body.modulate = Color(1.35, 1.2, 0.95)

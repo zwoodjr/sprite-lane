@@ -13,9 +13,9 @@ signal mount_pressed
 signal pause_pressed
 signal dash_pressed
 
-const AIM_FIRE_THRESHOLD := 0.35
-## Move stick must push at least this hard to count as "running = aiming that way".
-const MOVE_FIRE_THRESHOLD := 0.18
+const AIM_FIRE_THRESHOLD := 0.32
+## Move stick must push past this to count as run-aim (pairs with larger hero sprites).
+const MOVE_FIRE_THRESHOLD := 0.22
 
 var move_vector: Vector2 = Vector2.ZERO
 var aim_vector: Vector2 = Vector2.ZERO

@@ -35,15 +35,16 @@ static func control_safe_margin() -> Rect2:
 	if win_size.x > 0 and win_size.y > 0:
 		k = vp_size / win_size
 	var wa := DisplayServer.get_display_safe_area()
-	var left := 20.0
-	var top := 14.0
-	var right := 20.0
-	var bottom := 16.0
+	## Baseline padding for portrait thumbs + Dynamic Island / home bar.
+	var left := 22.0
+	var top := 18.0
+	var right := 22.0
+	var bottom := 22.0
 	if wa.size.x > 0 and wa.size.y > 0 and OS.has_feature("mobile"):
-		left = maxf(left, float(wa.position.x) * k.x + 6.0)
-		top = maxf(top, float(wa.position.y) * k.y + 4.0)
-		right = maxf(right, (win_size.x - float(wa.position.x + wa.size.x)) * k.x + 6.0)
-		bottom = maxf(bottom, (win_size.y - float(wa.position.y + wa.size.y)) * k.y + 6.0)
+		left = maxf(left, float(wa.position.x) * k.x + 8.0)
+		top = maxf(top, float(wa.position.y) * k.y + 6.0)
+		right = maxf(right, (win_size.x - float(wa.position.x + wa.size.x)) * k.x + 8.0)
+		bottom = maxf(bottom, (win_size.y - float(wa.position.y + wa.size.y)) * k.y + 10.0)
 	return Rect2(left, top, vp_size.x - left - right, vp_size.y - top - bottom)
 
 

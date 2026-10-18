@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://wanderer_pet_noel_rampage"
-path="res://.godot/imported/noel_rampage.png-pet.ctex"
+uid="uid://pf100086af5b7eeb"
+path="res://.godot/imported/noel_rampage.png-f100086af5b7eebd673ffb4f6455b27b.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/sprites/pets/noel_rampage.png"
-dest_files=["res://.godot/imported/noel_rampage.png-pet.ctex"]
+dest_files=["res://.godot/imported/noel_rampage.png-f100086af5b7eebd673ffb4f6455b27b.ctex"]
 
 [params]
 

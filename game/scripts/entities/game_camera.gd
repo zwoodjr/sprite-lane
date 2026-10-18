@@ -3,11 +3,11 @@ extends Camera2D
 ## Follow camera with look-ahead (toward aim when shooting, toward movement
 ## otherwise) plus screen-shake offset fed by Juice.
 ##
-## FOV targets the survivor phone ref (docs/art-refs/fov-single-stick-ref.jpg):
-## portrait 720×1280, 48px player ≈ 1/13 of screen width → zoom ≈ 1.12.
-## (Ref character measured ~1/12.7 of image width.)
+## FOV for sheet-detail heroes/mobs on portrait phones (Xogot / iPhone).
+## Slightly pulled out vs 1.12 so 96px wasteland units read without clogging.
+## ~52px player footprint ≈ 1/14 of 720-wide frame at zoom 1.0.
 
-const SURVIVOR_ZOOM := 1.12
+const SURVIVOR_ZOOM := 1.0
 
 var shake_offset: Vector2 = Vector2.ZERO
 var _look: Vector2 = Vector2.ZERO
@@ -57,11 +57,12 @@ func _process(delta: float) -> void:
 	if _target and is_instance_valid(_target):
 		var aim := TouchInput.aim_vector
 		## Pulled-out survivor FOV — lighter look-ahead so the battlefield stays readable.
-		var look_scale := 55.0 if TouchInput.is_single_stick() else 90.0
+		var look_scale := 48.0 if TouchInput.is_single_stick() else 84.0
 		if aim.length() > 0.01 and not TouchInput.is_single_stick():
 			want = aim * look_scale
 		else:
 			var v: Vector2 = _target.get("velocity") if "velocity" in _target else Vector2.ZERO
-			want = v.limit_length(280.0) * (0.16 if TouchInput.is_single_stick() else 0.22)
-	_look = _look.lerp(want, clampf(delta * 3.5, 0.0, 1.0))
+			## Lighter lead so sheet-detail sprites stay centered while running.
+			want = v.limit_length(240.0) * (0.12 if TouchInput.is_single_stick() else 0.20)
+	_look = _look.lerp(want, clampf(delta * 4.2, 0.0, 1.0))
 	offset = _look + shake_offset

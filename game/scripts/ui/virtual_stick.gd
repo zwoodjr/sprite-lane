@@ -4,10 +4,10 @@ extends Control
 
 signal stick_changed(vector: Vector2, active: bool)
 
-@export var stick_radius: float = 78.0
-@export var knob_radius: float = 32.0
-@export var deadzone: float = 0.18
-@export var response_power: float = 1.35 ## >1 = gentler near center (thumb-friendly)
+@export var stick_radius: float = 82.0
+@export var knob_radius: float = 34.0
+@export var deadzone: float = 0.14 ## snappy start without twitch at rest
+@export var response_power: float = 1.2 ## mild curve — responsive but not linear jitter
 @export var idle_alpha: float = 0.22
 @export var active_alpha: float = 0.92
 @export var base_color: Color = Color(1, 1, 1, 1)
@@ -42,8 +42,9 @@ func _process(delta: float) -> void:
 	## Smooth stick output so thumbs don't jitter aim/move
 	var target := _vector if _active else Vector2.ZERO
 	var prev_len := _smoothed.length()
-	_smoothed = _smoothed.lerp(target, clampf(delta * 18.0, 0.0, 1.0))
-	if _smoothed.length() < 0.02:
+	## Slightly snappier follow so release doesn't feel floaty on iPhone.
+	_smoothed = _smoothed.lerp(target, clampf(delta * 22.0, 0.0, 1.0))
+	if _smoothed.length() < 0.025:
 		_smoothed = Vector2.ZERO
 	if _active or prev_len > 0.01 or _smoothed.length() > 0.01:
 		stick_changed.emit(_smoothed, _active)

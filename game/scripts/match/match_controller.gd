@@ -197,8 +197,15 @@ func _update_spawns(delta: float) -> void:
 func _spawn_enemy() -> void:
 	if not is_instance_valid(player):
 		return
+	_cull_far_enemies()
 	var live := get_tree().get_nodes_in_group("enemies")
-	if live.size() >= 16:
+	## Soft cap — sheet-detail sprites are heavier; keep pressure without stutter.
+	var cap := 12
+	if GameState.threat_level >= 2:
+		cap = 14
+	if bool(_phases[_phase_index].get("is_last", false)) if _phase_index < _phases.size() else false:
+		cap = 10 ## fewer but heavier T3 units on Last Extract
+	if live.size() >= cap:
 		return
 	## Spawn just outside the visible area so enemies walk in, biased toward
 	## where the player is heading (so you meet them instead of being chased).
@@ -215,6 +222,22 @@ func _spawn_enemy() -> void:
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	enemy.setup(spot, hp_m, dmg_m, 1.0, _roll_enemy_kind())
 	world.add_child(enemy)
+
+
+## Drop stragglers far behind the player so T2/T3 pressure doesn't accumulate.
+func _cull_far_enemies() -> void:
+	if not is_instance_valid(player):
+		return
+	var culled := 0
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if culled >= 3:
+			break
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		if e.global_position.distance_to(player.global_position) > 1100.0:
+			e.queue_free()
+			culled += 1
 
 
 ## Tier mix: T1 early → T2 as Threat rises → T3 on Last Extract.

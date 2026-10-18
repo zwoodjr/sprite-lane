@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://wanderer_pet_noel"
-path="res://.godot/imported/noel.png-pet.ctex"
+uid="uid://p0e2f01245241f4a"
+path="res://.godot/imported/noel.png-0e2f01245241f4ad13934da72292e89a.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/sprites/pets/noel.png"
-dest_files=["res://.godot/imported/noel.png-pet.ctex"]
+dest_files=["res://.godot/imported/noel.png-0e2f01245241f4ad13934da72292e89a.ctex"]
 
 [params]
 

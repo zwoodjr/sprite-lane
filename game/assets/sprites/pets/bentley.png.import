@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://wanderer_pet_bentley"
-path="res://.godot/imported/bentley.png-pet.ctex"
+uid="uid://p055e154450630ca"
+path="res://.godot/imported/bentley.png-055e154450630ca2fedc7fdfa90c1379.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/sprites/pets/bentley.png"
-dest_files=["res://.godot/imported/bentley.png-pet.ctex"]
+dest_files=["res://.godot/imported/bentley.png-055e154450630ca2fedc7fdfa90c1379.ctex"]
 
 [params]
 

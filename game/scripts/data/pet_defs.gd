@@ -2,7 +2,8 @@ class_name PetDefs
 extends RefCounted
 
 ## MVP pet roster. One active pet per run (selected at deploy).
-## Style bible: shipped Noel (clean chibi). Roster: Noel · Bentley · Lillie.
+## Style: wasteland sheet (same detail bar as heroes/mobs) — not Noel chibi.
+## Roster: Noel · Bentley · Lillie.
 
 const NOEL_ID := "noel"
 const BENTLEY_ID := "bentley"
@@ -34,7 +35,7 @@ static func all_pets() -> Array[Dictionary]:
 			"rampage_aoe_damage": 38.0,
 			"rampage_tick": 0.28,
 			"rampage_speed_mult": 1.55,
-			"note": "Style bible. Super territorial.",
+			"note": "Wasteland sheet style. Super territorial.",
 		},
 		{
 			"id": BENTLEY_ID,
