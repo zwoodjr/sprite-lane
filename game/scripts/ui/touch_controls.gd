@@ -264,9 +264,12 @@ func _process(delta: float) -> void:
 		_player = get_tree().get_first_node_in_group("player")
 	if _player:
 		btn_dash.set("cooldown_ratio", _player.call("get_dash_cooldown_ratio"))
+		btn_dash.set("icon_kind", "rush")
 		btn_ability.set("cooldown_ratio", _player.call("get_ability_cooldown_ratio"))
 		btn_ability.set("label_text", str(_player.call("get_ability_short_name")))
 		btn_ability.set("disabled", not bool(_player.call("has_ability")))
+		var ab: Dictionary = GameState.get_character().get("ability", {})
+		btn_ability.set("icon_kind", str(ab.get("icon", "")))
 		var mount_ok: bool = bool(_player.call("can_mount"))
 		btn_mount.set("disabled", not mount_ok)
 		btn_mount.set("label_text", "RIDE" if not _player.call("is_mounted") else "HOP OFF")

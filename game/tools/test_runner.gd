@@ -87,11 +87,13 @@ func _run() -> void:
 				for n in pm:
 					if n.has_method("close"):
 						n.call("close")
-			## Walk to an open pad late in the match
-			if bool(match_scene.call("is_extract_open")) and frames > 1500 and is_instance_valid(player):
+			## Walk to an open pad whenever extracts are up (windows are shorter now).
+			if bool(match_scene.call("is_extract_open")) and frames > 400 and is_instance_valid(player):
 				var pads: Array = match_scene.call("get_pads")
-				if pads.size() > 0:
-					player.global_position = player.global_position.lerp((pads[0] as Node2D).global_position, 0.2)
+				for pad in pads:
+					if is_instance_valid(pad) and bool(pad.get("open")):
+						player.global_position = (pad as Node2D).global_position
+						break
 			await get_tree().physics_frame
 		print("MATCH_%d frames=%d kills=%d scrap=%d tl=%d extracted=%s wiped=%s" % [
 			i, frames, GameState.kills, GameState.scrap_found, GameState.threat_level,

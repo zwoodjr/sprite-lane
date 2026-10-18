@@ -343,7 +343,12 @@ func _buff_move() -> float:
 	return 1.35 if _buffs.has("speed") else 1.0
 
 func _buff_damage() -> float:
-	return 1.45 if _buffs.has("damage") else 1.0
+	var m := 1.0
+	if _buffs.has("damage"):
+		m *= 1.45
+	if _buffs.has("vial"):
+		m *= float(_ability.get("damage_mult", 1.35))
+	return m
 
 func _buff_firerate() -> float:
 	var f := firerate_mult
@@ -478,11 +483,17 @@ func _try_ability() -> void:
 	match str(_ability.get("id", "")):
 		"field_draught":
 			var amt := float(_ability.get("heal", 28.0))
+			## Station ranks + Sanctuary class pick deepen the heal.
+			amt *= 1.0 + 0.08 * float(GameState.station_rank(str(_char.get("id", ""))))
 			hp = minf(max_hp, hp + amt)
 			_post_heal_left = float(_char.get("post_heal_duration", 0.0))
 			health_changed.emit(hp, max_hp)
 			Juice.float_text(global_position + Vector2(0, -34), "+%d" % int(amt), UiTheme.TEAL, 22)
 			Juice.burst(global_position, UiTheme.TEAL, 18, 140.0, 0.6)
+			if float(GameState.run_mods.get("class_sanctuary", 0.0)) > 0.0:
+				_spawn_heal_puddle()
+			if float(GameState.run_mods.get("class_burn", 0.0)) > 0.0 and hp < max_hp * 0.85:
+				_burn_nearby(120.0, 12.0)
 		"rattle_rush":
 			_rush_left = float(_ability.get("duration", 3.0))
 			_iframes = maxf(_iframes, 0.3)
@@ -491,10 +502,95 @@ func _try_ability() -> void:
 				if crate is Node2D and global_position.distance_to((crate as Node2D).global_position) < 900.0:
 					if crate.has_method("ping"):
 						crate.call("ping")
+		"overload":
+			_do_overload()
+		"vial_shot":
+			_buffs["vial"] = float(_ability.get("duration", 4.0))
+			Juice.burst(global_position, Color(0.7, 0.4, 0.95), 14, 120.0, 0.45)
+		"maul_slam":
+			_rush_left = float(_ability.get("duration", 0.6))
+			_iframes = maxf(_iframes, 0.25)
+			_slam_nearby(90.0, 36.0)
+		"shadow_cut":
+			_rush_left = float(_ability.get("duration", 0.7))
+			_iframes = maxf(_iframes, 0.45)
+			modulate.a = 0.35
+			Juice.burst(global_position, Color(0.4, 0.5, 0.9), 12, 100.0, 0.35)
+		"rig_assist":
+			_buffs["rapid"] = float(_ability.get("duration", 4.0))
+			_buffs["speed"] = float(_ability.get("duration", 4.0))
+			## Supply Drop: call in special ammo.
+			GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
+			Juice.float_text(global_position + Vector2(0, -40), "SUPPLY!", UiTheme.AMBER, 16)
+		"blade_rush":
+			_rush_left = float(_ability.get("duration", 0.55))
+			_iframes = maxf(_iframes, 0.2)
 		_:
-			pass
+			_rush_left = float(_ability.get("duration", 0.0))
 	Juice.sfx("ability")
 	ability_used.emit(str(_ability.get("name", "Ability")))
+
+
+func _do_overload() -> void:
+	var radius := float(_ability.get("radius", 160.0))
+	var dmg := float(_ability.get("damage", 28.0)) * damage_mult
+	var stun := float(_ability.get("stun", 0.9))
+	var arcs := int(_ability.get("arcs", 4))
+	if float(GameState.run_mods.get("class_livewire", 0.0)) > 0.0:
+		arcs += 3
+		radius *= 1.2
+	Juice.burst(global_position, Color(0.45, 0.8, 1.0), 28, radius, 0.55)
+	Juice.shake(0.22)
+	var hit: Array = []
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if hit.size() >= arcs:
+			break
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		if global_position.distance_to(e.global_position) > radius:
+			continue
+		hit.append(e)
+		if e.has_method("take_damage"):
+			e.call("take_damage", dmg, (e.global_position - global_position).normalized())
+		if e.has_method("distract"):
+			e.call("distract", stun)
+
+
+func _slam_nearby(radius: float, dmg: float) -> void:
+	Juice.burst(global_position, Color(0.95, 0.55, 0.4), 20, radius * 1.2, 0.45)
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		if global_position.distance_to(e.global_position) > radius:
+			continue
+		if e.has_method("take_damage"):
+			e.call("take_damage", dmg * damage_mult, (e.global_position - global_position).normalized())
+		if e.has_method("distract"):
+			e.call("distract", 0.7)
+
+
+func _burn_nearby(radius: float, dmg: float) -> void:
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		if global_position.distance_to(e.global_position) > radius:
+			continue
+		if e.has_method("take_damage"):
+			e.call("take_damage", dmg, Vector2.ZERO)
+
+
+func _spawn_heal_puddle() -> void:
+	## Lightweight: burst heal aura once more after a short delay.
+	get_tree().create_timer(1.2).timeout.connect(func() -> void:
+		if not is_instance_valid(self) or hp <= 0.0:
+			return
+		hp = minf(max_hp, hp + 10.0)
+		health_changed.emit(hp, max_hp)
+		Juice.burst(global_position, UiTheme.TEAL, 10, 80.0, 0.4)
+	)
 
 ## =============================================================================
 ## Aiming & shooting
@@ -658,6 +754,14 @@ func _fire_one_shot(counts_as_trigger: bool) -> void:
 			crit = true
 			crit_any = true
 			dmg *= 1.5 + GameState.crit_damage_bonus()
+		var splash_r := float(_weapon.get("splash_radius", 0.0))
+		var splash_m := float(_weapon.get("splash_mult", 0.5))
+		var status: Dictionary = {}
+		if not GameState.special_ammo.is_empty():
+			status = GameState.special_ammo.duplicate(true)
+			if str(status.get("id", "")) == "explosive":
+				splash_r = maxf(splash_r, float(status.get("splash_radius", 55.0)))
+				splash_m = maxf(splash_m, float(status.get("splash_mult", 0.45)))
 		var bullet: Area2D = BulletScene.instantiate()
 		bullet.setup(
 			global_position + aim * 28.0,
@@ -667,9 +771,10 @@ func _fire_one_shot(counts_as_trigger: bool) -> void:
 			true,
 			self,
 			float(_weapon.get("lifetime", -1.0)),
-			float(_weapon.get("splash_radius", 0.0)),
-			float(_weapon.get("splash_mult", 0.5))
+			splash_r,
+			splash_m
 		)
+		bullet.set("status_effect", status)
 		get_tree().current_scene.add_child(bullet)
 	_recoil = float(_weapon.get("recoil", 5.0))
 	_flash_left = 0.045
@@ -749,6 +854,16 @@ func get_reload_ratio() -> float:
 ## =============================================================================
 ## Damage
 
+func _reset_extract_channels() -> void:
+	for pad in get_tree().get_nodes_in_group("extract_pads"):
+		if pad.has_method("reset_channel"):
+			pad.call("reset_channel")
+	## Also scan by class if group missing.
+	for n in get_tree().get_nodes_in_group("extract"):
+		if n.has_method("reset_channel"):
+			n.call("reset_channel")
+
+
 func take_damage(amount: float, attacker: Node = null) -> void:
 	if _iframes > 0.0 or hp <= 0.0:
 		return
@@ -759,13 +874,22 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.sfx("dash", -8.0)
 		return
 	var dmg := float(amount) * resist_mult
+	## Pebble tank: resist knockback/chip via knockback_resist as DR softener.
+	var kb := float(_char.get("knockback_resist", 0.0))
+	if kb > 0.0:
+		dmg *= 1.0 - kb * 0.25
 	## Brace Plate — half damage on proc (full rate with block_affinity kits).
 	if randf() < GameState.block_chance():
 		dmg *= 0.5
 		Juice.float_text(global_position + Vector2(0, -42), "BLOCK", UiTheme.AMBER, 14)
+	## Unbreakable class pick: reduced damage below half HP.
+	if float(GameState.run_mods.get("class_unbreakable", 0.0)) > 0.0 and hp < max_hp * 0.5:
+		dmg *= 0.65
 	hp -= dmg
 	## Fair hits: ~0.5s i-frames so one mistake isn't a full wipe (was 0.12s).
 	_iframes = 0.5
+	## Hit while extracting resets pad channel.
+	_reset_extract_channels()
 	if attacker != null and is_instance_valid(attacker) and attacker != self:
 		attacked.emit(attacker)
 	Juice.sfx("hurt")

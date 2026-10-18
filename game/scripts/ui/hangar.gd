@@ -14,8 +14,8 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(header("HANGAR", GameState.go_main_menu))
 	## Short copy on portrait so the catalog keeps vertical room under Xogot chrome.
 	var intro := UiTheme.body_label(
-		"Banked scrap → permanent upgrades. In-run levels never carry." if portrait
-		else "Spend banked scrap on permanent upgrades. In-run levels never carry — only what you buy here sticks after a wipe. Costs stretch so a few extracts won't dump the tree.",
+		"Shared camp · survivor stations · kennel · stash. In-run levels never carry." if portrait
+		else "Spend banked scrap on the hangar: shared camp upgrades, each survivor's station, the kennel, and stash slots. In-run levels never carry after extract or wipe.",
 		14 if portrait else 15, UiTheme.TEXT_DIM
 	)
 	c.add_child(intro)
@@ -108,8 +108,36 @@ func _rebuild() -> void:
 		_scroll_y_keep = _scroll.scroll_vertical
 	_clear_list()
 	_scrap_label.text = "SCRAP %d" % GameState.account_scrap
-	for entry in Progression.hangar_catalog_visible():
-		_list.add_child(_row(entry))
+	## Sectioned Hangar: Shared · Stations · Kennel · Stash · Logbook.
+	var layers := [
+		["shared", "SHARED CAMP"],
+		["station", "SURVIVOR STATIONS"],
+		["kennel", "KENNEL"],
+		["stash", "STASH"],
+	]
+	var catalog := Progression.hangar_catalog_visible()
+	for layer in layers:
+		var lid := str(layer[0])
+		var title := str(layer[1])
+		var any := false
+		for entry in catalog:
+			if str(entry.get("layer", "shared")) == lid:
+				any = true
+				break
+		if not any:
+			continue
+		_list.add_child(UiTheme.title_label(title, 22, UiTheme.AMBER))
+		for entry in catalog:
+			if str(entry.get("layer", "shared")) == lid:
+				_list.add_child(_row(entry))
+	## Logbook / trophies (quest stubs).
+	_list.add_child(UiTheme.title_label("LOGBOOK", 22, UiTheme.AMBER))
+	_list.add_child(UiTheme.body_label("Daily · Survivor stories · Camp milestones", 13, UiTheme.TEXT_DIM))
+	for d in QuestDefs.roll_dailies(3):
+		_list.add_child(UiTheme.body_label("• %s — %s (+%d scrap)" % [d["name"], d["desc"], int(d["reward_scrap"])], 14))
+	if GameState.hangar_trophies.size() > 0:
+		_list.add_child(UiTheme.body_label("Trophies: %s" % ", ".join(GameState.hangar_trophies), 13, UiTheme.TEAL))
+	_list.add_child(UiTheme.body_label("Stash %d / %d slots" % [GameState.stash.size(), GameState.stash_slots], 13, UiTheme.TEXT_DIM))
 	## End pad so the last skill clears thumbs / home indicator / Xogot chrome when scrolled down.
 	var pad := Control.new()
 	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE

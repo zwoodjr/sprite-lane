@@ -1,6 +1,15 @@
 # MVP status (repo mirror)
 
-**Latest (Master Brief Phase 0 + Phase 1 start):** Phase 0 bug fixes — upgrade-picker OOB (choices array cleared by `apply_run_upgrade`), touch devices strip mouse shoot binding, clear sticks after level-up, `go_result` always unpauses + abandon won't double-wipe, one-time garage→scrap migration flag, charger lunge hit range + collision_mask includes player, auto-pause on app focus-out, cooldown/telegraph polygons no longer triangulate-fail, remove Dev quick-test + Field Notes hangar item. Phase 1 feel start — on-screen-only auto-fire + auto-reload when idle, 0.5s hit i-frames, health drops from kills, larger heroes / smaller pets, DASH+ABILITY cluster (FIRE hidden under auto-fire), brighter attack telegraphs. Headless `test_runner` PASS.
+**Latest (Master Brief Phases 0–9):** Full brief pass on the Godot MVP.
+
+- **P0 bugs** fixed (picker OOB, touch shoot, sticks, result unpause, scrap migration, chargers, focus-out pause, polygon spam, Dev chrome).
+- **P1 feel:** on-screen auto-fire, 0.5s i-frames, heal drops, larger heroes / smaller pets, bottle-cap DASH/ABILITY, HEALTH/XP HUD.
+- **P2 stay-or-go:** Haze/Drift + loot × mult / Threat, extract windows, 3s pad channel (hit resets), death keep %.
+- **P3–4:** special ammo + shared/class run upgrades; survivor tricks (Overload, Rush, Heal, etc.).
+- **P5:** elite/boss rewards, Rad Gator death cloud, role roster.
+- **P6–7:** Hangar layers (Generator/Radio/Scrap Press/Ammo Bench, stations, kennel, stash) + gear/legendary stubs.
+- **P8–9:** Dust tiers 1–10 unlock ladder; events (Supply Crash, Dust Surge, Elite Hunt…) + logbook/quest stubs.
+  Headless `test_runner` PASS (both bot matches extract).
 
 **Prior (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
 

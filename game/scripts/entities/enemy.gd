@@ -328,6 +328,32 @@ func _spawn_health_drop() -> void:
 	pickup.call("setup", heal)
 
 
+func _spawn_toxic_cloud() -> void:
+	## Damages the player while they stand in it — step out.
+	var cloud := Area2D.new()
+	cloud.collision_layer = 0
+	cloud.collision_mask = 2
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 70.0
+	shape.shape = circle
+	cloud.add_child(shape)
+	var life := {"t": 4.0}
+	cloud.body_entered.connect(func(body: Node2D) -> void:
+		if body.is_in_group("player") and body.has_method("take_damage"):
+			body.call("take_damage", 6.0, self)
+	)
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	scene.add_child(cloud)
+	cloud.global_position = global_position
+	Juice.burst(global_position, Color(0.45, 0.9, 0.35), 16, 100.0, 0.7)
+	var tw := cloud.create_tween()
+	tw.tween_interval(4.0)
+	tw.tween_callback(cloud.queue_free)
+
+
 func _die() -> void:
 	_dead = true
 	remove_from_group("enemies")
@@ -342,6 +368,22 @@ func _die() -> void:
 	## Small health drops from kills (Phase 1 fair-hits loop).
 	if randf() < 0.22:
 		_spawn_health_drop.call_deferred()
+	## Rad Gator: toxic cloud on death — player must step out.
+	if kind == "rad_gator":
+		_spawn_toxic_cloud.call_deferred()
+	## Elite / boss rewards.
+	if kind == "cyber_juggernaut":
+		var bundle: Dictionary = GearDefs.elite_reward_bundle()
+		for g in bundle.get("gear", []):
+			GameState.add_run_gear(g)
+		Juice.float_text(global_position + Vector2(0, -56), "ELITE LOOT", UiTheme.AMBER, 16)
+	elif kind in ["dread_naught", "mutant_overlord"]:
+		GameState.record_boss_kill(kind)
+		Juice.float_text(global_position + Vector2(0, -56), "BOSS DOWN ×+0.5", Color(1.0, 0.7, 0.3), 18)
+	## Ammo Bench special-ammo drops.
+	if GameState.ammo_bench_rank() > 0 and randf() < SpecialAmmoDefs.drop_chance(GameState.ammo_bench_rank()):
+		GameState.activate_special_ammo(SpecialAmmoDefs.random_ammo())
+		Juice.float_text(global_position + Vector2(0, -70), "SPECIAL AMMO", Color(0.5, 0.85, 1.0), 14)
 	Juice.shake(0.12 if _archetype() != "brute" else 0.3)
 	if _archetype() == "brute":
 		Juice.hitstop(0.06)

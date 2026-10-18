@@ -6,7 +6,8 @@ extends Area2D
 signal extract_requested
 signal channel_changed(ratio: float)
 
-const CHANNEL_TIME := 1.5
+## Master Brief: standing on a pad takes 3s; taking a hit resets (via leave / player hit).
+const CHANNEL_TIME := 3.0
 
 @export var pad_name: String = "Extract"
 
@@ -24,6 +25,7 @@ var _beam: Polygon2D
 
 
 func _ready() -> void:
+	add_to_group("extract_pads")
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 	label.add_theme_font_size_override("font_size", 13)
@@ -60,17 +62,19 @@ func set_open(is_open: bool) -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	_beam.color.a = (0.22 + 0.1 * sin(_t * 3.0)) if open else 0.0
+	## Scale channel with fast-timers so compressed windows still extractable.
+	var need := CHANNEL_TIME * GameState.timer_scale()
 	if open and player_inside and not _fired:
 		_channel += delta
-		channel_changed.emit(_channel / CHANNEL_TIME)
+		channel_changed.emit(_channel / maxf(need, 0.01))
 		if int(_channel * 10.0) % 3 == 0:
 			Juice.burst(global_position + Vector2(randf_range(-40, 40), 10), Color(1, 0.85, 0.4, 0.8), 2, 60.0, 0.6)
-		if _channel >= CHANNEL_TIME:
+		if _channel >= need:
 			_fired = true
 			extract_requested.emit()
 	elif _channel > 0.0:
 		_channel = maxf(0.0, _channel - delta * 3.0)
-		channel_changed.emit(_channel / CHANNEL_TIME)
+		channel_changed.emit(_channel / maxf(need, 0.01))
 	if open and player_inside and Input.is_action_just_pressed("interact") and not _fired:
 		_fired = true
 		extract_requested.emit()
@@ -83,7 +87,8 @@ func _draw_ring() -> void:
 		var pulse := 0.5 + 0.5 * sin(_t * 4.0)
 		_ring.draw_arc(Vector2.ZERO, r + pulse * 6.0, 0.0, TAU, 48, Color(1, 0.85, 0.35, 0.35 + 0.3 * pulse), 3.0, true)
 	if _channel > 0.0:
-		var k := clampf(_channel / CHANNEL_TIME, 0.0, 1.0)
+		var need := CHANNEL_TIME * GameState.timer_scale()
+		var k := clampf(_channel / maxf(need, 0.01), 0.0, 1.0)
 		_ring.draw_arc(Vector2.ZERO, r - 8.0, -PI * 0.5, -PI * 0.5 + TAU * k, 48, Color(0.45, 1.0, 0.6, 0.95), 8.0, true)
 
 
@@ -95,12 +100,20 @@ func try_touch_extract() -> bool:
 	return false
 
 
+func reset_channel() -> void:
+	## Taking a hit while extracting resets the channel.
+	if _channel > 0.0 and not _fired:
+		_channel = 0.0
+		channel_changed.emit(0.0)
+
+
 func is_channeling() -> bool:
 	return _channel > 0.0
 
 
 func get_channel_ratio() -> float:
-	return clampf(_channel / CHANNEL_TIME, 0.0, 1.0)
+	var need := CHANNEL_TIME * GameState.timer_scale()
+	return clampf(_channel / maxf(need, 0.01), 0.0, 1.0)
 
 
 func _on_body_entered(body: Node2D) -> void:

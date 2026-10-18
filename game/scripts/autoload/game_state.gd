@@ -11,7 +11,7 @@ signal run_xp_changed(run_xp: int, run_level: int)
 signal run_level_up(new_level: int, choices: Array)
 signal meta_changed
 
-var selected_mode_id: String = ModeDefs.EASY_ID
+var selected_mode_id: String = ModeDefs.HAZE_ID
 var selected_character_id: String = CharacterDefs.ROOK_ID
 var selected_pet_id: String = PetDefs.NOEL_ID
 
@@ -37,9 +37,18 @@ var tank_dev_flag: bool = false
 
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
-const SAVE_VERSION := 4
+const SAVE_VERSION := 5
 ## One-time garage_tokens → scrap migration (never re-run when scrap hits 0).
 var garage_tokens_migrated: bool = false
+## Highest Dust tier unlocked (1=Haze always; extract unlocks next).
+var highest_tier_unlocked: int = 2
+## Shared hangar stash (extracted gear/mods).
+var stash: Array = []
+var stash_slots: int = 20
+var materials: Dictionary = {"salvage_cores": 0, "dust_hearts": 0}
+var boss_kills: Dictionary = {}
+var quest_progress: Dictionary = {}
+var hangar_trophies: Array = []
 var settings: Dictionary = {
 	"sfx": true,
 	"haptics": true,
@@ -69,6 +78,10 @@ var threat_level: int = 0
 var windows_skipped: int = 0
 var extract_windows_seen: int = 0
 var stay_bonus: float = 1.0
+var loot_multiplier: float = 1.0
+var special_ammo: Dictionary = {} ## active special ammo def + time left
+var run_bag_gear: Array = [] ## gear found this run (stash only on extract)
+var match_elapsed: float = 0.0
 var scrap_found: int = 0
 var kills: int = 0
 var extracted: bool = false
@@ -125,6 +138,13 @@ func save_profile() -> void:
 		"meta_upgrades": meta_upgrades,
 		"garage_tokens": garage_tokens,
 		"garage_tokens_migrated": garage_tokens_migrated,
+		"highest_tier_unlocked": highest_tier_unlocked,
+		"stash": stash,
+		"stash_slots": stash_slots,
+		"materials": materials,
+		"boss_kills": boss_kills,
+		"quest_progress": quest_progress,
+		"hangar_trophies": hangar_trophies,
 		"successful_extracts": successful_extracts,
 		"mount_unlock_tier": mount_unlock_tier,
 		"best_payout": best_payout,
@@ -173,12 +193,36 @@ func load_profile() -> void:
 	if typeof(mu) == TYPE_DICTIONARY:
 		meta_upgrades = (mu as Dictionary).duplicate()
 	successful_extracts = int(d.get("successful_extracts", 0))
+	highest_tier_unlocked = maxi(2, int(d.get("highest_tier_unlocked", 2)))
+	var st: Variant = d.get("stash", [])
+	if typeof(st) == TYPE_ARRAY:
+		stash = (st as Array).duplicate(true)
+	stash_slots = int(d.get("stash_slots", 20))
+	var mats: Variant = d.get("materials", {})
+	if typeof(mats) == TYPE_DICTIONARY:
+		materials = (mats as Dictionary).duplicate(true)
+	var bk: Variant = d.get("boss_kills", {})
+	if typeof(bk) == TYPE_DICTIONARY:
+		boss_kills = (bk as Dictionary).duplicate(true)
+	var qp: Variant = d.get("quest_progress", {})
+	if typeof(qp) == TYPE_DICTIONARY:
+		quest_progress = (qp as Dictionary).duplicate(true)
+	var ht: Variant = d.get("hangar_trophies", [])
+	if typeof(ht) == TYPE_ARRAY:
+		hangar_trophies = (ht as Array).duplicate(true)
 	mount_unlock_tier = int(d.get("mount_unlock_tier", 0))
 	best_payout = int(d.get("best_payout", 0))
 	total_runs = int(d.get("total_runs", 0))
 	_sync_account_level()
 	var mode_id := str(d.get("selected_mode_id", selected_mode_id))
-	if mode_id in [ModeDefs.EASY_ID, ModeDefs.MEDIUM_ID]:
+	mode_id = ModeDefs._canonicalize(mode_id)
+	## Accept any known tier id.
+	var known := false
+	for row in ModeDefs.TIER_TABLE:
+		if str(row["id"]) == mode_id:
+			known = true
+			break
+	if known:
 		selected_mode_id = mode_id
 	var char_id := str(d.get("selected_character_id", selected_character_id))
 	if char_id == "rook_vex":
@@ -201,14 +245,13 @@ func run_bar_state() -> Dictionary:
 func meta_rank(id: String) -> int:
 	return int(meta_upgrades.get(id, 0))
 
-func scrap_find_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "scrap_find")
-
 func starting_hp_bonus() -> float:
 	return Progression.meta_bonus(meta_upgrades, "max_hp")
 
 func starting_damage_bonus() -> float:
-	return Progression.meta_bonus(meta_upgrades, "damage")
+	## Survivor station ranks also hone that hero's gun.
+	var station := 0.04 * float(station_rank(selected_character_id))
+	return Progression.meta_bonus(meta_upgrades, "damage") + station
 
 func insurance_bonus_slots() -> int:
 	return int(Progression.meta_bonus(meta_upgrades, "insurance"))
@@ -253,7 +296,9 @@ func pickup_radius_bonus() -> float:
 	return Progression.meta_bonus(meta_upgrades, "pickup_radius")
 
 func pet_power_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "pet_power")
+	## Kennel ranks for the equipped pet add bite/rampage power.
+	var kennel := 0.12 * float(kennel_rank(selected_pet_id))
+	return 1.0 + Progression.meta_bonus(meta_upgrades, "pet_power") + kennel
 
 func loot_quality_bonus() -> float:
 	## Added to crate power-up chance; still capped in breakable.
@@ -310,6 +355,10 @@ func begin_run() -> void:
 	windows_skipped = 0
 	extract_windows_seen = 0
 	stay_bonus = 1.0
+	loot_multiplier = 1.0
+	special_ammo = {}
+	run_bag_gear = []
+	match_elapsed = 0.0
 	scrap_found = 0
 	kills = 0
 	extracted = false
@@ -325,7 +374,13 @@ func begin_run() -> void:
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
-	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0}
+	run_mods = {
+		"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0,
+		"ricochet": 0.0, "split": 0.0, "poison": 0.0, "pierce": 0.0,
+		"drone": 0.0, "mines": 0.0, "blades": 0.0,
+		"firewalk": 0.0, "dash_heal": 0.0, "shield": 0.0,
+		"scrap_find_run": 0.0, "luck": 0.0,
+	}
 	run_picks_taken.clear()
 	pending_run_choices.clear()
 	run_level_paused = false
@@ -369,7 +424,7 @@ func add_run_xp(amount: int) -> void:
 		run_xp -= Progression.run_xp_to_next(run_level)
 		run_level += 1
 		leveled = true
-		var choices := Progression.roll_run_choices(2, run_picks_taken)
+		var choices := Progression.roll_run_choices(2, run_picks_taken, selected_character_id)
 		pending_run_choices = choices
 		run_level_paused = true
 		run_level_up.emit(run_level, choices)
@@ -412,6 +467,8 @@ func try_buy_hangar(entry_id: String) -> bool:
 		return false
 	account_scrap -= cost
 	meta_upgrades[entry_id] = rank + 1
+	if str(entry.get("effect", "")) == "stash_slots":
+		stash_slots = 20 + int(Progression.meta_bonus(meta_upgrades, "stash_slots"))
 	save_profile()
 	meta_changed.emit()
 	return true
@@ -424,8 +481,15 @@ func on_extract_success() -> void:
 	var tl := ModeDefs.tl_table(threat_level)
 	var base := 100 + scrap_found * 2 + kills * 5
 	payout_this_run = int(
-		base * stay_bonus * float(tl["payout"]) * float(mode["payout_mult"]) * extract_payout_mult()
+		base * stay_bonus * loot_multiplier * float(tl["payout"]) * float(mode["payout_mult"]) * extract_payout_mult()
 	)
+	## Bank run bag gear into stash.
+	_bank_run_bag_to_stash()
+	## Unlock next Dust tier.
+	var tier := int(mode.get("tier", 1))
+	if tier >= highest_tier_unlocked and tier < 10:
+		highest_tier_unlocked = tier + 1
+		result_unlocks.append("%s unlocked" % ModeDefs.get_mode(ModeDefs.TIER_TABLE[tier]["id"])["display_name"])
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
 	result_scrap_banked = payout_this_run
@@ -467,8 +531,14 @@ func on_wipe() -> void:
 	_clear_result_meta()
 	var mode := get_mode()
 	result_scrap_before = account_scrap
-	result_scrap_banked = 0
-	result_scrap_lost = scrap_found
+	var keep_pct := float(mode.get("keep_on_death", 0.1))
+	var kept := int(floor(float(scrap_found) * keep_pct))
+	result_scrap_banked = kept
+	result_scrap_lost = maxi(0, scrap_found - kept)
+	if kept > 0:
+		account_scrap += kept
+	## Bag gear lost unless insured (stash only on extract).
+	run_bag_gear.clear()
 	result_account_xp_before = account_xp
 	result_account_level_before = account_level
 	account_xp_this_run = Progression.award_wipe_account_xp(kills, float(mode["payout_mult"]))
@@ -487,8 +557,9 @@ func on_wipe() -> void:
 			result_lost_keys.append(key)
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d" % account_level)
-	result_summary = "Wiped. Kept scrap %d + Hangar. Lost bag scrap %d. Lost gear: %s" % [
-		account_scrap,
+	result_summary = "Wiped. Kept %d%% bag scrap (+%d). Lost %d. Lost gear: %s" % [
+		int(keep_pct * 100.0),
+		result_scrap_banked,
 		result_scrap_lost,
 		", ".join(result_lost_keys) if result_lost_keys.size() else "(nothing)",
 	]
@@ -499,13 +570,106 @@ func on_wipe() -> void:
 func _reset_run_power_after_end() -> void:
 	## Permanent power never comes from run levels — clear after banking rewards.
 	run_xp = 0
-	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0}
+	run_mods = {
+		"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0,
+		"ricochet": 0.0, "split": 0.0, "poison": 0.0, "pierce": 0.0,
+		"drone": 0.0, "mines": 0.0, "blades": 0.0,
+		"firewalk": 0.0, "dash_heal": 0.0, "shield": 0.0,
+		"scrap_find_run": 0.0, "luck": 0.0,
+	}
 	run_picks_taken.clear()
 	pending_run_choices.clear()
 	run_level_paused = false
 
 func timer_scale() -> float:
 	return FAST_TIMER_SCALE if fast_timers else 1.0
+
+
+func tick_loot_multiplier(delta: float) -> void:
+	match_elapsed += delta
+	## ×0.1 every 30s survived, capped by mode.
+	var steps := int(floor(match_elapsed / 30.0))
+	var cap := float(get_mode().get("loot_mult_cap", 2.5))
+	loot_multiplier = minf(cap, 1.0 + 0.1 * float(steps))
+	## Threat climbs with multiplier (elite after 3 min handled in match).
+	var want_tl := clampi(int(floor((loot_multiplier - 1.0) / 0.2)), 0, 5)
+	if want_tl > threat_level:
+		threat_level = want_tl
+
+
+func grant_boss_loot_boost() -> void:
+	loot_multiplier += 0.5
+	var cap := float(get_mode().get("loot_mult_cap", 3.0))
+	loot_multiplier = minf(cap + 0.5, loot_multiplier) ## boss bump can briefly exceed
+
+
+func activate_special_ammo(def: Dictionary) -> void:
+	if def.is_empty():
+		return
+	var rank := meta_rank("ammo_bench")
+	var dur: float = SpecialAmmoDefs.duration_for_rank(float(def.get("duration", 15.0)), rank)
+	special_ammo = def.duplicate(true)
+	special_ammo["time_left"] = dur
+
+
+func tick_special_ammo(delta: float) -> void:
+	if special_ammo.is_empty():
+		return
+	special_ammo["time_left"] = float(special_ammo.get("time_left", 0.0)) - delta
+	if float(special_ammo["time_left"]) <= 0.0:
+		special_ammo = {}
+
+
+func ammo_bench_rank() -> int:
+	return meta_rank("ammo_bench")
+
+
+func kennel_rank(pet_id: String) -> int:
+	return meta_rank("kennel_%s" % pet_id)
+
+
+func station_rank(char_id: String) -> int:
+	return meta_rank("station_%s" % char_id)
+
+
+func pad_warning_sec() -> float:
+	## Radio Tower: pads ping earlier.
+	return 10.0 + Progression.meta_bonus(meta_upgrades, "pad_warning")
+
+
+func _bank_run_bag_to_stash() -> void:
+	for item in run_bag_gear:
+		if stash.size() >= stash_slots:
+			## Expand reminder — drop overflow for now.
+			break
+		stash.append(item)
+	run_bag_gear.clear()
+
+
+func add_run_gear(item: Dictionary) -> void:
+	run_bag_gear.append(item)
+
+
+func record_boss_kill(boss_id: String) -> void:
+	var n := int(boss_kills.get(boss_id, 0)) + 1
+	boss_kills[boss_id] = n
+	if n == 1:
+		var trophy := "trophy_%s" % boss_id
+		if trophy not in hangar_trophies:
+			hangar_trophies.append(trophy)
+			result_unlocks.append("Trophy: %s" % boss_id.replace("_", " ").capitalize())
+	grant_boss_loot_boost()
+	var bundle: Dictionary = GearDefs.boss_reward_bundle(boss_id)
+	for g in bundle.get("gear", []):
+		add_run_gear(g)
+	for k in bundle.get("materials", {}).keys():
+		materials[k] = int(materials.get(k, 0)) + int(bundle["materials"][k])
+
+
+func scrap_find_mult() -> float:
+	var meta := 1.0 + Progression.meta_bonus(meta_upgrades, "scrap_find")
+	var run := 1.0 + float(run_mods.get("scrap_find_run", 0.0))
+	return meta * run
 
 func go_main_menu() -> void:
 	get_tree().paused = false

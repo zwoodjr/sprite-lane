@@ -11,6 +11,7 @@ var lifetime: float = 1.1
 var source: Node = null
 var splash_radius: float = 0.0
 var splash_mult: float = 0.5
+var status_effect: Dictionary = {} ## special ammo / run mods
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -117,6 +118,7 @@ func _on_body_entered(body: Node2D) -> void:
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
 			## Enemy signature: (float, Vector2 knock dir)
 			body.take_damage(damage, direction)
+			_apply_status(body)
 			_apply_splash(body)
 			_impact(Color(1, 0.85, 0.45))
 		elif body.is_in_group("breakables") and body.has_method("take_damage"):
@@ -137,6 +139,27 @@ func _on_body_entered(body: Node2D) -> void:
 			_impact(Color(1, 0.35, 0.25))
 		elif body is StaticBody2D or body is TileMap:
 			_impact(Color(0.8, 0.7, 0.55))
+
+
+func _apply_status(body: Node) -> void:
+	if status_effect.is_empty() or body == null or not is_instance_valid(body):
+		return
+	var id := str(status_effect.get("id", ""))
+	match id:
+		"shock":
+			if body.has_method("distract"):
+				body.call("distract", float(status_effect.get("stun", 0.55)))
+		"frost":
+			if body.has_method("distract"):
+				body.call("distract", float(status_effect.get("slow_sec", 1.4)) * 0.5)
+		"incendiary":
+			## Extra chip damage as fire DoT stub.
+			if body.has_method("take_damage"):
+				body.call("take_damage", float(status_effect.get("dot", 4.0)), Vector2.ZERO)
+		"explosive":
+			pass ## splash already applied via splash_radius
+		_:
+			pass
 
 
 func _apply_splash(primary: Node) -> void:
