@@ -17,7 +17,7 @@ static func all_pets() -> Array[Dictionary]:
 			"name": "Noel",
 			"kind": "animal",
 			"branch": "Guard",
-			"species": "dust terrier",
+			"species": "merle doodle",
 			"damage": 8,
 			"loyalty": 70,
 			"active": true,
@@ -35,7 +35,7 @@ static func all_pets() -> Array[Dictionary]:
 			"rampage_aoe_damage": 38.0,
 			"rampage_tick": 0.28,
 			"rampage_speed_mult": 1.55,
-			"note": "Wasteland sheet style. Super territorial.",
+			"note": "Merle curly doodle — grey/black/white. Super territorial.",
 		},
 		{
 			"id": BENTLEY_ID,
