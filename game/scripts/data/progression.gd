@@ -121,7 +121,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "endurance",
 			"name": "Dust Lungs",
-			"desc": "+4% dash i-frame length per rank (stamina stub until a stamina bar ships)",
+			"desc": "+4% dash invulnerability time per rank",
 			"cost": 80,
 			"cost_step": 48,
 			"cost_curve": 1.38,
@@ -133,7 +133,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "scrap_find",
 			"name": "Magnet Fingers",
-			"desc": "+8% scrap found in-run per rank (diminishing feel via cost curve)",
+			"desc": "+8% scrap found in-run per rank",
 			"cost": 75,
 			"cost_step": 50,
 			"cost_curve": 1.4,
@@ -145,7 +145,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "loot_quality",
 			"name": "Apothecary Eye",
-			"desc": "+3% crate buff chance per rank (empty crates stay common)",
+			"desc": "+3% chance crates drop a buff, per rank",
 			"cost": 95,
 			"cost_step": 58,
 			"cost_curve": 1.4,
@@ -205,7 +205,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "dodge",
 			"name": "Dust Sidestep",
-			"desc": "+1.5% chance to shrug a hit per rank (soft-capped in combat)",
+			"desc": "+1.5% chance to dodge a hit per rank",
 			"cost": 100,
 			"cost_step": 60,
 			"cost_curve": 1.45,
@@ -217,7 +217,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "block",
 			"name": "Brace Plate",
-			"desc": "+2% block (half damage) per rank — full value with Bastion / block-affinity kits; half for others",
+			"desc": "+2% chance to block half a hit per rank (full value for Sister Cinder, half for others)",
 			"cost": 110,
 			"cost_step": 65,
 			"cost_curve": 1.45,
@@ -229,7 +229,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "move_speed",
 			"name": "Trail Dust",
-			"desc": "+2% move speed per rank (modest — won't outrun TL)",
+			"desc": "+2% move speed per rank",
 			"cost": 85,
 			"cost_step": 50,
 			"cost_curve": 1.38,
@@ -301,7 +301,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 		{
 			"id": "hangar_notes",
 			"name": "Field Notes",
-			"desc": "Unlock stub — hangar lore scrap (cosmetic for now)",
+			"desc": "Hangar lore from the wastes — collect all three",
 			"cost": 60,
 			"cost_step": 40,
 			"cost_curve": 1.2,
@@ -314,7 +314,7 @@ static func hangar_catalog() -> Array[Dictionary]:
 			## Hidden until a real loadout / stash screen ships — buying slots with nowhere to assign them is confusing.
 			"id": "insurance_slot",
 			"name": "Extra Tape",
-			"desc": "+1 insurance slot (needs Loadout screen — coming later)",
+			"desc": "+1 insurance slot — keep one more item on a wipe",
 			"cost": 200,
 			"cost_step": 120,
 			"cost_curve": 1.5,

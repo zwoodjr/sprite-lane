@@ -38,6 +38,9 @@ func build(c: VBoxContainer) -> void:
 		GameState.fast_timers = on
 		_refresh()
 	)
+	_fast.visible = GameState.dev_tools
+	if not GameState.dev_tools:
+		GameState.fast_timers = false
 	bottom.add_child(_fast)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL

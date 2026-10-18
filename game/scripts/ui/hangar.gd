@@ -15,7 +15,7 @@ func build(c: VBoxContainer) -> void:
 	## Short copy on portrait so the catalog keeps vertical room under Xogot chrome.
 	var intro := UiTheme.body_label(
 		"Banked scrap → permanent upgrades. In-run levels never carry." if portrait
-		else "Spend banked scrap on permanent upgrades. In-run levels never carry — only what you buy here sticks after a wipe. Costs stretch so a few extracts won't dump the tree.",
+		else "Spend banked scrap on permanent upgrades. In-run levels never carry — only what you buy here sticks after a wipe.",
 		14 if portrait else 15, UiTheme.TEXT_DIM
 	)
 	c.add_child(intro)
@@ -27,8 +27,8 @@ func build(c: VBoxContainer) -> void:
 	_scrap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	top.add_child(_scrap_label)
 	var prestige := UiTheme.body_label(
-		"Account Lv %d  ·  soft gate" % GameState.account_level if portrait
-		else "Account Lv %d  ·  soft gate for higher tiers" % GameState.account_level,
+		"Account Lv %d" % GameState.account_level if portrait
+		else "Account Lv %d  ·  unlocks higher upgrades" % GameState.account_level,
 		14 if portrait else 16, UiTheme.TEXT_DIM, false
 	)
 	prestige.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
