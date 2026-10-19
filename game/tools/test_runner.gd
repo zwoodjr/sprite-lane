@@ -142,6 +142,12 @@ func _run() -> void:
 	GameState.kit = keep_kit
 	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
 	await _test_depth_e6()
+	var keep_e7 := [GameState.tier_clears.duplicate(true), GameState.plane_parts.duplicate(), GameState.pacts.duplicate(), GameState.best_tier_extracted]
+	await _test_depth_e7()
+	GameState.tier_clears = keep_e7[0]
+	GameState.plane_parts = keep_e7[1]
+	GameState.pacts = keep_e7[2]
+	GameState.best_tier_extracted = keep_e7[3]
 	GameState.mechs_built = keep_mech[0]
 	GameState.selected_pet_id = keep_mech[1]
 	GameState.account_scrap = keep_mech[2]
@@ -1030,6 +1036,7 @@ func _test_depth_e5() -> void:
 	foe.set("max_hp", 99999.0)
 	foe.set("hp", 99999.0)
 	player.set("_fire_cd", 0.5)
+	player.set("_target", foe)
 	player.call("_tick_heat", 0.05)
 	_check(float(player.get("_overheat_left")) > 0.0 and float(player.call("heat_ratio")) == 1.0, "e5 hot barrel overheats")
 	await get_tree().process_frame
@@ -1170,6 +1177,209 @@ func _test_depth_e6() -> void:
 	GameState.reset_loadout_to_defaults()
 	await get_tree().process_frame
 	print("DEPTH_E6_OK")
+
+
+## Depth E7: zones + twists for tiers 3-10, exclusive loot, trophies, pacts, plane.
+func _test_depth_e7() -> void:
+	_check(ZoneDefs.ZONES.size() == 10 and ZoneDefs.zone(1)["twists"].is_empty(), "e7 ten zones")
+	for t in range(3, 11):
+		var z := ZoneDefs.zone(t)
+		_check(not (z["twists"] as Array).is_empty(), "e7 tier %d has a twist" % t)
+		_check(ResourceLoader.exists("res://assets/sprites/tiles/zones/ground_earth_%s.png" % z["grade"]), "e7 tier %d ground" % t)
+		for pr in z["props"]:
+			_check(ResourceLoader.exists(ZoneDefs.PROP_DIR % pr) and ZoneDefs.PROP_INFO.has(pr), "e7 prop %s" % pr)
+		_check(not ZoneDefs.exclusive(t).is_empty() and not ZoneDefs.plane_part(t).is_empty(), "e7 tier %d loot + plane part" % t)
+	for zk in ["key", "flare", "filter", "power_cell"]:
+		_check(ResourceLoader.exists("res://assets/sprites/depth/icons/zone_%s.png" % zk), "e7 icon %s" % zk)
+	for i in range(1, 9):
+		_check(ResourceLoader.exists(ZoneDefs.PLANE_LAYER % i), "e7 plane layer %d" % i)
+	for tw in ["smog", "night", "shroud", "toxic_air", "power_cells", "revive"]:
+		_check(ZoneDefs.has_twist(10, tw), "e7 dustfall has %s" % tw)
+	## Exclusive loot.
+	var ex := GameState.make_exclusive(7)
+	_check(str(ex["exclusive"]) == "chem_filter_vial" and str(ex["rarity"]) == "legendary" and not ex.has("needs_heart") and float(ex["stats"].get("regen", 0.0)) >= 1.0, "e7 exclusive item")
+	_check(GameState.make_exclusive(2).is_empty(), "e7 no exclusive below smog")
+	## Trophies + plane parts.
+	GameState.tier_clears = {}
+	GameState.plane_parts = {}
+	GameState.selected_character_id = "pebble"
+	GameState._record_tier_clear(2)
+	_check(GameState.tier_clears.is_empty(), "e7 no trophy below smog")
+	GameState._record_tier_clear(5)
+	_check(GameState.has_tier_clear("pebble", 5) and GameState.plane_parts.has("5") and not GameState.has_tier_clear("ash_rook", 5), "e7 trophy + plane part")
+	for t in range(3, 11):
+		GameState._record_tier_clear(t)
+	_check(GameState.plane_complete() and GameState.plane_part_count() == 8, "e7 plane complete")
+	## Pacts.
+	GameState.pacts = []
+	GameState.best_tier_extracted = 2
+	_check(not GameState.toggle_pact("thick_dust"), "e7 pacts locked before smog")
+	GameState.best_tier_extracted = 3
+	_check(GameState.toggle_pact("thick_dust") and GameState.toggle_pact("hungry_dark") and is_equal_approx(GameState.pact_fx("enemy_hp"), 1.25), "e7 pacts stack")
+	_check(is_equal_approx(GameState.pact_loot_bonus(), 0.3), "e7 pact loot bonus")
+	GameState.toggle_pact("hungry_dark")
+	_check(GameState.pacts == ["thick_dust"], "e7 pact toggles off")
+	## Save sanitize.
+	GameState._load_depth({"tier_clears": {"pebble": {"5": true, "1": true, "x": true}, "nobody": {"5": true}}, "plane_parts": {"4": true, "2": true}, "pacts": ["thick_dust", "bogus", "thick_dust"]})
+	_check(GameState.tier_clears.size() == 1 and (GameState.tier_clears["pebble"] as Dictionary).size() == 1, "e7 save tier clears sanitized")
+	_check(GameState.plane_parts.keys() == ["4"] and GameState.pacts == ["thick_dust"], "e7 save plane / pacts sanitized")
+	GameState._load_depth({})
+	_check(GameState.tier_clears.is_empty() and GameState.plane_parts.is_empty() and GameState.pacts.is_empty(), "e7 old saves")
+	## Pact in a match: enemies tougher, narrower windows.
+	GameState.pacts = ["thick_dust", "narrow_windows"]
+	var m: Node = await _depth_match("smog", "pebble")
+	var md: Dictionary = m.get("_mode")
+	_check(float(md["enemy_hp"]) > float(ModeDefs.get_mode("smog")["enemy_hp"]) and float(md["window_open"]) < float(ModeDefs.get_mode("smog")["window_open"]), "e7 pacts reach the match")
+	GameState.pacts = []
+	## Smog: patches, bunkers, keys.
+	var tw: Node = m.get_node("ZoneTwists")
+	var player: Node2D = m.get_node("World/Player")
+	player.set("max_hp", 99999.0)
+	player.set("hp", 99999.0)
+	_check((tw.get("smog") as Array).size() == int(ZoneDefs.SMOG["patches"]) and get_tree().get_nodes_in_group("bunkers").size() == 2, "e7 smog + bunkers")
+	var pk: Node = tw.call("spawn_pickup", "key", player.global_position)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(GameState.run_keys == 1, "e7 key picked up")
+	var bk: Node = get_tree().get_nodes_in_group("bunkers")[0]
+	_check(bool(bk.call("open_bunker")) and GameState.run_keys == 0 and bool(bk.get("opened")), "e7 bunker opens with a key")
+	var sm: Node2D = (tw.get("smog") as Array)[0]["node"]
+	var hid := _mob(m, "rad_gator", sm.global_position)
+	hid.set("_spawn_in", 9.0)
+	player.global_position = sm.global_position + Vector2(900, 0)
+	for k in range(3):
+		await get_tree().process_frame
+	_check(bool(hid.get_meta("smog_hidden", false)), "e7 smog hides enemies")
+	await _end_depth_match(m)
+	## Pall: night + flares + wraith phasing.
+	m = await _depth_match("pall", "pebble")
+	tw = m.get_node("ZoneTwists")
+	player = m.get_node("World/Player")
+	var r0 := float(tw.call("light_radius"))
+	tw.call("on_pickup", "flare", Vector2.ZERO)
+	_check(tw.get("_night") != null and float(tw.call("light_radius")) > r0, "e7 night + flare")
+	var wr := _mob(m, "ash_wraiths", player.global_position + Vector2(300, 0))
+	wr.set("_spawn_in", 9.0)
+	tw.set("_phase_t", float(ZoneDefs.WRAITH_PHASE["every"]) - float(ZoneDefs.WRAITH_PHASE["on"]) * 0.5)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var whp := float(wr.get("hp"))
+	wr.call("take_damage", 50.0, Vector2.ZERO)
+	_check(bool(wr.get("phased")) and is_equal_approx(float(wr.get("hp")), whp), "e7 wraith phases")
+	await _end_depth_match(m)
+	## Shroud: unseen until close; marked = seen; the rival crew hunts.
+	m = await _depth_match("shroud", "pebble")
+	tw = m.get_node("ZoneTwists")
+	player = m.get_node("World/Player")
+	player.set("max_hp", 99999.0)
+	player.set("hp", 99999.0)
+	var far := _mob(m, "rad_gator", player.global_position + Vector2(600, 0))
+	far.set("_spawn_in", 9.0)
+	var t_sh := Time.get_ticks_msec() + 500
+	while Time.get_ticks_msec() < t_sh:
+		await get_tree().process_frame
+	_check(far.modulate.a < 0.05, "e7 shroud hides far enemies")
+	far.call("apply_status", "mark", 3.0, 1.1)
+	await get_tree().process_frame
+	_check(far.modulate.a > 0.9, "e7 marked enemies show")
+	tw.set("_t", 999.0)
+	await get_tree().process_frame
+	var crews := get_tree().get_nodes_in_group("raider_crews")
+	_check(crews.size() >= 1 and bool(crews[0].get("hunting")), "e7 raider crew hunts")
+	await _end_depth_match(m)
+	## Choke: the air filter drains, empty hurts, filters refill.
+	m = await _depth_match("choke", "pebble")
+	tw = m.get_node("ZoneTwists")
+	player = m.get_node("World/Player")
+	GameState.run_filter = 0.0
+	var hp0 := float(player.get("hp"))
+	for k in range(10):
+		await get_tree().process_frame
+	_check(float(player.get("hp")) < hp0, "e7 no air hurts")
+	tw.call("on_pickup", "filter", Vector2.ZERO)
+	_check(GameState.run_filter >= float(ZoneDefs.TOXIC_AIR["refill"]) - 1.0, "e7 filter refills")
+	await _end_depth_match(m)
+	## Blackout: dead pads + power cell; enraged machines.
+	m = await _depth_match("blackout", "pebble")
+	tw = m.get_node("ZoneTwists")
+	player = m.get_node("World/Player")
+	var hound := _mob(m, "scrap_hound", player.global_position + Vector2(400, 0))
+	_check(float(hound.get("damage")) > float(EnemyDefs.get_kind("scrap_hound")["damage"]) * 1.1, "e7 machines enraged")
+	var pad: Area2D = (load("res://scenes/entities/extract_pad.tscn") as PackedScene).instantiate()
+	m.add_child(pad)
+	pad.call("set_open", true)
+	tw.call("on_window_open", 1, [pad])
+	_check(not bool(pad.get("powered")) and get_tree().get_nodes_in_group("zone_pickups").size() >= 1, "e7 pads dead + cell spawned")
+	pad.set("player_inside", true)
+	await get_tree().process_frame
+	_check(not bool(pad.get("powered")) and float(pad.call("get_channel_ratio")) == 0.0, "e7 dead pad won't channel")
+	tw.call("on_pickup", "power_cell", Vector2.ZERO)
+	await get_tree().process_frame
+	_check(bool(pad.get("powered")) and not GameState.run_has_cell, "e7 cell powers the pad")
+	pad.queue_free()
+	await _end_depth_match(m)
+	## Deadfall: one pad, sinkholes, rubble, serpent, revive.
+	m = await _depth_match("deadfall", "pebble")
+	tw = m.get_node("ZoneTwists")
+	player = m.get_node("World/Player")
+	player.set("max_hp", 99999.0)
+	player.set("hp", 99999.0)
+	m.call("_place_window_pads", 1)
+	_check((m.get("_pads") as Array).size() == 1, "e7 one pad on deadfall")
+	_check((tw.get("sinkholes") as Array).size() == int(ZoneDefs.SINKHOLES["count"]), "e7 sinkholes")
+	var sh: Dictionary = (tw.get("sinkholes") as Array)[0]
+	var hpb := float(player.get("hp"))
+	player.global_position = sh["pos"]
+	player.set("_iframes", 0.0)
+	tw.set("_sink_cd", 0.0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(float(player.get("hp")) < hpb and player.global_position.distance_to(sh["pos"]) > float(sh["r"]) * 0.8, "e7 sinkhole hurts + flings")
+	var sp: Node = tw.call("serpent_ambush")
+	_check(sp != null and str(sp.get("kind")) == "dune_serpent", "e7 serpent ambush")
+	var zomb := _mob(m, "rad_gator", player.global_position + Vector2(500, 0))
+	zomb.set("_spawn_in", 9.0)
+	await get_tree().process_frame
+	var downs := 0
+	for k in range(12):
+		var z2 := _mob(m, "rad_gator", player.global_position + Vector2(500, 60 + k * 10))
+		z2.set("_spawn_in", 9.0)
+		await get_tree().physics_frame
+		z2.call("take_damage", 99999.0, Vector2.ZERO)
+		if bool(z2.call("is_downed")):
+			downs += 1
+			z2.call("take_damage", 1.0, Vector2.ZERO)
+			_check(bool(z2.get("_dead")), "e7 downed mob finished by a hit")
+	_check(downs >= 2, "e7 some mobs go down instead of dying (%d/12)" % downs)
+	await _end_depth_match(m)
+	## Dustfall: the storm wall closes; outside hurts; bosses in pairs.
+	m = await _depth_match("dustfall", "pebble")
+	tw = m.get_node("ZoneTwists")
+	player = m.get_node("World/Player")
+	var r_start := float(tw.get("storm_radius"))
+	m.set("_elapsed_in_phases", float(tw.get("_storm_total")) * 0.9)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(float(tw.get("storm_radius")) < r_start * 0.5, "e7 storm closes in")
+	var hpd := float(player.get("hp"))
+	player.global_position = Vector2(float(tw.get("storm_radius")) + 400.0, 0) + tw.get("_origin")
+	for k in range(6):
+		await get_tree().process_frame
+	_check(float(player.get("hp")) < hpd, "e7 storm hurts outside")
+	player.global_position = tw.get("_origin") + Vector2(float(tw.get("storm_radius")) * 3.0, 0)
+	m.call("_place_window_pads", 1)
+	var inside := true
+	for pd in m.get("_pads"):
+		if (pd as Node2D).global_position.distance_to(tw.get("_origin")) > float(tw.get("storm_radius")):
+			inside = false
+	_check(inside, "e7 pads stay inside the storm")
+	var b0 := get_tree().get_nodes_in_group("bosses").size()
+	m.set("_next_boss_at", 0.0)
+	m.call("_tick_specials")
+	_check(get_tree().get_nodes_in_group("bosses").size() - b0 == 2, "e7 double boss")
+	await _end_depth_match(m)
+	GameState.selected_mode_id = "drift"
+	print("DEPTH_E7_OK")
 
 
 func _depth_match(mode: String, hero: String, camp_set: Dictionary = {}) -> Node:

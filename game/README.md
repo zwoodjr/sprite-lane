@@ -53,3 +53,13 @@ Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill t
 - **Events + Logbook** (`EventDefs`, `QuestDefs`): 1–2 radio events per run, Ambush Bounty / Pet Bond on extract, daily quests, survivor stories ending in their Legendary, camp milestones that add hangar cosmetics.
 - **Tiers** (`ModeDefs.TIER_TABLE`): Haze→Dustfall; each unlocks after extracting on the one below.
 - Tests: `godot --headless --path game res://tools/test_runner.tscn` (restores your save afterwards). Bot: `tools/playtest_bot.tscn` (arg 13 `max` camp, arg 14 `kit` gear). Screens: `tools/screenshot.tscn -- OUT hangar|gear|events`.
+
+## Depth Update (E1–E7)
+All tuning lives in `scripts/data/`: `medicine_defs` (ingredients, pouch, backpack, medicine crates, tonics, plague exposure),
+`faction_defs` (weaknesses, elite traits, infighting, raider crews), `recipe_defs` + `bestiary_defs` (evolutions, Field Notes,
+lore pages), `radio_defs` (Helm's contracts, camp cameos, Dust Warden, stay-or-go stakes), `kit_defs` (weapon styles, ability
+B versions, quirks — picked on the pre-run Loadout screen), `pet_defs` / `hangar_defs` (mech pets from Salvage Cores, built in
+the Workshop) and `zone_defs` (tiers 3–10 as zones with twists, tier-exclusive loot, tier trophies, Dust Pacts, Helm's plane).
+Art tools: `tools/gen_depth_art.py` (cel items/props/plane), `tools/gen_zone_tiles.py` (zone ground sets),
+`tools/gen_mech_pets.py` (mech pets from the machine rigs), `tools/gen_hud_readout.py` (HP/XP readout).
+Tests: `tools/test_runner.tscn` (`-- only=depth_e7` runs one section); screenshots: `tools/depth_shots.tscn -- <out> <phase>`.

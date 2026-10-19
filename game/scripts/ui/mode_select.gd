@@ -137,7 +137,11 @@ func _build_detail(mode: Dictionary) -> void:
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(name_l)
 	top.add_child(UiTheme.body_label("~%d min" % int(mode["target_minutes"]), 20, UiTheme.TEXT, false))
-	v.add_child(UiTheme.body_label(str(mode.get("blurb", "")), 14, UiTheme.TEXT_DIM))
+	var zn := ZoneDefs.zone(int(mode.get("tier", 1)))
+	var zt := str(mode.get("blurb", ""))
+	if not (zn["twists"] as Array).is_empty():
+		zt = "%s — %s" % [str(zn["name"]), zt]
+	v.add_child(UiTheme.body_label(zt, 14, UiTheme.TEXT_DIM))
 	var tl := Control.new()
 	tl.custom_minimum_size = Vector2(0, 24)
 	tl.draw.connect(_draw_timeline.bind(tl, mode))

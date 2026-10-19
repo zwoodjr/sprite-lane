@@ -214,6 +214,8 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 		+ GameState.tonic_fx("max_hp")
 	if GameState.quirk_fx("max_hp_mult") > 0.0:
 		max_hp *= GameState.quirk_fx("max_hp_mult")
+	## Depth E7 Dust Pact: Brittle Bones.
+	max_hp *= GameState.pact_fx("max_hp")
 	damage_mult = (1.0 + GameState.quirk_fx("damage")) * float(_char.get("damage_mult", 1.0)) \
 		* (1.0 + GameState.starting_damage_bonus()) \
 		* (1.0 + float(rm.get("damage", 0.0)))

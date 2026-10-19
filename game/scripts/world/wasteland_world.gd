@@ -69,6 +69,9 @@ var field: GroundField
 var _mid_tex: Dictionary = {}
 var _atlas: Texture2D
 var _ground_tex: Dictionary = {}
+## Depth E7: the tier's zone (ground set, props, tint — ZoneDefs).
+var zone: Dictionary = {}
+var _zone_tex: Dictionary = {}
 ## Chunks waiting for their one-off floor bake (one per frame, nearest first).
 var _bake_queue: Array[WastelandChunk] = []
 
@@ -76,10 +79,12 @@ var _bake_queue: Array[WastelandChunk] = []
 func setup(p_seed: int, player: Node2D) -> void:
 	run_seed = p_seed
 	_player = player
+	zone = ZoneDefs.zone(GameState.zone_tier())
 	_load_textures()
 	_chunks_root = Node2D.new()
 	_chunks_root.name = "Chunks"
 	_chunks_root.z_index = -10
+	_chunks_root.modulate = zone.get("tint", Color.WHITE)
 	add_child(_chunks_root)
 	_props_root = Node2D.new()
 	_props_root.name = "Props"
@@ -97,8 +102,17 @@ func setup(p_seed: int, player: Node2D) -> void:
 
 
 func _load_textures() -> void:
+	var grade := str(zone.get("grade", ""))
 	for k in ["earth", "sand", "scrub", "rubble", "riverbed", "asphalt"]:
-		_ground_tex[k] = load("res://assets/sprites/tiles/ground_%s.png" % k) as Texture2D
+		var zp := "res://assets/sprites/tiles/zones/ground_%s_%s.png" % [k, grade]
+		if grade != "" and ResourceLoader.exists(zp):
+			_ground_tex[k] = load(zp) as Texture2D
+		else:
+			_ground_tex[k] = load("res://assets/sprites/tiles/ground_%s.png" % k) as Texture2D
+	for zk in zone.get("props", []):
+		var zpath := ZoneDefs.PROP_DIR % str(zk)
+		if ResourceLoader.exists(zpath):
+			_zone_tex[str(zk)] = load(zpath) as Texture2D
 	for k in MID_PROPS.keys():
 		_mid_tex[k] = prop_tex(str(k))
 	_atlas = load("res://assets/sprites/decals/decal_atlas.png") as Texture2D
@@ -226,6 +240,7 @@ func _spawn_chunk(coord: Vector2i) -> Node2D:
 	var taken: Array[Vector2] = [] ## world positions of mid props (spacing)
 	_populate_road(chunk, coord, segs, decals, taken)
 	_populate_mid_props(chunk, coord, segs, taken)
+	_populate_zone_props(chunk, coord, segs, taken)
 	_populate_decals(chunk, coord, segs, decals)
 	_populate_props(chunk, coord, segs, taken)
 	_maybe_landmark_sprite(chunk, coord)
@@ -330,6 +345,52 @@ func _populate_mid_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary]
 		if (info.has("block") or kind == "fence_broken") and GroundField.road_dist(p, segs) < GroundField.ROAD_HALF + 60.0:
 			continue
 		_place_mid(chunk, kind, p, rng, taken)
+
+
+## Depth E7: this zone's own props (refinery tanks, city lamps, chem vats...).
+func _populate_zone_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], taken: Array[Vector2]) -> void:
+	if _zone_tex.is_empty():
+		return
+	var rng := _rng_for(coord, 71)
+	var keys: Array = _zone_tex.keys()
+	var count := rng.randi_range(ZoneDefs.PROPS_PER_CHUNK.x, ZoneDefs.PROPS_PER_CHUNK.y)
+	for i in range(count):
+		var p := chunk.position + Vector2(rng.randf_range(70, CHUNK_SIZE - 70), rng.randf_range(60, CHUNK_SIZE - 60))
+		var kind := str(keys[rng.randi() % keys.size()])
+		if GroundField.road_dist(p, segs) < GroundField.ROAD_HALF + 70.0 or p.length() < BLOCK_CLEAR_ORIGIN:
+			continue
+		var near := false
+		for t in taken:
+			if t.distance_to(p) < 140.0:
+				near = true
+		for lm in landmarks:
+			if (lm["position"] as Vector2).distance_to(p) < BLOCK_CLEAR_LANDMARK:
+				near = true
+		if near:
+			continue
+		taken.append(p)
+		var info: Array = ZoneDefs.PROP_INFO.get(kind, [110.0, Vector2.ZERO])
+		var tex: Texture2D = _zone_tex[kind]
+		var sp := Sprite2D.new()
+		sp.texture = tex
+		sp.scale = Vector2.ONE * (float(info[0]) / float(tex.get_height()))
+		sp.offset = Vector2(0, -tex.get_height() * 0.5 + tex.get_height() * 0.08)
+		sp.position = (p - chunk.position).floor()
+		sp.flip_h = rng.randf() < 0.5
+		sp.z_index = 2
+		var block: Vector2 = info[1]
+		if block.x > 0.0:
+			var body := StaticBody2D.new()
+			body.collision_layer = 1
+			body.collision_mask = 0
+			body.position = sp.position
+			var cs := CollisionShape2D.new()
+			var shape := RectangleShape2D.new()
+			shape.size = block
+			cs.shape = shape
+			body.add_child(cs)
+			chunk.add_child(body)
+		chunk.add_child(sp)
 
 
 func _weighted(table: Array, rng: RandomNumberGenerator) -> String:

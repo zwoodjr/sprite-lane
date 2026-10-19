@@ -98,6 +98,14 @@ var run_pack_locked: bool = false
 var kit: Dictionary = {}
 ## Depth E6: mech pets rebuilt in the Workshop ({pet id: true}).
 var mechs_built: Dictionary = {}
+## Depth E7: tier-clear trophies {hero: {"<tier>": true}}, Helm's plane parts
+## {"<tier>": true}, Dust Pacts picked for the next run, and run-only zone state.
+var tier_clears: Dictionary = {}
+var plane_parts: Dictionary = {}
+var pacts: Array = []
+var run_keys: int = 0
+var run_filter: float = 100.0
+var run_has_cell: bool = false
 ## Contract rewards waiting for extract: ingredients -> count.
 var run_job_rewards: Dictionary = {}
 var jobs_done_run: int = 0
@@ -223,6 +231,9 @@ func save_profile() -> void:
 		"lore_pages": lore_pages,
 		"kit": kit,
 		"mechs_built": mechs_built,
+		"tier_clears": tier_clears,
+		"plane_parts": plane_parts,
+		"pacts": pacts,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -385,6 +396,32 @@ func _load_depth(d: Dictionary) -> void:
 			if str(ed.get("quirk", "")) in KitDefs.quirks(str(h)):
 				clean["quirk"] = str(ed["quirk"])
 			kit[str(h)] = clean
+	tier_clears = {}
+	var tc: Variant = d.get("tier_clears", {})
+	if typeof(tc) == TYPE_DICTIONARY:
+		for h in (tc as Dictionary).keys():
+			var row: Variant = (tc as Dictionary)[h]
+			if not CharacterDefs.is_playable(str(h)) or typeof(row) != TYPE_DICTIONARY:
+				continue
+			var clean := {}
+			for t in (row as Dictionary).keys():
+				var tn := int(str(t))
+				if tn >= ZoneDefs.TROPHY_FROM_TIER and tn <= ModeDefs.EXPOSED_TIERS:
+					clean[str(tn)] = true
+			if not clean.is_empty():
+				tier_clears[str(h)] = clean
+	plane_parts = {}
+	var pp: Variant = d.get("plane_parts", {})
+	if typeof(pp) == TYPE_DICTIONARY:
+		for t in (pp as Dictionary).keys():
+			if not ZoneDefs.plane_part(int(str(t))).is_empty():
+				plane_parts[str(int(str(t)))] = true
+	pacts = []
+	var pc: Variant = d.get("pacts", [])
+	if typeof(pc) == TYPE_ARRAY:
+		for k in (pc as Array):
+			if not ZoneDefs.pact(str(k)).is_empty() and not str(k) in pacts:
+				pacts.append(str(k))
 	mechs_built = {}
 	var mb: Variant = d.get("mechs_built", {})
 	if typeof(mb) == TYPE_DICTIONARY:
@@ -506,6 +543,97 @@ func build_mech(pet_id: String) -> bool:
 	save_profile()
 	meta_changed.emit()
 	return true
+
+## =============================================================================
+## Depth E7: zones, Dust Pacts, tier trophies, Helm's plane, exclusive loot.
+
+func zone_tier() -> int:
+	return int(get_mode().get("tier", 1))
+
+func twist_on(twist: String) -> bool:
+	return ZoneDefs.has_twist(zone_tier(), twist)
+
+func pacts_unlocked() -> bool:
+	return best_tier_extracted >= ZoneDefs.PACTS_FROM_TIER
+
+## Active pacts for this run (only once unlocked).
+func active_pacts() -> Array:
+	return pacts if pacts_unlocked() else []
+
+func toggle_pact(id: String) -> bool:
+	if ZoneDefs.pact(id).is_empty() or not pacts_unlocked():
+		return false
+	if id in pacts:
+		pacts.erase(id)
+	else:
+		pacts.append(id)
+	save_profile()
+	return true
+
+## Multiplicative pact effect (1.0 = none); "window" is additive seconds.
+func pact_fx(key: String) -> float:
+	var add := key in ["window", "no_tonics", "window_elite"]
+	var v := 0.0 if add else 1.0
+	for id in active_pacts():
+		var fx: Dictionary = ZoneDefs.pact(str(id)).get("fx", {})
+		if fx.has(key):
+			v = v + float(fx[key]) if add else v * float(fx[key])
+	return v
+
+func pact_loot_bonus() -> float:
+	var b := 0.0
+	for id in active_pacts():
+		b += float(ZoneDefs.pact(str(id)).get("loot", 0.0))
+	return b
+
+func has_tier_clear(hero: String, tier: int) -> bool:
+	return bool((tier_clears.get(hero, {}) as Dictionary).get(str(tier), false))
+
+func plane_part_count() -> int:
+	return plane_parts.size()
+
+func plane_complete() -> bool:
+	return plane_parts.size() >= ZoneDefs.PLANE_PARTS.size()
+
+## Extract on tier >= 3: the survivor's trophy for that tier, and the first
+## clear of the tier sends a plane part home.
+func _record_tier_clear(tier: int) -> void:
+	if tier < ZoneDefs.TROPHY_FROM_TIER:
+		return
+	var hero := selected_character_id
+	if not has_tier_clear(hero, tier):
+		var row: Dictionary = tier_clears.get(hero, {})
+		row[str(tier)] = true
+		tier_clears[hero] = row
+		result_unlocks_pending.append("Trophy: %s cleared %s" % [str(get_character().get("display_name", hero)), str(ZoneDefs.zone(tier)["name"])])
+	var part := ZoneDefs.plane_part(tier)
+	if not part.is_empty() and not plane_parts.has(str(tier)):
+		plane_parts[str(tier)] = true
+		result_unlocks_pending.append("Helm's plane: %s recovered (%d/%d)" % [str(part["name"]), plane_parts.size(), ZoneDefs.PLANE_PARTS.size()])
+		if plane_complete():
+			result_unlocks_pending.append("Helm's plane is whole — new bases beyond the Dust are in reach")
+			hangar_notice = "Helm's plane is whole. Somewhere past the Dust, new bases are waiting."
+
+## A tier-exclusive legendary (ZoneDefs.EXCLUSIVE), or {} for tiers without one.
+func make_exclusive(tier: int, rng: RandomNumberGenerator = null) -> Dictionary:
+	var ex := ZoneDefs.exclusive(tier)
+	if ex.is_empty():
+		return {}
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	var it := GearDefs.make_gear(str(ex["slot"]), "legendary", rng)
+	var st: Dictionary = it["stats"]
+	for k in (ex["stats"] as Dictionary).keys():
+		st[k] = float(st.get(k, 0.0)) + float(ex["stats"][k])
+	it["stats"] = st
+	it["name"] = str(ex["name"])
+	it["exclusive"] = str(ex["id"])
+	it["exclusive_tier"] = tier
+	it["set"] = ""
+	it.erase("needs_heart")
+	it.erase("charged")
+	return it
 
 ## Old name kept for scripts / tests that still call it.
 func try_buy_hangar(entry_id: String) -> bool:
@@ -1296,6 +1424,9 @@ func begin_run() -> void:
 	exposure = 0.0
 	run_pack_locked = false
 	run_job_rewards = {}
+	run_keys = 0
+	run_filter = 100.0
+	run_has_cell = false
 	jobs_done_run = 0
 	_drink_tonics()
 	## Reset in-run track completely.
@@ -1550,8 +1681,11 @@ func on_extract_success() -> void:
 	## Extract pays the full bag (plus a 100 scrap stipend) × loot multiplier.
 	var base := 100 + bag_value()
 	payout_this_run = int(
-		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult()
+		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult() * (1.0 + pact_loot_bonus())
 	) + extract_bonus_scrap
+	if pact_loot_bonus() > 0.0:
+		result_unlocks_pending.append("Dust Pacts: payout +%d%%" % int(round(pact_loot_bonus() * 100.0)))
+	_record_tier_clear(int(mode.get("tier", 1)))
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
 	result_scrap_banked = payout_this_run

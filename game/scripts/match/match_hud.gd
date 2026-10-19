@@ -77,6 +77,9 @@ var _tonic_row: HBoxContainer
 var _pouch_row: HBoxContainer
 var _pouch_labels: Dictionary = {}
 var _expo_box: VBoxContainer
+## Depth E7 zone row: bunker keys · power cell · air filter · flare.
+var _zone_row: HBoxContainer
+var _zone_bits: Dictionary = {}
 var _expo_label: Label
 var _expo_bar: ProgressBar
 var _expo_col: Color = Color(0.55, 0.85, 0.35)
@@ -464,6 +467,20 @@ func _build_depth(vb: VBoxContainer) -> void:
 		l.visible = false
 		_pouch_row.add_child(l)
 		_pouch_labels[id] = [ic, l]
+	_zone_row = HBoxContainer.new()
+	_zone_row.add_theme_constant_override("separation", 4)
+	_zone_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_zone_row.visible = false
+	vb.add_child(_zone_row)
+	for zk in ["key", "power_cell", "filter", "flare"]:
+		var zi := _icon("res://assets/sprites/depth/icons/zone_%s.png" % zk, 18)
+		zi.visible = false
+		_zone_row.add_child(zi)
+		var zl := _label("", 13, UiTheme.TEXT)
+		zl.add_theme_font_override("font", UiTheme.font_button)
+		zl.visible = false
+		_zone_row.add_child(zl)
+		_zone_bits[zk] = [zi, zl]
 	_expo_box = VBoxContainer.new()
 	_expo_box.add_theme_constant_override("separation", 2)
 	_expo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -521,6 +538,24 @@ func set_pack(weight: int, cap: int, medicine: int) -> void:
 		(pair[0] as Control).visible = n > 0
 		(pair[1] as Label).visible = n > 0
 		(pair[1] as Label).text = "%d" % n
+
+## Zone run state (Depth E7). filter < 0 / flare <= 0 hide those bits.
+func set_zone(keys: int, cell: bool, filter: float, flare: float) -> void:
+	if _zone_row == null:
+		return
+	var vals := {"key": "%d" % keys if keys > 0 else "", "power_cell": "CELL" if cell else "",
+		"filter": "AIR %d%%" % int(ceil(filter)) if filter >= 0.0 else "", "flare": "%ds" % int(ceil(flare)) if flare > 0.0 else ""}
+	var any := false
+	for zk in _zone_bits.keys():
+		var pair: Array = _zone_bits[zk]
+		var on := str(vals[zk]) != ""
+		any = any or on
+		(pair[0] as Control).visible = on
+		(pair[1] as Label).visible = on
+		(pair[1] as Label).text = str(vals[zk])
+		if zk == "filter" and on:
+			(pair[1] as Label).add_theme_color_override("font_color", UiTheme.DANGER if filter < 20.0 else UiTheme.TEXT)
+	_zone_row.visible = any
 
 func set_tonics(ids: Array) -> void:
 	if _tonic_row == null:

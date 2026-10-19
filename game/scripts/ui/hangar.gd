@@ -134,6 +134,21 @@ func _build_view() -> Control:
 		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(tr)
 		_layers[n] = tr
+	## Depth E7: Helm's plane, rebuilt outside the door one tier-part at a time.
+	for i in range(1, ZoneDefs.PLANE_PARTS.size() + 1):
+		var pp := ZoneDefs.PLANE_LAYER % i
+		if not ResourceLoader.exists(pp):
+			continue
+		var pl := TextureRect.new()
+		pl.texture = load(pp)
+		pl.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pl.stretch_mode = TextureRect.STRETCH_SCALE
+		pl.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		pl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		## Keep it behind the hangar's own props (just above the backdrop).
+		v.add_child(pl)
+		v.move_child(pl, mini(1, v.get_child_count() - 1))
+		_layers["plane_%d" % i] = pl
 	## The dogs nap on their beds once the kennel has one.
 	for p in PET_ON_BED.keys():
 		var tex := _pet_frame(str(p))
@@ -183,6 +198,8 @@ func _place_art() -> void:
 	var k := r.size.x / ART_LAYOUT.CANVAS.x
 	for n in _layers.keys():
 		var lr: Rect2 = ART_LAYOUT.RECTS.get(n, Rect2(Vector2.ZERO, ART_LAYOUT.CANVAS))
+		if str(n).begins_with("plane_"):
+			lr = ZoneDefs.PLANE_RECT
 		var tr: TextureRect = _layers[n]
 		tr.position = r.position + lr.position * k
 		tr.size = lr.size * k
@@ -200,6 +217,9 @@ func _layer_visible(n: String) -> bool:
 		return true
 	if n.begins_with("trophy_"):
 		return GameState.has_trophy(n.substr(7))
+	if n.begins_with("plane_"):
+		## Layer i = the part from tier i + 2 (Smog = 1 ... Dustfall = 8).
+		return GameState.plane_parts.has(str(int(n.substr(6)) + 2))
 	if n.begins_with("cosmetic_"):
 		return GameState.has_cosmetic(n.substr(9))
 	var cut := n.rfind("_")
@@ -667,6 +687,47 @@ func open_trophies() -> void:
 	lines.append("")
 	lines.append("First kill of each boss puts a trophy over the hangar door; milestones dress up the hangar.")
 	_open_popup("TROPHY WALL", lines)
+	_add_tier_trophies()
+
+
+## Depth E7: per-survivor tier clears (Smog → Dustfall) and Helm's plane parts.
+func _add_tier_trophies() -> void:
+	if _popup == null:
+		return
+	var v: VBoxContainer = _popup.find_child("*", true, false) as VBoxContainer
+	for n in _popup.find_children("*", "VBoxContainer", true, false):
+		v = n
+		break
+	if v == null:
+		return
+	var close := v.get_child(v.get_child_count() - 1)
+	var head := UiTheme.body_label("TIER CLEARS  ·  Smog → Dustfall", 15, UiTheme.AMBER, false)
+	v.add_child(head)
+	v.move_child(head, close.get_index())
+	var grid := GridContainer.new()
+	grid.columns = 1 + (ModeDefs.EXPOSED_TIERS - ZoneDefs.TROPHY_FROM_TIER + 1)
+	grid.add_theme_constant_override("h_separation", 4)
+	grid.add_theme_constant_override("v_separation", 2)
+	v.add_child(grid)
+	v.move_child(grid, close.get_index())
+	for h in CharacterDefs.PLAYABLE_IDS:
+		var nm := UiTheme.body_label(str(CharacterDefs.get_character(str(h)).get("display_name", h)), 13, UiTheme.TEXT, false)
+		nm.custom_minimum_size.x = 120
+		nm.clip_text = true
+		grid.add_child(nm)
+		for t in range(ZoneDefs.TROPHY_FROM_TIER, ModeDefs.EXPOSED_TIERS + 1):
+			var on := GameState.has_tier_clear(str(h), t)
+			var c := ColorRect.new()
+			c.custom_minimum_size = Vector2(22, 16)
+			c.color = UiTheme.AMBER if on else Color(0.2, 0.17, 0.14)
+			c.tooltip_text = str(ZoneDefs.zone(t)["name"])
+			grid.add_child(c)
+	var parts: Array = []
+	for t in ZoneDefs.PLANE_PARTS.keys():
+		parts.append(("[x] " if GameState.plane_parts.has(str(t)) else "[ ] ") + str(ZoneDefs.PLANE_PARTS[t]["name"]))
+	var pl := UiTheme.body_label("HELM'S PLANE  %d/%d — %s" % [GameState.plane_part_count(), ZoneDefs.PLANE_PARTS.size(), "  ".join(PackedStringArray(parts))], 13, UiTheme.TEXT_DIM)
+	v.add_child(pl)
+	v.move_child(pl, close.get_index())
 
 
 func _open_popup(title: String, lines: Array) -> void:

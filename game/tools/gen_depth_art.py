@@ -2,7 +2,7 @@
 ingredients, tonics, medicine, backpack, plague fog and later phases' items.
 
 usage (from game/):  python3 tools/gen_depth_art.py [group ...] [--sheet DIR]
-groups: e1 e3 e4 e5 (default: all)
+groups: e1 e3 e4 e5 e6 e7 plane (default: all)
 Writes into assets/sprites/depth/.
 """
 import math
@@ -830,12 +830,408 @@ def salvage_core():
     return save_icon(cv, "salvage_core")
 
 
+# ================================================================== E7 zones
+ZONE = os.path.join(OUT, "zone")
+PLANE = os.path.join(OUT, "plane")
+CONC = C(150, 146, 136)
+CONC_D = C(108, 104, 98)
+OLIVE = C(96, 104, 62)
+HAZ = C(226, 184, 52)
+WHITE = C(224, 220, 206)
+TOXG = C(140, 210, 60)
+
+
+def save_zone(cv, name, px):
+    im = cv.save(os.path.join(ZONE, name + ".png"), px)
+    _made.append(im.resize((96, int(96 * im.height / im.width)), Image.LANCZOS))
+    return im
+
+
+def stripes(L, x0, y0, x1, y1, a=HAZ, b=C(36, 32, 30), w=1.6):
+    cel(L, [("rect", x0, y0, x1, y1)], a, n=(0, -0.05, 1), ol=1.4, bevel=0.3, wear=0.3)
+    x = x0 - (y1 - y0)
+    k = 0
+    while x < x1:
+        if k % 2:
+            fill(L, [("poly", [(max(x0, x), y1), (min(x1, x + w), y1), (min(x1, x + w + (y1 - y0)), y0), (max(x0, x + (y1 - y0)), y0)])], b, 0.95)
+        x += w
+        k += 1
+
+
+def oil_tank():
+    cv = Canvas(32, 32)
+    L = cv.L
+    shadow(L, 16.5, 29.0, 13.0, 2.0)
+    for x in (7.0, 24.0):
+        cel(L, [("rect", x, 22.0, x + 1.4, 29.0)], GUN, n=(0, 0, 1), ol=1.4, bevel=0.3, metal=0.6, rust=0.3)
+    cel(L, [("rect", 4.0, 9.0, 28.0, 24.0)], C(150, 120, 80), form="cylv", ol=2.6, bevel=1.4, metal=0.5, rust=0.45, wear=0.3)
+    cel(L, [("ell", 16.0, 9.0, 12.0, 3.4)], C(170, 140, 96), form="dome", ol=2.2, bevel=1.0, metal=0.5, rust=0.35)
+    for y in (13.0, 18.5):
+        ink(L, [(4.2, y), (27.8, y)], 0.3, C(60, 40, 26), 0.8)
+    for x in (21.0, 22.6):
+        ink(L, [(x, 9.5), (x, 24.0)], 0.32, C(50, 46, 44), 0.95)
+    for y in range(10, 24, 2):
+        ink(L, [(21.0, y), (22.6, y)], 0.26, C(50, 46, 44), 0.9)
+    fill(L, [("ell", 10.0, 21.5, 3.0, 1.2), ("rect", 9.4, 20.0, 10.6, 25.5)], C(20, 16, 14), 0.8)
+    stripes(L, 6.0, 15.0, 15.0, 16.6)
+    return save_zone(cv, "oil_tank", 256)
+
+
+def pipe_rack():
+    cv = Canvas(32, 24)
+    L = cv.L
+    shadow(L, 16.0, 21.5, 14.0, 1.6)
+    for x in (6.0, 24.0):
+        cel(L, [("poly", [(x - 3.0, 21.5), (x - 0.6, 6.0), (x + 0.6, 6.0), (x + 3.0, 21.5), (x + 1.6, 21.5), (x, 9.0), (x - 1.6, 21.5)])],
+            C(120, 86, 60), n=(0, 0, 1), ol=1.6, bevel=0.4, metal=0.5, rust=0.4)
+    for (y, r, col) in ((8.4, 1.6, C(150, 140, 120)), (12.0, 1.3, C(176, 120, 70)), (15.2, 1.1, C(120, 128, 130))):
+        cel(L, [("rect", 1.0, y - r, 31.0, y + r)], col, form="cylh", ol=1.6, bevel=0.6, metal=0.7, rust=0.35)
+    cel(L, [("ell", 15.0, 8.4, 2.4, 2.4), ("-ell", 15.0, 8.4, 1.4, 1.4)], C(190, 52, 40), form="sphere", ol=1.2, bevel=0.3, metal=0.5)
+    ink(L, [(13.6, 8.4), (16.4, 8.4)], 0.3, C(150, 40, 30), 0.9)
+    return save_zone(cv, "pipe_rack", 224)
+
+
+def street_lamp():
+    cv = Canvas(20, 32)
+    L = cv.L
+    shadow(L, 10.0, 30.0, 4.5, 1.0)
+    cel(L, [("rect", 7.4, 27.0, 11.6, 30.0)], CONC_D, n=(0, -0.2, 1), ol=1.6, bevel=0.4, wear=0.3)
+    cel(L, [("poly", [(9.0, 28.0), (10.4, 28.0), (10.6, 8.0), (13.0, 4.4), (14.6, 4.0), (14.6, 5.2), (13.4, 5.6), (11.6, 8.6), (11.4, 28.0)])],
+        C(70, 76, 80), n=(0, 0, 1), ol=1.6, bevel=0.4, metal=0.8, rust=0.3)
+    cel(L, [("poly", [(12.6, 4.6), (18.0, 4.6), (17.0, 6.6), (13.0, 6.6)])], C(60, 64, 70), n=(0, 0, 1), ol=1.4, bevel=0.3, metal=0.8)
+    glow(L, 15.2, 7.6, 3.0, C(255, 200, 110), 0.35)
+    fill(L, [("ell", 15.2, 6.9, 1.6, 0.5)], C(255, 226, 150), 0.9)
+    return save_zone(cv, "street_lamp", 224)
+
+
+def shop_ruin():
+    cv = Canvas(32, 28)
+    L = cv.L
+    shadow(L, 16.0, 25.5, 15.0, 1.6)
+    dx, dy = box(L, 2.0, 8.0, 27.0, 25.0, 4.0, C(150, 120, 100), top=C(170, 140, 116), side=C(120, 96, 80), wear=0.4, rust=0.1)
+    fill(L, [("poly", [(2.0, 8.0), (8.0, 8.0), (6.0, 5.0), (3.0, 6.4)])], C(0, 0, 0), 0.0)
+    cel(L, [("rect", 5.0, 14.0, 13.5, 22.0)], C(24, 22, 26), n=(0, 0, 1), ol=1.6, bevel=0.3)
+    cel(L, [("rect", 16.0, 14.0, 22.0, 25.0)], C(70, 50, 36), n=(0, 0, 1), ol=1.6, bevel=0.3, wear=0.4)
+    for i in range(6):
+        col = C(176, 52, 44) if i % 2 == 0 else WHITE
+        cel(L, [("poly", [(3.0 + i * 3.9, 10.6), (6.9 + i * 3.9, 10.6), (6.4 + i * 3.9, 13.4 + (i % 3) * 0.6), (3.4 + i * 3.9, 13.0)])], col,
+            n=(0, -0.4, 1), ol=1.0, bevel=0.2, wear=0.4)
+    cel(L, [("rect", 7.0, 8.6, 21.0, 10.2)], C(60, 70, 90), n=(0, 0, 1), ol=1.2, bevel=0.2, wear=0.4)
+    for k, x in enumerate((9.0, 12.0, 15.0, 18.0)):
+        fill(L, [("rect", x, 9.0, x + 1.6, 9.8)], C(230, 200, 90), 0.9 if k != 2 else 0.25)
+    ink(L, [(5.5, 15.0), (9.0, 18.0), (7.0, 21.0)], 0.2, C(160, 170, 180), 0.6)
+    return save_zone(cv, "shop_ruin", 256)
+
+
+def quarantine_tent():
+    cv = Canvas(32, 24)
+    L = cv.L
+    shadow(L, 16.0, 21.5, 15.0, 1.6)
+    cel(L, [("poly", [(2.0, 21.0), (12.0, 6.0), (22.0, 21.0)])], WHITE, n=(-0.3, -0.2, 1), ol=2.2, bevel=0.8, wear=0.3)
+    cel(L, [("poly", [(12.0, 6.0), (26.0, 7.4), (30.0, 21.0), (22.0, 21.0)])], C(200, 196, 182), n=(0.6, -0.2, 0.8), ol=2.2, bevel=0.8, wear=0.3)
+    cel(L, [("poly", [(9.0, 21.0), (12.0, 13.0), (15.0, 21.0)])], C(40, 40, 44), n=(0, 0, 1), ol=1.4, bevel=0.2)
+    cel(L, [("rect", 18.6, 11.0, 21.4, 17.0), ("rect", 17.0, 12.6, 23.0, 15.4)], C(190, 44, 40), n=(0, 0, 1), ol=1.0, bevel=0.2)
+    stripes(L, 0.6, 20.0, 31.4, 21.4)
+    return save_zone(cv, "quarantine_tent", 256)
+
+
+def hazard_barrier():
+    cv = Canvas(32, 14)
+    L = cv.L
+    shadow(L, 16.0, 12.0, 15.0, 1.4)
+    cel(L, [("poly", [(2.0, 12.0), (4.0, 4.0), (28.0, 4.0), (30.0, 12.0)])], CONC, n=(0, -0.2, 1), ol=2.2, bevel=0.8, wear=0.4)
+    stripes(L, 4.6, 5.6, 27.4, 8.4)
+    ink(L, [(0.0, 3.0), (10.0, 2.4), (20.0, 3.4), (32.0, 2.6)], 0.4, HAZ, 0.9)
+    return save_zone(cv, "hazard_barrier", 224)
+
+
+def spike_barricade():
+    cv = Canvas(32, 18)
+    L = cv.L
+    shadow(L, 16.0, 16.0, 15.0, 1.4)
+    for x in (5.0, 16.0, 27.0):
+        for sgn in (-1, 1):
+            cel(L, [("line", [(x - 4.0 * sgn, 16.0), (x + 4.0 * sgn, 4.0)], 1.1)], WOOD if 'WOOD' in globals() else C(120, 84, 52), ol=1.2, bevel=0.3, wear=0.4)
+    cel(L, [("rect", 1.0, 9.0, 31.0, 10.6)], C(110, 76, 48), form="cylh", ol=1.4, bevel=0.4, wear=0.4)
+    for x in range(3, 31, 4):
+        cel(L, [("poly", [(x, 9.0), (x + 1.0, 9.0), (x + 2.6, 4.6)])], C(170, 170, 176), n=(0, 0, 1), ol=0.8, bevel=0.1, metal=0.9, rust=0.3)
+    cel(L, [("ell", 16.0, 6.8, 2.0, 1.8)], C(222, 214, 190), form="sphere", ol=1.0, bevel=0.3)
+    fill(L, [("ell", 15.2, 6.6, 0.5, 0.5), ("ell", 16.8, 6.6, 0.5, 0.5)], C(20, 16, 14), 1.0)
+    return save_zone(cv, "spike_barricade", 224)
+
+
+def raider_totem():
+    cv = Canvas(16, 32)
+    L = cv.L
+    shadow(L, 8.0, 30.0, 5.0, 1.0)
+    cel(L, [("rect", 7.2, 3.0, 8.8, 30.0)], C(110, 76, 48), form="cylv", ol=1.6, bevel=0.4, wear=0.4)
+    for y in (24.0, 21.0):
+        cel(L, [("ell", 8.0, y, 4.4, 1.6), ("-ell", 8.0, y, 2.4, 0.8)], C(36, 34, 34), form="sphere", ol=1.2, bevel=0.4)
+    for (y, x) in ((8.0, 8.0), (12.6, 6.0), (12.6, 10.0)):
+        cel(L, [("ell", x, y, 1.9, 1.7)], C(224, 214, 186), form="sphere", ol=1.0, bevel=0.3, wear=0.3)
+        fill(L, [("ell", x - 0.7, y - 0.1, 0.45, 0.5), ("ell", x + 0.7, y - 0.1, 0.45, 0.5)], C(20, 16, 14), 1.0)
+    cel(L, [("poly", [(8.8, 3.4), (15.0, 4.6), (13.4, 6.4), (15.4, 8.4), (8.8, 7.6)])], C(176, 44, 36), n=(0, 0, 1), ol=1.2, bevel=0.3, wear=0.4)
+    return save_zone(cv, "raider_totem", 256)
+
+
+def chem_vat():
+    cv = Canvas(28, 28)
+    L = cv.L
+    shadow(L, 14.0, 25.5, 12.0, 1.8)
+    cel(L, [("rect", 4.0, 10.0, 24.0, 25.0)], C(176, 170, 120), form="cylv", ol=2.4, bevel=1.2, metal=0.4, rust=0.3, wear=0.3)
+    glow(L, 14.0, 9.6, 9.0, TOXG, 0.45)
+    cel(L, [("ell", 14.0, 10.0, 10.0, 2.6)], TOXG, form="dome", ol=2.0, bevel=0.6, gloss=0.5)
+    for (x, r) in ((10.0, 0.9), (16.4, 0.7), (13.0, 0.5)):
+        fill(L, [("ell", x, 9.6, r, r * 0.6)], C(220, 250, 140), 0.85)
+    stripes(L, 5.0, 17.0, 23.0, 19.0)
+    cel(L, [("poly", [(14.0, 20.4), (16.2, 24.0), (11.8, 24.0)])], HAZ, n=(0, 0, 1), ol=1.0, bevel=0.2)
+    fill(L, [("rect", 13.7, 21.5, 14.3, 23.0)], C(30, 26, 24), 1.0)
+    return save_zone(cv, "chem_vat", 224)
+
+
+def tank_wreck():
+    cv = Canvas(36, 22)
+    L = cv.L
+    shadow(L, 18.0, 20.0, 17.0, 1.6)
+    cel(L, [("rect", 2.0, 14.0, 34.0, 20.0)], C(40, 40, 38), form="cylh", ol=2.2, bevel=0.8, metal=0.5)
+    for x in range(4, 34, 4):
+        cel(L, [("ell", x, 17.0, 1.6, 1.6)], C(70, 70, 66), form="sphere", ol=0.8, bevel=0.3, metal=0.6)
+    cel(L, [("poly", [(3.0, 14.0), (6.0, 9.0), (31.0, 9.0), (34.0, 14.0)])], OLIVE, n=(0, -0.3, 1), ol=2.2, bevel=0.8, metal=0.3, rust=0.35, wear=0.3)
+    cel(L, [("poly", [(10.0, 9.0), (12.0, 5.0), (22.0, 5.0), (24.0, 9.0)])], OLIVE * 1.08, n=(0, -0.4, 1), ol=2.0, bevel=0.8, metal=0.3, rust=0.3)
+    cel(L, [("poly", [(22.0, 6.2), (33.0, 3.2), (33.4, 4.4), (22.4, 7.6)])], C(70, 74, 52), n=(0, 0, 1), ol=1.4, bevel=0.3, metal=0.4, rust=0.4)
+    fill(L, [("ell", 15.0, 11.4, 1.2, 1.2)], C(240, 236, 220), 0.9)
+    soft(L, [("ell", 18.0, 2.0, 3.0, 2.0)], C(80, 76, 72), 0.4, blur=4)
+    return save_zone(cv, "tank_wreck", 256)
+
+
+def guard_post():
+    cv = Canvas(24, 32)
+    L = cv.L
+    shadow(L, 12.0, 30.0, 10.0, 1.4)
+    for x in (5.0, 18.0):
+        cel(L, [("rect", x, 12.0, x + 1.2, 29.0)], C(110, 76, 48), form="cylv", ol=1.4, bevel=0.3, wear=0.4)
+    ink(L, [(5.6, 14.0), (18.6, 27.0)], 0.3, C(80, 56, 36), 0.9)
+    ink(L, [(18.6, 14.0), (5.6, 27.0)], 0.3, C(80, 56, 36), 0.9)
+    box(L, 3.4, 6.0, 20.6, 12.6, 3.0, OLIVE, top=OLIVE * 1.1, side=OLIVE * 0.8, wear=0.4, rust=0.2)
+    cel(L, [("rect", 5.4, 7.4, 18.6, 9.4)], C(24, 24, 26), n=(0, 0, 1), ol=1.2, bevel=0.2)
+    cel(L, [("poly", [(2.0, 6.4), (12.0, 2.0), (23.0, 6.0)])], C(90, 86, 70), n=(0, -0.6, 1), ol=1.6, bevel=0.4, rust=0.3)
+    for k in range(6):
+        x = 2.0 + k * 3.6
+        cel(L, [("ell", x + 1.8, 28.4, 2.0, 1.2)], C(150, 132, 92), form="sphere", ol=1.0, bevel=0.3, wear=0.3)
+    return save_zone(cv, "guard_post", 256)
+
+
+def slab_ruin():
+    cv = Canvas(32, 24)
+    L = cv.L
+    shadow(L, 16.0, 21.5, 15.0, 1.6)
+    cel(L, [("poly", [(2.0, 21.0), (6.0, 8.0), (16.0, 6.0), (14.0, 21.0)])], CONC, n=(-0.4, -0.2, 1), ol=2.2, bevel=0.8, wear=0.5)
+    cel(L, [("poly", [(12.0, 21.0), (20.0, 11.0), (30.0, 14.0), (28.0, 21.0)])], CONC_D, n=(0.4, -0.3, 1), ol=2.2, bevel=0.8, wear=0.5)
+    for (a, b) in (((7.0, 9.0), (4.0, 3.0)), ((12.0, 7.0), (13.0, 1.0)), ((22.0, 12.0), (25.0, 6.0))):
+        ink(L, [a, b], 0.3, C(130, 70, 40), 1.0)
+    ink(L, [(8.0, 14.0), (10.0, 16.0), (9.0, 19.0)], 0.2, C(60, 58, 56), 0.8)
+    for (x, y, r) in ((4.0, 21.0, 1.4), (30.0, 21.0, 1.2), (18.0, 21.4, 1.0)):
+        cel(L, [("ell", x, y, r, r * 0.7)], CONC_D, form="sphere", ol=1.0, bevel=0.3)
+    return save_zone(cv, "slab_ruin", 224)
+
+
+def dust_spire():
+    cv = Canvas(24, 32)
+    L = cv.L
+    shadow(L, 12.0, 30.0, 9.0, 1.4)
+    glow(L, 12.0, 16.0, 11.0, C(255, 180, 80), 0.5)
+    for (x0, x1, top, base) in ((6.0, 11.0, 10.0, 29.0), (10.0, 15.6, 2.0, 29.0), (14.0, 19.0, 9.0, 29.0), (3.0, 7.0, 18.0, 29.0), (17.4, 21.0, 16.0, 29.0)):
+        cx = (x0 + x1) / 2
+        cel(L, [("poly", [(x0, base), (x0 + 0.4, top + 3.0), (cx, top), (x1 - 0.4, top + 3.0), (x1, base)])], C(232, 168, 72),
+            n=(-0.3, -0.2, 1), ol=1.8, bevel=0.6, gloss=0.5, rim=0.8)
+        hline(L, [(x0 + 1.0, base - 1.0), (cx - 0.4, top + 2.0)], 0.22, C(255, 236, 170), 0.8)
+    return save_zone(cv, "dust_spire", 256)
+
+
+def bunker(opened=False):
+    cv = Canvas(32, 24)
+    L = cv.L
+    shadow(L, 16.0, 21.6, 15.5, 1.8)
+    cel(L, [("poly", [(1.0, 21.0), (5.0, 7.0), (27.0, 7.0), (31.0, 21.0)])], CONC_D, n=(0, -0.3, 1), ol=2.6, bevel=1.2, wear=0.5, rust=0.1)
+    cel(L, [("poly", [(5.0, 7.0), (7.0, 4.0), (25.0, 4.0), (27.0, 7.0)])], CONC, n=(0, -0.8, 0.6), ol=2.0, bevel=0.6, wear=0.4)
+    stripes(L, 6.0, 8.2, 26.0, 9.6)
+    if opened:
+        cel(L, [("rect", 10.0, 11.0, 22.0, 21.0)], C(14, 12, 12), n=(0, 0, 1), ol=1.6, bevel=0.2)
+        glow(L, 16.0, 17.0, 5.0, C(255, 200, 110), 0.4)
+        cel(L, [("poly", [(22.0, 11.0), (27.0, 12.0), (27.0, 22.0), (22.0, 21.0)])], C(90, 96, 100), n=(0.8, 0, 0.6), ol=1.6, bevel=0.4, metal=0.8, rust=0.3)
+    else:
+        cel(L, [("rect", 10.0, 11.0, 22.0, 21.0)], C(96, 102, 106), n=(0, -0.05, 1), ol=2.0, bevel=0.6, metal=0.8, rust=0.35, wear=0.3)
+        for y in (13.0, 19.0):
+            ink(L, [(10.4, y), (21.6, y)], 0.3, C(50, 52, 56), 0.9)
+        cel(L, [("ell", 16.0, 16.0, 2.2, 2.2), ("-ell", 16.0, 16.0, 1.2, 1.2)], C(80, 84, 88), form="sphere", ol=1.2, bevel=0.3, metal=0.9)
+        cel(L, [("rect", 18.8, 15.0, 21.4, 18.4)], HAZ, n=(0, 0, 1), ol=1.0, bevel=0.2, metal=0.8)
+        fill(L, [("ell", 20.1, 16.4, 0.4, 0.5)], C(30, 24, 20), 1.0)
+    return save_zone(cv, "bunker_open" if opened else "bunker", 256)
+
+
+def sinkhole():
+    cv = Canvas(32, 20)
+    L = cv.L
+    rng = np.random.default_rng(5)
+    soft(L, [("ell", 16.0, 10.0, 15.6, 9.4)], C(70, 58, 46), 0.55, blur=5)
+    cel(L, [("ell", 16.0, 10.4, 12.6, 7.2)], C(40, 33, 28), form="flat", n=(0, 0.7, 0.7), ol=1.2, bevel=1.6)
+    soft(L, [("ell", 16.0, 12.2, 9.4, 4.6)], C(4, 3, 3), 0.95, blur=6)
+    for k in range(16):
+        a = k / 16 * math.tau + rng.uniform(-0.15, 0.15)
+        rr = rng.uniform(0.6, 1.7)
+        x = 16.0 + math.cos(a) * rng.uniform(12.0, 14.4)
+        y = 10.2 + math.sin(a) * rng.uniform(7.0, 8.4)
+        if k % 2:
+            continue
+        col = C(int(rng.uniform(66, 86)), int(rng.uniform(54, 70)), int(rng.uniform(42, 56)))
+        cel(L, [("ell", x, y, rr * 0.8, rr * 0.5)], col, form="sphere", ol=0.6, bevel=0.3, wear=0.3)
+    ink(L, [(6.0, 8.0), (4.0, 6.4), (2.4, 6.8)], 0.2, C(40, 32, 26), 0.8)
+    ink(L, [(26.0, 13.0), (28.6, 15.0)], 0.2, C(40, 32, 26), 0.8)
+    return save_zone(cv, "sinkhole", 256)
+
+
+def rubble_chunk():
+    cv = Canvas(16, 16)
+    L = cv.L
+    cel(L, [("poly", [(2.0, 10.0), (5.0, 3.0), (12.0, 2.0), (14.6, 8.0), (11.0, 14.0), (4.0, 13.4)])], CONC, form="sphere", ol=2.0, bevel=1.0, wear=0.5)
+    ink(L, [(6.0, 4.0), (8.0, 8.0), (7.0, 12.0)], 0.2, C(80, 76, 72), 0.8)
+    ink(L, [(11.0, 3.0), (12.6, 0.6)], 0.3, C(130, 70, 40), 1.0)
+    return save_zone(cv, "rubble_chunk", 128)
+
+
+# ---------------------------------------------------------------- zone pickups (icons)
+def zone_key():
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 20.8, 7.0, 1.3)
+    glow(L, 12, 12, 8, C(255, 210, 120), 0.35)
+    cel(L, [("ell", 8.0, 9.0, 4.4, 4.4), ("-ell", 8.0, 9.0, 2.0, 2.0)], BRASS, form="sphere", ol=2.2, bevel=0.8, metal=1.0, gloss=0.5)
+    cel(L, [("poly", [(10.6, 11.2), (19.0, 18.4), (17.6, 19.8), (9.2, 12.6)])], BRASS, n=(0, 0, 1), ol=2.0, bevel=0.6, metal=1.0, gloss=0.4)
+    cel(L, [("poly", [(15.6, 16.6), (14.0, 18.6), (15.2, 19.6), (16.8, 17.6)]), ("poly", [(17.6, 18.4), (16.4, 20.6), (17.4, 21.4), (18.8, 19.6)])],
+        BRASS * 0.9, n=(0, 0, 1), ol=1.4, bevel=0.3, metal=1.0)
+    cel(L, [("rect", 13.4, 3.0, 20.4, 7.2)], C(200, 60, 44), n=(0, 0, 1), ol=1.4, bevel=0.3, wear=0.3)
+    ink(L, [(10.6, 6.0), (13.4, 5.0)], 0.2, C(80, 60, 40), 0.9)
+    return save_icon(cv, "zone_key")
+
+
+def zone_flare():
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 20.8, 6.5, 1.2)
+    glow(L, 16.0, 6.0, 7.0, C(255, 120, 70), 0.6)
+    cel(L, [("poly", [(5.0, 19.0), (14.4, 7.6), (16.4, 9.4), (7.0, 20.6)])], C(196, 44, 36), n=(0, 0, 1), ol=2.0, bevel=0.6, gloss=0.3)
+    cel(L, [("poly", [(5.0, 19.0), (6.8, 16.8), (8.8, 18.6), (7.0, 20.6)])], C(230, 220, 200), n=(0, 0, 1), ol=1.4, bevel=0.3)
+    fill(L, [("ell", 16.4, 7.0, 2.6, 2.6)], C(255, 180, 90), 0.95)
+    fill(L, [("ell", 16.6, 6.6, 1.3, 1.3)], C(255, 250, 220), 1.0)
+    for (a, r) in ((-1.2, 5.0), (-0.4, 6.0), (0.5, 4.6), (-2.0, 4.4)):
+        ink(L, [(16.4 + math.cos(a) * 3.0, 7.0 + math.sin(a) * 3.0), (16.4 + math.cos(a) * r, 7.0 + math.sin(a) * r)], 0.2, C(255, 200, 120), 0.9)
+    return save_icon(cv, "zone_flare")
+
+
+def zone_filter():
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 21.0, 7.0, 1.3)
+    cel(L, [("rect", 6.0, 6.0, 18.0, 19.0)], C(90, 104, 84), form="cylv", ol=2.4, bevel=1.0, metal=0.5, wear=0.3)
+    cel(L, [("ell", 12.0, 6.0, 6.0, 1.8)], C(120, 134, 112), form="dome", ol=2.0, bevel=0.6, metal=0.5)
+    for y in range(9, 18, 2):
+        ink(L, [(6.6, y), (17.4, y)], 0.26, C(50, 58, 46), 0.85)
+    cel(L, [("rect", 8.0, 11.0, 16.0, 14.6)], C(220, 210, 180), n=(0, 0, 1), ol=1.2, bevel=0.3)
+    cel(L, [("ell", 12.0, 12.8, 1.3, 1.3)], TOXG, form="sphere", ol=0.8, bevel=0.2)
+    cel(L, [("rect", 10.0, 2.6, 14.0, 5.0)], C(70, 74, 72), form="cylv", ol=1.4, bevel=0.4, metal=0.8)
+    return save_icon(cv, "zone_filter")
+
+
+def zone_power_cell():
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 21.0, 6.5, 1.3)
+    glow(L, 12.0, 12.0, 8.0, C(110, 200, 255), 0.5)
+    cel(L, [("rect", 7.0, 6.0, 17.0, 19.6)], C(60, 64, 72), form="cylv", ol=2.4, bevel=1.0, metal=0.7, wear=0.3)
+    cel(L, [("rect", 9.0, 3.6, 15.0, 6.2)], C(150, 150, 156), form="cylv", ol=1.6, bevel=0.4, metal=1.0)
+    cel(L, [("rect", 9.0, 8.0, 15.0, 17.6)], C(80, 190, 255), form="cylv", ol=1.4, bevel=0.6, gloss=0.5, rim=0.6)
+    fill(L, [("poly", [(12.6, 9.0), (10.2, 13.4), (12.0, 13.4), (11.2, 16.8), (13.8, 12.2), (12.0, 12.2)])], C(240, 250, 255), 0.95)
+    stripes(L, 7.0, 18.0, 17.0, 19.6)
+    return save_icon(cv, "zone_power_cell")
+
+
+# ---------------------------------------------------------------- Helm's plane (hangar layers)
+PLANE_U = (60, 32)
+PLANE_COL = C(122, 132, 120)
+
+
+def _plane_canvas():
+    return Canvas(*PLANE_U)
+
+
+def _save_plane(cv, i):
+    os.makedirs(PLANE, exist_ok=True)
+    im = cv.save(os.path.join(PLANE, "plane_%d.png" % i), 300, 160)
+    _made.append(im.resize((150, 80), Image.LANCZOS))
+    return im
+
+
+def plane_layer(i):
+    cv = _plane_canvas()
+    L = cv.L
+    body = [("poly", [(10.0, 14.0), (44.0, 12.0), (50.0, 13.0), (52.0, 17.0), (50.0, 21.0), (44.0, 22.0), (10.0, 19.0), (4.0, 15.4)])]
+    if i == 1:  # fuselage (patched)
+        shadow(L, 30.0, 29.0, 24.0, 1.6, 0.4)
+        cel(L, body, PLANE_COL, form="cylh", ol=2.4, bevel=1.2, metal=0.5, rust=0.25, wear=0.35)
+        for (x0, y0, x1, y1, c) in ((18.0, 14.0, 23.0, 18.0, C(150, 120, 80)), (30.0, 15.0, 35.0, 19.6, C(110, 110, 104))):
+            cel(L, [("rect", x0, y0, x1, y1)], c, n=(0, 0, 1), ol=1.0, bevel=0.3, metal=0.5, rust=0.4)
+            for x in (x0 + 0.6, x1 - 0.6):
+                fill(L, [("ell", x, y0 + 0.6, 0.3, 0.3), ("ell", x, y1 - 0.6, 0.3, 0.3)], C(60, 60, 60), 1.0)
+        for x in range(12, 44, 6):
+            ink(L, [(x, 13.4), (x, 20.0)], 0.16, C(70, 74, 70), 0.6)
+    elif i == 2:  # wings (high wing + struts)
+        cel(L, [("poly", [(20.0, 10.0), (46.0, 9.0), (47.0, 11.0), (21.0, 12.0)])], PLANE_COL * 1.08, n=(0, -0.6, 0.8), ol=2.0, bevel=0.6, metal=0.4, wear=0.3)
+        cel(L, [("poly", [(22.0, 12.0), (24.0, 18.0), (25.0, 18.0), (23.4, 12.0)]), ("poly", [(38.0, 11.6), (35.0, 18.0), (36.0, 18.0), (39.4, 11.6)])],
+            C(80, 84, 82), n=(0, 0, 1), ol=1.0, bevel=0.2, metal=0.7)
+    elif i == 3:  # tail fin + stabiliser
+        cel(L, [("poly", [(6.0, 15.0), (3.0, 5.0), (6.6, 5.0), (12.0, 14.4)])], PLANE_COL * 1.05, n=(0, 0, 1), ol=2.0, bevel=0.6, metal=0.4, wear=0.3)
+        cel(L, [("poly", [(3.0, 15.6), (13.0, 15.0), (13.0, 16.6), (2.0, 17.0)])], PLANE_COL * 0.92, n=(0, -0.4, 1), ol=1.6, bevel=0.4, metal=0.4)
+    elif i == 4:  # engine cowl
+        cel(L, [("poly", [(46.0, 11.6), (53.0, 12.4), (54.6, 17.0), (53.0, 21.6), (46.0, 22.4)])], C(70, 74, 80), form="cylh", ol=2.2, bevel=0.8, metal=0.9, rust=0.2)
+        for y in (13.4, 15.4, 17.4, 19.4):
+            ink(L, [(47.0, y), (52.6, y + 0.2)], 0.2, C(40, 42, 46), 0.8)
+        soft(L, [("ell", 50.0, 9.0, 2.6, 1.8)], C(110, 104, 100), 0.35, blur=3)
+    elif i == 5:  # propeller
+        cel(L, [("ell", 55.6, 17.0, 1.4, 1.4)], C(150, 150, 156), form="sphere", ol=1.2, bevel=0.3, metal=1.0)
+        cel(L, [("poly", [(55.0, 16.4), (56.4, 3.0), (57.6, 3.4), (56.4, 16.6)]), ("poly", [(55.0, 17.6), (56.4, 30.6), (57.6, 30.2), (56.4, 17.4)])],
+            C(120, 86, 56), n=(0, 0, 1), ol=1.4, bevel=0.4, wear=0.3)
+    elif i == 6:  # landing gear
+        for (x, r) in ((40.0, 2.4), (28.0, 2.4)):
+            cel(L, [("line", [(x - 1.0, 21.0), (x, 26.6)], 0.6)], C(70, 70, 74), ol=1.0, bevel=0.2, metal=0.8)
+            cel(L, [("ell", x, 27.0, r, r)], C(36, 34, 34), form="sphere", ol=1.6, bevel=0.6)
+            cel(L, [("ell", x, 27.0, r * 0.4, r * 0.4)], C(150, 150, 156), form="sphere", ol=0.6, bevel=0.2, metal=1.0)
+        cel(L, [("line", [(9.0, 18.4), (8.0, 25.4)], 0.4)], C(70, 70, 74), ol=0.8, bevel=0.2, metal=0.8)
+        cel(L, [("ell", 8.0, 26.0, 1.4, 1.4)], C(36, 34, 34), form="sphere", ol=1.0, bevel=0.3)
+    elif i == 7:  # canopy
+        cel(L, [("poly", [(34.0, 12.6), (36.0, 9.4), (43.0, 9.2), (45.0, 12.2)])], C(110, 170, 190), n=(0, -0.5, 0.8), ol=1.6, bevel=0.5, gloss=0.8, rim=0.8)
+        ink(L, [(39.4, 9.4), (39.4, 12.4)], 0.22, C(50, 56, 60), 0.9)
+        hline(L, [(36.6, 10.2), (38.6, 10.0)], 0.22, SPEC, 0.9)
+    else:  # fuel + paint: stripe, roundel, nav lights, pennant
+        cel(L, [("poly", [(11.0, 16.4), (46.0, 15.4), (46.0, 17.0), (11.0, 17.8)])], C(196, 64, 44), n=(0, 0, 1), ol=0.6, bevel=0.2)
+        cel(L, [("ell", 26.0, 17.0, 2.4, 2.4)], WHITE, form="sphere", ol=1.0, bevel=0.3)
+        cel(L, [("ell", 26.0, 17.0, 1.3, 1.3)], C(196, 64, 44), form="sphere", ol=0.6, bevel=0.2)
+        glow(L, 46.4, 9.4, 1.6, C(120, 255, 140), 0.7)
+        glow(L, 3.6, 5.0, 1.6, C(255, 90, 80), 0.7)
+        cel(L, [("line", [(30.0, 9.6), (30.0, 3.0)], 0.3)], C(80, 80, 84), ol=0.8, bevel=0.1)
+        cel(L, [("poly", [(30.2, 3.0), (35.0, 4.0), (30.2, 5.4)])], HAZ, n=(0, 0, 1), ol=0.8, bevel=0.2)
+    return _save_plane(cv, i)
+
+
 GROUPS = {
     "e1": [herb, plague_gland, dust_shard, machine_oil, medicine, lambda: medicine(False), backpack, exposure,
            *[(lambda t=t: tonic(t)) for t in TONIC_LOOK], plague_fog],
     "e3": [lore_page],
     "e4": [field_tent, relay, watch_tower, vault, market_stall, plane_wreck],
     "e6": [salvage_core],
+    "e7": [oil_tank, pipe_rack, street_lamp, shop_ruin, quarantine_tent, hazard_barrier, spike_barricade, raider_totem,
+           chem_vat, tank_wreck, guard_post, slab_ruin, dust_spire, bunker, lambda: bunker(True), sinkhole, rubble_chunk,
+           zone_key, zone_flare, zone_filter, zone_power_cell],
+    "plane": [(lambda i=i: plane_layer(i)) for i in range(1, 9)],
     "e5": [(lambda h=h, s=s: style_icon(h, s)) for (h, s) in E5_STYLES],
 }
 
@@ -849,6 +1245,7 @@ if __name__ == "__main__":
     groups = args or list(GROUPS)
     os.makedirs(ICON, exist_ok=True)
     os.makedirs(WORLD, exist_ok=True)
+    os.makedirs(os.path.join(OUT, "zone"), exist_ok=True)
     for gname in groups:
         for fn in GROUPS[gname]:
             fn()

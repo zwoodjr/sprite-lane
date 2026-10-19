@@ -42,9 +42,19 @@ var _next_crew_at: float = INF
 var _elite_side: int = 0
 ## E4: Helm's radio jobs, cameos, stakes, Dust Warden.
 var jobs: Node
+## Depth E7: the tier's zone twists (ZoneDefs).
+var twists: Node
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
+	## Depth E7 Dust Pacts: tougher / busier runs, narrower windows (loot bonus at extract).
+	if not GameState.active_pacts().is_empty():
+		_mode["enemy_hp"] = float(_mode["enemy_hp"]) * GameState.pact_fx("enemy_hp")
+		_mode["enemy_damage"] = float(_mode["enemy_damage"]) * GameState.pact_fx("enemy_damage")
+		_mode["spawn_density"] = float(_mode["spawn_density"]) * GameState.pact_fx("spawn")
+		_mode["window_open"] = maxf(4.0, float(_mode["window_open"]) + GameState.pact_fx("window"))
+		_mode["last_chance_open"] = maxf(4.0, float(_mode["last_chance_open"]) + GameState.pact_fx("window"))
+		_mode["phases"] = ModeDefs.build_phases(_mode)
 	if GameState.run_seed == 0:
 		GameState.run_seed = int(Time.get_unix_time_from_system()) ^ randi()
 	_phases = []
@@ -96,6 +106,11 @@ func _ready() -> void:
 	jobs.set_script(load("res://scripts/match/radio_jobs.gd"))
 	add_child(jobs)
 	jobs.call("setup", self, player, world, hud, events)
+	twists = Node.new()
+	twists.name = "ZoneTwists"
+	twists.set_script(load("res://scripts/match/zone_twists.gd"))
+	add_child(twists)
+	twists.call("setup", self, player, world, hud)
 	_phase_index = 0
 	_start_phase(0)
 	hud.show_banner("DROP IN", "%s · %s" % [
@@ -147,7 +162,8 @@ func _place_window_pads(phase_index: int) -> void:
 	var is_last := bool(_phases[phase_index].get("is_last", false))
 	var used: Array[Vector2] = []
 	var base_ang := rng.randf() * TAU
-	for i in range(2):
+	var pad_count := 1 if GameState.twist_on("one_pad") else 2
+	for i in range(pad_count):
 		var p := Vector2.ZERO
 		for attempt in range(10):
 			var ang := base_ang + PI * i + rng.randf_range(-0.9, 0.9)
@@ -161,6 +177,10 @@ func _place_window_pads(phase_index: int) -> void:
 					ok = false
 			if ok:
 				break
+		## Dustfall: pads always land inside the storm wall.
+		if twists != null and float(twists.get("storm_radius")) < INF:
+			var oc: Vector2 = twists.call("storm_origin")
+			p = oc + (p - oc).limit_length(float(twists.get("storm_radius")) * 0.8)
 		used.append(p)
 		var pad: Area2D = ExtractPadScene.instantiate()
 		pads_root.add_child(pad)
@@ -278,6 +298,10 @@ func _start_phase(index: int) -> void:
 		_spawn_pad_guards()
 		if plague:
 			plague.call("on_window_open", _window_index)
+		if twists:
+			twists.call("on_window_open", _window_index, _pads)
+		if GameState.pact_fx("window_elite") > 0.0:
+			spawn_special("elite")
 		var stake := ""
 		if jobs:
 			jobs.call("on_window_open", _window_index, _pads)
@@ -377,6 +401,9 @@ func _tick_specials() -> void:
 	if _match_time >= _next_boss_at:
 		_next_boss_at += ModeDefs.BOSS_EVERY * ts
 		spawn_special("boss")
+		## Dustfall: bosses come in pairs.
+		if GameState.twist_on("double_boss"):
+			spawn_special("boss")
 	if _match_time >= _next_crew_at:
 		_next_crew_at += FactionDefs.CREW_EVERY * ts
 		if get_tree().get_nodes_in_group("raider_crews").size() < FactionDefs.CREW_MAX_ALIVE:

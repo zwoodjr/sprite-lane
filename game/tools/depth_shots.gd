@@ -340,3 +340,69 @@ func _shots_e6() -> void:
 		await _snap("e6_%s" % mid)
 		m.queue_free()
 		await _frames(3)
+
+
+## E7: every zone in a run (ground, props, twist), the hangar plane, trophies, pacts.
+func _shots_e7() -> void:
+	GameState.best_tier_extracted = 10
+	GameState.camp = {}
+	for mid in ["smog", "pall", "blight", "shroud", "choke", "blackout", "deadfall", "dustfall"]:
+		var m := await _match(mid, "vesper_thorn")
+		var player: Node2D = m.get_node("World/Player")
+		player.set("max_hp", 9999.0)
+		player.set("hp", 9999.0)
+		var tw: Node = m.get_node("ZoneTwists")
+		match mid:
+			"smog":
+				var sm: Node2D = (tw.get("smog") as Array)[0]["node"]
+				sm.global_position = player.global_position + Vector2(140, 140)
+				var b: Node2D = get_tree().get_nodes_in_group("bunkers")[0]
+				b.global_position = player.global_position + Vector2(-150, -170)
+			"pall":
+				pass
+			"shroud":
+				pass
+			"choke":
+				GameState.run_filter = 34.0
+			"blackout":
+				m.call("_place_window_pads", 1)
+				for pd in m.get("_pads"):
+					pd.call("set_open", true)
+				tw.call("on_window_open", 1, m.get("_pads"))
+				var pad: Node2D = (m.get("_pads") as Array)[0]
+				pad.global_position = player.global_position + Vector2(0, -230)
+				for zp in get_tree().get_nodes_in_group("zone_pickups"):
+					(zp as Node2D).global_position = player.global_position + Vector2(130, 60)
+			"deadfall":
+				var sh: Dictionary = (tw.get("sinkholes") as Array)[0]
+				(sh["node"] as Node2D).global_position = player.global_position + Vector2(-150, 170)
+				sh["pos"] = player.global_position + Vector2(-150, 170)
+				tw.call("drop_rubble", player.global_position + Vector2(140, -60))
+			"dustfall":
+				m.set("_elapsed_in_phases", float(tw.get("_storm_total")) * 0.6)
+				await _frames(3)
+				player.global_position = tw.get("_origin") + Vector2(float(tw.get("storm_radius")) - 180.0, 0)
+		await _frames(50 if mid != "deadfall" else 40)
+		await _snap("e7_%s" % mid)
+		m.queue_free()
+		await _frames(3)
+	GameState.plane_parts = {"3": true, "4": true, "5": true, "6": true, "7": true}
+	GameState.tier_clears = {"vesper_thorn": {"3": true, "4": true, "5": true}, "pebble": {"3": true}}
+	var hg := await _open("res://scenes/ui/hangar.tscn")
+	await _snap("e7_hangar_plane")
+	hg.call("open_trophies")
+	await _frames(6)
+	await _snap("e7_trophies")
+	hg.queue_free()
+	GameState.pacts = ["thick_dust", "hunted"]
+	GameState.selected_character_id = "vesper_thorn"
+	var prep := await _open("res://scenes/ui/prep.tscn")
+	var sc: ScrollContainer = prep.find_child("PrepScroll", true, false)
+	sc.scroll_vertical = 100000
+	await _frames(6)
+	await _snap("e7_pacts")
+	prep.queue_free()
+	GameState.pacts = []
+	var ms := await _open("res://scenes/ui/mode_select.tscn")
+	await _snap("e7_tiers")
+	ms.queue_free()

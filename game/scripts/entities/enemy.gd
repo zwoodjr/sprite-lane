@@ -27,6 +27,10 @@ var _knock: Vector2 = Vector2.ZERO
 var _strafe_sign: float = 1.0
 var _player: Node2D
 var _dead: bool = false
+## Depth E7 zone twists: Ash-Wraith phasing (untouchable), Crater City revive.
+var phased: bool = false
+var _downed_left: float = 0.0
+var _revived: bool = false
 var _spawn_in: float = 0.35
 var _distract_left: float = 0.0
 var _anim: UnitAnim = UnitAnim.new()
@@ -148,6 +152,11 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	hp = max_hp
 	damage = float(_def["damage"]) * dmg_mult
 	speed = float(_def["speed"]) * spd_mult * randf_range(0.92, 1.08)
+	## Military Base: the war machines are enraged.
+	if faction == EnemyDefs.MACHINE and GameState.twist_on("machines_enraged"):
+		var zs := ZoneDefs.strength(GameState.zone_tier())
+		damage *= 1.0 + (float(ZoneDefs.MACHINES_ENRAGED["damage"]) - 1.0) * zs
+		speed *= 1.0 + (float(ZoneDefs.MACHINES_ENRAGED["speed"]) - 1.0) * zs
 	_fire_cd = randf_range(0.6, 1.6)
 	_strafe_sign = -1.0 if randf() < 0.5 else 1.0
 	if is_inside_tree():
@@ -323,6 +332,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if _spawn_in > 0.0:
 		_spawn_in -= delta
+		return
+	if _downed_left > 0.0:
+		_tick_downed(delta)
 		return
 	_fire_cd = maxf(0.0, _fire_cd - delta)
 	_distract_left = maxf(0.0, _distract_left - delta)
@@ -546,6 +558,16 @@ func _fire_from(origin: Vector2, dir: Vector2, spd: float, dmg: float) -> void:
 func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float = -1.0, crit: bool = false, num_color: Color = Color(0, 0, 0, 0)) -> void:
 	if _dead:
 		return
+	## Phased Ash-Wraiths: hits pass straight through.
+	if phased:
+		return
+	## Downed (Crater City): any hit finishes it for good.
+	if _downed_left > 0.0:
+		_downed_left = 0.0
+		modulate = Color.WHITE
+		hp = 0.0
+		_die()
+		return
 	amount *= damage_taken_mult()
 	## Shielded elites shrug off hits from the front.
 	if "shielded" in traits and from_dir.length() > 0.01:
@@ -578,7 +600,40 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 			_rubble_left = 0.35
 			_rubble_hit.clear()
 	if hp <= 0.0:
+		if _try_go_down():
+			return
 		_die()
+
+## Crater City: some mobs drop and get back up unless you finish them.
+func _try_go_down() -> bool:
+	if _revived or role != "" or crew != null or not GameState.twist_on("revive"):
+		return false
+	if randf() >= float(ZoneDefs.REVIVE["chance"]) * ZoneDefs.strength(GameState.zone_tier()):
+		return false
+	_revived = true
+	hp = 1.0
+	_downed_left = float(ZoneDefs.REVIVE["time"])
+	modulate = Color(0.55, 0.5, 0.48)
+	if hp_bar:
+		hp_bar.value = hp
+	Juice.float_text(global_position + Vector2(0, -40), "DOWN — finish it!", Color(1.0, 0.7, 0.4), 14)
+	return true
+
+func _tick_downed(delta: float) -> void:
+	velocity = Vector2.ZERO
+	_downed_left -= delta
+	if _downed_left <= 0.0:
+		_downed_left = 0.0
+		hp = max_hp * float(ZoneDefs.REVIVE["hp"])
+		modulate = Color.WHITE
+		if hp_bar:
+			hp_bar.value = hp
+		Juice.float_text(global_position + Vector2(0, -40), "BACK UP!", Color(1.0, 0.45, 0.35), 15)
+		Juice.dust_puff(global_position + Vector2(0, 10), 8)
+
+## True while lying downed (Crater City) — still a target, one hit finishes it.
+func is_downed() -> bool:
+	return _downed_left > 0.0
 
 func _die() -> void:
 	_dead = true
@@ -586,6 +641,8 @@ func _die() -> void:
 	_evo_on_death()
 	if "bloated" in traits:
 		_bloat_burst()
+	elif faction == EnemyDefs.PLAGUE and role == "" and GameState.twist_on("infected_burst") and randf() < float(ZoneDefs.INFECTED_BURST["chance"]) * ZoneDefs.strength(GameState.zone_tier()):
+		_bloat_burst(ZoneDefs.INFECTED_BURST)
 	if crew != null and is_instance_valid(crew):
 		crew.call("on_member_died", self)
 	if _aura:
@@ -604,7 +661,7 @@ func _die() -> void:
 	LootDrop.spawn_burst(parent, global_position, "scrap", clampi(scrap, 1, 4), float(scrap))
 	LootDrop.spawn_burst(parent, global_position, "xp", clampi(xp / 4 + 1, 1, 4), float(xp))
 	HaulPickup.drop_kill(parent, global_position + Vector2(randf_range(-10, 10), 6), faction, role)
-	if randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
+	if GameState.pact_fx("no_tonics") <= 0.0 and randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)
 	## Rare special-ammo can (more likely from elites / bosses).
 	## Gated behind the Hangar's Ammo Bench (rank = types, odds).
@@ -615,6 +672,10 @@ func _die() -> void:
 	## Gear: elites / bosses pay out their rewards; everyone else rolls a small chance.
 	if role != "":
 		GearPickup.drop_role_reward(parent, global_position, role, kind)
+		## Depth E7: this tier's exclusive legendary, now and then.
+		var zt := GameState.zone_tier()
+		if not ZoneDefs.exclusive(zt).is_empty() and randf() < (ZoneDefs.EXCLUSIVE_BOSS_CHANCE if role == "boss" else ZoneDefs.EXCLUSIVE_ELITE_CHANCE):
+			GearPickup.spawn(parent, global_position + Vector2(0, -20), GameState.make_exclusive(zt))
 		GameState.quest_event("elite")
 		if role == "boss":
 			GameState.on_boss_killed(kind)
@@ -717,6 +778,9 @@ func _apply_status_tint() -> void:
 	if body == null:
 		return
 	var c := Color.WHITE
+	if phased:
+		body.modulate = Color(0.6, 0.8, 1.0, 0.35)
+		return
 	if _distract_left > 0.0:
 		c = Color(1.15, 1.05, 0.7)
 	for id in STATUS_ORDER:
@@ -880,8 +944,8 @@ func _spore_cloud(at: Vector2, r: float, life: float, dps: float) -> void:
 
 
 ## Bloated: bursts in a spray of plague when it dies.
-func _bloat_burst() -> void:
-	var bd: Dictionary = FactionDefs.TRAITS["bloated"]
+func _bloat_burst(params: Dictionary = {}) -> void:
+	var bd: Dictionary = params if not params.is_empty() else FactionDefs.TRAITS["bloated"]
 	var r := float(bd["radius"])
 	RunFx.ring(get_parent(), global_position + Vector2(0, 8), r, Color(0.75, 0.9, 0.35), 0.45, 6.0)
 	Juice.burst(global_position, Color(0.7, 0.85, 0.3), 30, r * 2.2, 0.6, 1.6)

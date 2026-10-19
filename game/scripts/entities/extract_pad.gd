@@ -17,6 +17,8 @@ var _channel: float = 0.0
 var _t: float = 0.0
 var _fired: bool = false
 var last_chance: bool = false
+## Military Base (Depth E7): a dead pad needs a power cell before it will channel.
+var powered: bool = true
 var _ping_t: float = 0.0 ## >0 while the "new pad" ping ring expands
 
 @onready var sprite: Sprite2D = $Sprite
@@ -69,7 +71,10 @@ func set_open(is_open: bool) -> void:
 		sprite.texture = load(
 			"res://assets/sprites/props/extract_open.png" if open else "res://assets/sprites/props/extract_sealed.png"
 		) as Texture2D
-	if open:
+	if open and not powered:
+		label.text = "%s · NO POWER — bring a cell" % pad_name
+		label.add_theme_color_override("font_color", Color(0.55, 0.8, 1.0))
+	elif open:
 		label.text = "%s · OPEN" % pad_name
 		label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35) if last_chance else Color(1.0, 0.85, 0.35))
 	else:
@@ -81,7 +86,12 @@ func _process(delta: float) -> void:
 	_t += delta
 	_beam.color = (Color(1.0, 0.35, 0.3) if last_chance else Color(1.0, 0.85, 0.4))
 	_beam.color.a = (0.22 + 0.1 * sin(_t * 3.0)) if open else 0.06
-	if open and player_inside and not _fired:
+	if open and player_inside and not powered and GameState.run_has_cell:
+		set_powered(true)
+		GameState.run_has_cell = false
+		Juice.float_text(global_position + Vector2(0, -70), "POWERED!", Color(0.5, 0.9, 1.0), 18)
+		Juice.sfx("extract_open")
+	if open and player_inside and not _fired and powered:
 		_channel += delta
 		channel_changed.emit(_channel / _need())
 		if int(_channel * 10.0) % 3 == 0:
@@ -92,7 +102,7 @@ func _process(delta: float) -> void:
 	elif _channel > 0.0:
 		_channel = maxf(0.0, _channel - delta * 3.0)
 		channel_changed.emit(_channel / _need())
-	if open and player_inside and Input.is_action_just_pressed("interact") and not _fired:
+	if open and powered and player_inside and Input.is_action_just_pressed("interact") and not _fired:
 		_fired = true
 		extract_requested.emit()
 	_ring.queue_redraw()
@@ -109,8 +119,15 @@ func _draw_ring() -> void:
 		_ring.draw_arc(Vector2.ZERO, r - 8.0, -PI * 0.5, -PI * 0.5 + TAU * k, 48, Color(0.45, 1.0, 0.6, 0.95), 8.0, true)
 
 
+func set_powered(on: bool) -> void:
+	powered = on
+	if sprite:
+		sprite.modulate = Color.WHITE if on else Color(0.45, 0.48, 0.55)
+	set_open(open)
+
+
 func try_touch_extract() -> bool:
-	if open and player_inside and not _fired:
+	if open and powered and player_inside and not _fired:
 		_fired = true
 		extract_requested.emit()
 		return true

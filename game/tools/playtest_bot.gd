@@ -278,10 +278,23 @@ func _drive(delta: float) -> void:
 	if going:
 		var best: Node2D = null
 		var bd := INF
+		## Depth E7 (Military Base): dead pads need the window's power cell first.
+		if not GameState.run_has_cell:
+			var dead := false
+			for pad in _m.call("get_pads"):
+				if is_instance_valid(pad) and not bool(pad.get("powered")):
+					dead = true
+			if dead:
+				for zp in get_tree().get_nodes_in_group("zone_pickups"):
+					if str(zp.get("kind")) == "power_cell":
+						var dz: float = (zp as Node2D).global_position.distance_to(_p.global_position)
+						if dz < bd:
+							bd = dz
+							best = zp
 		for pad in _m.call("get_pads"):
 			if is_instance_valid(pad):
 				var d: float = pad.global_position.distance_to(_p.global_position)
-				if d < bd: bd = d; best = pad
+				if best == null or (d < bd and not (best.is_in_group("zone_pickups"))): bd = d; best = pad
 		if best:
 			var to := best.global_position - _p.global_position
 			mv = to.normalized() if to.length() > 12.0 else Vector2.ZERO
@@ -298,6 +311,20 @@ func _drive(delta: float) -> void:
 			if e and e.global_position.distance_to(_p.global_position) < 70.0 and to.length() > 90.0:
 				TouchInput.pulse_dash()
 			TouchInput.move_vector = mv
+			return
+	## Dustfall: never wander into the storm wall.
+	var ztw := get_tree().get_first_node_in_group("zone_twists")
+	if ztw != null and float(ztw.get("storm_radius")) < INF:
+		var oc: Vector2 = ztw.call("storm_origin")
+		if _p.global_position.distance_to(oc) > float(ztw.get("storm_radius")) - 220.0:
+			TouchInput.move_vector = (oc - _p.global_position).normalized()
+			return
+	## Zone pickups (Depth E7: keys, flares, air filters) are worth a short detour.
+	var zp := _nearest("zone_pickups")
+	if zp and str(zp.get("kind")) != "power_cell" and zp.global_position.distance_to(_p.global_position) < 520.0:
+		var nz := _nearest("enemies")
+		if nz == null or nz.global_position.distance_to(_p.global_position) > 140.0 or GameState.run_filter < 25.0:
+			TouchInput.move_vector = (zp.global_position - _p.global_position).normalized()
 			return
 	## Medicine crates are worth a detour when the pack has room.
 	var med := _nearest("medicine_crates")

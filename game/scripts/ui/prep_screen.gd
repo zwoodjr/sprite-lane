@@ -108,6 +108,13 @@ func _rebuild() -> void:
 			str(td["desc"]), "", str(tid) in GameState.tonic_loadout, pick_tonic.bind(str(tid))))
 	if not any:
 		_list.add_child(UiTheme.body_label("No tonics brewed. Cinder brews them at the Hangar's BREW tab.", 14, UiTheme.TEXT_DIM))
+	## Dust Pacts (Depth E7): stack rules against yourself for a bigger payout.
+	if GameState.pacts_unlocked():
+		_list.add_child(_section("DUST PACTS  ·  payout +%d%%" % int(round(GameState.pact_loot_bonus() * 100.0))))
+		for pid in ZoneDefs.PACTS.keys():
+			var pd: Dictionary = ZoneDefs.PACTS[pid]
+			_list.add_child(_option(null, "%s  (+%d%%)" % [str(pd["name"]), int(round(float(pd["loot"]) * 100.0))], str(pd["desc"]), "",
+				str(pid) in GameState.pacts, pick_pact.bind(str(pid)), false, "SWORN"))
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(0, 20)
 	_list.add_child(pad)
@@ -120,7 +127,7 @@ func _section(t: String) -> Label:
 
 
 ## One selectable row: icon · name / desc · lock line. Tap to pick.
-func _option(icon: Texture2D, title: String, desc: String, lock: String, on: bool, cb: Callable, mirror: bool = false) -> Button:
+func _option(icon: Texture2D, title: String, desc: String, lock: String, on: bool, cb: Callable, mirror: bool = false, on_text: String = "EQUIPPED") -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_force_pass_scroll_events = true
@@ -169,7 +176,7 @@ func _option(icon: Texture2D, title: String, desc: String, lock: String, on: boo
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(l)
 	if on:
-		var tag := UiTheme.body_label("EQUIPPED", 13, UiTheme.TEAL, false)
+		var tag := UiTheme.body_label(on_text, 13, UiTheme.TEAL, false)
 		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(tag)
@@ -199,6 +206,13 @@ func pick_quirk(q: String) -> bool:
 
 func pick_tonic(tid: String) -> bool:
 	var ok := GameState.toggle_tonic(tid)
+	Juice.sfx("ui_tap")
+	_rebuild()
+	return ok
+
+
+func pick_pact(pid: String) -> bool:
+	var ok := GameState.toggle_pact(pid)
 	Juice.sfx("ui_tap")
 	_rebuild()
 	return ok
