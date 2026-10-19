@@ -28,6 +28,16 @@ var _min_hp := 9999.0
 var _reload_s := 0.0
 var _stuck_s := 0.0
 var _last_pos := Vector2.ZERO
+## Optional stress / showcase: keep `_horde` enemies alive (arg 6), drawn from
+## `_kinds` (arg 7, comma list; empty = whole roster).
+var _horde := 0
+var _kinds: Array = []
+var _horde_t := 0.0
+## arg 8 "stand": hero holds still (auto-attacks only) and snaps every 1.5 s.
+var _stand := false
+var _fps_min := 9999
+var _fps_sum := 0.0
+var _fps_n := 0
 
 
 func _ready() -> void:
@@ -41,7 +51,10 @@ func _ready() -> void:
 	TouchInput.touch_primary = true
 	if ch != "": GameState.selected_character_id = ch
 	if a.size() > 3: GameState.selected_mode_id = a[3]
-	if a.size() > 4: GameState.selected_pet_id = a[4]
+	if a.size() > 4 and a[4] != "": GameState.selected_pet_id = a[4]
+	if a.size() > 5: _horde = int(a[5])
+	if a.size() > 6 and a[6] != "": _kinds = Array(a[6].split(","))
+	if a.size() > 7: _stand = a[7] == "stand"
 	_headless = DisplayServer.get_name() == "headless"
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()
@@ -63,6 +76,15 @@ func _snap(name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("%s/%s.png" % [_out, name])
+	## Close-up around the hero (3x, nearest) to check art / muzzles / feet.
+	if is_instance_valid(_p):
+		var sp: Vector2 = get_viewport().get_canvas_transform() * _p.global_position
+		var r := Rect2i(Vector2i(sp) - Vector2i(150, 150), Vector2i(300, 300))
+		r = r.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+		if r.size.x > 10 and r.size.y > 10:
+			var c := img.get_region(r)
+			c.resize(r.size.x * 3, r.size.y * 3, Image.INTERPOLATE_NEAREST)
+			c.save_png("%s/%s_zoom.png" % [_out, name])
 
 
 func _nearest(group: String) -> Node2D:
@@ -102,6 +124,7 @@ func _process(delta: float) -> void:
 	_t += delta
 	_drive(delta)
 	_extra(delta)
+	_top_up_horde(delta)
 	_log_t += delta
 	_snap_t += delta
 	if _log_t >= 1.0:
@@ -109,10 +132,15 @@ func _process(delta: float) -> void:
 		var en := get_tree().get_nodes_in_group("enemies").size()
 		var ne := _nearest("enemies")
 		var nd: float = ne.global_position.distance_to(_p.global_position) if ne else -1.0
+		if _t > 3.0:
+			var f := Engine.get_frames_per_second()
+			_fps_min = mini(_fps_min, f)
+			_fps_sum += f
+			_fps_n += 1
 		print("T %5.1f fps=%d hp=%.0f/%.0f enemies=%d nearest=%.0f phase=%d extract=%s pos=(%.0f,%.0f) hits=%d" % [
 			_t, Engine.get_frames_per_second(), _p.hp, _p.max_hp, en, nd,
 			_m.get("_phase_index"), _m.call("is_extract_open"), _p.global_position.x, _p.global_position.y, _dmg_events])
-	if _snap_t >= (5.0 if _secs < 30.0 else 8.0):
+	if _snap_t >= (1.5 if _stand else (5.0 if _secs < 30.0 else 8.0)):
 		_snap_t = 0.0
 		_n += 1
 		_snap("shot_%02d_t%03d" % [_n, int(_t)])
@@ -125,6 +153,9 @@ func _process(delta: float) -> void:
 
 
 func _drive(delta: float) -> void:
+	if _stand:
+		TouchInput.move_vector = Vector2.ZERO
+		return
 	## Combat is automatic (hero fires/swings at the closest enemy in range);
 	## the bot only steers the move stick and taps DASH / ABILITY.
 	var mv := Vector2.ZERO
@@ -199,7 +230,26 @@ func _extra(delta: float) -> void:
 			_pet_far += delta
 
 
+func _top_up_horde(delta: float) -> void:
+	if _horde <= 0:
+		return
+	_horde_t -= delta
+	if _horde_t > 0.0:
+		return
+	_horde_t = 0.25
+	var live := get_tree().get_nodes_in_group("enemies").size()
+	var scene: PackedScene = load("res://scenes/entities/enemy.tscn")
+	var pool: Array = _kinds if not _kinds.is_empty() else EnemyDefs.all_kinds().map(func(k: Dictionary) -> String: return str(k["id"]))
+	for i in range(mini(6, _horde - live)):
+		var e: CharacterBody2D = scene.instantiate()
+		var at := _p.global_position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(170.0, 330.0)
+		e.call("setup", at, 1.0, 0.6, 1.0, str(pool[randi() % pool.size()]))
+		_p.get_parent().add_child(e)
+
+
 func _summary() -> void:
+	if _fps_n > 0:
+		print("FPS avg=%.0f min=%d horde=%d" % [_fps_sum / _fps_n, _fps_min, _horde])
 	print("SUMMARY char=%s pet=%s mode=%s t=%.0f hp_end=%.0f min_hp=%.0f kills=%d scrap=%d runlv=%d hits=%d abil=%d pet_far_s=%.0f reload_s=%.0f stuck_s=%.0f" % [
 		GameState.selected_character_id, GameState.selected_pet_id, GameState.selected_mode_id, _t,
 		_p.hp if is_instance_valid(_p) else -1.0, _min_hp, GameState.kills, GameState.get("scrap_found"), GameState.run_level,
