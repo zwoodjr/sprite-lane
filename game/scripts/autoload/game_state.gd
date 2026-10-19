@@ -35,6 +35,25 @@ var meta_upgrades: Dictionary = {} ## v3 flat Hangar (retired; refunded on load)
 var camp: Dictionary = {}
 ## Shared lockbox of extracted gear (Phase B items). Capacity: stash_capacity().
 var stash: Array = []
+## --- Gear (Phase B) ---
+## Per survivor: loadout slot -> item uid (GearDefs.LOADOUT_SLOTS).
+var loadouts: Dictionary = {}
+## Per survivor: the one insured item uid (kept even on death).
+var insured: Dictionary = {}
+var next_uid: int = 1
+## Banked boss materials: salvage_core / dust_heart -> count.
+var materials: Dictionary = {}
+## Derived for the current deploy (see _compute_gear): stats, set counts, legendary.
+var gear: Dictionary = {}
+## Found this run (kept only on extract) + boss bonus to the loot multiplier.
+var run_loot: Array = []
+var run_materials: Dictionary = {}
+var boss_loot_bonus: float = 0.0
+var result_found: Array = []
+var result_lost_items: Array = []
+var result_salvaged: int = 0
+## Unlock lines raised mid-run (trophies), shown on the result screen.
+var result_unlocks_pending: PackedStringArray = []
 ## First boss kills: boss kind -> true. Trophies show over the hangar door.
 var trophies: Dictionary = {}
 ## One-time v3 → v4 Hangar migration done (old spend refunded as scrap).
@@ -136,6 +155,10 @@ func save_profile() -> void:
 		"camp": camp,
 		"stash": stash,
 		"trophies": trophies,
+		"loadouts": loadouts,
+		"insured": insured,
+		"next_uid": next_uid,
+		"materials": materials,
 		"migrated_hangar_v4": migrated_hangar_v4,
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
@@ -199,6 +222,34 @@ func apply_save(d: Dictionary) -> void:
 			if typeof(it) == TYPE_DICTIONARY:
 				stash.append(it)
 	migrated_hangar_v4 = bool(d.get("migrated_hangar_v4", false))
+	var lo: Variant = d.get("loadouts", {})
+	loadouts = {}
+	if typeof(lo) == TYPE_DICTIONARY:
+		for h in (lo as Dictionary).keys():
+			var slots: Variant = (lo as Dictionary)[h]
+			if typeof(slots) != TYPE_DICTIONARY:
+				continue
+			var clean := {}
+			for sl in (slots as Dictionary).keys():
+				if str(sl) in GearDefs.LOADOUT_SLOTS:
+					clean[str(sl)] = int((slots as Dictionary)[sl])
+			loadouts[str(h)] = clean
+	var ins: Variant = d.get("insured", {})
+	insured = {}
+	if typeof(ins) == TYPE_DICTIONARY:
+		for h in (ins as Dictionary).keys():
+			insured[str(h)] = int((ins as Dictionary)[h])
+	var mats: Variant = d.get("materials", {})
+	materials = {}
+	if typeof(mats) == TYPE_DICTIONARY:
+		for k in (mats as Dictionary).keys():
+			materials[str(k)] = maxi(0, int((mats as Dictionary)[k]))
+	next_uid = maxi(1, int(d.get("next_uid", 1)))
+	for it in stash:
+		it["uid"] = int(it.get("uid", 0))
+		if int(it["uid"]) <= 0:
+			it["uid"] = next_uid
+		next_uid = maxi(next_uid, int(it["uid"]) + 1)
 	var tr: Variant = d.get("trophies", {})
 	trophies = (tr as Dictionary).duplicate() if typeof(tr) == TYPE_DICTIONARY else {}
 	garage_tokens = int(d.get("garage_tokens", 0))
@@ -280,13 +331,16 @@ func try_buy_camp(id: String) -> bool:
 func try_buy_hangar(entry_id: String) -> bool:
 	return try_buy_camp(entry_id)
 
-## Generator: +HP for all.
+## Generator + gear + Quarry Plate (2).
 func starting_hp_bonus() -> float:
-	return float(HangarDefs.shared_val("generator", "hp", camp_rank("generator"), 0))
+	var hp_b := float(HangarDefs.shared_val("generator", "hp", camp_rank("generator"), 0)) + gear_stat("max_hp")
+	if has_set("quarry_plate", 2):
+		hp_b += float(GearDefs.SURVIVOR_SETS["quarry_plate"]["max_hp"])
+	return hp_b
 
-## Scrap Press: more scrap per run.
+## Scrap Press + gear: more scrap per run.
 func scrap_find_mult() -> float:
-	return 1.0 + float(HangarDefs.shared_val("scrap_press", "scrap", camp_rank("scrap_press"), 0.0))
+	return 1.0 + float(HangarDefs.shared_val("scrap_press", "scrap", camp_rank("scrap_press"), 0.0)) + gear_stat("scrap")
 
 ## Radio Tower: seconds earlier the next pads are revealed.
 func pad_reveal_bonus() -> float:
@@ -308,32 +362,56 @@ func ammo_duration_bonus() -> float:
 func ammo_odds_mult() -> float:
 	return float(HangarDefs.shared_val("ammo_bench", "odds", camp_rank("ammo_bench"), 0.0))
 
-## Survivor station: weapon damage for the selected hero.
+## Survivor station + gear damage for the selected hero.
 func starting_damage_bonus() -> float:
-	return HangarDefs.station_weapon_damage(station_rank())
+	return HangarDefs.station_weapon_damage(station_rank()) + gear_stat("damage")
 
-## Ability dict for the selected hero with its station applied.
+## Ability dict for the selected hero with its station + survivor set applied.
 func hero_ability() -> Dictionary:
-	return HangarDefs.apply_station_ability(selected_character_id, get_character().get("ability", {}), station_rank())
+	var a := HangarDefs.apply_station_ability(selected_character_id, get_character().get("ability", {}), station_rank())
+	var ss: Dictionary = GearDefs.SURVIVOR_SETS
+	if has_set("foremans_kit", 2) and a.has("cooldown"):
+		a["cooldown"] = float(a["cooldown"]) * float(ss["foremans_kit"]["ability_cd"])
+	if has_set("bell_ringers_shroud", 2):
+		for k in ["coat_time", "cloud_time"]:
+			if a.has(k):
+				a[k] = float(a[k]) * float(ss["bell_ringers_shroud"]["ability_time"])
+	if has_set("linemans_rig", 2) and a.has("stun"):
+		a["stun"] = float(a["stun"]) * float(ss["linemans_rig"]["stun_mult"])
+	if has_set("cathedral_vestments", 2) and a.has("heal"):
+		a["heal"] = float(a["heal"]) * float(ss["cathedral_vestments"]["heal_mult"])
+	if has_set("surgeons_coat", 2) and a.has("mark_mult"):
+		a["mark_mult"] = float(a["mark_mult"]) * float(ss["surgeons_coat"]["mark_mult"])
+	if has_set("foremans_kit", 3):
+		a["charges"] = int(ss["foremans_kit"]["charges"])
+	return a
 
-## Retired v3 flat stats — neutral now (gear in Phase B feeds some of these).
+## Gear-fed stats (retired v3 Hangar stats stay neutral).
 func insurance_bonus_slots() -> int:
 	return 0
 
 func dash_cooldown_mult() -> float:
-	return 1.0
+	var r := gear_stat("dash_cd")
+	if has_set("night_runner", 4):
+		r += float(GearDefs.GENERAL_SETS["night_runner"]["dash_cd"])
+	if has_set("smugglers_wraps", 2):
+		r += float(GearDefs.SURVIVOR_SETS["smugglers_wraps"]["dash_cd"])
+	return maxf(0.45, 1.0 - r)
 
+## Field Salvager (6): extract bonus per set piece worn.
 func extract_payout_mult() -> float:
+	if has_set("field_salvager", 6):
+		return 1.0 + float(GearDefs.GENERAL_SETS["field_salvager"]["extract_per_piece"]) * float(set_count("field_salvager"))
 	return 1.0
 
 func endurance_iframe_mult() -> float:
 	return 1.0
 
 func crit_chance() -> float:
-	return 0.0
+	return gear_stat("crit")
 
 func crit_damage_bonus() -> float:
-	return 0.0
+	return float(GearDefs.SURVIVOR_SETS["surgeons_coat"]["crit_bonus"]) if has_set("surgeons_coat", 2) else 0.0
 
 func aoe_damage_mult() -> float:
 	return 1.0
@@ -345,10 +423,13 @@ func block_chance() -> float:
 	return 0.0
 
 func move_speed_bonus() -> float:
-	return 0.0
+	var m := gear_stat("move")
+	if has_set("night_runner", 2):
+		m += float(GearDefs.GENERAL_SETS["night_runner"]["move"])
+	return m
 
 func pickup_radius_bonus() -> float:
-	return 0.0
+	return gear_stat("pickup")
 
 func pet_power_mult() -> float:
 	return 1.0
@@ -358,6 +439,223 @@ func loot_quality_bonus() -> float:
 
 func extract_grace_sec() -> float:
 	return 0.0
+
+## =============================================================================
+## Gear: stash items, per-survivor loadouts, insurance, materials.
+
+## Adds an item to the stash (assigns a uid). False when the stash is full.
+func add_to_stash(item: Dictionary) -> bool:
+	if stash.size() >= stash_capacity():
+		return false
+	var it := item.duplicate(true)
+	it["uid"] = next_uid
+	next_uid += 1
+	stash.append(it)
+	return true
+
+func stash_item(uid: int) -> Dictionary:
+	for it in stash:
+		if int(it.get("uid", -1)) == uid:
+			return it
+	return {}
+
+func loadout_of(hero: String = "") -> Dictionary:
+	var h := hero if hero != "" else selected_character_id
+	if not loadouts.has(h):
+		loadouts[h] = {}
+	return loadouts[h]
+
+## slot -> item for a survivor (missing / stale uids are skipped).
+func equipped_items(hero: String = "") -> Dictionary:
+	var out := {}
+	var lo := loadout_of(hero)
+	for sl in lo.keys():
+		var it := stash_item(int(lo[sl]))
+		if not it.is_empty():
+			out[str(sl)] = it
+	return out
+
+## Which survivor (if any) has this item equipped, and in which slot.
+func equipped_by(uid: int) -> Array:
+	for h in loadouts.keys():
+		var lo: Dictionary = loadouts[h]
+		for sl in lo.keys():
+			if int(lo[sl]) == uid:
+				return [str(h), str(sl)]
+	return []
+
+## Equip a stash item; it leaves any other survivor / slot it was in.
+func equip(hero: String, slot: String, uid: int) -> bool:
+	var it := stash_item(uid)
+	if it.is_empty() or not GearDefs.fits(it, slot, hero):
+		return false
+	var prev := equipped_by(uid)
+	if not prev.is_empty():
+		(loadouts[prev[0]] as Dictionary).erase(prev[1])
+		if int(insured.get(prev[0], -1)) == uid and str(prev[0]) != hero:
+			insured.erase(prev[0])
+	loadout_of(hero)[slot] = uid
+	save_profile()
+	return true
+
+func unequip(hero: String, slot: String) -> void:
+	var lo := loadout_of(hero)
+	if lo.has(slot):
+		if int(insured.get(hero, -1)) == int(lo[slot]):
+			insured.erase(hero)
+		lo.erase(slot)
+		save_profile()
+
+## Insure one equipped item for this survivor (uid -1 clears).
+func set_insured(hero: String, uid: int) -> bool:
+	if uid < 0:
+		insured.erase(hero)
+		save_profile()
+		return true
+	var by := equipped_by(uid)
+	if by.is_empty() or str(by[0]) != hero:
+		return false
+	insured[hero] = uid
+	save_profile()
+	return true
+
+func is_insured(uid: int) -> bool:
+	for h in insured.keys():
+		if int(insured[h]) == uid:
+			return true
+	return false
+
+## Salvage a stash item for scrap (unequips it first).
+func salvage(uid: int) -> int:
+	var it := stash_item(uid)
+	if it.is_empty():
+		return 0
+	var by := equipped_by(uid)
+	if not by.is_empty():
+		unequip(str(by[0]), str(by[1]))
+	stash.erase(it)
+	var v := GearDefs.salvage_value(it)
+	account_scrap += v
+	save_profile()
+	meta_changed.emit()
+	return v
+
+func material_count(id: String) -> int:
+	return int(materials.get(id, 0))
+
+## Awaken an Epic+ Vial with a Dust Heart.
+func charge_vial(uid: int) -> bool:
+	var it := stash_item(uid)
+	if it.is_empty() or not bool(it.get("needs_heart", false)) or bool(it.get("charged", false)):
+		return false
+	if material_count("dust_heart") <= 0:
+		return false
+	materials["dust_heart"] = material_count("dust_heart") - 1
+	it["charged"] = true
+	save_profile()
+	return true
+
+## Totals for the current survivor's loadout (called on every deploy / loadout reset).
+func _compute_gear() -> void:
+	var stats := {}
+	var sets := {}
+	var mods: Array = []
+	var witem: Dictionary = {}
+	var hero := selected_character_id
+	var eq := equipped_items(hero)
+	for sl in eq.keys():
+		var it: Dictionary = eq[sl]
+		if not GearDefs.fits(it, str(sl), hero):
+			continue
+		if str(sl) == "weapon":
+			witem = it
+			continue
+		if str(sl) in ["mod1", "mod2"]:
+			mods.append(it)
+			continue
+		if bool(it.get("needs_heart", false)) and not bool(it.get("charged", false)):
+			continue
+		var st: Dictionary = it.get("stats", {})
+		for k in st.keys():
+			stats[k] = float(stats.get(k, 0.0)) + float(st[k])
+		var sid := str(it.get("set", ""))
+		if sid != "":
+			sets[sid] = int(sets.get(sid, 0)) + 1
+	for k in stats.keys():
+		if GearDefs.STAT_CAP.has(k):
+			stats[k] = minf(float(stats[k]), float(GearDefs.STAT_CAP[k]))
+	gear = {"stats": stats, "sets": sets, "mods": mods, "weapon_item": witem,
+		"legendary": str(witem.get("legendary", ""))}
+
+func gear_stat(id: String) -> float:
+	var st: Variant = gear.get("stats", {})
+	return float((st as Dictionary).get(id, 0.0)) if st is Dictionary else 0.0
+
+func set_count(set_id: String) -> int:
+	var sets: Variant = gear.get("sets", {})
+	return int((sets as Dictionary).get(set_id, 0)) if sets is Dictionary else 0
+
+## General sets count any wearer; survivor sets only on their survivor.
+func has_set(set_id: String, pieces: int) -> bool:
+	if GearDefs.SURVIVOR_SETS.has(set_id) and str(GearDefs.SURVIVOR_SETS[set_id]["hero"]) != selected_character_id:
+		return false
+	return set_count(set_id) >= pieces
+
+func gear_legendary() -> String:
+	return str(gear.get("legendary", ""))
+
+func gear_luck() -> float:
+	var l := gear_stat("luck")
+	if has_set("field_salvager", 4):
+		l += float(GearDefs.GENERAL_SETS["field_salvager"]["drop_luck"])
+	return l
+
+## In-run pickups: gear (kept on extract), materials, boss bonus + trophy.
+func add_run_loot(item: Dictionary) -> void:
+	run_loot.append(item.duplicate(true))
+
+func add_run_material(id: String, n: int) -> void:
+	run_materials[id] = int(run_materials.get(id, 0)) + n
+
+func on_boss_killed(kind: String) -> void:
+	boss_loot_bonus += GearDefs.BOSS_LOOT_BONUS
+	loot_mult += GearDefs.BOSS_LOOT_BONUS
+	if not has_trophy(kind):
+		trophies[kind] = true
+		result_unlocks_pending.append("Trophy: first %s kill" % EnemyDefs.get_kind(kind).get("display_name", kind))
+
+## Extract: found gear → stash (overflow salvaged), materials banked.
+func _bank_run_loot() -> void:
+	result_found = []
+	result_salvaged = 0
+	for it in run_loot:
+		if add_to_stash(it):
+			result_found.append(it)
+		else:
+			var v := int(round(float(GearDefs.salvage_value(it)) * GearDefs.OVERFLOW_SALVAGE))
+			account_scrap += v
+			result_salvaged += v
+	for k in run_materials.keys():
+		materials[k] = material_count(str(k)) + int(run_materials[k])
+		result_unlocks.append("+%d %s" % [int(run_materials[k]), GearDefs.MATERIAL_NAME.get(str(k), str(k))])
+	run_loot = []
+	run_materials = {}
+
+## Death: found gear and brought-in gear are lost, except the insured item.
+func _lose_run_loot() -> void:
+	result_lost_items = run_loot.duplicate(true)
+	var hero := selected_character_id
+	var keep := int(insured.get(hero, -1))
+	var eq := equipped_items(hero)
+	for sl in eq.keys():
+		var it: Dictionary = eq[sl]
+		if int(it.get("uid", -1)) == keep:
+			continue
+		result_lost_items.append(it.duplicate(true))
+		stash.erase(it)
+		loadout_of(hero).erase(sl)
+	run_loot = []
+	run_materials = {}
 
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
@@ -373,6 +671,9 @@ func reset_profile() -> void:
 	camp.clear()
 	stash.clear()
 	trophies.clear()
+	loadouts.clear()
+	insured.clear()
+	materials.clear()
 	migrated_hangar_v4 = true
 	garage_tokens = 0
 	successful_extracts = 0
@@ -390,8 +691,10 @@ func get_character() -> Dictionary:
 func reset_loadout_to_defaults() -> void:
 	armor = LoadoutStubs.default_armor()
 	## Kit follows the selected hero — never the old shared Scrap SMG.
+	_compute_gear()
 	weapon = HangarDefs.apply_station_weapon(selected_character_id,
 		LoadoutStubs.weapon_for_character(selected_character_id), station_rank())
+	weapon = GearDefs.apply_weapon(weapon, gear.get("weapon_item", {}), gear.get("mods", []))
 	pet = HangarDefs.apply_kennel(LoadoutStubs.default_pet(selected_pet_id), kennel_rank())
 	insured_slots.clear()
 	var slots: int = int(get_mode().get("insurance_slots", 2)) + insurance_bonus_slots()
@@ -422,6 +725,10 @@ func begin_run() -> void:
 	if run_seed == 0:
 		run_seed = 1
 	extract_pad_info = []
+	run_loot = []
+	run_materials = {}
+	boss_loot_bonus = 0.0
+	result_unlocks_pending = PackedStringArray()
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
@@ -444,13 +751,16 @@ func _clear_result_meta() -> void:
 	result_lost_keys = PackedStringArray()
 	result_kept_keys = PackedStringArray()
 	result_unlocks = PackedStringArray()
+	result_found = []
+	result_lost_items = []
+	result_salvaged = 0
 
 func on_window_skipped() -> void:
 	windows_skipped += 1
 
 ## Called every frame by the match: multiplier from run time, Threat follows it.
 func set_loot_mult(mult: float) -> void:
-	loot_mult = mult
+	loot_mult = mult + boss_loot_bonus
 	threat_level = ModeDefs.threat_for_mult(mult)
 
 ## What the bag is worth right now (before the multiplier).
@@ -512,10 +822,11 @@ func up(id: String, key: String, default: Variant = 0.0) -> Variant:
 
 ## Lucky Vial: returns the luck multiplier for this level-up (uses a charge).
 func consume_luck() -> float:
+	var charm := 1.0 + gear_stat("luck")
 	if run_luck_charges <= 0:
-		return 1.0
+		return charm
 	run_luck_charges -= 1
-	return run_luck
+	return run_luck * charm
 
 func use_reroll() -> bool:
 	if run_rerolls_left <= 0:
@@ -526,9 +837,12 @@ func use_reroll() -> bool:
 func note_kill(kind: String) -> void:
 	run_kind_kills[kind] = int(run_kind_kills.get(kind, 0)) + 1
 
-## Scavenger's Eye multiplier on kill scrap.
+## Scavenger's Eye (+ Field Salvager 2) multiplier on kill scrap.
 func run_scrap_mult() -> float:
-	return 1.0 + float(up("scavengers_eye", "scrap", 0.0))
+	var m := 1.0 + float(up("scavengers_eye", "scrap", 0.0))
+	if has_set("field_salvager", 2):
+		m += float(GearDefs.GENERAL_SETS["field_salvager"]["scrap"])
+	return m
 
 static func _fresh_run_mods() -> Dictionary:
 	return {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0}
@@ -574,6 +888,9 @@ func on_extract_success() -> void:
 	successful_extracts += 1
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d (Hangar gates)" % account_level)
+	_bank_run_loot()
+	result_unlocks.append_array(result_unlocks_pending)
+	result_unlocks_pending = PackedStringArray()
 	result_summary = "Extracted. +%d scrap banked (×%.1f loot) · run Lv %d · Threat %d" % [
 		payout_this_run, loot_mult, run_level, threat_level,
 	]
@@ -606,15 +923,18 @@ func on_wipe() -> void:
 	_sync_account_level()
 	result_run_level_reached = run_level
 	payout_this_run = keep
-	result_lost_keys = PackedStringArray()
-	result_kept_keys = PackedStringArray()
-	for key in ["weapon", "armor", "pet"]:
-		if key in insured_slots:
-			result_kept_keys.append(key)
-		else:
-			result_lost_keys.append(key)
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d" % account_level)
+	var kept_item := stash_item(int(insured.get(selected_character_id, -1)))
+	_lose_run_loot()
+	result_lost_keys = PackedStringArray()
+	result_kept_keys = PackedStringArray()
+	for it in result_lost_items:
+		result_lost_keys.append(str(it.get("name", "item")))
+	if not kept_item.is_empty():
+		result_kept_keys.append(str(kept_item.get("name", "item")))
+	result_unlocks.append_array(result_unlocks_pending)
+	result_unlocks_pending = PackedStringArray()
 	result_summary = "Wiped. Kept %d%% of the bag (+%d scrap). Lost %d. Lost gear: %s" % [
 		int(round(float(mode.get("death_keep", 0.1)) * 100.0)),
 		keep,
@@ -651,6 +971,14 @@ func go_how_to_play() -> void:
 
 func go_settings() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/settings_menu.tscn")
+
+## Gear screen; `from` = "hangar" | "character_select" (where BACK / DONE go).
+var loadout_from: String = "hangar"
+
+func go_loadout(from: String = "hangar") -> void:
+	loadout_from = from
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/loadout.tscn")
 
 func go_hangar() -> void:
 	get_tree().paused = false
