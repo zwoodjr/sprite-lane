@@ -43,7 +43,6 @@ func _ready() -> void:
 	player.health_changed.connect(hud.on_health_changed)
 	if player.has_signal("buffs_changed"):
 		player.buffs_changed.connect(hud.on_buffs_changed)
-	TouchInput.extract_pressed.connect(_on_touch_extract)
 	hud.setup(self)
 	hud.setup_nav(player, _pads, wasteland.get_landmarks())
 	## In-run level-up picker (pauses on level).
@@ -99,13 +98,6 @@ func _roll_extracts() -> void:
 			pad.extract_requested.connect(_on_extract_requested)
 		_pads.append(pad)
 	GameState.extract_pad_info = rolled
-
-func _on_touch_extract() -> void:
-	if _ended or not _extract_open:
-		return
-	for pad in _pads:
-		if is_instance_valid(pad) and pad.has_method("try_touch_extract") and pad.try_touch_extract():
-			return
 
 func _process(delta: float) -> void:
 	if _ended:
@@ -226,8 +218,7 @@ func _spawn_enemy() -> void:
 	var heading: Vector2 = player.velocity
 	if heading.length() > 40.0 and randf() < 0.6:
 		ang = heading.angle() + randf_range(-1.1, 1.1)
-	var dist := randf_range(620.0, 780.0)
-	var spot := player.global_position + Vector2(cos(ang), sin(ang)) * dist
+	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
 	var tl := ModeDefs.tl_table(GameState.threat_level)
 	var step := float(_mode.get("tl_step_size", 1.0))
 	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
@@ -235,6 +226,26 @@ func _spawn_enemy() -> void:
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	enemy.setup(spot, hp_m, dmg_m, 1.0, _roll_enemy_kind())
 	world.add_child(enemy)
+
+## Just outside the visible screen along dir (from the camera's view centre),
+## kept within SPAWN_MIN..SPAWN_MAX of the hero so mobs walk in quickly.
+const SPAWN_MARGIN := 48.0
+const SPAWN_MIN := 520.0
+const SPAWN_MAX := 760.0
+
+func _spawn_point_outside_view(dir: Vector2) -> Vector2:
+	var cam: Camera2D = player.get_node_or_null("Camera2D") as Camera2D
+	var center := player.global_position
+	var half := Vector2(360, 640)
+	if cam:
+		center += cam.offset
+		half = get_viewport().get_visible_rect().size / cam.zoom * 0.5
+	var tx := INF if absf(dir.x) < 0.001 else half.x / absf(dir.x)
+	var ty := INF if absf(dir.y) < 0.001 else half.y / absf(dir.y)
+	var edge := center + dir * (minf(tx, ty) + SPAWN_MARGIN)
+	var from_hero := edge - player.global_position
+	var d := clampf(from_hero.length(), SPAWN_MIN, SPAWN_MAX)
+	return player.global_position + from_hero.normalized() * d
 
 ## Drop stragglers far behind the player so T2/T3 pressure doesn't accumulate.
 func _cull_far_enemies() -> void:
