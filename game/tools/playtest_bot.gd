@@ -132,6 +132,21 @@ func _ready() -> void:
 		_camp_override = true
 		_keep_gear = [GameState.stash.duplicate(true), GameState.loadouts.duplicate(true), GameState.insured.duplicate(true)]
 		_give_kit(GameState.selected_character_id)
+	## arg 15 (Depth E5) "styleIdx:abilityVer:quirk" or "rand": the pre-run loadout
+	## (set in memory, not saved; needs the station rank, e.g. arg 13 "max").
+	if a.size() > 15 and a[15] != "" and a[15] != "none":
+		var hero := GameState.selected_character_id
+		var parts: PackedStringArray = a[15].split(":")
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		var rand := a[15] == "rand"
+		var si := rng.randi_range(0, 2) if rand else int(parts[0])
+		var av := ("b" if rng.randf() < 0.5 else "a") if rand else (parts[1] if parts.size() > 1 else "a")
+		var qs: Array = KitDefs.quirks(hero)
+		var qu := str(qs[rng.randi_range(0, qs.size() - 1)]) if rand else (parts[2] if parts.size() > 2 else "")
+		GameState.kit[hero] = {"style": str(KitDefs.styles(hero)[clampi(si, 0, 2)]["id"]), "ability": av, "quirk": qu}
+		GameState.reset_loadout_to_defaults()
+		print("KIT %s style=%s ability=%s quirk=%s" % [hero, GameState.kit_style(hero), GameState.kit_ability(hero), GameState.kit_quirk(hero)])
 	_headless = DisplayServer.get_name() == "headless"
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()

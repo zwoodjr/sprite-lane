@@ -2,7 +2,7 @@
 ingredients, tonics, medicine, backpack, plague fog and later phases' items.
 
 usage (from game/):  python3 tools/gen_depth_art.py [group ...] [--sheet DIR]
-groups: e1 (default: all)
+groups: e1 e3 e4 e5 (default: all)
 Writes into assets/sprites/depth/.
 """
 import math
@@ -517,11 +517,302 @@ def plane_wreck():
     return save_world(cv, "plane_wreck", 224)
 
 
+# ================================================================== E5 weapon styles
+# Weapon icons drawn in a local frame (x along the weapon, y across, art units around
+# 0,0) and laid on a diagonal (muzzle / tip up-right), the hangar cel look.
+ANG = math.radians(-38)
+WOOD_W = C(132, 86, 52)
+GRIP = C(58, 44, 38)
+FIRE = C(250, 140, 50)
+TOX = C(140, 210, 80)
+VOLT = C(110, 190, 255)
+BLADE = C(196, 202, 206)
+
+
+class Frame:
+    def __init__(self, ang=ANG, cx=12.0, cy=12.4, k=1.08):
+        self.c, self.s, self.cx, self.cy, self.k = math.cos(ang), math.sin(ang), cx, cy, k
+
+    def p(self, x, y):
+        x, y = x * self.k, y * self.k
+        return (self.cx + x * self.c - y * self.s, self.cy + x * self.s + y * self.c)
+
+    def poly(self, pts):
+        return ("poly", [self.p(x, y) for (x, y) in pts])
+
+    def rect(self, x0, y0, x1, y1):
+        return self.poly([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+
+    def ell(self, x, y, r):
+        q = self.p(x, y)
+        return ("ell", q[0], q[1], r * self.k, r * self.k)
+
+    def line(self, pts):
+        return [self.p(x, y) for (x, y) in pts]
+
+
+def part(L, prims, col, ol=2.1, bevel=0.8, **kw):
+    cel(L, prims if isinstance(prims, list) else [prims], col, ol=ol, bevel=bevel, **kw)
+
+
+def _gun(L, f, length=17.0, barrel=GUN, body=GUN, stock=WOOD_W, mag=None, suppressor=0.0, scope=False, short=False):
+    """A generic long-gun: stock, receiver, barrel (+ suppressor), magazine, scope."""
+    x0 = -length / 2
+    if not short:
+        part(L, f.poly([(x0, -0.6), (x0 + 4.6, -1.0), (x0 + 4.6, 1.1), (x0 + 0.6, 2.6), (x0 - 0.3, 2.4)]), stock, wear=0.25)
+    part(L, f.poly([(x0 + 5.4, 1.0), (x0 + 6.8, 1.0), (x0 + 6.2, 4.0), (x0 + 4.9, 4.0)]), GRIP)
+    if mag is not None:
+        part(L, f.poly([(x0 + 8.0, 1.0), (x0 + 9.8, 1.0), (x0 + 10.4, mag), (x0 + 8.6, mag)]), C(70, 66, 60), metal=0.4)
+    part(L, f.rect(x0 + 4.2, -1.4, x0 + 11.0, 1.2), body, metal=0.6, wear=0.2)
+    bx = x0 + 11.0
+    bend = length / 2 - suppressor
+    part(L, f.rect(bx - 0.2, -0.75, bend, 0.35), barrel, ol=1.3, bevel=0.4, metal=0.8)
+    if suppressor:
+        part(L, f.rect(bend - 0.1, -1.1, bend + suppressor, 0.7), C(46, 48, 54), ol=1.4, bevel=0.6, metal=0.7)
+        for k in range(1, 4):
+            xx = bend + suppressor * k / 4
+            ink(L, f.line([(xx, -1.0), (xx, 0.6)]), 0.12, C(20, 20, 24), 0.8)
+    if scope:
+        part(L, f.rect(x0 + 5.0, -3.0, x0 + 10.6, -1.7), C(52, 56, 62), ol=1.3, bevel=0.5, metal=0.8)
+        part(L, f.ell(x0 + 10.6, -2.35, 0.9), C(90, 150, 200), ol=1.0, bevel=0.3, gloss=0.6)
+    hline(L, f.line([(x0 + 4.6, -1.0), (x0 + 10.6, -1.0)]), 0.14, SPEC, 0.6)
+
+
+def _sparks(L, pts, col, n=5, seed=1):
+    rnd = np.random.default_rng(seed)
+    for (x, y) in pts:
+        for _ in range(n):
+            a = rnd.uniform(0, math.tau)
+            r = rnd.uniform(0.8, 2.0)
+            ink(L, [(x, y), (x + math.cos(a) * r, y + math.sin(a) * r)], 0.16, col, 0.9)
+
+
+def _rocket(L, f, x, scale=1.0, col=C(196, 70, 44)):
+    part(L, f.poly([(x, -1.5 * scale), (x + 2.2 * scale, -1.2 * scale), (x + 4.0 * scale, 0), (x + 2.2 * scale, 1.2 * scale),
+                    (x, 1.5 * scale)]), col, ol=1.4, bevel=0.6, gloss=0.4)
+
+
+def _blade(L, f, x0, x1, w, col=BLADE, curve=0.0, serr=False, hilt=GRIP, guard=BRASS):
+    """A knife along +x from x0 (hilt end) to x1 (tip); curve bends the tip down."""
+    hx = x0 + (x1 - x0) * 0.3
+    part(L, f.rect(x0, -0.75, hx, 0.75), hilt, wear=0.2)
+    for k in range(3):
+        xx = x0 + (hx - x0) * (k + 0.6) / 3.4
+        ink(L, f.line([(xx, -0.7), (xx, 0.7)]), 0.14, C(30, 22, 18), 0.7)
+    part(L, f.rect(hx - 0.3, -w * 0.95, hx + 0.5, w * 0.95), guard, ol=1.2, bevel=0.3, metal=0.9)
+    top = [(hx + 0.5, -w * 0.55), (x1 - (x1 - hx) * 0.25, -w * 0.6 + curve * 0.3), (x1, curve)]
+    bot = [(x1 - (x1 - hx) * 0.18, w * 0.5 + curve), (hx + 0.5, w * 0.6)]
+    if serr:
+        bot = []
+        n = 7
+        for k in range(n + 1):
+            xx = x1 - (x1 - hx - 0.5) * k / n
+            bot.append((xx, w * 0.6 + (0.45 if k % 2 else 0)))
+    part(L, f.poly(top + bot), col, ol=1.4, bevel=0.5, metal=1.0, gloss=0.5)
+    hline(L, f.line([(hx + 0.8, -w * 0.2), (x1 - 1.0, curve * 0.5 - w * 0.1)]), 0.16, SPEC, 0.8)
+
+
+def _hammer(L, f, hl, head, hw, hh, col=STEEL, wood=WOOD_W):
+    part(L, f.rect(-hl / 2, -0.55, hl / 2, 0.55), wood, wear=0.3)
+    part(L, f.rect(-hl / 2, -0.7, -hl / 2 + 2.4, 0.7), GRIP)
+    x = hl / 2 - 0.5
+    part(L, f.rect(x - hw / 2, -hh, x + hw / 2, hh), col, ol=2.0, bevel=0.8, metal=0.7, rust=0.15, wear=0.3)
+    return x
+
+
+def style_icon(hero, sid):
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 21.0, 8.0, 1.3)
+    f = Frame()
+    if hero == "ash_rook":
+        if sid == "boom":
+            part(L, f.rect(-8.5, -2.0, 5.0, 2.0), C(110, 116, 74), form="cylh", wear=0.35, rust=0.2)
+            part(L, f.rect(-9.2, -2.4, -7.6, 2.4), C(70, 72, 60), metal=0.5)
+            part(L, f.rect(3.8, -2.4, 5.4, 2.4), C(70, 72, 60), metal=0.5)
+            part(L, f.poly([(-3.0, 2.0), (-1.6, 2.0), (-2.0, 4.8), (-3.4, 4.8)]), GRIP)
+            _rocket(L, f, 5.4, 1.05)
+            glow(L, *f.p(-9.6, 0), 2.4, FIRE, 0.35)
+        elif sid == "cluster":
+            part(L, f.rect(-8.5, -2.0, 3.0, 2.0), C(96, 104, 120), form="cylh", wear=0.3, rust=0.15)
+            part(L, f.poly([(-3.0, 2.0), (-1.6, 2.0), (-2.0, 4.8), (-3.4, 4.8)]), GRIP)
+            for (x, y) in ((5.4, -1.9), (5.8, 1.7), (8.4, -0.1)):
+                part(L, f.ell(x, y, 1.9), C(200, 150, 60), form="sphere", gloss=0.5)
+                ink(L, f.line([(x - 0.4, y - 1.4), (x - 0.2, y - 2.2)]), 0.2, C(40, 30, 20), 0.9)
+        else:  # mortar
+            g = Frame(math.radians(-62), 11.0, 14.0)
+            part(L, g.rect(-6.0, -2.8, 4.0, 2.8), C(64, 60, 58), form="cylh", metal=0.6, rust=0.3)
+            part(L, g.rect(3.6, -3.2, 5.0, 3.2), C(84, 80, 76), metal=0.6)
+            part(L, g.poly([(-6.5, -3.0), (-7.4, 0), (-6.5, 3.0)]), C(54, 50, 48))
+            glow(L, *g.p(7.5, 0), 4.0, FIRE, 0.65)
+            part(L, g.ell(7.8, 0, 2.4), C(240, 110, 40), form="sphere", rim=0.4, gloss=0.7)
+            fill(L, [g.ell(7.2, -0.6, 1.0)], C(255, 220, 120), 0.9)
+    elif hero == "vesper_thorn":
+        if sid == "bolt":
+            _gun(L, f, 19.0, scope=True)
+            part(L, f.ell(-0.6, 1.8, 0.7), C(150, 150, 156), form="sphere", metal=0.8)
+            part(L, f.poly([(9.0, -0.9), (11.0, -0.2), (9.0, 0.5)]), C(220, 206, 170), ol=1.0, bevel=0.2)
+        elif sid == "semi":
+            _gun(L, f, 16.0, mag=5.2, body=C(80, 86, 70))
+        else:
+            _gun(L, f, 18.0, body=C(70, 76, 66))
+            glow(L, *f.p(-0.6, -3.0), 3.0, TOX, 0.5)
+            bottle(L, *f.p(-0.6, -3.4), TOX, shape_="round", r=1.9, glow_col=None, fill_k=0.7)
+    elif hero == "pebble":
+        if sid == "maul":
+            x = _hammer(L, f, 17.0, 0, 4.6, 3.0)
+            for yy in (-1.6, 1.6):
+                part(L, f.ell(x, yy, 0.45), C(150, 150, 150), form="sphere", ol=0.8, bevel=0.2, metal=1)
+        elif sid == "sweep":
+            g = Frame(math.radians(-24))
+            x = _hammer(L, g, 18.0, 0, 3.2, 4.0, C(150, 120, 70))
+            for r in (6.0, 7.4):
+                pts = [(12 + math.cos(a) * r * 1.4, 13 + math.sin(a) * r) for a in np.linspace(math.pi * 1.05, math.pi * 1.7, 8)]
+                ink(L, pts, 0.24, C(255, 236, 200), 0.6)
+        else:
+            x = _hammer(L, f, 16.0, 0, 5.4, 2.4, C(92, 96, 104))
+            part(L, f.rect(x + 2.7, -1.4, x + 4.4, 1.4), C(150, 152, 160), ol=1.4, bevel=0.6, metal=1)
+            for yy in (-1.6, 0, 1.6):
+                part(L, f.ell(x - 1.2, yy, 0.4), C(186, 160, 90), form="sphere", ol=0.7, bevel=0.2, metal=1)
+    elif hero == "bolt_juno":
+        if sid == "chain":
+            g = Frame(math.radians(-30), 12, 12.6)
+            for k in range(5):
+                part(L, g.ell(-8.0 + k * 1.9, 0.4 * math.sin(k), 1.0), C(140, 144, 150), ol=1.1, bevel=0.3, metal=1)
+            part(L, g.rect(1.0, -3.0, 5.0, 3.0), C(88, 92, 104), metal=0.7, wear=0.3)
+            part(L, g.poly([(5.0, -3.2), (8.4, -2.6), (9.0, 0), (8.4, 2.6), (5.0, 3.2)]), C(120, 126, 140), metal=0.8)
+            for k in range(4):
+                ink(L, g.line([(8.6, -2.0 + k * 1.3), (9.0, -2.0 + k * 1.3)]), 0.2, C(30, 30, 36), 0.8)
+            _sparks(L, [g.p(9.4, -1.6)], VOLT, 4)
+        elif sid == "whip":
+            pts = [(12 + math.cos(a) * (2.0 + a * 1.25), 12 + math.sin(a) * (2.0 + a * 1.1)) for a in np.linspace(0, 5.6, 40)]
+            ink(L, pts, 0.9, C(40, 50, 70), 1.0)
+            ink(L, pts, 0.5, VOLT, 0.9)
+            glow(L, pts[-1][0], pts[-1][1], 2.4, VOLT, 0.5)
+            part(L, Frame(math.radians(50), 10.0, 13.0).rect(-1.0, -0.8, 3.6, 0.8), GRIP)
+            _sparks(L, [pts[-1], pts[22]], C(200, 230, 255), 4, 3)
+        else:
+            g = Frame(math.radians(-12), 12, 12.2)
+            rings = [g.ell(-5.1 + k * 3.4, -1.2, 1.75) for k in range(4)]
+            holes = [("-" + r[0],) + r[1:] for r in [g.ell(-5.1 + k * 3.4, -1.2, 1.0) for k in range(4)]]
+            part(L, rings + [g.poly([(-7.0, -0.4), (7.0, -0.4), (6.0, 3.8), (3.0, 5.0), (-3.0, 5.0), (-6.0, 3.8)])] + holes, BRASS,
+                 metal=0.9, wear=0.35, gloss=0.5, ol=2.2)
+            for k in range(4):
+                part(L, g.poly([(-5.9 + k * 3.4, -2.6), (-5.1 + k * 3.4, -4.4), (-4.3 + k * 3.4, -2.6)]), C(170, 172, 180),
+                     metal=1, ol=1.2, bevel=0.3)
+            hline(L, g.line([(-5.6, 3.6), (5.0, 3.6)]), 0.18, SPEC, 0.6)
+            _sparks(L, [g.p(6.6, -3.4)], VOLT, 3, 5)
+    elif hero == "sister_cinder":
+        if sid == "suppressor":
+            _gun(L, f, 20.0, mag=4.6, suppressor=4.4, stock=C(70, 64, 60))
+        elif sid == "burst":
+            _gun(L, f, 17.0, mag=4.4, stock=C(70, 64, 60))
+            cx, cy = f.p(3.0, 5.0)
+            ink(L, [f.p(1.5, 1.0), (cx, cy - 1.6)], 0.2, BRASS, 0.9)
+            soft(L, [("ell", cx + 1.0, cy + 2.4, 2.6, 1.6)], C(200, 196, 190), 0.4, blur=3)
+            part(L, [("ell", cx, cy, 1.7, 1.7)], BRASS, form="sphere", metal=0.9, gloss=0.5)
+            glow(L, cx, cy, 1.8, FIRE, 0.4)
+        else:
+            g = Frame(math.radians(-38), 12, 12)
+            for k, off in enumerate((-3.2, 0, 3.2)):
+                h = Frame(math.radians(-38), 12 + off * 0.62, 12 + off * 0.78)
+                part(L, h.rect(-6.0, -1.2, 1.0, 1.2), BRASS, metal=0.9, wear=0.2)
+                part(L, h.poly([(1.0, -1.1), (3.4, -0.8), (5.0, 0), (3.4, 0.8), (1.0, 1.1)]), C(220, 90, 30), gloss=0.5)
+                glow(L, *h.p(5.4, 0), 1.8, FIRE, 0.55)
+                fill(L, [h.ell(5.6, 0, 0.6)], C(255, 230, 140), 0.9)
+    elif hero == "quill_marrow":
+        if sid == "bayonet":
+            _blade(L, f, -9.0, 9.4, 1.6)
+        elif sid == "scalpels":
+            for a in (-55, -20):
+                g = Frame(math.radians(a), 12, 12.4)
+                part(L, g.rect(-8.0, -0.5, 0.0, 0.5), C(160, 164, 172), metal=1, ol=1.2, bevel=0.3)
+                part(L, g.poly([(0.0, -0.8), (5.0, -0.9), (7.8, 0.6), (0.0, 0.8)]), BLADE, metal=1, gloss=0.6, ol=1.2, bevel=0.3)
+                hline(L, g.line([(0.6, -0.4), (6.4, -0.2)]), 0.12, SPEC, 0.8)
+        else:
+            part(L, f.rect(-9.0, -0.8, -3.0, 0.8), GRIP)
+            part(L, f.poly([(-3.0, -1.0), (8.0, -2.4), (9.2, 3.0), (-3.0, 3.6)] + [(-3.0, 3.6)]), BLADE, metal=0.9, rust=0.2,
+                 gloss=0.4, ol=2.0)
+            for k in range(9):
+                x = -2.6 + k * 1.3
+                fill(L, [f.poly([(x, 3.4 - k * 0.06), (x + 0.65, 4.3 - k * 0.06), (x + 1.3, 3.4 - k * 0.06)])], C(150, 154, 160))
+            part(L, f.ell(5.4, -0.4, 0.8), C(40, 30, 30), ol=0.8)
+            fill(L, [f.ell(1.0, 2.0, 0.9), f.ell(2.0, 2.8, 0.5)], C(150, 30, 30), 0.8)
+    elif hero == "nyx_caldera":
+        if sid == "dustblades":
+            for a in (-60, -20):
+                g = Frame(math.radians(a), 12, 12.4)
+                _blade(L, g, -8.0, 8.0, 1.4, col=C(176, 168, 190), curve=-1.4, guard=C(90, 70, 110))
+        elif sid == "long":
+            _blade(L, f, -10.0, 10.4, 1.2, col=C(170, 176, 196), guard=C(90, 70, 110))
+        else:
+            _blade(L, f, -8.0, 8.6, 2.2, col=C(170, 190, 150), curve=-2.6, guard=C(60, 90, 50))
+            p = f.p(6.4, -0.6)
+            glow(L, p[0], p[1] + 1.0, 2.2, TOX, 0.45)
+            fill(L, [("ell", p[0], p[1] + 0.6, 0.45, 0.9), ("ell", p[0] + 0.1, p[1] + 2.2, 0.5, 0.7)], TOX, 0.95)
+            fill(L, [f.ell(1.0, 0.0, 0.5), f.ell(3.0, 0.2, 0.4)], TOX, 0.85)
+    else:  # helm_wisp
+        g = Frame(math.radians(-14), 12, 11.4)
+        if sid == "sidearm":
+            part(L, g.rect(-6.0, -2.0, 6.0, 0.6), C(86, 90, 100), metal=0.8, wear=0.2)
+            part(L, g.poly([(-5.6, 0.6), (-2.0, 0.6), (-2.6, 3.6), (-3.4, 6.4), (-6.6, 6.0), (-6.0, 3.0)]), C(100, 70, 50), wear=0.3)
+            ink(L, g.line([(-2.0, 0.8), (0.2, 0.9), (0.4, 2.6), (-2.4, 2.8)]), 0.3, C(60, 62, 70), 1.0)
+            for k in range(4):
+                ink(L, g.line([(-5.0 + k * 0.8, -1.8), (-5.0 + k * 0.8, -0.2)]), 0.14, C(30, 30, 34), 0.8)
+            part(L, g.rect(5.6, -2.2, 6.6, -1.6), C(70, 72, 80), ol=0.8, bevel=0.2)
+        elif sid == "flare":
+            part(L, g.rect(-6.0, -2.4, 0.0, 1.0), C(200, 80, 40), wear=0.3, rust=0.1)
+            part(L, g.rect(-0.4, -2.6, 5.0, 1.2), C(220, 96, 46), form="cylh", wear=0.3)
+            part(L, g.poly([(5.0, -2.9), (6.8, -3.6), (6.8, 2.2), (5.0, 1.5)]), C(200, 84, 40), wear=0.3, metal=0.3)
+            fill(L, [g.ell(6.9, -0.7, 1.5)], C(40, 20, 14))
+            part(L, g.poly([(-5.6, 1.0), (-2.0, 1.0), (-3.0, 6.4), (-6.4, 6.0)]), C(90, 66, 50))
+            glow(L, *g.p(7.6, -0.7), 3.0, FIRE, 0.6)
+            fill(L, [g.ell(7.4, -0.7, 1.2)], C(255, 210, 120), 0.95)
+        else:
+            part(L, g.rect(-7.0, -2.0, 7.0, 0.6), C(60, 64, 72), metal=0.8, wear=0.2)
+            part(L, g.poly([(-5.0, 0.6), (-2.2, 0.6), (-3.0, 5.4), (-5.6, 5.0)]), GRIP)
+            part(L, g.rect(-0.6, 0.6, 1.4, 8.2), C(80, 76, 70), metal=0.5)
+            ink(L, g.line([(-7.0, -0.6), (-10.0, -0.4), (-10.4, 2.6)]), 0.5, C(50, 52, 58), 1.0)
+            for k in range(3):
+                ink(L, g.line([(2.4 + k * 1.3, -1.8), (2.4 + k * 1.3, 0.4)]), 0.14, C(20, 20, 24), 0.8)
+    return _save_inked(cv, "style_%s_%s" % (hero, sid))
+
+
+def _save_inked(cv, name, px=PX, width=4.0):
+    """Hangar-style heavy silhouette ink around thin weapon shapes, then save."""
+    im = cv.image()
+    a = np.asarray(im).astype(np.float32)
+    solid = a[..., 3] > 170
+    from scipy import ndimage as _ndi
+    d = _ndi.distance_transform_edt(~solid)
+    ring = np.clip(width + 0.5 - d, 0, 1) * (~solid)
+    ink_rgb = np.array([34, 24, 22], np.float32)
+    al = a[..., 3:4] / 255.0
+    r = ring[..., None]
+    rgb = a[..., :3] * (1 - r) + ink_rgb * r
+    out_a = np.maximum(a[..., 3], ring * 255)
+    # keep glows / shadow under the ink where they were already there
+    rgb = np.where(r > 0, (ink_rgb * r + a[..., :3] * al * (1 - r)) / np.maximum(r + al * (1 - r), 1e-4), rgb)
+    im2 = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), np.clip(out_a, 0, 255)]).astype(np.uint8), "RGBA")
+    im2 = im2.resize((px, px), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=0.8, percent=40, threshold=2))
+    im2.save(os.path.join(ICON, name + ".png"))
+    _made.append(im2)
+    return im2
+
+
+E5_STYLES = [(h, s) for h, ss in (
+    ("ash_rook", ("boom", "cluster", "mortar")), ("vesper_thorn", ("bolt", "semi", "coater")),
+    ("pebble", ("maul", "sweep", "driver")), ("bolt_juno", ("chain", "whip", "knuckle")),
+    ("sister_cinder", ("suppressor", "burst", "ember")), ("quill_marrow", ("bayonet", "scalpels", "cleaver")),
+    ("nyx_caldera", ("dustblades", "long", "viper")), ("helm_wisp", ("sidearm", "flare", "machine"))) for s in ss]
+
+
 GROUPS = {
     "e1": [herb, plague_gland, dust_shard, machine_oil, medicine, lambda: medicine(False), backpack, exposure,
            *[(lambda t=t: tonic(t)) for t in TONIC_LOOK], plague_fog],
     "e3": [lore_page],
     "e4": [field_tent, relay, watch_tower, vault, market_stall, plane_wreck],
+    "e5": [(lambda h=h, s=s: style_icon(h, s)) for (h, s) in E5_STYLES],
 }
 
 

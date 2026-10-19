@@ -135,6 +135,10 @@ var _storm_left: float = 0.0
 var _storm_t: float = 0.0
 var _ghost_left: float = 0.0
 var _raid_t: float = 0.0
+## Depth E5 quirks: Hot Barrel heat, and the current plague stage (Dust Eater).
+var _heat: float = 0.0
+var _overheat_left: float = 0.0
+var exposure_stage: int = -1
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -208,12 +212,14 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 		+ GameState.starting_hp_bonus() \
 		+ float(rm.get("max_hp", 0.0)) \
 		+ GameState.tonic_fx("max_hp")
-	damage_mult = float(_char.get("damage_mult", 1.0)) \
+	if GameState.quirk_fx("max_hp_mult") > 0.0:
+		max_hp *= GameState.quirk_fx("max_hp_mult")
+	damage_mult = (1.0 + GameState.quirk_fx("damage")) * float(_char.get("damage_mult", 1.0)) \
 		* (1.0 + GameState.starting_damage_bonus()) \
 		* (1.0 + float(rm.get("damage", 0.0)))
 	move_mult = float(_char.get("move_speed_mult", 1.0)) \
 		* (1.0 + float(rm.get("move", 0.0))) \
-		* (1.0 + GameState.move_speed_bonus() + GameState.tonic_fx("move"))
+		* (1.0 + GameState.move_speed_bonus() + GameState.tonic_fx("move") + GameState.quirk_fx("move"))
 	firerate_mult = (1.0 + float(rm.get("firerate", 0.0))) * (1.0 + GameState.gear_stat("firerate"))
 	if reset_ammo:
 		_ammo = _mag_size()
@@ -416,6 +422,9 @@ func _update_regen(delta: float) -> void:
 		_oos_timer += delta
 	else:
 		_oos_timer = 0.0
+	## Bloodthirst: no regeneration at all (kills heal instead).
+	if GameState.quirk_fx("no_regen") > 0.0:
+		return
 	if _oos_timer > 1.5 and hp < max_hp:
 		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta)
 		health_changed.emit(hp, max_hp)
@@ -479,6 +488,8 @@ func _buff_firerate() -> float:
 		f *= float(_char.get("post_heal_firerate_mult", 1.0))
 	if _buffs.has("rapid"):
 		f *= 1.75
+	if GameState.quirk_fx("rage") > 0.0 and hp < max_hp * GameState.quirk_fx("below"):
+		f *= 1.0 + GameState.quirk_fx("rage")
 	return f * (1.0 + exposure_rate)
 
 func _tick_buffs(delta: float) -> void:
@@ -689,6 +700,8 @@ func _ability_cast(id: String) -> bool:
 			var dir3 := (t3.global_position - global_position) if t3 else (mv if mv.length() > 0.1 else _facing_dir())
 			_start_ability_move(dir3, float(a.get("dash_speed", 920.0)), float(a.get("dash_time", 0.26)), "blade")
 			Juice.sfx("dash")
+			if a.has("hide"):
+				_hidden_left = maxf(_hidden_left, float(a["hide"]))
 		"rig_assist":
 			_rush_left = float(a.get("duration", 4.0))
 		_:
@@ -710,6 +723,10 @@ func _fire_ability() -> void:
 		"field_draught":
 			var amt := float(a.get("heal", 28.0))
 			heal(amt)
+			## Smoke Censer (E5 ability B): a healing smoke where she stands.
+			if a.has("puddle_radius"):
+				RunFx.ground(get_parent(), self, global_position + Vector2(0, FEET_Y - 4), "heal",
+					float(a["puddle_radius"]), float(a.get("puddle_time", 5.0)), float(a.get("puddle_hps", 7.0)))
 			## Cinder's draught also burns the plague out of the blood.
 			if GameState.exposure > 0.0:
 				GameState.cleanse_exposure(MedicineDefs.CINDER_HEAL_CLEANSE)
@@ -851,6 +868,12 @@ func _update_rush_ram() -> void:
 		Juice.shake(0.08)
 
 func _on_rush_end() -> void:
+	## Short Charge (E5 ability B): the charge ends in a ground slam.
+	if str(_ability.get("id", "")) == "rattle_rush" and _ability.has("end_slam_radius"):
+		RunFx.explosion(self, global_position + Vector2(0, 10), float(_ability["end_slam_radius"]),
+			float(_ability.get("end_slam_damage", 40.0)) * damage_mult, Color(1.0, 0.75, 0.4), "ability", 420.0, 0.6)
+		Juice.dust_puff(global_position + Vector2(0, 14), 16)
+		Juice.shake(0.3)
 	if str(_ability.get("id", "")) != "rattle_rush" or GameState.run_rank("aftershock") <= 0:
 		return
 	var dmg := float(GameState.up("aftershock", "damage", 45.0)) * damage_mult * float(GameState.up("earthquake", "aftershock_mult", 1.0))
@@ -865,6 +888,8 @@ func vial_burst(pos: Vector2) -> void:
 	var r := float(a.get("cloud_radius", 85.0))
 	for e in RunFx.enemies_in(get_tree(), pos, r):
 		e.call("apply_status", "poison", float(a.get("cloud_time", 3.5)), float(a.get("cloud_dps", 12.0)))
+		if a.has("cloud_slow"):
+			e.call("apply_status", "slow", float(a.get("cloud_time", 3.5)), float(a["cloud_slow"]))
 	RunFx.ground(get_parent(), self, pos, "poison", r, float(a.get("cloud_time", 3.5)), float(a.get("cloud_dps", 12.0)))
 	RunFx.ring(get_parent(), pos, r, Color(0.55, 1.0, 0.35), 0.35)
 	Juice.burst(pos, Color(0.55, 1.0, 0.35), 20, 160.0, 0.5, 1.4)
@@ -998,6 +1023,11 @@ func _update_combat(_delta: float) -> void:
 		_try_shoot()
 
 func _try_shoot() -> void:
+	## Hot Barrel: no reloads, but sustained fire overheats the gun.
+	if GameState.quirk_fx("no_reload") > 0.0:
+		if _overheat_left > 0.0:
+			return
+		_ammo = _mag_size()
 	if _reload_left > 0.0:
 		return
 	if _ammo <= 0:
@@ -1008,7 +1038,7 @@ func _try_shoot() -> void:
 	_fire_one_shot()
 
 func _roll_damage(mult: float = 1.0) -> Array:
-	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage() * mult
+	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage() * mult * _quirk_damage()
 	if _grave_stacks > 0:
 		dmg *= 1.0 + float(GearDefs.LEGENDARIES["gravedigger"]["per_stack"]) * float(_grave_stacks)
 	var crit := false
@@ -1326,7 +1356,7 @@ func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: f
 	return bullet
 
 func _start_reload() -> void:
-	if _reload_left > 0.0 or is_melee():
+	if _reload_left > 0.0 or is_melee() or GameState.quirk_fx("no_reload") > 0.0:
 		return
 	_reload_left = float(_weapon.get("reload_time", 1.4))
 	Juice.sfx("reload")
@@ -1721,6 +1751,9 @@ func on_kill(e: Node) -> void:
 	if _dead:
 		return
 	_kills += 1
+	if GameState.quirk_fx("kill_heal") > 0.0 and hp > 0.0:
+		hp = minf(max_hp, hp + GameState.quirk_fx("kill_heal"))
+		health_changed.emit(hp, max_hp)
 	var pos: Vector2 = (e as Node2D).global_position if e is Node2D else global_position
 	var parent := get_parent()
 	var gs: Dictionary = GearDefs.GENERAL_SETS
@@ -1920,6 +1953,7 @@ func _air_support(fc: Dictionary) -> void:
 
 func _update_evolutions(delta: float) -> void:
 	_ghost_left = maxf(0.0, _ghost_left - delta)
+	_tick_heat(delta)
 	## Blade Storm: the blades fling shards in every direction.
 	if GameState.has_evo("blade_storm"):
 		_shard_t -= delta
@@ -1968,3 +2002,49 @@ func _update_evolutions(delta: float) -> void:
 				RunFx.zap(get_parent(), (d as Node2D).global_position, t2.global_position, Color(1.0, 0.7, 0.35), 0.3, 2.5)
 				RunFx.explosion(self, t2.global_position, float(GameState.up("air_raid", "radius", 70.0)),
 					float(GameState.up("air_raid", "damage", 34.0)) * damage_mult, Color(1.0, 0.6, 0.3), "blast", 180.0)
+
+
+## =============================================================================
+## Depth E5 quirks
+
+## Damage multiplier from the run's quirk (situational ones checked live).
+func _quirk_damage() -> float:
+	var q := 1.0
+	if GameState.quirk_fx("rage") > 0.0 and hp < max_hp * GameState.quirk_fx("below"):
+		q *= 1.0 + GameState.quirk_fx("rage")
+	if GameState.quirk_fx("still_damage") > 0.0 and velocity.length() < 12.0:
+		q *= 1.0 + GameState.quirk_fx("still_damage")
+	if GameState.quirk_fx("stage_damage") > 0.0 and exposure_stage >= 0:
+		q *= 1.0 + GameState.quirk_fx("stage_damage") * float(exposure_stage + 1)
+	if GameState.quirk_fx("pet_damage") > 0.0:
+		for pt in get_tree().get_nodes_in_group("pets"):
+			if pt is Node2D and (pt as Node2D).global_position.distance_to(global_position) <= GameState.quirk_fx("pet_range"):
+				q *= 1.0 + GameState.quirk_fx("pet_damage")
+				break
+	return q
+
+
+## Hot Barrel: heat builds while shooting, cools when not; full heat = overheat.
+func _tick_heat(delta: float) -> void:
+	if GameState.quirk_fx("no_reload") <= 0.0:
+		return
+	if _overheat_left > 0.0:
+		_overheat_left -= delta
+		if randf() < 0.2:
+			Juice.burst(global_position + _muzzle_offset(), Color(0.8, 0.8, 0.8, 0.6), 1, 40.0, 0.5, 1.2)
+		return
+	if _fire_cd > 0.0 and get_target() != null:
+		_heat += delta
+		if _heat >= GameState.quirk_fx("heat_max"):
+			_heat = 0.0
+			_overheat_left = GameState.quirk_fx("overheat")
+			Juice.float_text(global_position + Vector2(0, -44), "OVERHEAT", Color(1.0, 0.55, 0.25), 15)
+	else:
+		_heat = maxf(0.0, _heat - delta * 1.5)
+
+
+func heat_ratio() -> float:
+	if _overheat_left > 0.0:
+		return 1.0
+	var mx := GameState.quirk_fx("heat_max")
+	return clampf(_heat / mx, 0.0, 1.0) if mx > 0.0 else 0.0

@@ -94,6 +94,8 @@ var lore_pages: Dictionary = {}
 ## --- Depth E4: radio jobs (in-run) ---
 ## Nyx's Pack Lock: the pack survives a death this run.
 var run_pack_locked: bool = false
+## --- Depth E5: per-survivor kit (KitDefs): {"style", "ability" a|b, "quirk"} ---
+var kit: Dictionary = {}
 ## Contract rewards waiting for extract: ingredients -> count.
 var run_job_rewards: Dictionary = {}
 var jobs_done_run: int = 0
@@ -217,6 +219,7 @@ func save_profile() -> void:
 		"tonic_loadout": tonic_loadout,
 		"bestiary": bestiary,
 		"lore_pages": lore_pages,
+		"kit": kit,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -363,6 +366,22 @@ func _load_depth(d: Dictionary) -> void:
 			var n := maxi(0, int((bs as Dictionary)[k]))
 			if n > 0:
 				bestiary[str(k)] = n
+	kit = {}
+	var kt: Variant = d.get("kit", {})
+	if typeof(kt) == TYPE_DICTIONARY:
+		for h in (kt as Dictionary).keys():
+			var e: Variant = (kt as Dictionary)[h]
+			if not CharacterDefs.is_playable(str(h)) or typeof(e) != TYPE_DICTIONARY:
+				continue
+			var ed: Dictionary = e
+			var clean := {"style": str(KitDefs.styles(str(h))[0]["id"]), "ability": "a", "quirk": ""}
+			if not KitDefs.style(str(h), str(ed.get("style", ""))).is_empty() and str(KitDefs.style(str(h), str(ed.get("style", "")))["id"]) == str(ed.get("style", "")):
+				clean["style"] = str(ed["style"])
+			if str(ed.get("ability", "a")) == "b":
+				clean["ability"] = "b"
+			if str(ed.get("quirk", "")) in KitDefs.quirks(str(h)):
+				clean["quirk"] = str(ed["quirk"])
+			kit[str(h)] = clean
 	lore_pages = {}
 	var lp: Variant = d.get("lore_pages", {})
 	if typeof(lp) == TYPE_DICTIONARY:
@@ -484,6 +503,9 @@ func starting_damage_bonus() -> float:
 ## Ability dict for the selected hero with its station + survivor set applied.
 func hero_ability() -> Dictionary:
 	var a := HangarDefs.apply_station_ability(selected_character_id, get_character().get("ability", {}), station_rank())
+	## Depth E5: the chosen ability version (B unlocks at the station).
+	if kit_ability(selected_character_id) == "b":
+		a = KitDefs.apply_ability(a, selected_character_id, "b")
 	var ss: Dictionary = GearDefs.SURVIVOR_SETS
 	if has_set("foremans_kit", 2) and a.has("cooldown"):
 		a["cooldown"] = float(a["cooldown"]) * float(ss["foremans_kit"]["ability_cd"])
@@ -824,7 +846,7 @@ func _bank_pack_into_pending() -> void:
 ## Depth Update E1: backpack, medicine, ingredients, tonics, plague exposure.
 
 func pack_capacity() -> int:
-	return MedicineDefs.pack_capacity(camp_rank("backpack"))
+	return MedicineDefs.pack_capacity(camp_rank("backpack")) + int(quirk_fx("pack"))
 
 func pack_weight() -> int:
 	var w := 0
@@ -977,6 +999,8 @@ func exposure_active() -> bool:
 ## How fast exposure builds for this hero / kit (tonics, Cinder, gear resist).
 func exposure_gain_mult() -> float:
 	var m := tonic_fx_mult("exposure_mult")
+	if quirk_fx("exposure_mult") > 0.0:
+		m *= quirk_fx("exposure_mult")
 	if selected_character_id == CharacterDefs.CINDER_ID:
 		m *= MedicineDefs.CINDER_EXPOSURE_MULT
 	## Vials (a charged one counts extra) and the Plague Doctor set.
@@ -1159,6 +1183,7 @@ func reset_profile() -> void:
 	tonic_loadout.clear()
 	bestiary.clear()
 	lore_pages.clear()
+	kit.clear()
 	migrated_hangar_v4 = true
 	garage_tokens = 0
 	successful_extracts = 0
@@ -1180,6 +1205,7 @@ func reset_loadout_to_defaults() -> void:
 	_compute_gear()
 	weapon = HangarDefs.apply_station_weapon(selected_character_id,
 		LoadoutStubs.weapon_for_character(selected_character_id), station_rank())
+	weapon = KitDefs.apply_style(weapon, selected_character_id, kit_style(selected_character_id))
 	weapon = GearDefs.apply_weapon(weapon, gear.get("weapon_item", {}), gear.get("mods", []))
 	pet = HangarDefs.apply_kennel(LoadoutStubs.default_pet(selected_pet_id), kennel_rank())
 	insured_slots.clear()
@@ -1342,7 +1368,7 @@ func note_kill(kind: String) -> void:
 
 ## Scavenger's Eye (+ Field Salvager 2) multiplier on kill scrap.
 func run_scrap_mult() -> float:
-	var m := 1.0 + float(up("scavengers_eye", "scrap", 0.0)) + float(up("fortune", "scrap", 0.0))
+	var m := 1.0 + float(up("scavengers_eye", "scrap", 0.0)) + float(up("fortune", "scrap", 0.0)) + quirk_fx("scrap")
 	if has_set("field_salvager", 2):
 		m += float(GearDefs.GENERAL_SETS["field_salvager"]["scrap"])
 	return m
@@ -1403,6 +1429,65 @@ func missing_pages() -> Array:
 		if not lore_pages.has(str(p["id"])):
 			out.append(str(p["id"]))
 	return out
+
+## =============================================================================
+## Depth E5: loadout kit (weapon style, ability version, quirk) per survivor.
+
+func kit_of(hero: String) -> Dictionary:
+	if not kit.has(hero):
+		var st: Array = KitDefs.styles(hero)
+		kit[hero] = {"style": str(st[0]["id"]) if not st.is_empty() else "", "ability": "a", "quirk": ""}
+	return kit[hero]
+
+func kit_style(hero: String) -> String:
+	var sid := str(kit_of(hero)["style"])
+	## A style above the station rank (e.g. after a reset) falls back to the first.
+	if not KitDefs.style_unlocked(hero, sid, station_rank(hero)):
+		return str(KitDefs.styles(hero)[0]["id"])
+	return sid
+
+func kit_ability(hero: String) -> String:
+	if station_rank(hero) < KitDefs.ABILITY_B_RANK:
+		return "a"
+	return str(kit_of(hero)["ability"])
+
+func kit_quirk(hero: String) -> String:
+	return str(kit_of(hero)["quirk"])
+
+func set_style(hero: String, sid: String) -> bool:
+	if not KitDefs.style_unlocked(hero, sid, station_rank(hero)) or str(KitDefs.style(hero, sid).get("id", "")) != sid:
+		return false
+	kit_of(hero)["style"] = sid
+	_after_kit(hero)
+	return true
+
+func set_ability_version(hero: String, v: String) -> bool:
+	if v == "b" and station_rank(hero) < KitDefs.ABILITY_B_RANK:
+		return false
+	kit_of(hero)["ability"] = "b" if v == "b" else "a"
+	_after_kit(hero)
+	return true
+
+func set_quirk(hero: String, q: String) -> bool:
+	if q != "" and not q in KitDefs.quirks(hero):
+		return false
+	kit_of(hero)["quirk"] = q
+	_after_kit(hero)
+	return true
+
+func _after_kit(hero: String) -> void:
+	if hero == selected_character_id:
+		reset_loadout_to_defaults()
+	save_profile()
+
+## Quirk effect for the survivor being played (0 when none).
+func quirk_fx(key: String) -> float:
+	var q := KitDefs.quirk(kit_quirk(selected_character_id))
+	if q.is_empty():
+		return 0.0
+	if bool(q.get("ranged", false)) and weapon.has("melee"):
+		return 0.0
+	return float((q.get("fx", {}) as Dictionary).get(key, 0.0))
 
 ## An evolution (RecipeDefs) owned this run.
 func has_evo(id: String) -> bool:
@@ -1530,13 +1615,18 @@ func go_mode_select() -> void:
 func go_character_select() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/character_select.tscn")
 
+## Pre-run LOADOUT (style / ability / quirk / tonics) between select and the match.
+func go_prep() -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/prep.tscn")
+
 func go_how_to_play() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/how_to_play.tscn")
 
 func go_settings() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/settings_menu.tscn")
 
-## Gear screen; `from` = "hangar" | "character_select" (where BACK / DONE go).
+## Gear screen; `from` = "hangar" | "character_select" | "prep" (where BACK / DONE go).
 var loadout_from: String = "hangar"
 
 func go_loadout(from: String = "hangar") -> void:

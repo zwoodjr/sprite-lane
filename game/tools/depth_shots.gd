@@ -243,3 +243,41 @@ func _shots_e4() -> void:
 	await _snap("e4_dust_warden")
 	m.queue_free()
 	await _frames(3)
+
+
+## E5: pre-run Loadout (styles, ability versions, quirks, tonics), Hot Barrel HUD.
+func _shots_e5() -> void:
+	GameState.camp = {HangarDefs.station_id("vesper_thorn"): 4}
+	GameState.selected_character_id = "vesper_thorn"
+	GameState.kit = {"vesper_thorn": {"style": "semi", "ability": "b", "quirk": "no_reload"}}
+	GameState.tonics = {"menders": 2, "spark": 1}
+	GameState.tonic_loadout = ["menders"]
+	GameState.reset_loadout_to_defaults()
+	var prep := await _open("res://scenes/ui/prep.tscn")
+	await _snap("e5_prep_top")
+	var sc: ScrollContainer = prep.find_child("PrepScroll", true, false)
+	sc.scroll_vertical = 100000
+	await _frames(6)
+	await _snap("e5_prep_bottom")
+	prep.queue_free()
+	GameState.camp = {}
+	GameState.selected_character_id = "pebble"
+	GameState.kit = {}
+	GameState.reset_loadout_to_defaults()
+	prep = await _open("res://scenes/ui/prep.tscn")
+	await _snap("e5_prep_locked")
+	prep.queue_free()
+	await _frames(3)
+	GameState.camp = {HangarDefs.station_id("vesper_thorn"): 4}
+	GameState.selected_character_id = "vesper_thorn"
+	GameState.kit = {"vesper_thorn": {"style": "semi", "ability": "b", "quirk": "no_reload"}}
+	GameState.reset_loadout_to_defaults()
+	var m := await _match("smog", "vesper_thorn")
+	var player: Node2D = m.get_node("World/Player")
+	player.set("max_hp", 9999.0)
+	player.set("hp", 9999.0)
+	player.set("_overheat_left", 1.5)
+	await _frames(10)
+	await _snap("e5_hot_barrel_hud")
+	m.queue_free()
+	await _frames(3)

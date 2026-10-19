@@ -137,6 +137,9 @@ func _run() -> void:
 	var keep_st := GameState.stories.duplicate(true)
 	await _test_depth_e4()
 	GameState.stories = keep_st
+	var keep_kit := GameState.kit.duplicate(true)
+	await _test_depth_e5()
+	GameState.kit = keep_kit
 	GameState.ingredients = keep_depth[0]
 	GameState.tonics = keep_depth[1]
 	GameState.tonic_loadout = keep_depth[2]
@@ -937,10 +940,129 @@ func _test_depth_e1() -> void:
 	print("DEPTH_E1_OK")
 
 
-func _depth_match(mode: String, hero: String) -> Node:
+## Depth E5: loadouts — weapon styles, ability versions, quirks, prep screen.
+func _test_depth_e5() -> void:
+	for h in CharacterDefs.PLAYABLE_IDS:
+		var st: Array = KitDefs.styles(str(h))
+		_check(st.size() == 3 and KitDefs.ABILITIES.has(h) and KitDefs.quirks(str(h)).size() == 3, "e5 kit defs %s" % h)
+		for q in KitDefs.quirks(str(h)):
+			_check(not KitDefs.quirk(str(q)).is_empty(), "e5 quirk exists %s" % q)
+		for s in st:
+			_check(ResourceLoader.exists(KitDefs.icon_path(str(h), str(s["id"]))), "e5 style icon %s %s" % [h, s["id"]])
+	## Unlock gating by station rank.
+	GameState.camp.clear()
+	GameState.kit = {}
+	var sid := HangarDefs.station_id("ash_rook")
+	_check(not GameState.set_style("ash_rook", "cluster") and GameState.kit_style("ash_rook") == "boom", "e5 style locked at rank 0")
+	_check(not GameState.set_ability_version("ash_rook", "b") and GameState.kit_ability("ash_rook") == "a", "e5 ability B locked")
+	GameState.camp[sid] = 2
+	_check(GameState.set_style("ash_rook", "cluster") and not GameState.set_style("ash_rook", "mortar"), "e5 rank 2 unlocks style 2 only")
+	GameState.camp[sid] = 4
+	_check(GameState.set_style("ash_rook", "mortar") and GameState.set_ability_version("ash_rook", "b"), "e5 rank 4 unlocks all")
+	_check(not GameState.set_quirk("ash_rook", "bloodthirst") and GameState.set_quirk("ash_rook", "glass_cannon"), "e5 quirk list per hero")
+	GameState.camp[sid] = 0
+	_check(GameState.kit_style("ash_rook") == "boom" and GameState.kit_ability("ash_rook") == "a", "e5 kit falls back when station drops")
+	## Style edits.
+	var base := LoadoutStubs.weapon_for_character("ash_rook")
+	var cl := KitDefs.apply_style(base, "ash_rook", "cluster")
+	_check(int(cl.get("pellets", 0)) == 2 and absf(float(cl["damage"]) - float(base["damage"]) * 0.55) <= 0.51, "e5 cluster style")
+	var mo := KitDefs.apply_style(base, "ash_rook", "mortar")
+	_check(int(mo["mag_size"]) == 3 and str((mo["coats"] as Array)[-1]["coat"]) == "fire" and str(mo["style"]) == "mortar", "e5 mortar style")
+	var sw := KitDefs.apply_style(LoadoutStubs.weapon_for_character("pebble"), "pebble", "sweep")
+	_check(is_equal_approx(float(sw["melee"]["arc_deg"]), 210.0), "e5 sweep widens the arc")
+	_check(KitDefs.apply_style(base, "ash_rook", "boom").get("pellets", 1) == base.get("pellets", 1), "e5 base style unchanged")
+	## Save sanitize.
+	GameState._load_depth({"kit": {"ash_rook": {"style": "laser", "ability": "b", "quirk": "bloodthirst"},
+		"pebble": {"style": "sweep", "ability": "x", "quirk": "berserker"}, "nobody": {"style": "boom"}, "vesper_thorn": 5}})
+	_check(GameState.kit_of("ash_rook")["style"] == "boom" and GameState.kit_of("ash_rook")["quirk"] == "", "e5 save drops bad style / quirk")
+	_check(GameState.kit_of("pebble")["style"] == "sweep" and GameState.kit_of("pebble")["ability"] == "a" and GameState.kit_of("pebble")["quirk"] == "berserker", "e5 save keeps good entries")
+	_check(not GameState.kit.has("nobody"), "e5 save drops unknown heroes")
+	GameState._load_depth({})
+	_check(GameState.kit.is_empty() and GameState.kit_style("vesper_thorn") == "bolt", "e5 old saves default kit")
+	## Melee survivors ignore ranged-only quirks.
+	GameState.selected_character_id = "pebble"
+	GameState.reset_loadout_to_defaults()
+	GameState.kit_of("pebble")["quirk"] = "no_reload"
+	_check(GameState.quirk_fx("no_reload") == 0.0, "e5 melee ignores Hot Barrel")
+	GameState.kit_of("pebble")["quirk"] = ""
+	## In match: Rook with Slag Mortar, Short Charge and Glass Cannon.
+	GameState.kit = {"ash_rook": {"style": "mortar", "ability": "b", "quirk": "glass_cannon"}}
+	var m: Node = await _depth_match("smog", "ash_rook", {sid: 4})
+	var player: Node2D = m.get_node("World/Player")
+	var w: Dictionary = player.get("_weapon")
+	_check(str(w.get("style", "")) == "mortar", "e5 style reaches the player")
+	var ab: Dictionary = player.get("_ability")
+	_check(ab.has("end_slam_radius") and str(ab.get("version", "")) == "b", "e5 ability B reaches the player")
+	var mhp := float(CharacterDefs.get_character("ash_rook").get("max_hp", 100.0))
+	_check(float(player.get("max_hp")) < mhp * 0.95, "e5 glass cannon lowers max HP (%.0f vs %.0f)" % [float(player.get("max_hp")), mhp])
+	_check(GameState.quirk_fx("damage") > 0.25, "e5 glass cannon damage")
+	var tgt := _mob(m, "scav_bear", player.global_position + Vector2(40, 0))
+	tgt.set("max_hp", 5000.0)
+	tgt.set("hp", 5000.0)
+	await get_tree().physics_frame
+	player.call("_on_rush_end")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(float(tgt.get("hp")) < 5000.0, "e5 short charge slams")
+	await _end_depth_match(m)
+	## Vesper: Hot Barrel never reloads, overheats; Steady Hands vs moving.
+	GameState.kit = {"vesper_thorn": {"style": "semi", "ability": "a", "quirk": "no_reload"}}
+	m = await _depth_match("smog", "vesper_thorn", {HangarDefs.station_id("vesper_thorn"): 2})
+	player = m.get_node("World/Player")
+	player.set("max_hp", 99999.0)
+	player.set("hp", 99999.0)
+	_check(int((player.get("_weapon") as Dictionary).get("mag_size", 0)) == 8, "e5 semi style mag")
+	player.set("_ammo", 0)
+	player.call("_try_shoot")
+	_check(float(player.get("_reload_left")) <= 0.0, "e5 hot barrel no reload")
+	player.set("_heat", GameState.quirk_fx("heat_max") - 0.001)
+	var foe := _mob(m, "scav_bear", player.global_position + Vector2(120, 0))
+	foe.set("max_hp", 99999.0)
+	foe.set("hp", 99999.0)
+	player.set("_fire_cd", 0.5)
+	player.call("_tick_heat", 0.05)
+	_check(float(player.get("_overheat_left")) > 0.0 and float(player.call("heat_ratio")) == 1.0, "e5 hot barrel overheats")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(str(m.get_tree().get_first_node_in_group("hud").get("_ammo_label").text).begins_with("OVERHEAT"), "e5 HUD shows heat")
+	await _end_depth_match(m)
+	## Berserker below half HP; Dust Eater stage damage.
+	GameState.kit = {"quill_marrow": {"style": "bayonet", "ability": "a", "quirk": "berserker"}}
+	m = await _depth_match("smog", "quill_marrow")
+	player = m.get_node("World/Player")
+	var q0 := float(player.call("_quirk_damage"))
+	player.set("hp", float(player.get("max_hp")) * 0.3)
+	_check(is_equal_approx(q0, 1.0) and float(player.call("_quirk_damage")) > 1.3, "e5 berserker")
+	await _end_depth_match(m)
+	## Prep screen builds, respects locks, and routes the gear button.
+	GameState.camp.clear()
+	GameState.kit = {}
+	GameState.selected_character_id = "nyx_caldera"
+	var prep: Node = (load("res://scenes/ui/prep.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(prep)
+	await get_tree().process_frame
+	_check(not bool(prep.call("pick_style", "viper")) and bool(prep.call("pick_quirk", "scavenger")), "e5 prep locks / picks")
+	_check(GameState.kit_quirk("nyx_caldera") == "scavenger" and GameState.run_scrap_mult() > 1.3, "e5 scavenger scrap")
+	var btns := 0
+	for b in prep.find_children("*", "Button", true, false):
+		btns += 1
+	_check(btns >= 10, "e5 prep rows (%d)" % btns)
+	prep.queue_free()
+	GameState.camp.clear()
+	GameState.selected_character_id = "ash_rook"
+	GameState.reset_loadout_to_defaults()
+	await get_tree().process_frame
+	print("DEPTH_E5_OK")
+
+
+func _depth_match(mode: String, hero: String, camp_set: Dictionary = {}) -> Node:
 	GameState.camp.clear()
 	GameState.selected_mode_id = mode
 	GameState.selected_character_id = hero
+	if not camp_set.is_empty():
+		for k in camp_set.keys():
+			GameState.camp[k] = camp_set[k]
+		GameState.reset_loadout_to_defaults()
 	GameState.fast_timers = true
 	GameState.tutorial_done = true
 	GameState.tonic_loadout = []

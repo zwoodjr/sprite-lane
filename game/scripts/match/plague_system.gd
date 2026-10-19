@@ -157,6 +157,7 @@ func _tick_exposure(delta: float) -> void:
 		mv = float(sd["move"])
 		fr = float(sd["firerate"])
 		dps = float(sd["dps"])
+	_player.set("exposure_stage", st)
 	_player.set("exposure_move", mv)
 	_player.set("exposure_rate", fr)
 	if dps > 0.0 and _player.has_method("drain"):

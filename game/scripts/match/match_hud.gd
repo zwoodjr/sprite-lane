@@ -586,6 +586,13 @@ func _process(delta: float) -> void:
 		var rel: bool = _player.call("is_reloading")
 		if rel:
 			_ammo_label.text = "RELOADING %d%%" % int(float(_player.call("get_reload_ratio")) * 100.0)
+		## Hot Barrel quirk: no magazine — the ammo line becomes a heat gauge.
+		if GameState.quirk_fx("no_reload") > 0.0 and _player.has_method("heat_ratio") and not bool(_player.call("is_melee")):
+			var hr := float(_player.call("heat_ratio"))
+			var over: bool = _player.get("_overheat_left") > 0.0
+			var cells := int(round(hr * 10.0))
+			_ammo_label.text = ("OVERHEAT " if over else "HEAT ") + "|".repeat(cells) + ".".repeat(10 - cells)
+			_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if over or hr > 0.8 else (UiTheme.AMBER if hr > 0.5 else UiTheme.TEXT))
 	## Rotating tips (when the tutorial isn't talking)
 	if GameState.settings.get("show_hints", true) and (tutorial == null or not is_instance_valid(tutorial)):
 		_hint_cycle_t += delta

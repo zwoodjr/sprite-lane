@@ -52,12 +52,14 @@ func build(c: VBoxContainer) -> void:
 	_list.add_theme_constant_override("separation", 8)
 	_scroll.add_child(_list)
 
-	var from_select := GameState.loadout_from == "character_select"
+	var from_select := GameState.loadout_from in ["character_select", "prep"]
 	var deploy := UiTheme.big_button("DONE" if from_select else "DEPLOY", UiTheme.AMBER, 64, 22)
 	deploy.pressed.connect(func() -> void:
 		GameState.selected_character_id = _hero
 		GameState.save_profile()
-		if from_select:
+		if GameState.loadout_from == "prep":
+			GameState.go_prep()
+		elif from_select:
 			GameState.go_character_select()
 		else:
 			GameState.go_mode_select())
@@ -66,7 +68,9 @@ func build(c: VBoxContainer) -> void:
 
 
 func _back() -> void:
-	if GameState.loadout_from == "character_select":
+	if GameState.loadout_from == "prep":
+		GameState.go_prep()
+	elif GameState.loadout_from == "character_select":
 		GameState.go_character_select()
 	else:
 		GameState.go_hangar()

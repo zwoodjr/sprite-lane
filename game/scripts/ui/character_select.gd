@@ -126,7 +126,7 @@ func build(c: VBoxContainer) -> void:
 	var deploy := UiTheme.big_button("DEPLOY ›", UiTheme.AMBER, 76, 32)
 	deploy.custom_minimum_size.x = 0
 	deploy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	deploy.pressed.connect(GameState.go_match)
+	deploy.pressed.connect(GameState.go_prep)
 	bottom.add_child(deploy)
 	_refresh()
 
