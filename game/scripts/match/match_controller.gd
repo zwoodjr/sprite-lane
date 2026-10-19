@@ -113,10 +113,13 @@ func _place_window_pads(phase_index: int) -> void:
 	var base_ang := rng.randf() * TAU
 	for i in range(2):
 		var p := Vector2.ZERO
-		for attempt in range(8):
+		for attempt in range(10):
 			var ang := base_ang + PI * i + rng.randf_range(-0.9, 0.9)
 			p = player.global_position + Vector2(cos(ang), sin(ang)) * rng.randf_range(500.0, 900.0)
-			var ok := _spot_clear(p)
+			## Clear spot with a straight run from the hero (short windows: a pad
+			## behind a long ruin wall is effectively unreachable). Relax the
+			## line-of-sight need on the last attempts.
+			var ok := _spot_clear(p) and (attempt >= 6 or _clear_line(player.global_position, p))
 			for u in used:
 				if u.distance_to(p) < 450.0:
 					ok = false
@@ -148,6 +151,10 @@ func _spot_clear(p: Vector2) -> bool:
 	q.transform = Transform2D(0.0, p)
 	q.collision_mask = 1
 	return get_world_2d().direct_space_state.intersect_shape(q, 1).is_empty()
+
+func _clear_line(a: Vector2, b: Vector2) -> bool:
+	var q := PhysicsRayQueryParameters2D.create(a, b, 1)
+	return get_world_2d().direct_space_state.intersect_ray(q).is_empty()
 
 ## Which upcoming phase (if any) opens within the ping lead time.
 func _maybe_ping_next_window() -> void:
