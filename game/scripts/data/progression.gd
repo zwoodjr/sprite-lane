@@ -83,6 +83,8 @@ static func run_upgrade_pool() -> Array:
 
 ## True when this card can still be offered to the current hero.
 static func can_offer(u: Dictionary) -> bool:
+	if bool(u.get("evolution", false)):
+		return recipe_ready(u)
 	var hero := GameState.selected_character_id if GameState else ""
 	if u.has("hero") and str(u["hero"]) != hero:
 		return false
@@ -99,6 +101,36 @@ static func can_offer(u: Dictionary) -> bool:
 		if have >= int(w.get("drone_max", 4)):
 			return false
 	return true
+
+
+## Depth E3: an evolution is ready when its base is at max rank and the partner
+## is owned (or, for "ammo:shock", Shock ammo was picked up this run).
+static func recipe_ready(c: Dictionary) -> bool:
+	if GameState == null:
+		return false
+	var hero := GameState.selected_character_id
+	if c.has("hero") and str(c["hero"]) != hero:
+		return false
+	if GameState.run_rank(str(c["id"])) > 0:
+		return false
+	var needs: Array = c.get("needs", [])
+	if needs.size() < 2:
+		return false
+	var base := UpgradeDefs.get_def(str(needs[0]))
+	if base.is_empty() or GameState.run_rank(str(needs[0])) < int(base.get("max_rank", 1)):
+		return false
+	var partner := str(needs[1])
+	if partner.begins_with("ammo:"):
+		return bool(GameState.run_ammo_seen.get(partner.substr(5), false))
+	return GameState.run_rank(partner) > 0
+
+
+static func ready_recipes() -> Array:
+	var out: Array = []
+	for c in RecipeDefs.all():
+		if recipe_ready(c):
+			out.append(c)
+	return out
 
 
 ## Weighted roll of `count` distinct cards. luck > 1 boosts rare / epic odds
@@ -134,6 +166,15 @@ static func roll_run_choices(count: int = UpgradeDefs.CHOICES_PER_LEVEL, exclude
 		out.append(avail[i])
 		avail.remove_at(i)
 		weights.remove_at(i)
+	## An evolution that is ready always takes a slot (the build's payoff).
+	if RecipeDefs.GUARANTEE_SLOT:
+		var evos := ready_recipes()
+		if not evos.is_empty():
+			var evo: Dictionary = evos[(rng.randi() if rng else randi()) % evos.size()]
+			if out.size() >= count and count > 0:
+				out[out.size() - 1] = evo
+			else:
+				out.append(evo)
 	## Too few new cards (late run) — refill from excluded ones so there are 3.
 	if out.size() < count and not exclude.is_empty():
 		for u in UpgradeDefs.all():

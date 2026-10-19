@@ -412,7 +412,7 @@ func _want_ability() -> bool:
 
 
 func _score_card(u: Dictionary) -> float:
-	var sc: float = {"common": 1.0, "uncommon": 1.6, "rare": 2.2, "epic": 2.8}.get(str(u.get("rarity", "common")), 1.0)
+	var sc: float = {"common": 1.0, "uncommon": 1.6, "rare": 2.2, "epic": 2.8, "evolution": 9.0}.get(str(u.get("rarity", "common")), 1.0)
 	var id := str(u["id"])
 	if u.has("hero"):
 		sc += 1.2
@@ -510,5 +510,10 @@ func _summary() -> void:
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])
+	var evos: PackedStringArray = []
+	for c in RecipeDefs.all():
+		if _picks.any(func(p: String) -> bool: return p.begins_with(str(c["id"]))):
+			evos.append(str(c["id"]))
+	print("EVOS %s" % ",".join(evos))
 	print("DEPTH tonics=%s max_pack=%d max_exposure=%.0f pack_now=%s raiders=%d traits=%s" % [",".join(PackedStringArray(GameState.run_tonics)),
 		_max_pack, _max_exposure, str(GameState.run_pack), _raiders_seen.size(), ",".join(PackedStringArray(_elite_traits.keys()))])

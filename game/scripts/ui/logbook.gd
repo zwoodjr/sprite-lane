@@ -3,8 +3,8 @@ extends "res://scripts/ui/menu_base.gd"
 ## Logbook (brief Part 8): DAILY quests (claim scrap), survivor STORIES
 ## (5 chapters each, ending in their named Legendary), camp MILESTONES.
 
-const TABS := ["daily", "stories", "milestones"]
-const TAB_LABEL := {"daily": "DAILY", "stories": "STORIES", "milestones": "MILESTONES"}
+const TABS := ["daily", "stories", "milestones", "notes"]
+const TAB_LABEL := {"daily": "DAILY", "stories": "STORIES", "milestones": "GOALS", "notes": "FIELD NOTES"}
 
 var _tab: String = "daily"
 var _tab_btns: Dictionary = {}
@@ -77,6 +77,8 @@ func _rebuild() -> void:
 			_list.add_child(_note("Long goals. Each one changes the hangar."))
 			for m in QuestDefs.MILESTONES:
 				_list.add_child(_milestone_row(m))
+		"notes":
+			_build_notes()
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(0, 20)
 	_list.add_child(pad)
@@ -168,4 +170,103 @@ func _milestone_row(m: Dictionary) -> PanelContainer:
 	v.add_child(UiTheme.body_label("%s  ·  %s" % [str(m["desc"]), ("Hangar: " + cz) if cz != "" else "Trophy over the door"], 14, UiTheme.TEXT_DIM))
 	var prog := GameState.milestone_progress(str(m["id"]))
 	v.add_child(_bar(prog, int(m["need"])))
+	return p
+
+
+## =========================================================================
+## Quill's Field Notes (Depth E3): bestiary + hidden lore pages.
+
+func _build_notes() -> void:
+	_list.add_child(_note("Quill's notebook. Kills of each creature fill its page: %d to study it, %d to find its weak spot (+10%% damage), %d to master it (+20%%)." % [
+		int(BestiaryDefs.THRESHOLDS[0]), int(BestiaryDefs.THRESHOLDS[1]), int(BestiaryDefs.THRESHOLDS[2])]))
+	var kinds: Array = []
+	for k in EnemyDefs.all_kinds():
+		kinds.append(str(k["id"]))
+	## Known creatures first, most-killed first.
+	kinds.sort_custom(func(a: String, b: String) -> bool: return GameState.bestiary_kills(a) > GameState.bestiary_kills(b))
+	for k in kinds:
+		_list.add_child(_beast_row(str(k)))
+	_list.add_child(UiTheme.body_label("LORE PAGES  %d / %d" % [GameState.lore_pages.size(), BestiaryDefs.PAGES.size()], 18, UiTheme.AMBER))
+	for p in BestiaryDefs.PAGES:
+		_list.add_child(_page_row(p))
+
+
+func beast_count() -> int:
+	return EnemyDefs.all_kinds().size()
+
+
+func _beast_icon(kind: String) -> Texture2D:
+	var def := EnemyDefs.get_kind(kind)
+	var path := str(def.get("anim", "")) + "_idle.png"
+	if not ResourceLoader.exists(path):
+		return null
+	var strip: Texture2D = load(path)
+	var at := AtlasTexture.new()
+	at.atlas = strip
+	var h := float(strip.get_height())
+	at.region = Rect2(h * 0.1, h * 0.1, h * 0.8, h * 0.8)
+	return at
+
+
+func _beast_row(kind: String) -> PanelContainer:
+	var n := GameState.bestiary_kills(kind)
+	var st := BestiaryDefs.stage_for(n)
+	var p := card(UiTheme.AMBER if st >= 3 else UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.add_child(h)
+	var ic := TextureRect.new()
+	ic.texture = _beast_icon(kind)
+	ic.custom_minimum_size = Vector2(72, 72)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if n <= 0:
+		ic.modulate = Color(0.05, 0.04, 0.04, 0.85)
+	h.add_child(ic)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 2)
+	v.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(v)
+	var nm := str(EnemyDefs.get_kind(kind).get("display_name", kind)) if n > 0 else "???"
+	v.add_child(UiTheme.body_label("%s  ·  %d kills  ·  %s" % [nm, n, str(BestiaryDefs.STAGE_NAME[st])], 17, UiTheme.AMBER if n > 0 else UiTheme.TEXT_DIM, false))
+	var nx := BestiaryDefs.next_threshold(n)
+	if nx > 0:
+		v.add_child(_bar(n, nx))
+	var notes: Array = BestiaryDefs.NOTES.get(kind, ["", ""])
+	if st >= 1:
+		v.add_child(UiTheme.body_label(str(notes[0]), 14, UiTheme.TEXT))
+	else:
+		v.add_child(UiTheme.body_label("Kill %d to study it." % int(BestiaryDefs.THRESHOLDS[0]), 13, UiTheme.TEXT_DIM))
+	if st >= 2:
+		v.add_child(UiTheme.body_label("Weak spot: %s  (+%d%% damage)" % [str(notes[1]), int(round(BestiaryDefs.damage_bonus(n) * 100.0))], 14, UiTheme.TEAL))
+	return p
+
+
+func _page_row(pg: Dictionary) -> PanelContainer:
+	var found := GameState.lore_pages.has(str(pg["id"]))
+	var p := card(UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.add_child(h)
+	var ic := TextureRect.new()
+	if ResourceLoader.exists(BestiaryDefs.PAGE_ICON):
+		ic.texture = load(BestiaryDefs.PAGE_ICON)
+	ic.custom_minimum_size = Vector2(48, 48)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ic.modulate = Color.WHITE if found else Color(0.3, 0.28, 0.26, 0.8)
+	h.add_child(ic)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(v)
+	v.add_child(UiTheme.body_label(str(pg["title"]) if found else "Torn page", 17, UiTheme.AMBER if found else UiTheme.TEXT_DIM, false))
+	v.add_child(UiTheme.body_label(str(pg["text"]) if found else "Somewhere out in the Dust. Look for a page fluttering on the ground.", 14, UiTheme.TEXT if found else UiTheme.TEXT_DIM))
 	return p

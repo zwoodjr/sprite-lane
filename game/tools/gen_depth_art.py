@@ -321,9 +321,39 @@ def plague_fog():
     _made.append(im.resize((96, 96), Image.LANCZOS))
 
 
+# ================================================================== E3
+PAPER = C(196, 172, 128)
+
+
+def lore_page():
+    """A torn notebook page with Quill's sketch of a creature, pinned by a red thread."""
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 21.2, 7.5, 1.3)
+    pts = [(5.0, 3.6), (18.6, 2.8), (19.6, 8.0), (18.8, 12.0), (19.8, 19.6), (13.0, 20.6), (11.6, 19.6),
+           (9.8, 20.8), (4.4, 20.2), (5.4, 14.0), (4.2, 9.0)]
+    cel(L, [("poly", pts)], PAPER, n=(-0.15, -0.2, 1), ol=2.0, bevel=0.6, rim=0.6, line=C(90, 70, 46))
+    # folded corner
+    cel(L, [("poly", [(15.2, 2.9), (18.6, 2.8), (19.0, 6.4)])], PAPER * 0.9, n=(-0.3, -0.3, 0.9), ol=1.2, bevel=0.2,
+        line=C(90, 70, 46))
+    # ruled lines + handwriting squiggles
+    for k, y in enumerate((6.0, 8.2, 15.6, 17.6)):
+        ink(L, [(6.4, y), (9.0, y - 0.2), (11.6, y + 0.1), (14.2 - (k % 2) * 2, y - 0.1)], 0.14, C(70, 56, 46), 0.75)
+    # sketch of a scorp-like creature in red-brown ink
+    ink(L, [(7.4, 12.6), (9.6, 10.6), (12.4, 10.6), (14.6, 12.2), (16.6, 10.4), (17.2, 8.8)], 0.22, C(120, 40, 34), 0.95)
+    for x in (9.0, 11.0, 13.0):
+        ink(L, [(x, 11.6), (x - 0.8, 13.6)], 0.16, C(120, 40, 34), 0.9)
+    fill(L, [("ell", 8.0, 12.2, 1.0, 0.8)], C(120, 40, 34), 0.9)
+    # pin + thread
+    cel(L, [("ell", 6.6, 4.8, 1.1, 1.1)], C(190, 50, 44), form="sphere", ol=1.0, bevel=0.6, rim=0)
+    ink(L, [(6.6, 4.8), (4.6, 8.6), (5.2, 12.4)], 0.16, C(170, 40, 36), 0.8)
+    return save_icon(cv, "lore_page")
+
+
 GROUPS = {
     "e1": [herb, plague_gland, dust_shard, machine_oil, medicine, lambda: medicine(False), backpack, exposure,
            *[(lambda t=t: tonic(t)) for t in TONIC_LOOK], plague_fog],
+    "e3": [lore_page],
 }
 
 

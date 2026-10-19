@@ -130,6 +130,10 @@ func _run() -> void:
 	var keep_depth := [GameState.ingredients.duplicate(), GameState.tonics.duplicate(), GameState.tonic_loadout.duplicate()]
 	await _test_depth_e1()
 	await _test_depth_e2()
+	var keep_notes := [GameState.bestiary.duplicate(), GameState.lore_pages.duplicate()]
+	await _test_depth_e3()
+	GameState.bestiary = keep_notes[0]
+	GameState.lore_pages = keep_notes[1]
 	GameState.ingredients = keep_depth[0]
 	GameState.tonics = keep_depth[1]
 	GameState.tonic_loadout = keep_depth[2]
@@ -1095,3 +1099,124 @@ func _test_depth_e2() -> void:
 	_check(crew.get("carrier") != null and crew.get("carrier") != cap, "e2 new carrier")
 	await _end_depth_match(m)
 	print("DEPTH_E2_OK")
+
+
+func _grant(id: String, n: int = 99) -> void:
+	var u := UpgradeDefs.get_def(id)
+	for i in range(n):
+		if GameState.run_rank(id) >= int(u.get("max_rank", 1)):
+			break
+		GameState.apply_run_upgrade(u)
+
+
+## Depth E3: recipes / evolutions, Field Notes bestiary, lore pages.
+func _test_depth_e3() -> void:
+	## Every shared upgrade is in a recipe; every survivor has a class recipe.
+	var in_recipe := {}
+	for c in RecipeDefs.all():
+		for nd in c["needs"]:
+			in_recipe[str(nd)] = true
+	for u in UpgradeDefs.all():
+		if not u.has("hero"):
+			_check(in_recipe.has(str(u["id"])), "e3 recipe covers %s" % u["id"])
+	for h in CharacterDefs.PLAYABLE_IDS:
+		var n := 0
+		for c in RecipeDefs.all():
+			if str(c.get("hero", "")) == h:
+				n += 1
+		_check(n == 1, "e3 class recipe %s" % h)
+	## Readiness + guaranteed offer.
+	GameState.camp.clear()
+	GameState.loadouts.clear()
+	GameState.selected_character_id = "vesper_thorn"
+	GameState.selected_mode_id = "drift"
+	GameState.begin_run()
+	_grant("dust_rounds", 2)
+	_grant("spore_mines", 1)
+	_check(not Progression.recipe_ready(RecipeDefs.get_recipe("plague_bloom")), "e3 not ready below max")
+	_grant("dust_rounds")
+	_check(Progression.recipe_ready(RecipeDefs.get_recipe("plague_bloom")), "e3 ready at max + partner")
+	var ch := Progression.roll_run_choices()
+	var offered := false
+	for c in ch:
+		offered = offered or str(c["id"]) == "plague_bloom"
+	_check(offered and ch.size() == 3, "e3 evolution offered")
+	GameState.apply_run_upgrade(RecipeDefs.get_recipe("plague_bloom"))
+	_check(GameState.has_evo("plague_bloom") and not Progression.recipe_ready(RecipeDefs.get_recipe("plague_bloom")), "e3 evolution owned once")
+	_grant("ricochet")
+	_check(not Progression.recipe_ready(RecipeDefs.get_recipe("arc_storm")), "e3 arc storm needs shock")
+	GameState.run_ammo_seen["shock"] = true
+	_check(Progression.recipe_ready(RecipeDefs.get_recipe("arc_storm")), "e3 arc storm with shock")
+	_check(not Progression.recipe_ready(RecipeDefs.get_recipe("earthquake")), "e3 class recipe other hero")
+	var pk := CanvasLayer.new()
+	pk.set_script(load("res://scripts/ui/run_upgrade_picker.gd"))
+	add_child(pk)
+	_check(str(pk.call("_recipe_hint", "spore_mines", "vesper_thorn")).contains("Plague Bloom"), "e3 card shows recipe")
+	pk.queue_free()
+	## Deadeye / Fortune numbers.
+	var c0 := GameState.crit_chance()
+	GameState.run_ranks["deadeye"] = 1
+	GameState.run_ranks["fortune"] = 1
+	_check(is_equal_approx(GameState.crit_chance(), c0 + 0.2) and GameState.run_scrap_mult() >= 1.5, "e3 deadeye/fortune")
+	## In a match: Plague Bloom cloud, Death Knell blast, Blade Storm shards, Lead Rain fan.
+	var m: Node = await _depth_match("drift", "vesper_thorn")
+	var player: Node2D = m.get_node("World/Player")
+	GameState.run_ranks["plague_bloom"] = 1
+	GameState.run_ranks["death_knell"] = 1
+	var a := _mob(m, "rad_gator", player.global_position + Vector2(400, 0))
+	var b := _mob(m, "rad_gator", player.global_position + Vector2(440, 0))
+	await get_tree().physics_frame
+	var g0 := get_tree().get_nodes_in_group("ground_fx").size()
+	a.call("apply_status", "poison", 3.0, 1.0)
+	a.call("apply_status", "mark", 3.0, 1.0)
+	b.set("max_hp", 500.0)
+	b.set("hp", 500.0)
+	a.call("take_damage", 9999.0, Vector2.ZERO, 0.0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(get_tree().get_nodes_in_group("ground_fx").size() > g0, "e3 plague bloom cloud")
+	_check(float(b.get("hp")) < 500.0, "e3 death knell blast")
+	b.queue_free()
+	GameState.run_ranks["orbit_blades"] = 1
+	GameState.run_ranks["blade_storm"] = 1
+	var before := m.get_child_count()
+	player.set("_shard_t", 0.0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(m.get_child_count() >= before + 8, "e3 blade storm shards %d" % (m.get_child_count() - before))
+	GameState.run_ranks.erase("blade_storm")
+	GameState.run_ranks["lead_rain"] = 1
+	await get_tree().physics_frame
+	var b2 := m.get_child_count()
+	player.call("_fire_one_shot")
+	await get_tree().process_frame
+	_check(m.get_child_count() >= b2 + 3, "e3 lead rain fan")
+	await _end_depth_match(m)
+	## Field Notes: kills fill entries (kept), weak spot bonus, save round trip, logbook tab.
+	GameState.bestiary = {}
+	GameState.lore_pages = {}
+	for i in range(BestiaryDefs.THRESHOLDS[1]):
+		GameState.note_kill("scrap_hound")
+	_check(BestiaryDefs.stage_for(GameState.bestiary_kills("scrap_hound")) == 2 and is_equal_approx(GameState.bestiary_bonus("scrap_hound"), 0.1), "e3 weak spot")
+	_check(GameState.find_page("p_war") and not GameState.find_page("p_war") and not GameState.find_page("nope"), "e3 lore page once")
+	GameState.save_profile()
+	GameState.apply_save(JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH)))
+	_check(GameState.bestiary_kills("scrap_hound") == 40 and GameState.lore_pages.has("p_war"), "e3 notes saved")
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "bestiary": {"rad_gator": "x", "toxic_scorp": 5}, "lore_pages": {"bogus": true}})
+	_check(GameState.bestiary == {"toxic_scorp": 5} and GameState.lore_pages.is_empty(), "e3 notes sanitised")
+	var lb: Node = (load("res://scenes/ui/logbook.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lb)
+	await get_tree().process_frame
+	lb.call("show_tab", "notes")
+	await get_tree().process_frame
+	_check(int(lb.call("beast_count")) >= 30, "e3 notes tab")
+	lb.queue_free()
+	## A page in a run gets picked up.
+	m = await _depth_match("drift", "pebble")
+	player = m.get_node("World/Player")
+	m.get_node("PlagueSystem").call("spawn_page", "p_dust", player.global_position + Vector2(10, 0))
+	for k in range(6):
+		await get_tree().physics_frame
+	_check(GameState.lore_pages.has("p_dust"), "e3 page picked up in a run")
+	await _end_depth_match(m)
+	print("DEPTH_E3_OK")

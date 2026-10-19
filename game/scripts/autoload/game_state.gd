@@ -88,6 +88,9 @@ var tonic_loadout: Array = []
 var run_pack: Dictionary = {}
 var run_tonics: Array = []
 var exposure: float = 0.0
+## --- Depth E3: Quill's Field Notes (kills per kind, kept) + found lore pages ---
+var bestiary: Dictionary = {}
+var lore_pages: Dictionary = {}
 
 
 ## Player settings + onboarding flags (persisted to user://).
@@ -144,6 +147,8 @@ var run_luck_charges: int = 0 ## Lucky Vial: level-ups left with better odds
 var run_luck: float = 1.0
 ## Field Notes: kills per enemy kind this run.
 var run_kind_kills: Dictionary = {}
+## Depth E3: special ammo types picked up this run (Arc Storm needs Shock).
+var run_ammo_seen: Dictionary = {}
 var pending_run_choices: Array = []
 var run_level_paused: bool = false
 
@@ -204,6 +209,8 @@ func save_profile() -> void:
 		"ingredients": ingredients,
 		"tonics": tonics,
 		"tonic_loadout": tonic_loadout,
+		"bestiary": bestiary,
+		"lore_pages": lore_pages,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -343,6 +350,19 @@ func _load_depth(d: Dictionary) -> void:
 			var tid := str(t)
 			if MedicineDefs.TONICS.has(tid) and not tid in tonic_loadout:
 				tonic_loadout.append(tid)
+	bestiary = {}
+	var bs: Variant = d.get("bestiary", {})
+	if typeof(bs) == TYPE_DICTIONARY:
+		for k in (bs as Dictionary).keys():
+			var n := maxi(0, int((bs as Dictionary)[k]))
+			if n > 0:
+				bestiary[str(k)] = n
+	lore_pages = {}
+	var lp: Variant = d.get("lore_pages", {})
+	if typeof(lp) == TYPE_DICTIONARY:
+		for k in (lp as Dictionary).keys():
+			if not BestiaryDefs.page(str(k)).is_empty():
+				lore_pages[str(k)] = true
 
 ## {id: int >= 0} keeping only known ids.
 func _count_dict(v: Variant, known: Array) -> Dictionary:
@@ -497,10 +517,11 @@ func endurance_iframe_mult() -> float:
 	return 1.0
 
 func crit_chance() -> float:
-	return gear_stat("crit")
+	return gear_stat("crit") + float(up("deadeye", "crit", 0.0))
 
 func crit_damage_bonus() -> float:
-	return float(GearDefs.SURVIVOR_SETS["surgeons_coat"]["crit_bonus"]) if has_set("surgeons_coat", 2) else 0.0
+	return (float(GearDefs.SURVIVOR_SETS["surgeons_coat"]["crit_bonus"]) if has_set("surgeons_coat", 2) else 0.0) \
+		+ float(up("deadeye", "crit_damage", 0.0))
 
 func aoe_damage_mult() -> float:
 	return 1.0
@@ -1107,6 +1128,8 @@ func reset_profile() -> void:
 	ingredients.clear()
 	tonics.clear()
 	tonic_loadout.clear()
+	bestiary.clear()
+	lore_pages.clear()
 	migrated_hangar_v4 = true
 	garage_tokens = 0
 	successful_extracts = 0
@@ -1278,11 +1301,16 @@ func use_reroll() -> bool:
 
 func note_kill(kind: String) -> void:
 	run_kind_kills[kind] = int(run_kind_kills.get(kind, 0)) + 1
+	var before := BestiaryDefs.stage_for(bestiary_kills(kind))
+	bestiary[kind] = bestiary_kills(kind) + 1
+	var after := BestiaryDefs.stage_for(bestiary_kills(kind))
+	if after > before:
+		result_unlocks_pending.append("Field Notes: %s — %s" % [str(EnemyDefs.get_kind(kind).get("display_name", kind)), str(BestiaryDefs.STAGE_NAME[after])])
 	quest_event("kills", 1, {"kind": kind})
 
 ## Scavenger's Eye (+ Field Salvager 2) multiplier on kill scrap.
 func run_scrap_mult() -> float:
-	var m := 1.0 + float(up("scavengers_eye", "scrap", 0.0))
+	var m := 1.0 + float(up("scavengers_eye", "scrap", 0.0)) + float(up("fortune", "scrap", 0.0))
 	if has_set("field_salvager", 2):
 		m += float(GearDefs.GENERAL_SETS["field_salvager"]["scrap"])
 	return m
@@ -1298,6 +1326,34 @@ func _reset_run_cards() -> void:
 	run_luck_charges = 0
 	run_luck = 1.0
 	run_kind_kills.clear()
+	run_ammo_seen.clear()
+
+func bestiary_kills(kind: String) -> int:
+	return int(bestiary.get(kind, 0))
+
+## Field Notes weak-spot bonus against a kind (kept across runs).
+func bestiary_bonus(kind: String) -> float:
+	return BestiaryDefs.damage_bonus(bestiary_kills(kind))
+
+## A hidden lore page: kept at once (no need to extract). False if already found.
+func find_page(id: String) -> bool:
+	if lore_pages.has(id) or BestiaryDefs.page(id).is_empty():
+		return false
+	lore_pages[id] = true
+	result_unlocks_pending.append("Lore page: %s" % str(BestiaryDefs.page(id)["title"]))
+	save_profile()
+	return true
+
+func missing_pages() -> Array:
+	var out: Array = []
+	for p in BestiaryDefs.PAGES:
+		if not lore_pages.has(str(p["id"])):
+			out.append(str(p["id"]))
+	return out
+
+## An evolution (RecipeDefs) owned this run.
+func has_evo(id: String) -> bool:
+	return run_rank(id) > 0
 
 func on_extract_success() -> void:
 	if run_finished:

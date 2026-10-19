@@ -47,6 +47,28 @@ func _place_crates() -> void:
 			if _match.has_method("_spot_free") and bool(_match.call("_spot_free", p, 40.0)):
 				break
 		HaulPickup.spawn(_world, p, "medicine", 1, false)
+	_place_lore_page()
+
+
+## Depth E3: sometimes a hidden lore page lies out in the Dust.
+func _place_lore_page() -> void:
+	var left := GameState.missing_pages()
+	if left.is_empty() or _rng.randf() > BestiaryDefs.PAGE_CHANCE:
+		return
+	spawn_page(str(left[_rng.randi() % left.size()]))
+
+
+func spawn_page(id: String, at: Vector2 = Vector2.INF) -> Node2D:
+	var p := at
+	if p == Vector2.INF:
+		var ang := _rng.randf() * TAU
+		p = _player.global_position + Vector2(cos(ang), sin(ang)) * _rng.randf_range(BestiaryDefs.PAGE_DIST.x, BestiaryDefs.PAGE_DIST.y)
+	var n := Node2D.new()
+	n.set_script(load("res://scripts/entities/lore_page.gd"))
+	n.set("page_id", id)
+	n.position = p
+	_world.add_child(n)
+	return n
 
 
 func _on_attacked(attacker: Node) -> void:

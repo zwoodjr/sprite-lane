@@ -23,6 +23,7 @@ const RARITY_COLOR := {
 	"uncommon": Color(0.42, 0.85, 0.48),
 	"rare": Color(0.40, 0.66, 1.0),
 	"epic": Color(0.78, 0.48, 1.0),
+	"evolution": Color(1.0, 0.78, 0.25),
 }
 ## Class cards show up a bit more often so each hero's build has an identity.
 const CLASS_WEIGHT_MULT := 1.6
@@ -267,6 +268,9 @@ static func get_def(id: String) -> Dictionary:
 	if _by_id.is_empty():
 		for u in all():
 			_by_id[str(u["id"])] = u
+		## Depth E3: evolutions resolve like any card (GameState.up works on them).
+		for c in RecipeDefs.all():
+			_by_id[str(c["id"])] = c
 	return _by_id.get(id, {})
 
 

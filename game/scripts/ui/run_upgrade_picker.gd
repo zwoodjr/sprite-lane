@@ -173,11 +173,15 @@ func _card(u: Dictionary, w: float) -> Button:
 	var top := HBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(top)
-	var rl := _lbl(rarity.to_upper() + ("  ·  CLASS" if u.has("hero") else ""), 15, col)
+	var evo := bool(u.get("evolution", false))
+	var rl := _lbl(("EVOLUTION" if evo else rarity.to_upper()) + ("  ·  CLASS" if u.has("hero") else ""), 15, col)
 	rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(rl)
 	var path := "NEW  ·  RANK 1/%d" % max_rank if rank == 0 else "RANK %d → %d / %d" % [rank, rank + 1, max_rank]
-	top.add_child(_lbl(path, 15, UiTheme.AMBER if rank > 0 else UiTheme.TEXT_DIM))
+	if evo:
+		var nd: Array = u.get("needs", [])
+		path = "%s MAX + %s" % [RecipeDefs.part_name(str(nd[0])), RecipeDefs.part_name(str(nd[1]))]
+	top.add_child(_lbl(path, 15, UiTheme.AMBER if rank > 0 or evo else UiTheme.TEXT_DIM))
 
 	## Name
 	var nm := _lbl(str(u.get("name", "?")), 34, Color(1, 0.96, 0.88))
@@ -213,11 +217,37 @@ func _card(u: Dictionary, w: float) -> Button:
 			owned.append(str(cd["name"]))
 		else:
 			others.append(str(cd["name"]))
-	if not owned.is_empty():
+	## Depth E3: which recipe this card leads toward (beats the combo hint).
+	var rec := _recipe_hint(id, hero)
+	if rec != "":
+		vb.add_child(_lbl(rec, 15, RecipeDefs.COLOR))
+	elif not owned.is_empty():
 		vb.add_child(_lbl("COMBO with your " + ", ".join(owned), 15, UiTheme.TEAL))
 	elif not others.is_empty():
 		vb.add_child(_lbl("Pairs with: " + ", ".join(others.slice(0, 2)), 14, UiTheme.TEXT_DIM))
+	if evo:
+		## Gold glow pulse on evolution cards.
+		var tw := b.create_tween().set_loops()
+		tw.tween_property(b, "self_modulate", Color(1.25, 1.15, 0.85), 0.5)
+		tw.tween_property(b, "self_modulate", Color.WHITE, 0.5)
 	return b
+
+## "RECIPE → Plague Bloom: max this + Spore Mines (ready)" when the partner is owned.
+func _recipe_hint(id: String, hero: String) -> String:
+	var recs := RecipeDefs.recipes_for(id, hero)
+	if recs.is_empty():
+		return ""
+	var c: Dictionary = recs[0]
+	for rc in recs:
+		if GameState.run_rank(str(rc["id"])) <= 0:
+			c = rc
+			break
+	var nd: Array = c["needs"]
+	if str(nd[0]) == id:
+		var partner := str(nd[1])
+		var have := GameState.run_rank(partner) > 0 or (partner.begins_with("ammo:") and bool(GameState.run_ammo_seen.get(partner.substr(5), false)))
+		return "RECIPE → %s: max this + %s%s" % [str(c["name"]), RecipeDefs.part_name(partner), "  (ready)" if have else ""]
+	return "RECIPE → %s: with %s at max" % [str(c["name"]), RecipeDefs.part_name(str(nd[0]))]
 
 ## Shared Bullet/Melee cards show only the tag that applies to this hero.
 func _tags_for(u: Dictionary, melee: bool) -> Array[String]:

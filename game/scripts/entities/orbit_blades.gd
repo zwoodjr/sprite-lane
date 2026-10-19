@@ -20,7 +20,7 @@ func _ready() -> void:
 
 
 func _sync() -> void:
-	var want := int(GameState.up("orbit_blades", "count", 0))
+	var want := int(GameState.up("orbit_blades", "count", 0)) * int(GameState.up("blade_storm", "count_mult", 1))
 	while _blades.size() < want:
 		var s := Sprite2D.new()
 		if not _frames.is_empty():

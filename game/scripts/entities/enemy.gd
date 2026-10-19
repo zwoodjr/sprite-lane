@@ -580,6 +580,7 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 func _die() -> void:
 	_dead = true
 	remove_from_group("enemies")
+	_evo_on_death()
 	if "bloated" in traits:
 		_bloat_burst()
 	if crew != null and is_instance_valid(crew):
@@ -962,3 +963,22 @@ func note_weak_hit() -> void:
 		return
 	_weak_text_cd = FactionDefs.WEAK_TEXT_CD
 	Juice.float_text(global_position + Vector2(0, -46), "WEAK!", Color(1.0, 0.8, 0.35), 13)
+
+
+## Depth E3 evolutions that trigger on a kill: Plague Bloom (poisoned burst),
+## Death Knell (marked explode), Fortune's Favor (ammo drops).
+func _evo_on_death() -> void:
+	var p := get_tree().get_first_node_in_group("player") as Node2D
+	if p == null:
+		return
+	if GameState.has_evo("plague_bloom") and has_status("poison"):
+		RunFx.ground(get_parent(), p, global_position + Vector2(0, 8), "poison",
+			float(GameState.up("plague_bloom", "cloud_r", 70.0)), float(GameState.up("plague_bloom", "cloud_time", 3.5)),
+			float(GameState.up("plague_bloom", "cloud_dps", 14.0)))
+		Juice.burst(global_position, Color(0.55, 1.0, 0.35), 14, 140.0, 0.45, 1.3)
+	if GameState.has_evo("death_knell") and has_status("mark"):
+		RunFx.explosion(p, global_position, float(GameState.up("death_knell", "radius", 90.0)),
+			float(GameState.up("death_knell", "damage", 40.0)) * float(p.get("damage_mult")), Color(1.0, 0.55, 0.85), "blast", 220.0)
+		Juice.float_text(global_position + Vector2(0, -40), "KNELL", Color(1.0, 0.6, 0.9), 15)
+	if GameState.has_evo("fortune") and randf() < float(GameState.up("fortune", "ammo_chance", 0.0)):
+		RunFx.spawn_ammo_pickup(get_parent(), global_position + Vector2(10, 10), RunFx.random_ammo_id())

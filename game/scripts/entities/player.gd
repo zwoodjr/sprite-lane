@@ -128,6 +128,13 @@ var _rubble_cd: float = 0.0     ## Last Shift
 ## Depth Update: plague exposure stage penalties (set by plague_system.gd, ≤ 0).
 var exposure_move: float = 0.0
 var exposure_rate: float = 0.0
+## Depth E3 evolution timers.
+var _shard_t: float = 0.0
+var _quake_t: float = 0.0
+var _storm_left: float = 0.0
+var _storm_t: float = 0.0
+var _ghost_left: float = 0.0
+var _raid_t: float = 0.0
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -243,9 +250,9 @@ func _sync_drones() -> void:
 	var wdef: Dictionary = _weapon
 	var want := 0
 	if base > 0:
-		want = clampi(base + GameState.run_rank("squadron") + GameState.run_rank("scrap_drone"), 0, int(_weapon.get("drone_max", 4)))
+		want = clampi(base + GameState.run_rank("squadron") + GameState.run_rank("scrap_drone") + int(GameState.up("hive", "drones", 0)), 0, int(_weapon.get("drone_max", 4)))
 	else:
-		want = int(GameState.up("scrap_drone", "drones", 0))
+		want = int(GameState.up("scrap_drone", "drones", 0)) + int(GameState.up("hive", "drones", 0))
 		wdef = UpgradeDefs.get_def("scrap_drone").get("drone", {})
 	if want <= 0:
 		return
@@ -270,7 +277,7 @@ func get_drones() -> Array:
 
 ## Wingman ranks × DRONE-call overclock.
 func drone_rate_mult() -> float:
-	var m := 1.0 + float(GameState.up("wingman", "firerate", 0.0))
+	var m := 1.0 + float(GameState.up("wingman", "firerate", 0.0)) + float(GameState.up("hive", "rate", 0.0))
 	if GameState.has_set("flight_crew_gear", 2):
 		m *= float(GearDefs.SURVIVOR_SETS["flight_crew_gear"]["drone_rate"])
 	if _overclock_left > 0.0:
@@ -392,8 +399,11 @@ func _update_movement(delta: float) -> void:
 		rate *= turn_boost
 	velocity = velocity.move_toward(target, rate * delta)
 	velocity += _knock_v
+	var before_walk := global_position
 	move_and_slide()
 	velocity -= _knock_v
+	if GameState.has_evo("hellfire_stride"):
+		_firewalk_step(global_position.distance_to(before_walk))
 
 func _update_actions() -> void:
 	if Input.is_action_just_pressed("ability") or TouchInput.consume_ability():
@@ -493,6 +503,8 @@ func apply_powerup(def: Dictionary) -> void:
 		var amt := float(def.get("instant_heal", 35.0))
 		hp = minf(max_hp, hp + amt)
 		health_changed.emit(hp, max_hp)
+	if def.has("ammo"):
+		GameState.run_ammo_seen[str(def["ammo"])] = true
 	var dur := float(def.get("duration", 10.0))
 	if dur > 0.2:
 		## Special ammo lives in the "ammo" buff slot (one type at a time).
@@ -542,6 +554,12 @@ func _try_dash() -> void:
 	_trail_dist = 999.0
 	_firewalk_step(0.0)
 	_dash_hit.clear()
+	if GameState.has_evo("phoenix"):
+		heal(float(GameState.up("phoenix", "heal", 6.0)))
+		RunFx.explosion(self, global_position, float(GameState.up("phoenix", "radius", 110.0)),
+			float(GameState.up("phoenix", "damage", 30.0)) * damage_mult, Color(1.0, 0.55, 0.2), "blast", 280.0)
+	if GameState.has_evo("ghost_debt"):
+		_ghost_left = float(GameState.up("ghost_debt", "time", 2.0))
 	_gear_on_dash()
 	dashed.emit()
 
@@ -701,6 +719,10 @@ func _fire_ability() -> void:
 				RunFx.ground(get_parent(), self, global_position + Vector2(0, FEET_Y - 4), "heal",
 					float(GameState.up("sanctuary", "radius", 72.0)), float(GameState.up("sanctuary", "time", 4.0)),
 					float(GameState.up("sanctuary", "hps", 6.0)))
+				if GameState.has_evo("cathedral_fire"):
+					RunFx.ground(get_parent(), self, global_position + Vector2(0, FEET_Y - 4), "burn",
+						float(GameState.up("sanctuary", "radius", 72.0)), float(GameState.up("sanctuary", "time", 4.0)),
+						float(GameState.up("cathedral_fire", "dps", 18.0)))
 		"rattle_rush":
 			Juice.burst(global_position, UiTheme.AMBER, 16, 160.0, 0.5)
 			Juice.shake(0.12)
@@ -785,6 +807,8 @@ func _overload() -> void:
 		cur = RunFx.nearest_enemy(get_tree(), prev, float(a.get("jump", 170.0)), hit)
 	Juice.shake(0.15)
 	Juice.sfx("hit", 0.0, 0.3)
+	if GameState.has_evo("thunderhead"):
+		_storm_left = float(GameState.up("thunderhead", "time", 5.0))
 
 ## Movement abilities: leap (Pebble), lunge (Quill), blade dash (Nyx).
 func _tick_ability_move(delta: float) -> void:
@@ -828,7 +852,7 @@ func _update_rush_ram() -> void:
 func _on_rush_end() -> void:
 	if str(_ability.get("id", "")) != "rattle_rush" or GameState.run_rank("aftershock") <= 0:
 		return
-	var dmg := float(GameState.up("aftershock", "damage", 45.0)) * damage_mult
+	var dmg := float(GameState.up("aftershock", "damage", 45.0)) * damage_mult * float(GameState.up("earthquake", "aftershock_mult", 1.0))
 	RunFx.explosion(self, global_position, float(GameState.up("aftershock", "radius", 120.0)), dmg, Color(1.0, 0.55, 0.2), "ability", 360.0)
 	Juice.shake(0.35)
 	Juice.hitstop(0.05)
@@ -1015,6 +1039,10 @@ func _fire_one_shot() -> void:
 	if every > 0 and _shot_count % every == 0:
 		count = int(GameState.up("split_shot", "count", 3))
 		fan = deg_to_rad(float(GameState.up("split_shot", "spread_deg", 12.0)))
+	## Lead Rain: every shot is a fan; split shots become a wall of lead.
+	if GameState.has_evo("lead_rain"):
+		count = int(GameState.up("lead_rain", "split_count", 7)) if count > 1 else int(GameState.up("lead_rain", "count", 3))
+		fan = maxf(fan, deg_to_rad(float(GameState.up("lead_rain", "fan_deg", 9.0))) * (1.6 if count > 3 else 1.0))
 	## Weapon pattern: extra pellets per trigger (e.g. Flare Sidearm double tap).
 	var pellets := int(_weapon.get("pellets", 0))
 	if pellets > 0 and count < 1 + pellets:
@@ -1168,6 +1196,8 @@ func _melee_upgrades_on_swing(hit: Array, m: Dictionary) -> void:
 			from = nxt
 	## Split Shot (melee): every Nth swing adds a mirrored second slash.
 	var every := int(GameState.up("split_shot", "every", 0))
+	if GameState.has_evo("lead_rain"):
+		every = 1
 	if every > 0 and _swing_count % every == 0:
 		var dir2 := _swing_dir.rotated(deg_to_rad(18.0) * (1.0 if _swing_count % 2 == 0 else -1.0))
 		var mult2 := float(GameState.up("split_shot", "slash_mult", 0.6))
@@ -1180,7 +1210,11 @@ func _melee_upgrades_on_swing(hit: Array, m: Dictionary) -> void:
 		)
 	## Quarry Slam (Pebble): every Nth swing slams the ground and stuns.
 	var q := int(GameState.up("quarry_slam", "every", 0))
+	if GameState.has_evo("mountain"):
+		q = int(GameState.up("mountain", "every", 2))
 	if q > 0 and _swing_count % q == 0:
+		if GameState.has_evo("mountain"):
+			_guard_left = maxf(_guard_left, float(GameState.up("mountain", "guard", 2.0)))
 		var roll2 := _roll_damage(float(GameState.up("quarry_slam", "mult", 0.5)))
 		RunFx.explosion(self, global_position + Vector2(0, 10), float(GameState.up("quarry_slam", "radius", 110.0)), float(roll2[0]),
 			Color(1.0, 0.8, 0.45), "main", 260.0, float(GameState.up("quarry_slam", "stun", 0.8)))
@@ -1263,7 +1297,7 @@ func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: f
 		bullet.set("homing_turn", float(_weapon.get("homing_turn", 10.0)))
 	bullet.set("pierce_left", int(GameState.up("piercing", "pierce", 0)) + int(_weapon.get("pierce", 0)))
 	bullet.set("pierce_falloff", float(GameState.up("piercing", "falloff", 0.8)))
-	bullet.set("bounces_left", int(GameState.up("ricochet", "bounces", 0)))
+	bullet.set("bounces_left", int(GameState.up("ricochet", "bounces", 0)) + int(GameState.up("arc_storm", "bounces", 0)))
 	bullet.set("bounce_mult", float(GameState.up("ricochet", "mult", 0.6)))
 	bullet.set("bounce_range", float(GameState.up("ricochet", "range", 220.0)))
 	get_tree().current_scene.add_child(bullet)
@@ -1295,7 +1329,11 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	## Iron Tonic: the shield eats one whole hit, then recharges.
 	if _tonic_ready:
 		_tonic_ready = false
-		_tonic_cd = float(GameState.up("iron_tonic", "recharge", 14.0))
+		_tonic_cd = float(GameState.up("bulwark", "recharge", GameState.up("iron_tonic", "recharge", 14.0)))
+		## Bulwark: the block blasts everything back.
+		if GameState.has_evo("bulwark"):
+			RunFx.explosion(self, global_position, float(GameState.up("bulwark", "radius", 120.0)),
+				float(GameState.up("bulwark", "damage", 25.0)) * damage_mult, Color(0.95, 0.85, 0.55), "blast", 420.0)
 		_iframes = HURT_IFRAMES * 0.6
 		Juice.float_text(global_position + Vector2(0, -36), "BLOCKED", Color(0.9, 0.85, 0.6), 16)
 		Juice.burst(global_position, Color(0.95, 0.85, 0.55), 18, 160.0, 0.35)
@@ -1468,6 +1506,8 @@ func hit_element(src: String) -> String:
 		return "shock"
 	if src == "blast":
 		return "fire"
+	if src == "arc":
+		return "shock"
 	var coats: Variant = _weapon.get("coats", [])
 	if coats is Array:
 		for c in coats:
@@ -1482,6 +1522,8 @@ func hit_element(src: String) -> String:
 ## Field Notes (per-kind kills) and Double Cross (hits from behind).
 func _damage_vs(e: Node2D, src: String) -> float:
 	var m := 1.0
+	## Field Notes weak spots (kept across runs).
+	m *= 1.0 + GameState.bestiary_bonus(str(e.get("kind")))
 	## Tonics: Firebrand (plague) / Spark (machines).
 	match str(e.get("faction")):
 		EnemyDefs.PLAGUE:
@@ -1491,12 +1533,12 @@ func _damage_vs(e: Node2D, src: String) -> float:
 	var per := float(GameState.up("field_notes", "per_kill", 0.0))
 	if per > 0.0:
 		var k := int(GameState.run_kind_kills.get(str(e.get("kind")), 0))
-		m *= 1.0 + minf(per * k, float(GameState.up("field_notes", "cap", 0.3)))
+		m *= 1.0 + minf(per * k, float(GameState.up("field_notes", "cap", 0.3)) * float(GameState.up("autopsy_table", "cap_mult", 1.0)))
 	if GameState.run_rank("double_cross") > 0 and src in ["main", "ability", "chain"]:
 		var facing := Vector2.LEFT if bool(e.get("_facing_left")) else Vector2.RIGHT
 		var to_me := (global_position - e.global_position).normalized()
 		var cone := deg_to_rad(float(GameState.up("double_cross", "cone_deg", 90.0)))
-		if absf(facing.angle_to(to_me)) >= PI - cone * 0.5:
+		if _ghost_left > 0.0 or absf(facing.angle_to(to_me)) >= PI - cone * 0.5:
 			m *= float(GameState.up("double_cross", "mult", 3.0))
 			if _backstab_text_cd <= 0.0:
 				_backstab_text_cd = 0.6
@@ -1506,6 +1548,13 @@ func _damage_vs(e: Node2D, src: String) -> float:
 func _on_hit_effects(e: Node2D, dmg: float, src: String) -> void:
 	if not e.has_method("apply_status"):
 		return
+	## Arc Storm: hits can arc lightning on to a nearby enemy.
+	if GameState.has_evo("arc_storm") and src in ["main", "chain", "drone"] and randf() < float(GameState.up("arc_storm", "chance", 0.45)):
+		var nx := RunFx.nearest_enemy(get_tree(), e.global_position, float(GameState.up("arc_storm", "range", 170.0)), [e])
+		if nx != null:
+			RunFx.zap(get_parent(), e.global_position + Vector2(0, -10), nx.global_position + Vector2(0, -10), Color(0.55, 0.85, 1.0), 0.2, 3.0)
+			nx.call("apply_status", "stun", float(GameState.up("arc_storm", "stun", 0.35)))
+			hit_enemy.call_deferred(nx, dmg * float(GameState.up("arc_storm", "mult", 0.5)), (nx.global_position - e.global_position).normalized(), 60.0, false, "arc")
 	if GameState.run_rank("dust_rounds") > 0:
 		e.call("apply_status", "poison", float(GameState.up("dust_rounds", "time", 3.0)), float(GameState.up("dust_rounds", "dps", 4.0)))
 	if GameState.run_rank("marked") > 0 and src in ["main", "chain", "ability", "drone"]:
@@ -1551,11 +1600,12 @@ func _on_hit_effects(e: Node2D, dmg: float, src: String) -> void:
 ## Iron Tonic recharge, Rook's ram.
 func _update_run_upgrades(delta: float) -> void:
 	_update_rush_ram()
+	_update_evolutions(delta)
 	_update_gear(delta)
 	## Bell Tower: standing still charges stronger shots.
 	if GameState.run_rank("bell_tower") > 0:
 		if velocity.length() < 12.0:
-			_bell_charge = minf(_bell_charge + float(GameState.up("bell_tower", "per_sec", 0.35)) * delta, float(GameState.up("bell_tower", "cap", 0.7)))
+			_bell_charge = minf(_bell_charge + float(GameState.up("bell_tower", "per_sec", 0.35)) * delta, float(GameState.up("bell_tower", "cap", 0.7)) + float(GameState.up("death_knell", "bell_cap", 0.0)))
 		elif velocity.length() > 40.0:
 			_bell_charge = 0.0
 		if _bell_ring:
@@ -1592,6 +1642,8 @@ func _update_run_upgrades(delta: float) -> void:
 				for e in near:
 					var dir := ((e as Node2D).global_position - global_position).normalized()
 					var roll := _roll_damage(float(GameState.up("bayonet", "mult", 0.6)))
+					if GameState.has_evo("autopsy_table"):
+						e.call("apply_status", "mark", float(GameState.up("autopsy_table", "mark_time", 3.0)), float(GameState.up("autopsy_table", "mark", 1.3)))
 					_spawn_smear("line", {"length": 44.0, "width": 16.0, "smear": Color(0.95, 0.9, 0.8)}, dir)
 					hit_enemy(e, float(roll[0]), dir, 160.0, bool(roll[1]), "main")
 	## Supply Drop (Helm): a crate of special ammo every N seconds.
@@ -1614,7 +1666,7 @@ func _firewalk_step(moved: float) -> void:
 	if _trail_dist >= r * 0.9:
 		_trail_dist = 0.0
 		RunFx.ground(get_parent(), self, global_position + Vector2(0, FEET_Y - 4), "burn", r,
-			float(GameState.up("firewalk", "time", 2.5)), float(GameState.up("firewalk", "dps", 14.0)))
+			float(GameState.up("firewalk", "time", 2.5)), float(GameState.up("firewalk", "dps", 14.0)) * float(GameState.up("hellfire_stride", "burn_mult", 1.0)))
 
 func is_dashing() -> bool:
 	return _dash_left > 0.0
@@ -1839,3 +1891,57 @@ func _air_support(fc: Dictionary) -> void:
 		RunFx.zap(get_parent(), from, at, Color(1.0, 0.7, 0.35), 0.3, 2.5)
 		RunFx.explosion(self, at, float(fc["volley_radius"]), float(fc["volley_damage"]) * damage_mult, Color(1.0, 0.6, 0.3), "blast", 140.0)
 	Juice.shake(0.15)
+
+## =============================================================================
+## Depth E3 evolutions with their own timers (RecipeDefs).
+
+func _update_evolutions(delta: float) -> void:
+	_ghost_left = maxf(0.0, _ghost_left - delta)
+	## Blade Storm: the blades fling shards in every direction.
+	if GameState.has_evo("blade_storm"):
+		_shard_t -= delta
+		if _shard_t <= 0.0:
+			_shard_t = float(GameState.up("blade_storm", "shard_every", 1.1))
+			var n := int(GameState.up("blade_storm", "shards", 8))
+			var dmg := float(GameState.up("orbit_blades", "damage", 9.0)) * damage_mult * float(GameState.up("blade_storm", "shard_mult", 0.5)) * 2.0
+			var off := randf() * TAU
+			for i in range(n):
+				var d := Vector2.RIGHT.rotated(off + TAU * i / float(n))
+				var b := _spawn_bullet(global_position + d * 20.0 + Vector2(0, -6), d, dmg, false, 560.0)
+				b.set("homing_target", null)
+				b.set("pierce_left", 1)
+				b.set("lifetime", 0.55)
+	## Earthquake: RUSH shakes the ground as Rook goes.
+	if GameState.has_evo("earthquake") and _rush_active:
+		_quake_t -= delta
+		if _quake_t <= 0.0:
+			_quake_t = float(GameState.up("earthquake", "every", 0.25))
+			RunFx.explosion(self, global_position + Vector2(0, 10), float(GameState.up("earthquake", "radius", 75.0)),
+				float(GameState.up("earthquake", "damage", 18.0)) * damage_mult, Color(0.9, 0.7, 0.4), "blast", 200.0)
+			Juice.dust_puff(global_position + Vector2(0, 14), 8)
+	## Thunderhead: a storm around Juno zaps enemies after OVERLOAD.
+	if _storm_left > 0.0:
+		_storm_left -= delta
+		_storm_t -= delta
+		if _storm_t <= 0.0:
+			_storm_t = float(GameState.up("thunderhead", "every", 0.35))
+			var t := RunFx.nearest_enemy(get_tree(), global_position, float(GameState.up("thunderhead", "range", 210.0)))
+			if t != null:
+				RunFx.zap(get_parent(), global_position + Vector2(randf_range(-30, 30), -70), t.global_position, Color(0.6, 0.85, 1.0), 0.18, 3.5)
+				t.call("apply_status", "stun", float(GameState.up("thunderhead", "stun", 0.3)))
+				var roll := _roll_damage(float(GameState.up("thunderhead", "mult", 0.6)))
+				hit_enemy(t, float(roll[0]), (t.global_position - global_position).normalized(), 80.0, bool(roll[1]), "arc")
+	## Air Raid: every few seconds each drone fires a missile.
+	if GameState.has_evo("air_raid"):
+		_raid_t -= delta
+		if _raid_t <= 0.0:
+			_raid_t = float(GameState.up("air_raid", "every", 6.0))
+			for d in get_drones():
+				if not is_instance_valid(d):
+					continue
+				var t2 := RunFx.nearest_enemy(get_tree(), (d as Node2D).global_position, 420.0)
+				if t2 == null:
+					continue
+				RunFx.zap(get_parent(), (d as Node2D).global_position, t2.global_position, Color(1.0, 0.7, 0.35), 0.3, 2.5)
+				RunFx.explosion(self, t2.global_position, float(GameState.up("air_raid", "radius", 70.0)),
+					float(GameState.up("air_raid", "damage", 34.0)) * damage_mult, Color(1.0, 0.6, 0.3), "blast", 180.0)

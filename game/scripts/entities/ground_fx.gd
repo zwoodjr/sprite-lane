@@ -9,7 +9,7 @@ const TICK := 0.25
 const ART := {
 	"burn": {"path": "res://assets/sprites/fx/fx_firewalk.png", "n": 4, "fps": 10.0, "tint": Color(1, 1, 1, 0.95), "size_k": 1.6},
 	"heal": {"path": "res://assets/sprites/fx/fx_heal_puddle.png", "n": 2, "fps": 4.0, "tint": Color(1, 1, 1, 0.85), "size_k": 2.2},
-	"poison": {"path": "res://assets/sprites/fx/fx_heal_puddle.png", "n": 2, "fps": 4.0, "tint": Color(0.75, 1.3, 0.35, 0.8), "size_k": 2.2},
+	"poison": {"path": "res://assets/sprites/depth/world/plague_fog.png", "n": 1, "fps": 1.0, "tint": Color(0.85, 1.2, 0.6, 0.85), "size_k": 2.3},
 	## Depth E2: enemy spore cloud (Sporing / Bloated elites) — hurts the hero.
 	"spore": {"path": "res://assets/sprites/depth/world/plague_fog.png", "n": 1, "fps": 1.0, "tint": Color(1.0, 1.0, 1.0, 0.95), "size_k": 2.3},
 }
@@ -39,7 +39,7 @@ func _ready() -> void:
 		var w := radius * float(art["size_k"])
 		_sprite.scale = Vector2.ONE * (w / float(_frames[0].get_width()))
 	_sprite.modulate = art["tint"]
-	if mode == "spore":
+	if mode in ["spore", "poison"]:
 		_sprite.scale.y *= 0.62
 	if mode == "burn":
 		_sprite.offset = Vector2(0, -float(_frames[0].get_height()) * 0.35) if not _frames.is_empty() else Vector2.ZERO

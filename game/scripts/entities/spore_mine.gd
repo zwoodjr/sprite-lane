@@ -49,6 +49,10 @@ func _burst() -> void:
 	_done = true
 	var dmg := float(GameState.up("spore_mines", "damage", 22.0)) * float(player.get("damage_mult"))
 	var r := float(GameState.up("spore_mines", "radius", 70.0))
+	## Plague Bloom: bigger, nastier mines.
+	var pb := float(GameState.up("plague_bloom", "mine_mult", 1.0))
+	dmg *= pb
+	r *= sqrt(pb)
 	RunFx.explosion(player, global_position, r, dmg, Color(0.55, 0.95, 0.35), "mine", 180.0)
 	Juice.sfx("hit", -4.0, 0.3)
 	queue_free()

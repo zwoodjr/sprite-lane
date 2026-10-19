@@ -161,3 +161,40 @@ func _shots_e2() -> void:
 	await _snap("e2_raider_crew")
 	m.queue_free()
 	await _frames(3)
+
+
+## E3: an evolution card on the level-up picker, the storm it makes, Field Notes.
+func _shots_e3() -> void:
+	GameState.best_tier_extracted = 9
+	GameState.camp = {}
+	var m := await _match("drift", "vesper_thorn")
+	var player: Node2D = m.get_node("World/Player")
+	for id in ["dust_rounds", "spore_mines", "split_shot", "quick_mag", "orbit_blades", "piercing"]:
+		var u := UpgradeDefs.get_def(id)
+		for i in range(int(u.get("max_rank", 1))):
+			GameState.apply_run_upgrade(u)
+	var picker: Node = null
+	for n in get_tree().root.find_children("*", "CanvasLayer", true, false):
+		if n.has_method("pick_index"):
+			picker = n
+	var choices := [RecipeDefs.get_recipe("lead_rain"), UpgradeDefs.get_def("ricochet"), UpgradeDefs.get_def("firewalk")]
+	picker.call("open", 7, choices)
+	await _frames(20)
+	await _snap("e3_evolution_card")
+	picker.call("pick_index", 0)
+	GameState.apply_run_upgrade(RecipeDefs.get_recipe("blade_storm"))
+	GameState.apply_run_upgrade(RecipeDefs.get_recipe("plague_bloom"))
+	for k in range(14):
+		_mob(m, ["rad_gator", "scrap_hound", "toxic_scorp"][k % 3], player.global_position + Vector2.RIGHT.rotated(k * 0.45) * (160.0 + 12.0 * k))
+	await _frames(70)
+	await _snap("e3_storm")
+	m.queue_free()
+	await _frames(3)
+	GameState.bestiary = {"rad_gator": 140, "scrap_hound": 52, "toxic_scorp": 12, "raider_grunt": 3}
+	GameState.lore_pages = {"p_first": true, "p_cathedral": true}
+	var lb := await _open("res://scenes/ui/logbook.tscn")
+	lb.call("show_tab", "notes")
+	await _frames(10)
+	await _snap("e3_field_notes")
+	lb.queue_free()
+	await _frames(3)
