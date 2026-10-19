@@ -9,7 +9,9 @@ const HANGAR_DIR := "res://assets/sprites/hangar/"
 const TABS := ["camp", "survivors", "kennel", "stash"]
 const TAB_LABEL := {"camp": "CAMP", "survivors": "SURVIVORS", "kennel": "KENNEL", "stash": "STASH"}
 const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
-const PET_ON_BED := {"noel": Vector2(106, 135), "bentley": Vector2(120, 135), "lillie": Vector2(134, 135)}
+const PET_ON_BED := {"noel": Vector2(110, 141.5), "bentley": Vector2(125, 141.5), "lillie": Vector2(140, 141.5)}
+## Painted layers are cropped PNGs; this gives each one's rect on the painted canvas.
+const ART_LAYOUT := preload("res://scripts/data/hangar_art_layout.gd")
 
 var _scrap_label: Label
 var _view: Control
@@ -120,10 +122,9 @@ func _build_view() -> Control:
 			continue
 		var tr := TextureRect.new()
 		tr.texture = load(path)
-		tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(tr)
 		_layers[n] = tr
@@ -140,7 +141,7 @@ func _build_view() -> Control:
 		pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(pr)
 		_pets[p] = pr
-	v.resized.connect(_place_pets)
+	v.resized.connect(_place_art)
 	_refresh_view(false)
 	return v
 
@@ -171,8 +172,14 @@ func _art_rect() -> Rect2:
 	return Rect2((sz.x - w) * 0.5, (sz.y - h) * 0.5, w, h)
 
 
-func _place_pets() -> void:
+func _place_art() -> void:
 	var r := _art_rect()
+	var k := r.size.x / ART_LAYOUT.CANVAS.x
+	for n in _layers.keys():
+		var lr: Rect2 = ART_LAYOUT.RECTS.get(n, Rect2(Vector2.ZERO, ART_LAYOUT.CANVAS))
+		var tr: TextureRect = _layers[n]
+		tr.position = r.position + lr.position * k
+		tr.size = lr.size * k
 	var s := r.size.x / 240.0
 	for p in _pets.keys():
 		var pr: TextureRect = _pets[p]
@@ -215,7 +222,7 @@ func _refresh_view(animate: bool) -> void:
 		var pr: TextureRect = _pets[p]
 		pr.visible = GameState.kennel_rank(str(p)) >= 1
 		pr.self_modulate = tint
-	_place_pets()
+	_place_art()
 
 
 ## =========================================================================
