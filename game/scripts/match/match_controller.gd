@@ -116,7 +116,7 @@ func _place_window_pads(phase_index: int) -> void:
 		for attempt in range(8):
 			var ang := base_ang + PI * i + rng.randf_range(-0.9, 0.9)
 			p = player.global_position + Vector2(cos(ang), sin(ang)) * rng.randf_range(500.0, 900.0)
-			var ok := true
+			var ok := _spot_clear(p)
 			for u in used:
 				if u.distance_to(p) < 450.0:
 					ok = false
@@ -138,6 +138,16 @@ func _place_window_pads(phase_index: int) -> void:
 		GameState.extract_pad_info.append({"name": pad.pad_name, "position": pad.global_position})
 	if hud.has_method("ping_pads"):
 		hud.call("ping_pads")
+
+## No walls / props within 80 px (so a pad is never buried or unreachable).
+func _spot_clear(p: Vector2) -> bool:
+	var q := PhysicsShapeQueryParameters2D.new()
+	var c := CircleShape2D.new()
+	c.radius = 80.0
+	q.shape = c
+	q.transform = Transform2D(0.0, p)
+	q.collision_mask = 1
+	return get_world_2d().direct_space_state.intersect_shape(q, 1).is_empty()
 
 ## Which upcoming phase (if any) opens within the ping lead time.
 func _maybe_ping_next_window() -> void:

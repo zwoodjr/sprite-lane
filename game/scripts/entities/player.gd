@@ -66,6 +66,7 @@ var _target: Node2D = null
 var _swing_dir: Vector2 = Vector2.RIGHT
 var _swing_index: int = 0
 var _drones: Array = []
+var _guard_left: float = 0.0 ## melee: half damage after a swing lands
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -206,6 +207,7 @@ func _tick_timers(delta: float) -> void:
 	_dash_cd = maxf(0.0, _dash_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
 	_attack_hold = maxf(0.0, _attack_hold - delta)
+	_guard_left = maxf(0.0, _guard_left - delta)
 	if _reload_left > 0.0:
 		_reload_left -= delta
 		if _reload_left <= 0.0:
@@ -231,6 +233,9 @@ func _update_movement(delta: float) -> void:
 		_dash_left -= delta
 		velocity = _dash_dir * DASH_SPEED
 		move_and_slide()
+		if _dash_left <= 0.0 and is_melee():
+			## Dash-cancel into swing: come out of a dash ready to hit.
+			_fire_cd = 0.0
 		if int(_dash_left * 60.0) % 2 == 0:
 			_spawn_afterimage()
 		return
@@ -653,6 +658,7 @@ func _melee_impact() -> void:
 	var m: Dictionary = _weapon["melee"]
 	var shape := str(m.get("shape", "arc"))
 	var hits := 0
+	var dealt := 0.0
 	var any_crit := false
 	for n in get_tree().get_nodes_in_group("enemies"):
 		if not (n is Node2D) or not is_instance_valid(n) or not n.has_method("take_damage"):
@@ -661,6 +667,7 @@ func _melee_impact() -> void:
 		if not _in_melee_box(e, shape, m):
 			continue
 		var roll := _roll_damage(share)
+		dealt += float(roll[0])
 		any_crit = any_crit or bool(roll[1])
 		var dir := (e.global_position - global_position).normalized()
 		e.call("take_damage", float(roll[0]), dir, float(m.get("knockback", 200.0)) * (1.0 if first else 0.35), bool(roll[1]))
@@ -671,6 +678,11 @@ func _melee_impact() -> void:
 	if first:
 		_spawn_smear(shape, m)
 	if hits > 0:
+		## Melee survival kit: heal a slice of the damage dealt, brief guard.
+		var ls := float(m.get("lifesteal", 0.0))
+		if ls > 0.0 and dealt > 0.0:
+			heal(dealt * ls)
+		_guard_left = maxf(_guard_left, float(m.get("guard_on_hit", 0.0)))
 		if first:
 			Juice.hitstop(0.05)
 		Juice.sfx("hit", -2.0)
@@ -755,6 +767,10 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.sfx("dash", -8.0)
 		return
 	var dmg := float(amount) * resist_mult
+	if is_melee():
+		dmg *= float((_weapon["melee"] as Dictionary).get("resist", 1.0))
+		if _guard_left > 0.0:
+			dmg *= 0.5
 	## Brace Plate — half damage on proc (full rate with block_affinity kits).
 	if randf() < GameState.block_chance():
 		dmg *= 0.5

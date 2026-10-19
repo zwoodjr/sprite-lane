@@ -39,6 +39,9 @@ var _fps_min := 9999
 var _fps_sum := 0.0
 var _fps_n := 0
 var _leave_at := 1
+var _stuck_frames := 0
+var _unstick_t := 0.0
+var _unstick_side := 1.0
 
 
 func _ready() -> void:
@@ -183,6 +186,14 @@ func _drive(delta: float) -> void:
 		if best:
 			var to := best.global_position - _p.global_position
 			mv = to.normalized() if to.length() > 12.0 else Vector2.ZERO
+			## Blocked by a prop? Slide around it for a moment.
+			if _unstick_t > 0.0:
+				_unstick_t -= delta
+				mv = mv.rotated(1.3 * _unstick_side)
+			elif _stuck_frames > 20:
+				_unstick_t = 0.6
+				_unstick_side = -_unstick_side
+				_stuck_frames = 0
 			if e and e.global_position.distance_to(_p.global_position) < 70.0:
 				TouchInput.pulse_dash()
 			TouchInput.move_vector = mv
@@ -190,15 +201,25 @@ func _drive(delta: float) -> void:
 	if e:
 		var to: Vector2 = e.global_position - _p.global_position
 		var d := to.length()
-		if melee and not low_hp:
-			## Close in and keep circling at swing distance.
-			if d > rng * 0.8:
-				mv = to.normalized().rotated(0.25 * sin(_t * 2.0))
+		if melee:
+			## Melee: close in (dash in to close gaps), swing, and dash OUT when
+			## something nearby winds up. Back off to recover when low.
+			var dash_ready: bool = float(_p.call("get_dash_cooldown_ratio")) <= 0.0
+			var threat := _winding_up_near(150.0)
+			if threat != null:
+				var away: Vector2 = (_p.global_position - threat.global_position).normalized()
+				mv = away.rotated(0.5)
+				if dash_ready:
+					TouchInput.pulse_dash()
+			elif low_hp and d < 260.0:
+				mv = -to.normalized().rotated(0.4 * sin(_t))
+			elif d > rng * 0.8:
+				mv = to.normalized()
+				if d < 240.0 and d > rng + 30.0 and dash_ready and not low_hp:
+					TouchInput.pulse_dash()
 			else:
-				mv = to.normalized().rotated(PI * 0.5) * 0.5
-			if d < 140.0 and e.get("_windup_left") > 0.0:
-				mv = -to.normalized()
-				TouchInput.pulse_dash()
+				## In reach: orbit slowly so swings keep landing.
+				mv = to.normalized().rotated(PI * 0.5) * 0.45
 		elif d < 110.0:
 			## Too close: run away and dash.
 			mv = -to.normalized().rotated(0.6)
@@ -215,6 +236,15 @@ func _drive(delta: float) -> void:
 	TouchInput.move_vector = mv
 
 
+func _winding_up_near(r: float) -> Node2D:
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(n): continue
+		var en := n as Node2D
+		if en.global_position.distance_to(_p.global_position) < r and float(en.get("_windup_left")) > 0.0:
+			return en
+	return null
+
+
 func _wander_dir(delta: float) -> Vector2:
 	_wander_t -= delta
 	if _wander_t <= 0.0:
@@ -226,7 +256,11 @@ func _wander_dir(delta: float) -> Vector2:
 func _extra(delta: float) -> void:
 	_min_hp = min(_min_hp, _p.hp)
 	if _p.get("_reload_left") > 0.0: _reload_s += delta
-	if TouchInput.move_vector.length() > 0.5 and _p.global_position.distance_to(_last_pos) < 0.3: _stuck_s += delta
+	if TouchInput.move_vector.length() > 0.5 and _p.global_position.distance_to(_last_pos) < 0.3:
+		_stuck_s += delta
+		_stuck_frames += 1
+	else:
+		_stuck_frames = 0
 	_last_pos = _p.global_position
 	_abil_t -= delta
 	var e := _nearest("enemies")

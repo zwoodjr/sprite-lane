@@ -43,6 +43,10 @@ static func weapon_for_character(char_id: String) -> Dictionary:
 ##   projectile    — bullet look: rocket / slug / tracer / smg / pistol
 ##   melee         — {shape: arc|line, ...}: swing instead of shooting; damage is
 ##                   applied once per swing at the impact moment (windup seconds).
+##                   Melee survival kit: lifesteal (fraction of damage dealt healed),
+##                   resist (damage taken ×), guard_on_hit (seconds of half damage
+##                   after a swing lands). A dash ends with the swing ready
+##                   (dash-cancel into swing).
 static func _weapon_table() -> Dictionary:
 	return {
 		CharacterDefs.ASH_ROOK_ID: {
@@ -103,8 +107,9 @@ static func _weapon_table() -> Dictionary:
 			"trigger_range": 70.0,
 			"muzzle": Vector2(14, -4),
 			"melee": {
-				"shape": "arc", "arc_deg": 120.0, "radius": 70.0,
+				"shape": "arc", "arc_deg": 140.0, "radius": 80.0,
 				"windup": 0.16, "knockback": 420.0, "shake": 0.14,
+				"lifesteal": 0.10, "resist": 0.75, "guard_on_hit": 0.5,
 				"smear": Color(1.0, 0.85, 0.7),
 			},
 			"recoil": 0.0,
@@ -126,8 +131,9 @@ static func _weapon_table() -> Dictionary:
 			"trigger_range": 150.0,
 			"muzzle": Vector2(14, 0),
 			"melee": {
-				"shape": "line", "length": 140.0, "width": 30.0,
+				"shape": "line", "length": 140.0, "width": 34.0,
 				"windup": 0.1, "knockback": 240.0, "shake": 0.05,
+				"lifesteal": 0.06, "resist": 0.85, "guard_on_hit": 0.3,
 				"smear": Color(1.0, 0.55, 0.4),
 			},
 			"recoil": 0.0,
@@ -174,8 +180,9 @@ static func _weapon_table() -> Dictionary:
 			"trigger_range": 70.0,
 			"muzzle": Vector2(12, 0),
 			"melee": {
-				"shape": "arc", "arc_deg": 80.0, "radius": 65.0,
-				"windup": 0.05, "knockback": 140.0, "shake": 0.0,
+				"shape": "arc", "arc_deg": 100.0, "radius": 72.0,
+				"windup": 0.05, "knockback": 160.0, "shake": 0.0,
+				"lifesteal": 0.12, "resist": 0.8, "guard_on_hit": 0.35,
 				"alternate_deg": 22.0,
 				"smear": Color(0.75, 0.9, 1.0),
 			},
