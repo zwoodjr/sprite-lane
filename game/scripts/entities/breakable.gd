@@ -76,7 +76,11 @@ static func _spawn_pickup(parent: Node, pos: Vector2) -> void:
 	var pickup: Area2D = PickupScene.instantiate()
 	parent.add_child(pickup)
 	pickup.global_position = pos
-	pickup.call("setup", PowerupDefs.random_powerup())
+	## Some crate buffs are special-ammo cans instead (Phase 4).
+	if randf() < UpgradeDefs.AMMO_CRATE_SHARE:
+		pickup.call("setup", RunFx.ammo_def(RunFx.random_ammo_id()))
+	else:
+		pickup.call("setup", PowerupDefs.random_powerup())
 
 
 func _break_open() -> void:

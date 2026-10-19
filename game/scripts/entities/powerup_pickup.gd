@@ -17,6 +17,9 @@ func setup(powerup: Dictionary) -> void:
 		label = $Label
 	if sprite and powerup.has("sprite"):
 		sprite.texture = load(str(powerup["sprite"])) as Texture2D
+		## Big HD art (special ammo cans) is scaled to a world size.
+		if powerup.has("sprite_world") and sprite.texture:
+			sprite.scale = Vector2.ONE * (float(powerup["sprite_world"]) / float(sprite.texture.get_width()))
 	if label:
 		label.text = str(powerup.get("name", "Boost"))
 		label.add_theme_color_override("font_color", powerup.get("color", Color.WHITE))

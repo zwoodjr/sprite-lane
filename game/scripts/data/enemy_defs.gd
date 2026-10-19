@@ -7,6 +7,8 @@ extends RefCounted
 const TIER_NORMAL := 1
 const TIER_MID := 2
 const TIER_FINAL := 3
+## Mechanical mobs — Bolt Juno's Short Circuit hits these hardest.
+const MACHINE_IDS := ["iron_horse", "coil_spider", "scrap_hound", "fusion_golem", "dread_naught", "mech_wyrm", "mech_wyrm_b", "cyber_juggernaut"]
 
 
 static func all_kinds() -> Array[Dictionary]:

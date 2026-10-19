@@ -40,6 +40,21 @@ var _hit_anim_cd: float = 0.0
 var body_scale: float = 1.0
 ## 1 normal · 2 elite · 3 boss (off-screen arrow size, loot).
 var tier: int = 1
+## Mechanical mob (Short Circuit bonus when stunned).
+var machine: bool = false
+## Status effects (Phase 4): id -> {time, value}. poison / burn (value = dps),
+## stun, slow (value = speed multiplier), mark (value = damage-taken mult).
+var _status: Dictionary = {}
+var _dot_t: float = 0.0
+## Rubble Wall: briefly after a big knockback this mob smashes into others.
+var _rubble_left: float = 0.0
+var _rubble_hit: Array = []
+const STATUS_TINT := {
+	"stun": Color(1.25, 1.2, 0.6), "burn": Color(1.3, 0.8, 0.55), "poison": Color(0.75, 1.2, 0.6),
+	"slow": Color(0.7, 0.95, 1.35), "mark": UpgradeDefs.MARK_TINT,
+}
+const STATUS_ORDER := ["stun", "mark", "burn", "poison", "slow"]
+const RUBBLE_KNOCK := 150.0
 
 @onready var body: Sprite2D = $Body
 @onready var hp_bar: ProgressBar = $HpBar
@@ -97,6 +112,7 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	_def = KINDS[kind]
 	body_scale = float(_def.get("scale", 1.0))
 	tier = int(_def.get("tier", 1))
+	machine = kind in EnemyDefs.MACHINE_IDS
 	max_hp = float(_def["hp"]) * hp_mult
 	hp = max_hp
 	damage = float(_def["damage"]) * dmg_mult
@@ -263,7 +279,24 @@ func _physics_process(delta: float) -> void:
 	_fire_cd = maxf(0.0, _fire_cd - delta)
 	_distract_left = maxf(0.0, _distract_left - delta)
 	_hit_anim_cd = maxf(0.0, _hit_anim_cd - delta)
+	_tick_status(delta)
+	if _dead:
+		return
+	if _rubble_left > 0.0:
+		_tick_rubble(delta)
 	_player = get_tree().get_first_node_in_group("player") as Node2D
+	## Stunned, or the hero vanished (Nyx's Back Way Out): no attacks, drift.
+	var hidden := _player != null and _player.has_method("is_hidden") and bool(_player.call("is_hidden"))
+	if has_status("stun") or hidden:
+		_cancel_attack()
+		var drift := Vector2.ZERO
+		if hidden and not has_status("stun") and _player:
+			drift = (global_position - _player.global_position).normalized().orthogonal() * speed * 0.3 * _strafe_sign
+		velocity = velocity.move_toward(drift, 900.0 * delta) + _knock
+		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
+		move_and_slide()
+		_update_anim(false)
+		return
 	if _player == null:
 		velocity = velocity.move_toward(Vector2.ZERO, 600.0 * delta)
 		move_and_slide()
@@ -276,12 +309,8 @@ func _physics_process(delta: float) -> void:
 	if _distract_left > 0.0:
 		velocity = velocity.move_toward(dir.orthogonal() * speed * 0.35, 700.0 * delta)
 		move_and_slide()
-		if body:
-			body.modulate = Color(1.15, 1.05, 0.7)
 		_update_anim(false)
 		return
-	elif body:
-		body.modulate = Color.WHITE
 
 	## Wind-up in progress: hold still and telegraph.
 	if _windup_left > 0.0:
@@ -309,7 +338,7 @@ func _physics_process(delta: float) -> void:
 
 	if _lunge_left > 0.0:
 		_lunge_left -= delta
-		velocity = _lunge_dir * speed * LUNGE_SPEED_MULT
+		velocity = _lunge_dir * speed * LUNGE_SPEED_MULT * _slow_mult()
 		move_and_slide()
 		## Enemies don't collide with the player layer, so test contact by
 		## distance after the move: player radius (14) + body half-width + slack.
@@ -320,7 +349,7 @@ func _physics_process(delta: float) -> void:
 			_knock = -_lunge_dir * 160.0
 		return
 
-	var chase := speed
+	var chase := speed * _slow_mult()
 	if _player.has_method("get_active_buffs") and (_player.get_active_buffs() as Dictionary).has("quiet") and dist > 220.0:
 		chase *= 0.75
 	var pref := _pref_range()
@@ -440,9 +469,11 @@ func _fire_from(origin: Vector2, dir: Vector2, spd: float, dmg: float) -> void:
 	get_tree().current_scene.add_child(bullet)
 
 ## knock < 0 → default bullet knockback. crit → bigger amber damage number.
-func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float = -1.0, crit: bool = false) -> void:
+## num_color (alpha > 0) tints the number (status ticks).
+func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float = -1.0, crit: bool = false, num_color: Color = Color(0, 0, 0, 0)) -> void:
 	if _dead:
 		return
+	amount *= damage_taken_mult()
 	hp -= amount
 	if hp_bar:
 		hp_bar.visible = true
@@ -451,12 +482,18 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 	if _hit_anim_cd <= 0.0 and _anim.has_state("hit") and not (_anim.is_busy() or _windup_left > 0.0 or _lunge_left > 0.0):
 		_anim.play("hit")
 		_hit_anim_cd = 0.35
-	Juice.damage_number(global_position + Vector2(0, -26), amount, crit)
-	Juice.sfx("hit", -8.0)
+	if num_color.a > 0.0:
+		Juice.damage_number(global_position + Vector2(0, -26), amount, false, num_color)
+	else:
+		Juice.damage_number(global_position + Vector2(0, -26), amount, crit)
+		Juice.sfx("hit", -8.0)
 	if from_dir.length() > 0.01:
 		var resist := 0.35 if _archetype() == "brute" else 1.0
 		var k := 220.0 if knock < 0.0 else knock
 		_knock += from_dir.normalized() * k * resist
+		if k * resist >= RUBBLE_KNOCK and GameState.run_rank("rubble_wall") > 0:
+			_rubble_left = 0.35
+			_rubble_hit.clear()
 	if hp <= 0.0:
 		_die()
 
@@ -464,8 +501,10 @@ func _die() -> void:
 	_dead = true
 	remove_from_group("enemies")
 	var range_v: Vector2i = _def.get("scrap", Vector2i(1, 3))
-	var scrap := randi_range(range_v.x, range_v.y)
+	var scrap := int(round(float(randi_range(range_v.x, range_v.y)) * GameState.run_scrap_mult()))
 	GameState.kills += 1
+	GameState.note_kill(kind)
+	_status.clear()
 	## Loot pops out and magnets to the hero: scrap bolts + Dust-shard XP,
 	## sometimes a small health tonic (more often from elites/bosses).
 	var parent := get_parent()
@@ -474,6 +513,9 @@ func _die() -> void:
 	LootDrop.spawn_burst(parent, global_position, "xp", clampi(xp / 4 + 1, 1, 4), float(xp))
 	if randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)
+	## Rare special-ammo can (more likely from elites / bosses).
+	if randf() < float(UpgradeDefs.AMMO_DROP_CHANCE[clampi(tier, 1, 3) - 1]):
+		RunFx.spawn_ammo_pickup(parent, global_position + Vector2(randf_range(-20, 20), 10))
 	Juice.sfx("enemy_die", -2.0)
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
@@ -496,3 +538,103 @@ func _die() -> void:
 	tw.tween_interval(dur * 0.85)
 	tw.tween_property(self, "modulate:a", 0.0, dur * 0.15 + 0.1)
 	tw.tween_callback(queue_free)
+
+
+## =============================================================================
+## Status effects (upgrades, special ammo, abilities)
+
+func apply_status(id: String, time: float, value: float = 0.0) -> void:
+	if _dead:
+		return
+	var cur: Dictionary = _status.get(id, {})
+	var v := value
+	if id == "slow":
+		## Slow keeps the strongest (lowest) multiplier.
+		v = minf(value, float(cur.get("value", 1.0))) if cur.size() > 0 else value
+	else:
+		v = maxf(value, float(cur.get("value", 0.0)))
+	_status[id] = {"time": maxf(time, float(cur.get("time", 0.0))), "value": v}
+	if id == "stun":
+		_cancel_attack()
+
+func has_status(id: String) -> bool:
+	return _status.has(id)
+
+func status_value(id: String, default: float = 0.0) -> float:
+	return float((_status.get(id, {}) as Dictionary).get("value", default))
+
+func _cancel_attack() -> void:
+	_windup_left = 0.0
+	_lunge_left = 0.0
+	if _warn:
+		_warn.color.a = 0.0
+	if _tele:
+		_tele.visible = false
+
+func _slow_mult() -> float:
+	return status_value("slow", 1.0) if has_status("slow") else 1.0
+
+## Marked (Vesper / Quill) and Short Circuit (Juno: stunned machines) bonuses.
+func damage_taken_mult() -> float:
+	var m := 1.0
+	if has_status("mark"):
+		m *= status_value("mark", 1.0)
+	if has_status("stun") and GameState.run_rank("short_circuit") > 0:
+		m *= float(GameState.up("short_circuit", "machine" if machine else "other", 1.0))
+	return m
+
+func _tick_status(delta: float) -> void:
+	if _status.is_empty():
+		_apply_status_tint()
+		return
+	for id in _status.keys():
+		_status[id]["time"] = float(_status[id]["time"]) - delta
+		if float(_status[id]["time"]) <= 0.0:
+			_status.erase(id)
+	_dot_t += delta
+	if _dot_t >= UpgradeDefs.POISON_TICK:
+		_dot_t = 0.0
+		var dps := 0.0
+		var col := Color(0.6, 1.0, 0.45)
+		if has_status("burn"):
+			dps += status_value("burn")
+			col = Color(1.0, 0.6, 0.3)
+		if has_status("poison"):
+			dps += status_value("poison")
+		if dps > 0.0:
+			take_damage(dps * UpgradeDefs.POISON_TICK, Vector2.ZERO, 0.0, false, col)
+	_apply_status_tint()
+
+func _apply_status_tint() -> void:
+	if body == null:
+		return
+	var c := Color.WHITE
+	if _distract_left > 0.0:
+		c = Color(1.15, 1.05, 0.7)
+	for id in STATUS_ORDER:
+		if _status.has(id):
+			c = STATUS_TINT[id]
+			break
+	body.modulate = c
+
+## Rubble Wall: a mob flying from a big knockback smashes the ones it meets.
+func _tick_rubble(delta: float) -> void:
+	_rubble_left -= delta
+	if _knock.length() < 60.0:
+		return
+	var r := float(GameState.up("rubble_wall", "radius", 46.0)) * body_scale
+	var p := get_tree().get_first_node_in_group("player")
+	var dmg := float(GameState.up("rubble_wall", "damage", 14.0)) * (float(p.get("damage_mult")) if p else 1.0)
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if n == self or n in _rubble_hit or not is_instance_valid(n):
+			continue
+		var o := n as Node2D
+		if o.global_position.distance_to(global_position) > r:
+			continue
+		_rubble_hit.append(o)
+		o.call("take_damage", dmg, _knock.normalized(), 120.0)
+		take_damage(dmg * 0.5, Vector2.ZERO, 0.0)
+		Juice.dust_puff(o.global_position, 6)
+		Juice.shake(0.05)
+		if _dead:
+			return

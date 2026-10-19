@@ -22,6 +22,10 @@ var _fire_anim: float = 0.0
 var _sprite: Sprite2D
 var _hover_frames: Array[Texture2D] = []
 var _fire_frames: Array[Texture2D] = []
+## >0: temporary drone (Helm's DRONE call) that leaves after this many seconds.
+var temp_left: float = -1.0
+## Scrap Drone (non-Helm heroes) gets a brass tint so it reads as salvage.
+var tint: Color = Color.WHITE
 
 
 func setup(player: Node2D, slot: int, weapon: Dictionary) -> void:
@@ -54,6 +58,9 @@ func _ready() -> void:
 	_fire_frames = _slice(FIRE_TEX, 2)
 	if _hover_frames.size() > 0:
 		_sprite.texture = _hover_frames[0]
+	_sprite.modulate = tint
+	if temp_left > 0.0:
+		Juice.burst(global_position, Color(0.5, 1.0, 0.85), 12, 120.0, 0.4)
 	var shadow := Polygon2D.new()
 	var pts := PackedVector2Array()
 	for i in range(12):
@@ -92,6 +99,13 @@ func _physics_process(delta: float) -> void:
 		return
 	_t += delta
 	_cd = maxf(0.0, _cd - delta)
+	if temp_left > 0.0:
+		temp_left -= delta
+		if temp_left <= 0.0:
+			Juice.burst(global_position, Color(0.5, 1.0, 0.85), 10, 100.0, 0.35)
+			queue_free()
+			return
+		_sprite.modulate.a = 0.5 + 0.5 * absf(sin(_t * 10.0)) if temp_left < 1.0 else 1.0
 	_fire_anim = maxf(0.0, _fire_anim - delta)
 	var want := _player.global_position + _slot_offset() + Vector2(0, sin(_t * 3.0 + _slot) * 3.0)
 	global_position = global_position.lerp(want, clampf(delta * 8.0, 0.0, 1.0))
@@ -154,12 +168,17 @@ func _on_screen(world_pos: Vector2) -> bool:
 
 
 func _fire() -> void:
-	_cd = _interval
+	## Wingman / DRONE call overclock speed every drone up.
+	var rate := float(_player.call("drone_rate_mult")) if _player.has_method("drone_rate_mult") else 1.0
+	_cd = _interval / maxf(0.2, rate)
 	_fire_anim = 0.12
 	var aim := (_target.global_position - global_position).normalized()
 	var dmg := _damage * float(_player.get("damage_mult"))
 	var bullet: Area2D = BulletScene.instantiate()
 	bullet.setup(global_position + aim * 14.0, aim, 900.0, dmg, true, _player, 0.6, 0.0, 0.0)
 	bullet.set("style", "drone")
+	bullet.set("src_tag", "drone")
+	if _player.has_method("special_ammo"):
+		bullet.set("ammo", str(_player.call("special_ammo")))
 	get_tree().current_scene.add_child(bullet)
 	Juice.sfx("shot", -12.0)

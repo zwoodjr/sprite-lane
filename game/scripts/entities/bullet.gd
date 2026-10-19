@@ -14,6 +14,17 @@ var splash_mult: float = 0.5
 ## Look: rocket / slug / tracer / smg / pistol / drone (player); enemy shots ignore it.
 var style: String = "pistol"
 var crit: bool = false
+## Phase 4: tag for the hero's hit pipeline (main / drone / chain / vial),
+## pierce + ricochet counts, special-ammo look, Vesper's vial burst.
+var src_tag: String = "main"
+var pierce_left: int = 0
+var pierce_falloff: float = 0.8
+var bounces_left: int = 0
+var bounce_mult: float = 0.6
+var bounce_range: float = 220.0
+var ammo: String = ""
+var vial: bool = false
+var _hit_set: Array = []
 
 ## Per-style look: sprite tint/scale, trail colour/width/length, glow texture.
 const STYLES := {
@@ -23,6 +34,7 @@ const STYLES := {
 	"smg": {"color": Color(1.0, 0.9, 0.55), "scale": Vector2(0.55, 0.55), "trail": 1.5, "len": 3, "tex": ""},
 	"pistol": {"color": Color(1.0, 0.95, 0.75), "scale": Vector2(0.8, 0.8), "trail": 2.0, "len": 4, "tex": ""},
 	"drone": {"color": Color(0.45, 1.0, 0.85), "scale": Vector2(0.6, 0.6), "trail": 1.5, "len": 4, "tex": ""},
+	"vial": {"color": Color(0.55, 1.0, 0.3), "scale": Vector2(0.42, 0.42), "trail": 5.0, "len": 9, "tex": "res://assets/sprites/pickups/tonic_small.png", "spin": 14.0},
 }
 var _smoke: CPUParticles2D
 
@@ -77,7 +89,14 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	if sprite and sprite.texture == null:
 		sprite.texture = load("res://assets/sprites/props/bullet.png")
-	var look: Dictionary = STYLES.get(style, STYLES["pistol"]) if from_player else {}
+	var look: Dictionary = (STYLES.get(style, STYLES["pistol"]) as Dictionary).duplicate() if from_player else {}
+	if from_player and ammo != "" and not vial and UpgradeDefs.AMMO.has(ammo):
+		## Special ammo: its own round + trail colour (rockets keep their body).
+		var a: Dictionary = UpgradeDefs.AMMO[ammo]
+		look["color"] = a["color"]
+		if style != "rocket":
+			look["tex"] = a["bullet"]
+			look["scale"] = Vector2(0.75, 0.75)
 	var col: Color = look.get("color", Color(1.0, 0.88, 0.4)) if from_player else Color(1.0, 0.32, 0.22)
 	var glow := CanvasItemMaterial.new()
 	glow.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -134,6 +153,8 @@ func _physics_process(delta: float) -> void:
 	if _arm_left > 0.0:
 		_arm_left -= delta
 	global_position += direction * speed * delta
+	if sprite and from_player and STYLES.has(style) and (STYLES[style] as Dictionary).has("spin"):
+		sprite.rotation += float(STYLES[style]["spin"]) * delta
 	_trail.add_point(global_position)
 	var max_pts := int((STYLES.get(style, {}) as Dictionary).get("len", 5)) if from_player else 7
 	while _trail.get_point_count() > max_pts:
@@ -162,9 +183,23 @@ func _on_body_entered(body: Node2D) -> void:
 
 	if from_player:
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
-			## Enemy signature: (float, Vector2 knock dir)
-			body.take_damage(damage, direction, -1.0, crit)
+			if body in _hit_set:
+				return
+			_hit_set.append(body)
+			## Through the hero's hit pipeline (on-hit upgrades / special ammo).
+			if source != null and is_instance_valid(source) and source.has_method("hit_enemy"):
+				source.call("hit_enemy", body, damage, direction, -1.0, crit, src_tag)
+			else:
+				body.take_damage(damage, direction, -1.0, crit)
 			_apply_splash(body)
+			if pierce_left > 0:
+				## Piercing Slugs: keep flying, a little weaker.
+				pierce_left -= 1
+				damage *= pierce_falloff
+				Juice.burst(global_position, Color(1, 0.85, 0.45), 4, 120.0, 0.2, 0.7)
+				return
+			if bounces_left > 0 and _bounce():
+				return
 			_impact(Color(1, 0.85, 0.45))
 		elif body.is_in_group("breakables") and body.has_method("take_damage"):
 			body.take_damage(damage)
@@ -217,8 +252,28 @@ func _apply_splash(primary: Node) -> void:
 		crate.take_damage(splash_dmg)
 
 
+## Ricochet Rounds: redirect to the nearest enemy not yet hit.
+func _bounce() -> bool:
+	var tree := get_tree()
+	if tree == null:
+		return false
+	var nxt := RunFx.nearest_enemy(tree, global_position, bounce_range, _hit_set)
+	if nxt == null:
+		return false
+	bounces_left -= 1
+	damage *= bounce_mult
+	direction = (nxt.global_position - global_position).normalized()
+	rotation = direction.angle()
+	lifetime = maxf(lifetime, bounce_range / maxf(speed, 1.0) + 0.1)
+	src_tag = "chain"
+	Juice.burst(global_position, Color(1, 0.9, 0.6), 6, 140.0, 0.2, 0.8)
+	return true
+
+
 func _impact(col: Color) -> void:
 	_hit = true
+	if vial and from_player and source != null and is_instance_valid(source) and source.has_method("vial_burst"):
+		source.call("vial_burst", global_position)
 	if splash_radius > 0.0 and from_player:
 		## Small blast ring for the rocket splash.
 		Juice.burst(global_position, Color(1.0, 0.55, 0.2), 16, 260.0, 0.3, 1.6)
@@ -232,6 +287,8 @@ func _impact(col: Color) -> void:
 
 func _fizzle() -> void:
 	_hit = true
+	if vial and from_player and source != null and is_instance_valid(source) and source.has_method("vial_burst"):
+		source.call("vial_burst", global_position)
 	_cleanup()
 
 

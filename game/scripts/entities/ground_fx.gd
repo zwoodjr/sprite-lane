@@ -1,0 +1,71 @@
+extends Node2D
+
+## Lingering ground patch spawned by upgrades / abilities (RunFx.ground):
+##   burn   — Firewalk trail: enemies standing in it burn (value = dps)
+##   heal   — Sanctuary puddle: the hero heals while inside (value = HP/s)
+##   poison — Vial Shot cloud: enemies inside are poisoned (value = dps)
+
+const TICK := 0.25
+const ART := {
+	"burn": {"path": "res://assets/sprites/fx/fx_firewalk.png", "n": 4, "fps": 10.0, "tint": Color(1, 1, 1, 0.95), "size_k": 1.6},
+	"heal": {"path": "res://assets/sprites/fx/fx_heal_puddle.png", "n": 2, "fps": 4.0, "tint": Color(1, 1, 1, 0.85), "size_k": 2.2},
+	"poison": {"path": "res://assets/sprites/fx/fx_heal_puddle.png", "n": 2, "fps": 4.0, "tint": Color(0.75, 1.3, 0.35, 0.8), "size_k": 2.2},
+}
+
+var mode: String = "burn"
+var radius: float = 30.0
+var life: float = 2.5
+var value: float = 10.0
+var player: Node2D
+
+var _age: float = 0.0
+var _tick: float = 0.0
+var _sprite: Sprite2D
+var _frames: Array[Texture2D] = []
+var _fps: float = 8.0
+
+
+func _ready() -> void:
+	add_to_group("ground_fx")
+	z_index = -3
+	var art: Dictionary = ART.get(mode, ART["burn"])
+	_frames = RunFx.frames(str(art["path"]), int(art["n"]))
+	_fps = float(art["fps"])
+	_sprite = Sprite2D.new()
+	if not _frames.is_empty():
+		_sprite.texture = _frames[0]
+		var w := radius * float(art["size_k"])
+		_sprite.scale = Vector2.ONE * (w / float(_frames[0].get_width()))
+	_sprite.modulate = art["tint"]
+	if mode == "burn":
+		_sprite.offset = Vector2(0, -float(_frames[0].get_height()) * 0.35) if not _frames.is_empty() else Vector2.ZERO
+	add_child(_sprite)
+	_sprite.modulate.a = 0.0
+	var tw := _sprite.create_tween()
+	tw.tween_property(_sprite, "modulate:a", float((art["tint"] as Color).a), 0.12)
+
+
+func _physics_process(delta: float) -> void:
+	_age += delta
+	if not _frames.is_empty():
+		_sprite.texture = _frames[int(_age * _fps) % _frames.size()]
+	if _age > life - 0.3:
+		_sprite.modulate.a = maxf(0.0, (life - _age) / 0.3)
+	if _age >= life:
+		queue_free()
+		return
+	_tick -= delta
+	if _tick > 0.0:
+		return
+	_tick = TICK
+	match mode:
+		"heal":
+			if player and is_instance_valid(player) and player.is_in_group("player") \
+					and player.global_position.distance_to(global_position) <= radius + 14.0:
+				player.call("heal", value * TICK)
+		"burn":
+			for e in RunFx.enemies_in(get_tree(), global_position, radius):
+				e.call("apply_status", "burn", 1.2, value)
+		"poison":
+			for e in RunFx.enemies_in(get_tree(), global_position, radius):
+				e.call("apply_status", "poison", 2.0, value)
