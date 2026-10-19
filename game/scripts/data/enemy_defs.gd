@@ -11,6 +11,18 @@ const TIER_FINAL := 3
 const MACHINE_IDS := ["iron_horse", "coil_spider", "scrap_hound", "fusion_golem", "dread_naught", "mech_wyrm", "mech_wyrm_b", "cyber_juggernaut"]
 
 
+## Elite / boss roles (Part 3). These kinds never come from the random pools;
+## the match spawns them on the tier's elite / boss schedule (ModeDefs).
+const ROLE_KINDS := {"cyber_juggernaut": "elite", "dread_naught": "boss", "mutant_overlord": "boss"}
+const ELITE_KINDS: Array = ["cyber_juggernaut"]
+const BOSS_KINDS: Array = ["dread_naught", "mutant_overlord"]
+## Stat multipliers on top of the tier's enemy strength.
+const ROLE_STATS := {
+	"elite": {"hp": 2.2, "damage": 1.25, "speed": 1.0, "tier": 2},
+	"boss": {"hp": 5.0, "damage": 1.4, "speed": 0.9, "tier": 3},
+}
+
+
 static func all_kinds() -> Array[Dictionary]:
 	return [
 		## --- Tier 1 (normal) ---
@@ -49,7 +61,7 @@ static func all_kinds() -> Array[Dictionary]:
 static func ids_for_tier(tier: int) -> Array[String]:
 	var out: Array[String] = []
 	for k in all_kinds():
-		if int(k["tier"]) == tier:
+		if int(k["tier"]) == tier and not ROLE_KINDS.has(str(k["id"])):
 			out.append(str(k["id"]))
 	return out
 

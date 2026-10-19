@@ -29,6 +29,9 @@ var _window_index: int = 0          ## how many windows have opened
 var _pads_pinged_for: int = -1      ## phase index whose pads are already placed
 var _storm_left: float = -1.0       ## >=0 while the Dust storm rolls in
 var _storm_overlay: ColorRect
+## Elite / boss schedule (ModeDefs), in run seconds.
+var _next_elite_at: float = INF
+var _next_boss_at: float = INF
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -75,6 +78,12 @@ func _ready() -> void:
 		str(_mode.get("display_name", "")),
 	])
 	_match_time = 0.0
+	var tier := int(_mode.get("tier", 1))
+	var ts := GameState.timer_scale()
+	if tier >= ModeDefs.ELITE_FROM_TIER:
+		_next_elite_at = ModeDefs.ELITE_FIRST * ts
+	if tier >= ModeDefs.BOSS_FROM_TIER:
+		_next_boss_at = ModeDefs.BOSS_FIRST * ts
 	## Cheap event stub: one radio toast mid-lockout (no quest log).
 	_radio_ping_done = false
 	_radio_ping_at = 18.0 * GameState.timer_scale()
@@ -181,6 +190,7 @@ func _process(delta: float) -> void:
 		return
 	_match_time += delta
 	_update_spawns(delta)
+	_tick_specials()
 	if _storm_left >= 0.0:
 		_tick_storm(delta)
 		return
@@ -313,6 +323,45 @@ func _update_spawns(delta: float) -> void:
 		_spawn_accum = 0.0
 		_spawn_enemy()
 
+## Elites / bosses on the tier's schedule.
+func _tick_specials() -> void:
+	var ts := GameState.timer_scale()
+	if _match_time >= _next_elite_at:
+		_next_elite_at += ModeDefs.ELITE_EVERY * ts
+		var n := 2 if int(_mode.get("tier", 1)) >= ModeDefs.DOUBLE_ELITE_FROM_TIER else 1
+		for i in range(n):
+			spawn_special("elite")
+	if _match_time >= _next_boss_at:
+		_next_boss_at += ModeDefs.BOSS_EVERY * ts
+		spawn_special("boss")
+
+## Spawns an elite / boss just off screen (also used by events and tests).
+func spawn_special(role: String, kind: String = "") -> Node:
+	if not is_instance_valid(player):
+		return null
+	var k := kind
+	if k == "":
+		var pool: Array = EnemyDefs.BOSS_KINDS if role == "boss" else EnemyDefs.ELITE_KINDS
+		k = str(pool[randi() % pool.size()])
+	var ang := randf() * TAU
+	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
+	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var step := float(_mode.get("tl_step_size", 1.0))
+	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
+	var dmg_m := (1.0 + (float(tl["damage"]) - 1.0) * step) * float(_mode.get("enemy_damage", 1.0))
+	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	enemy.setup(spot, hp_m, dmg_m, 1.0, k)
+	enemy.call("set_role", role)
+	world.add_child(enemy)
+	var nm := str(EnemyDefs.get_kind(k).get("display_name", k))
+	if role == "boss":
+		hud.show_banner("BOSS", "%s is hunting you" % nm, UiTheme.DANGER)
+		Juice.sfx("threat_up")
+		Juice.shake(0.3)
+	else:
+		hud.show_toast("ELITE: %s inbound — it carries good gear" % nm, UiTheme.RUST)
+	return enemy
+
 func _spawn_enemy() -> void:
 	if not is_instance_valid(player):
 		return
@@ -387,6 +436,8 @@ func _cull_far_enemies() -> void:
 		if not (n is Node2D) or not is_instance_valid(n):
 			continue
 		var e := n as Node2D
+		if str(e.get("role")) != "":
+			continue
 		if e.global_position.distance_to(player.global_position) > 1100.0:
 			e.queue_free()
 			culled += 1

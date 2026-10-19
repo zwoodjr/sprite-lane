@@ -107,4 +107,5 @@ func _break_open() -> void:
 		Juice.float_text(pos + Vector2(0, -20), "+%d scrap" % scrap2, UiTheme.AMBER, 15)
 	else:
 		Juice.float_text(pos + Vector2(0, -18), "empty", Color(0.7, 0.65, 0.55), 13)
+	GearPickup.maybe_drop(get_tree().current_scene, pos, GearDefs.CRATE_DROP_CHANCE)
 	queue_free()

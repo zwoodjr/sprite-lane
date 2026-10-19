@@ -25,6 +25,15 @@ const LOOT_STEP := 0.1
 const LOOT_EVERY := 30.0
 ## Minimap ping / pads appear this long before a window opens.
 const PING_LEAD := 10.0
+## Elites / bosses (Part 3 + 5): from these tiers, on this schedule (seconds
+## of run time, scaled by fast timers). Two elites at once from DOUBLE_ELITE.
+const ELITE_FROM_TIER := 3
+const BOSS_FROM_TIER := 5
+const DOUBLE_ELITE_FROM_TIER := 8
+const ELITE_FIRST := 180.0
+const ELITE_EVERY := 120.0
+const BOSS_FIRST := 240.0
+const BOSS_EVERY := 300.0
 ## Dust storm: seconds of storm after the last chance closes before the wipe.
 const STORM_SECONDS := 3.0
 
