@@ -125,6 +125,9 @@ var _bell_cd: float = 0.0       ## Bellwether
 var _mayday_left: float = 0.0
 var _mayday_cd: float = 0.0
 var _rubble_cd: float = 0.0     ## Last Shift
+## Depth Update: plague exposure stage penalties (set by plague_system.gd, ≤ 0).
+var exposure_move: float = 0.0
+var exposure_rate: float = 0.0
 
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
@@ -196,13 +199,14 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 		+ float(_char.get("max_hp_bonus", 0)) \
 		+ float(_armor.get("flat_armor", 0)) * 0.5 \
 		+ GameState.starting_hp_bonus() \
-		+ float(rm.get("max_hp", 0.0))
+		+ float(rm.get("max_hp", 0.0)) \
+		+ GameState.tonic_fx("max_hp")
 	damage_mult = float(_char.get("damage_mult", 1.0)) \
 		* (1.0 + GameState.starting_damage_bonus()) \
 		* (1.0 + float(rm.get("damage", 0.0)))
 	move_mult = float(_char.get("move_speed_mult", 1.0)) \
 		* (1.0 + float(rm.get("move", 0.0))) \
-		* (1.0 + GameState.move_speed_bonus())
+		* (1.0 + GameState.move_speed_bonus() + GameState.tonic_fx("move"))
 	firerate_mult = (1.0 + float(rm.get("firerate", 0.0))) * (1.0 + GameState.gear_stat("firerate"))
 	if reset_ammo:
 		_ammo = _mag_size()
@@ -355,7 +359,7 @@ func is_attacking() -> bool:
 	return _attack_hold > 0.0
 
 func _current_speed() -> float:
-	var s := base_speed * move_mult * _buff_move()
+	var s := base_speed * move_mult * _buff_move() * (1.0 + exposure_move) * GameState.carry_speed_mult()
 	if _rush_left > 0.0:
 		s *= float(_ability.get("speed_mult", 1.3))
 	## Slightly slower while attacking so dodging is a choice, not automatic.
@@ -405,8 +409,8 @@ func _update_regen(delta: float) -> void:
 	if _oos_timer > 1.5 and hp < max_hp:
 		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta)
 		health_changed.emit(hp, max_hp)
-	## Gear regen (Vials etc.) ticks always.
-	var rg := GameState.gear_stat("regen")
+	## Gear regen (Vials etc.) and Mender's Draught tick always.
+	var rg := GameState.gear_stat("regen") + GameState.tonic_fx("regen")
 	if rg > 0.0 and hp < max_hp and hp > 0.0:
 		hp = minf(max_hp, hp + rg * delta)
 		health_changed.emit(hp, max_hp)
@@ -464,7 +468,7 @@ func _buff_firerate() -> float:
 		f *= float(_char.get("post_heal_firerate_mult", 1.0))
 	if _buffs.has("rapid"):
 		f *= 1.75
-	return f
+	return f * (1.0 + exposure_rate)
 
 func _tick_buffs(delta: float) -> void:
 	var changed := false
@@ -687,6 +691,9 @@ func _fire_ability() -> void:
 		"field_draught":
 			var amt := float(a.get("heal", 28.0))
 			heal(amt)
+			## Cinder's draught also burns the plague out of the blood.
+			if GameState.exposure > 0.0:
+				GameState.cleanse_exposure(MedicineDefs.CINDER_HEAL_CLEANSE)
 			_post_heal_left = float(_char.get("post_heal_duration", 0.0))
 			Juice.float_text(global_position + Vector2(0, -34), "+%d" % int(amt), UiTheme.TEAL, 22)
 			Juice.burst(global_position, UiTheme.TEAL, 18, 140.0, 0.6)
@@ -1298,6 +1305,9 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	## Dust Surge: enemies hit harder while it lasts.
 	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("enemies"):
 		dmg *= GameState.event_enemy_damage
+		## Plague Ward tonic: plague creatures hit softer.
+		if str(attacker.get("faction")) == EnemyDefs.PLAGUE:
+			dmg *= 1.0 - GameState.tonic_fx("plague_resist")
 	## Gear: armor resist; Plague Doctor (2) halves poison / Dust hazards.
 	dmg *= 1.0 - GameState.gear_stat("resist")
 	var hazard := attacker == null or not is_instance_valid(attacker) or not attacker.is_in_group("enemies")
@@ -1355,25 +1365,48 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		return
 	health_changed.emit(hp, max_hp)
 	if hp <= 0.0:
-		Juice.burst(global_position, Color(0.9, 0.3, 0.2), 30, 240.0, 0.7, 1.5)
-		Juice.hitstop(0.12)
-		remove_from_group("player")
-		died.emit()
-		set_physics_process(false)
-		_dead = true
-		_swing_hits_left = 0
-		_muzzle_flash.visible = false
-		body.modulate = Color.WHITE
-		_anim.play("death")
-		collision_layer = 0
-		_ability_pending = ""
-		for d in get_drones():
-			if is_instance_valid(d):
-				d.queue_free()
-		_drones.clear()
-		_temp_drones.clear()
-		if _orbit and is_instance_valid(_orbit):
-			_orbit.queue_free()
+		_go_down()
+
+## HP lost to sickness (plague exposure): no i-frames, no flinch.
+func drain(amount: float) -> void:
+	if _dead or hp <= 0.0 or amount <= 0.0:
+		return
+	hp -= amount
+	if hp <= 0.0:
+		if _last_rites:
+			_last_rites = false
+			hp = max_hp * float(GearDefs.SURVIVOR_SETS["cathedral_vestments"]["revive_frac"])
+			Juice.float_text(global_position + Vector2(0, -50), "LAST RITES", Color(1.0, 0.95, 0.7), 24)
+		elif _last_stitch_available:
+			_last_stitch_available = false
+			hp = 1.0
+			Juice.float_text(global_position + Vector2(0, -50), "LAST STITCH!", UiTheme.TEAL, 24)
+	health_changed.emit(hp, max_hp)
+	if hp <= 0.0:
+		_go_down()
+
+func _go_down() -> void:
+	if _dead:
+		return
+	Juice.burst(global_position, Color(0.9, 0.3, 0.2), 30, 240.0, 0.7, 1.5)
+	Juice.hitstop(0.12)
+	remove_from_group("player")
+	died.emit()
+	set_physics_process(false)
+	_dead = true
+	_swing_hits_left = 0
+	_muzzle_flash.visible = false
+	body.modulate = Color.WHITE
+	_anim.play("death")
+	collision_layer = 0
+	_ability_pending = ""
+	for d in get_drones():
+		if is_instance_valid(d):
+			d.queue_free()
+	_drones.clear()
+	_temp_drones.clear()
+	if _orbit and is_instance_valid(_orbit):
+		_orbit.queue_free()
 
 func heal(amount: float) -> void:
 	if hp <= 0.0 or amount <= 0.0:
@@ -1420,6 +1453,12 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 ## Field Notes (per-kind kills) and Double Cross (hits from behind).
 func _damage_vs(e: Node2D, src: String) -> float:
 	var m := 1.0
+	## Tonics: Firebrand (plague) / Spark (machines).
+	match str(e.get("faction")):
+		EnemyDefs.PLAGUE:
+			m *= 1.0 + GameState.tonic_fx("vs_plague")
+		EnemyDefs.MACHINE:
+			m *= 1.0 + GameState.tonic_fx("vs_machine")
 	var per := float(GameState.up("field_notes", "per_kill", 0.0))
 	if per > 0.0:
 		var k := int(GameState.run_kind_kills.get(str(e.get("kind")), 0))

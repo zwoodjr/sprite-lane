@@ -53,7 +53,7 @@ func set_last_chance(on: bool) -> void:
 ## Taking a hit while channeling knocks you off the pad's count.
 ## Dev quick-test timers shrink windows below 3 s, so shrink the channel too.
 func _need() -> float:
-	return CHANNEL_TIME if not GameState.fast_timers else 0.5
+	return (CHANNEL_TIME if not GameState.fast_timers else 0.5) * GameState.tonic_fx_mult("channel_mult")
 
 func reset_channel() -> void:
 	if _channel > 0.0 and not _fired:

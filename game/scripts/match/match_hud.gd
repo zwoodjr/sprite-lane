@@ -57,6 +57,16 @@ var _toast_box: VBoxContainer
 var _extract_prompt: Label
 var _vignette: TextureRect
 var _hint_label: Label
+## Depth Update E1: backpack, medicine, plague exposure, tonics drunk.
+var _pack_row: HBoxContainer
+var _pack_label: Label
+var _med_icon: TextureRect
+var _med_label: Label
+var _tonic_row: HBoxContainer
+var _expo_box: VBoxContainer
+var _expo_label: Label
+var _expo_bar: ProgressBar
+var _expo_col: Color = Color(0.55, 0.85, 0.35)
 
 var _hp_ratio: float = 1.0
 var _last_tl: int = 0
@@ -77,6 +87,7 @@ const ROTATING_HINTS := [
 
 func _ready() -> void:
 	layer = 10
+	add_to_group("hud")
 	root = Control.new()
 	root.name = "Root"
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -226,6 +237,7 @@ func _build() -> void:
 	_buff_row.add_theme_constant_override("separation", 6)
 	_buff_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_buff_row)
+	_build_depth(vb)
 
 	## Top-center: phase card
 	_phase_card = _panel(0.82)
@@ -360,6 +372,88 @@ func _layout() -> void:
 	_extract_prompt.size = Vector2(vp.x, 34)
 	_hint_label.position = Vector2(vp.x * 0.1, m.position.y + m.size.y - 22)
 	_hint_label.size = Vector2(vp.x * 0.8, 20)
+
+## Pack (weight / room), medicine count, tonics drunk, plague exposure meter.
+func _build_depth(vb: VBoxContainer) -> void:
+	_pack_row = HBoxContainer.new()
+	_pack_row.add_theme_constant_override("separation", 4)
+	_pack_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(_pack_row)
+	_pack_row.add_child(_icon(MedicineDefs.icon_path("backpack"), 22))
+	_pack_label = _label("PACK 0/8", 14, UiTheme.TEXT)
+	_pack_label.add_theme_font_override("font", UiTheme.font_button)
+	_pack_row.add_child(_pack_label)
+	_med_icon = _icon(MedicineDefs.icon_path("medicine"), 22)
+	_med_icon.visible = false
+	_pack_row.add_child(_med_icon)
+	_med_label = _label("", 14, Color(1.0, 0.55, 0.5))
+	_med_label.add_theme_font_override("font", UiTheme.font_button)
+	_pack_row.add_child(_med_label)
+	_tonic_row = HBoxContainer.new()
+	_tonic_row.add_theme_constant_override("separation", 2)
+	_tonic_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pack_row.add_child(_tonic_row)
+	_expo_box = VBoxContainer.new()
+	_expo_box.add_theme_constant_override("separation", 2)
+	_expo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_expo_box.visible = false
+	vb.add_child(_expo_box)
+	var er := HBoxContainer.new()
+	er.add_theme_constant_override("separation", 4)
+	er.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_expo_box.add_child(er)
+	er.add_child(_icon(MedicineDefs.icon_path("exposure"), 18))
+	_expo_label = _caption("PLAGUE 0%")
+	_expo_label.add_theme_color_override("font_color", _expo_col)
+	er.add_child(_expo_label)
+	_expo_bar = ProgressBar.new()
+	_expo_bar.custom_minimum_size = Vector2(BAR_W, 8)
+	_expo_bar.show_percentage = false
+	_expo_bar.max_value = MedicineDefs.EXPOSURE_MAX
+	_expo_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiTheme.skin_bar(_expo_bar, _expo_col)
+	_expo_box.add_child(_expo_bar)
+
+func _icon(path: String, px: float) -> TextureRect:
+	var t := TextureRect.new()
+	t.custom_minimum_size = Vector2(px, px)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ResourceLoader.exists(path):
+		t.texture = load(path)
+	return t
+
+func set_pack(weight: int, cap: int, medicine: int) -> void:
+	if _pack_label == null:
+		return
+	var txt := "PACK %d/%d" % [weight, cap]
+	if _pack_label.text != txt:
+		_pack_label.text = txt
+		_pack_label.add_theme_color_override("font_color", UiTheme.RUST if weight >= cap else UiTheme.TEXT)
+	_med_icon.visible = medicine > 0
+	_med_label.text = "×%d" % medicine if medicine > 0 else ""
+
+func set_tonics(ids: Array) -> void:
+	if _tonic_row == null:
+		return
+	for c in _tonic_row.get_children():
+		c.queue_free()
+	for t in ids:
+		_tonic_row.add_child(_icon(MedicineDefs.icon_path(str(t)), 20))
+
+func set_exposure(v: float, stage: int) -> void:
+	if _expo_box == null:
+		return
+	_expo_box.visible = true
+	_expo_bar.value = v
+	var nm := "" if stage < 0 else " · " + str(MedicineDefs.STAGES[stage]["name"]).to_upper()
+	_expo_label.text = "PLAGUE %d%%%s" % [int(round(v)), nm]
+	var col := _expo_col if stage < 1 else (Color(0.9, 0.85, 0.3) if stage == 1 else UiTheme.DANGER)
+	if _expo_bar.get_meta("c", Color.BLACK) != col:
+		_expo_bar.set_meta("c", col)
+		UiTheme.skin_bar(_expo_bar, col)
+		_expo_label.add_theme_color_override("font_color", col)
 
 func _flash_hit() -> void:
 	if _hit_flash == null:

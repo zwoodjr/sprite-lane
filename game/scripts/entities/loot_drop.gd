@@ -111,6 +111,7 @@ func _collect() -> void:
 		"tonic":
 			if _player.has_method("heal"):
 				_player.call("heal", value)
+			GameState.cleanse_exposure(MedicineDefs.TONIC_PICKUP_CLEANSE)
 			Juice.float_text(_player.global_position + Vector2(0, -36), "+%d" % int(value), UiTheme.TEAL, 16)
 			Juice.sfx("pickup", -4.0)
 	queue_free()

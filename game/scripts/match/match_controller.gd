@@ -35,6 +35,8 @@ var _next_boss_at: float = INF
 ## In-run events (Part 8) + Pad Heat guards for the next window.
 var events: Node
 var _pad_guards: int = 0
+## Depth Update E1: medicine crates, plague fog, exposure.
+var plague: Node
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -79,6 +81,11 @@ func _ready() -> void:
 	events.set_script(load("res://scripts/match/run_events.gd"))
 	add_child(events)
 	events.call("setup", self, player, world, hud)
+	plague = Node.new()
+	plague.name = "PlagueSystem"
+	plague.set_script(load("res://scripts/match/plague_system.gd"))
+	add_child(plague)
+	plague.call("setup", self, player, world, hud)
 	_phase_index = 0
 	_start_phase(0)
 	hud.show_banner("DROP IN", "%s · %s" % [
@@ -327,6 +334,8 @@ func _update_spawns(delta: float) -> void:
 	var interval := 3.8 / maxf(0.4, spawn_mult)
 	if _extract_open:
 		interval *= 0.7
+	if GameState.smells_medicine():
+		interval *= MedicineDefs.SMELL_SPAWN_MULT
 	_spawn_accum += delta
 	if _spawn_accum >= interval:
 		_spawn_accum = 0.0

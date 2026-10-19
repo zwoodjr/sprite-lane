@@ -258,6 +258,10 @@ func _refresh() -> void:
 		LoadoutStubs.default_armor()["set_name"],
 		pet["name"],
 	]
+	var tn: PackedStringArray = []
+	for t in GameState.tonic_loadout:
+		tn.append("%s (%d)" % [MedicineDefs.item_name(str(t)), GameState.tonic_count(str(t))])
+	_loadout.text += "\nTonics: %s" % (", ".join(tn) if not tn.is_empty() else "none — brew at the Hangar's BREW tab")
 	for pid in _pet_tabs.keys():
 		var pb: Button = _pet_tabs[pid]
 		var on: bool = pid == GameState.selected_pet_id

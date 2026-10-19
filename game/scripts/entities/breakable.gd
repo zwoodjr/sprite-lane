@@ -94,6 +94,9 @@ func _break_open() -> void:
 	Juice.shake(0.1)
 	Juice.burst(pos, Color(0.7, 0.5, 0.3), 16, 200.0, 0.5, 1.2)
 	broken.emit(pos)
+	## Depth Update: an Ashroot sometimes grows out of the wreck.
+	if randf() < MedicineDefs.CRATE_HERB_CHANCE:
+		HaulPickup.spawn(get_parent(), pos, "herb")
 	## Outcomes: power-up (~20% + Hangar loot quality) · scrap-only · empty.
 	## Soft-cap so empty crates stay common (player preference).
 	var buff_chance := clampf(powerup_chance + GameState.loot_quality_bonus(), 0.05, 0.35)

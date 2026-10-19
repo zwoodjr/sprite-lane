@@ -29,6 +29,12 @@ func _ready() -> void:
 func _run() -> void:
 	## Tests buy, equip and bank freely — put the player's save back afterwards.
 	var save_backup := FileAccess.get_file_as_string(GameState.SAVE_PATH) if FileAccess.file_exists(GameState.SAVE_PATH) else ""
+	## `-- only=depth_e1`: run just one section (fast iteration), then finish.
+	for a in OS.get_cmdline_user_args():
+		if str(a).begins_with("only="):
+			await call("_test_" + str(a).substr(5))
+			_finish(save_backup)
+			return
 	## 1. Load everything
 	for path in _walk("res://scripts") + _walk("res://scenes"):
 		if not (path.ends_with(".gd") or path.ends_with(".tscn")):
@@ -121,6 +127,11 @@ func _run() -> void:
 	await _test_quests_events()
 	var keep_best := GameState.best_tier_extracted
 	await _test_tiers()
+	var keep_depth := [GameState.ingredients.duplicate(), GameState.tonics.duplicate(), GameState.tonic_loadout.duplicate()]
+	await _test_depth_e1()
+	GameState.ingredients = keep_depth[0]
+	GameState.tonics = keep_depth[1]
+	GameState.tonic_loadout = keep_depth[2]
 	GameState.best_tier_extracted = keep_best
 	GameState.selected_mode_id = "drift"
 	GameState.daily = keep_q[0]
@@ -140,6 +151,10 @@ func _run() -> void:
 		if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
 			n.queue_free()
 	await get_tree().process_frame
+	_finish(save_backup)
+
+
+func _finish(save_backup: String) -> void:
 	if save_backup != "":
 		var f := FileAccess.open(GameState.SAVE_PATH, FileAccess.WRITE)
 		if f:
@@ -307,7 +322,7 @@ func _test_hangar() -> void:
 	get_tree().root.add_child(h)
 	for i in range(3):
 		await get_tree().process_frame
-	for t in ["camp", "survivors", "kennel", "stash"]:
+	for t in ["camp", "survivors", "kennel", "brew", "stash"]:
 		h.call("show_tab", t)
 		await get_tree().process_frame
 	for id in HangarDefs.all_ids():
@@ -755,3 +770,156 @@ func _test_tiers() -> void:
 			await get_tree().process_frame
 	GameState.fast_timers = false
 	print("TIERS_OK")
+
+
+## Depth E1: old saves, brewing, tonic slots + effects, backpack + medicine,
+## banking / losing the pack, plague exposure, and a short Blight match.
+func _test_depth_e1() -> void:
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true})
+	_check(GameState.ingredients.is_empty() and GameState.tonics.is_empty() and GameState.tonic_loadout.is_empty(), "e1 old save defaults")
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "ingredients": {"herb": 3, "bogus": 2, "dust_shard": -4},
+		"tonics": {"menders": 2, "x": 1}, "tonic_loadout": ["menders", "menders", "nope"]})
+	_check(GameState.ingredients == {"herb": 3} and GameState.tonics == {"menders": 2} and GameState.tonic_loadout == ["menders"], "e1 save sanitised")
+	GameState.camp.clear()
+	GameState.loadouts.clear()
+	GameState.selected_character_id = "ash_rook"
+	GameState._compute_gear()
+	## Brewing + slots.
+	GameState.ingredients = {"herb": 5, "plague_gland": 2}
+	GameState.tonics = {}
+	GameState.tonic_loadout = []
+	_check(GameState.can_brew("menders") and not GameState.can_brew("spark"), "e1 can_brew")
+	_check(GameState.brew("menders") and GameState.tonic_count("menders") == 1 and GameState.ingredient_count("herb") == 2, "e1 brew")
+	_check(not GameState.brew("menders"), "e1 brew needs ingredients")
+	GameState.camp[HangarDefs.station_id("sister_cinder")] = 4
+	GameState.ingredients["herb"] = 2
+	_check(GameState.brew("ward") and GameState.tonic_count("ward") == 2, "e1 double brew at rank 4")
+	GameState.camp.clear()
+	_check(GameState.tonic_slot_count() == 1, "e1 one slot")
+	GameState.toggle_tonic("menders")
+	GameState.toggle_tonic("ward")
+	_check(GameState.tonic_loadout == ["ward"], "e1 slot swaps")
+	GameState.camp[HangarDefs.station_id("sister_cinder")] = 2
+	GameState.toggle_tonic("menders")
+	_check(GameState.tonic_slot_count() == 2 and GameState.tonic_loadout.size() == 2, "e1 two slots")
+	## Deploy drinks them.
+	GameState.selected_mode_id = "blight"
+	GameState.best_tier_extracted = 9
+	GameState.begin_run()
+	_check(GameState.run_tonics.size() == 2 and GameState.tonic_count("menders") == 0 and GameState.tonic_count("ward") == 1, "e1 drink on deploy")
+	_check(GameState.tonic_loadout == ["ward"], "e1 empty slot cleared")
+	_check(is_equal_approx(GameState.tonic_fx("regen"), 1.2) and is_equal_approx(GameState.tonic_fx_mult("exposure_mult"), 0.5), "e1 tonic fx")
+	## Exposure: Plague Ward halves it; Cinder resists; stages.
+	GameState.add_exposure(40.0)
+	_check(is_equal_approx(GameState.exposure, 20.0), "e1 exposure ward %.1f" % GameState.exposure)
+	GameState.run_tonics = []
+	GameState.exposure = 0.0
+	GameState.selected_character_id = "sister_cinder"
+	GameState.add_exposure(40.0)
+	_check(is_equal_approx(GameState.exposure, 30.0), "e1 exposure cinder %.1f" % GameState.exposure)
+	_check(MedicineDefs.stage_of(39.0) == -1 and MedicineDefs.stage_of(45.0) == 0 and MedicineDefs.stage_of(100.0) == 2, "e1 stages")
+	GameState.selected_character_id = "ash_rook"
+	GameState.selected_mode_id = "drift"
+	GameState.exposure = 0.0
+	GameState.add_exposure(50.0)
+	_check(GameState.exposure == 0.0, "e1 no exposure below tier 5")
+	## Backpack + medicine.
+	GameState.camp.clear()
+	GameState.begin_run()
+	_check(GameState.pack_capacity() == 8, "e1 pack 8")
+	_check(GameState.add_to_pack("medicine") and GameState.add_to_pack("medicine") and GameState.add_to_pack("herb", 2), "e1 pack fill")
+	_check(not GameState.add_to_pack("herb") and GameState.pack_weight() == 8, "e1 pack full")
+	_check(is_equal_approx(GameState.carry_speed_mult(), 1.0 - 0.15) and GameState.smells_medicine(), "e1 carry slow")
+	var bag := GameState.bag_value()
+	_check(bag == 2 * MedicineDefs.MEDICINE_SCRAP, "e1 medicine in bag")
+	GameState.run_tonics = ["saints"]
+	_check(GameState.carry_speed_mult() == 1.0 and not GameState.smells_medicine(), "e1 saints carry free")
+	GameState.run_tonics = []
+	GameState.camp["backpack"] = 3
+	_check(GameState.pack_capacity() == 17 and GameState.add_to_pack("dust_shard"), "e1 pack upgrade")
+	GameState.ingredients = {}
+	GameState.on_extract_success()
+	_check(GameState.ingredient_count("medicine") == 2 and GameState.ingredient_count("herb") == 2 and GameState.run_pack.is_empty(), "e1 pack banked")
+	_check(GameState.payout_this_run >= int((100 + bag) * float(GameState.get_mode()["payout_mult"])), "e1 medicine pays")
+	GameState.begin_run()
+	GameState.add_to_pack("medicine")
+	GameState.on_wipe()
+	_check(GameState.ingredient_count("medicine") == 2 and GameState.run_pack.is_empty(), "e1 pack lost on death")
+	## A short Blight match: crates placed, fog builds exposure, stages bite.
+	GameState.camp.clear()
+	GameState.selected_mode_id = "blight"
+	GameState.selected_character_id = "vesper_thorn"
+	GameState.fast_timers = true
+	GameState.tutorial_done = true
+	GameState.tonic_loadout = []
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(4):
+		await get_tree().physics_frame
+	var player: Node2D = m.get_node("World/Player")
+	_check(get_tree().get_nodes_in_group("medicine_crates").size() == MedicineDefs.crates_for_tier(5), "e1 crates placed")
+	var ps: Node = m.get_node("PlagueSystem")
+	ps.call("spawn_zone", player.global_position, 150.0)
+	for k in range(40):
+		player.set("hp", player.get("max_hp"))
+		await get_tree().physics_frame
+	_check(GameState.exposure > 1.0, "e1 fog builds exposure %.1f" % GameState.exposure)
+	GameState.exposure = 75.0
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(is_equal_approx(float(player.get("exposure_move")), -0.14), "e1 sick slows")
+	var hp0 := float(player.get("hp"))
+	for k in range(30):
+		await get_tree().physics_frame
+	_check(float(player.get("hp")) < hp0, "e1 sick drains")
+	## Medicine crate pickup + kill drops + drop from the pack.
+	var crate: Node2D = get_tree().get_nodes_in_group("medicine_crates")[0]
+	crate.global_position = player.global_position
+	for k in range(30):
+		await get_tree().physics_frame
+	_check(GameState.medicine_carried() == 1, "e1 crate picked up")
+	HaulPickup.drop_kill(m.get_node("World"), player.global_position + Vector2(70, 0), EnemyDefs.MACHINE, "boss")
+	for k in range(60):
+		await get_tree().physics_frame
+	_check(GameState.pack_count("dust_shard") >= 1 or GameState.pack_weight() >= GameState.pack_capacity() - 1, "e1 kill drops picked up")
+	var hud: Node = m.get_node("HUD")
+	hud.call("_open_pause")
+	await get_tree().process_frame
+	var pm: Node = null
+	for n in get_tree().root.find_children("*", "CanvasLayer", true, false):
+		if n.has_method("show_pack"):
+			pm = n
+	if pm:
+		pm.call("show_pack")
+		var before := GameState.pack_weight()
+		pm.call("drop_item", "medicine")
+		_check(GameState.pack_weight() == before - MedicineDefs.MEDICINE_WEIGHT, "e1 drop from pack")
+		pm.call("close")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var dropped := 0
+	for h in get_tree().get_nodes_in_group("haul"):
+		if bool(h.get("dropped")):
+			dropped += 1
+	_check(dropped == 1 and GameState.medicine_carried() == 0, "e1 dropped stays on the ground")
+	m.queue_free()
+	GameState.fast_timers = false
+	get_tree().paused = false
+	for k in range(3):
+		await get_tree().process_frame
+	## The Apothecary tab.
+	GameState.ingredients = {"herb": 3}
+	var hg: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(hg)
+	await get_tree().process_frame
+	hg.call("show_tab", "brew")
+	await get_tree().process_frame
+	_check(bool(hg.call("brew", "menders")) and bool(hg.call("toggle_tonic", "menders")) and GameState.tonic_loadout.has("menders"), "e1 brew tab")
+	hg.queue_free()
+	await get_tree().process_frame
+	GameState.camp.clear()
+	GameState.selected_mode_id = "drift"
+	print("DEPTH_E1_OK")
+

@@ -7,6 +7,7 @@ extends RefCounted
 ##   station  — one per survivor, "station_<hero id>" (5 ranks: weapon + trick)
 ##   kennel   — one per dog, "kennel_<pet id>" (3 ranks)
 ##   stash    — "stash" (3 ranks of +10 slots)
+##   pack     — "backpack" (3 ranks of carry room, MedicineDefs)
 ## Every tuning number lives here. Arrays indexed by rank (index 0 = not bought).
 
 const SHARED_PRICES: Array = [100, 250, 500, 900, 1500]
@@ -68,7 +69,7 @@ const STATIONS := {
 		"add_keys": {"chain": [0, 0, 0, 1, 1, 2]},
 		"notes": ["Fresh gauntlet coils", "Hotter Overload", "+1 arc jump", "Longer stun", "+2 arc jumps"]},
 	"sister_cinder": {"name": "Cinder's Medicine Table", "power_keys": ["heal"],
-		"notes": ["Rifle stock re-wrapped", "Stronger draught", "Faster brewing", "Purer tonic", "Cathedral recipe"]},
+		"notes": ["Rifle stock re-wrapped", "Second tonic slot", "Stronger draught", "Brews two at a time", "Cathedral recipe"]},
 	"quill_marrow": {"name": "Quill's Dissection Table", "power_keys": ["damage_mult", "mark_time"],
 		"notes": ["Honed bayonet", "Longer marks", "Deeper lunge", "Sharper notes", "Surgeon's eye"]},
 	"nyx_caldera": {"name": "Nyx's Smuggler Crates", "power_keys": ["damage_mult", "hit_radius"],
@@ -134,6 +135,8 @@ static func layer_of(id: String) -> String:
 		return "kennel"
 	if id == "stash":
 		return "stash"
+	if id == "backpack":
+		return "pack"
 	return ""
 
 
@@ -147,6 +150,8 @@ static func prices(id: String) -> Array:
 			return KENNEL_PRICES
 		"stash":
 			return STASH_PRICES
+		"pack":
+			return MedicineDefs.PACK_PRICES
 	return []
 
 
@@ -172,6 +177,8 @@ static func display_name(id: String) -> String:
 			return "Kennel: %s" % str(KENNEL[id.substr(7)]["name"])
 		"stash":
 			return "Stash Lockbox"
+		"pack":
+			return "Field Backpack"
 	return id
 
 
@@ -212,6 +219,8 @@ static func rank_text(id: String, rank: int) -> String:
 			return str((k["rank_text"] as Array)[r])
 		"stash":
 			return "%d stash slots" % stash_slots(r)
+		"pack":
+			return "Carry %d in a run (medicine weighs %d)" % [MedicineDefs.pack_capacity(r), MedicineDefs.MEDICINE_WEIGHT]
 	return ""
 
 
@@ -225,6 +234,8 @@ static func blurb(id: String) -> String:
 			return str(KENNEL[id.substr(7)]["blurb"])
 		"stash":
 			return "Shared lockbox for gear you extract with."
+		"pack":
+			return "More room for ingredients and medicine on the way home."
 	return ""
 
 
@@ -328,11 +339,13 @@ static func ids_for(layer: String) -> Array:
 			return [kennel_id("noel"), kennel_id("bentley"), kennel_id("lillie")]
 		"stash":
 			return ["stash"]
+		"pack":
+			return ["backpack"]
 	return []
 
 
 static func all_ids() -> Array:
-	return ids_for("shared") + ids_for("station") + ids_for("kennel") + ids_for("stash")
+	return ids_for("shared") + ids_for("station") + ids_for("kennel") + ids_for("stash") + ids_for("pack")
 
 
 ## Total scrap to max everything (sanity: ~45k per the brief).

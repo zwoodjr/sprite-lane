@@ -58,6 +58,9 @@ var _keep_camp: Dictionary = {}
 var _keep_gear: Array = []
 var _camp_override := false
 var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
+## Depth Update tallies (printed on the DEPTH line).
+var _max_exposure := 0.0
+var _max_pack := 0
 
 
 func _restore_profile() -> void:
@@ -273,6 +276,13 @@ func _drive(delta: float) -> void:
 				TouchInput.pulse_dash()
 			TouchInput.move_vector = mv
 			return
+	## Medicine crates are worth a detour when the pack has room.
+	var med := _nearest("medicine_crates")
+	if med and GameState.pack_has_room("medicine") and med.global_position.distance_to(_p.global_position) < 650.0 and not low_hp:
+		var ne := _nearest("enemies")
+		if ne == null or ne.global_position.distance_to(_p.global_position) > 160.0:
+			TouchInput.move_vector = (med.global_position - _p.global_position).normalized()
+			return
 	## Like a player: sweep up nearby XP / scrap when nothing is in reach.
 	var loot := _nearest("loot")
 	var ed: float = e.global_position.distance_to(_p.global_position) if e else INF
@@ -336,6 +346,8 @@ func _wander_dir(delta: float) -> Vector2:
 
 func _extra(delta: float) -> void:
 	_min_hp = min(_min_hp, _p.hp)
+	_max_exposure = maxf(_max_exposure, GameState.exposure)
+	_max_pack = maxi(_max_pack, GameState.pack_weight())
 	if _p.get("_reload_left") > 0.0: _reload_s += delta
 	if TouchInput.move_vector.length() > 0.5 and _p.global_position.distance_to(_last_pos) < 0.3:
 		_stuck_s += delta
@@ -491,3 +503,5 @@ func _summary() -> void:
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])
+	print("DEPTH tonics=%s max_pack=%d max_exposure=%.0f pack_now=%s crates_left=%d" % [",".join(PackedStringArray(GameState.run_tonics)),
+		_max_pack, _max_exposure, str(GameState.run_pack), get_tree().get_nodes_in_group("medicine_crates").size()])

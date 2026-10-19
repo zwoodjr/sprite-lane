@@ -79,6 +79,15 @@ var migrated_hangar_v4: bool = false
 var hangar_notice: String = ""
 var garage_tokens: int = 0
 var successful_extracts: int = 0
+## --- Depth Update E1: medicine & plague (MedicineDefs) ---
+## Banked ingredients (+ "medicine") -> count; brewed tonic stock; tonics to drink on deploy.
+var ingredients: Dictionary = {}
+var tonics: Dictionary = {}
+var tonic_loadout: Array = []
+## In-run: carried ingredients / medicine (banked on extract), tonics drunk, exposure.
+var run_pack: Dictionary = {}
+var run_tonics: Array = []
+var exposure: float = 0.0
 
 
 ## Player settings + onboarding flags (persisted to user://).
@@ -192,6 +201,9 @@ func save_profile() -> void:
 		"selected_mode_id": selected_mode_id,
 		"selected_character_id": selected_character_id,
 		"selected_pet_id": selected_pet_id,
+		"ingredients": ingredients,
+		"tonics": tonics,
+		"tonic_loadout": tonic_loadout,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -317,7 +329,33 @@ func apply_save(d: Dictionary) -> void:
 	var pet_id := str(d.get("selected_pet_id", selected_pet_id))
 	if PetDefs.is_equipable(pet_id):
 		selected_pet_id = pet_id
+	_load_depth(d)
 	_migrate_hangar_v4()
+
+## Depth Update keys (old saves: all missing → empty, safe defaults).
+func _load_depth(d: Dictionary) -> void:
+	ingredients = _count_dict(d.get("ingredients", {}), MedicineDefs.INGREDIENTS.keys())
+	tonics = _count_dict(d.get("tonics", {}), MedicineDefs.TONICS.keys())
+	tonic_loadout = []
+	var tl: Variant = d.get("tonic_loadout", [])
+	if typeof(tl) == TYPE_ARRAY:
+		for t in (tl as Array):
+			var tid := str(t)
+			if MedicineDefs.TONICS.has(tid) and not tid in tonic_loadout:
+				tonic_loadout.append(tid)
+
+## {id: int >= 0} keeping only known ids.
+func _count_dict(v: Variant, known: Array) -> Dictionary:
+	var out := {}
+	if typeof(v) != TYPE_DICTIONARY:
+		return out
+	for k in (v as Dictionary).keys():
+		var id := str(k)
+		if id in known:
+			var n := maxi(0, int((v as Dictionary)[k]))
+			if n > 0:
+				out[id] = n
+	return out
 
 func _dict_or_empty(v: Variant) -> Dictionary:
 	return (v as Dictionary).duplicate(true) if typeof(v) == TYPE_DICTIONARY else {}
@@ -639,6 +677,7 @@ func _compute_gear() -> void:
 	var sets := {}
 	var mods: Array = []
 	var witem: Dictionary = {}
+	var vial_resist := 0.0
 	var hero := selected_character_id
 	var eq := equipped_items(hero)
 	for sl in eq.keys():
@@ -656,6 +695,8 @@ func _compute_gear() -> void:
 		var st: Dictionary = it.get("stats", {})
 		for k in st.keys():
 			stats[k] = float(stats.get(k, 0.0)) + float(st[k])
+		if str(sl) == "vial":
+			vial_resist += float(st.get("resist", 0.0)) + (0.1 if bool(it.get("charged", false)) else 0.0)
 		var sid := str(it.get("set", ""))
 		if sid != "":
 			sets[sid] = int(sets.get(sid, 0)) + 1
@@ -663,7 +704,7 @@ func _compute_gear() -> void:
 		if GearDefs.STAT_CAP.has(k):
 			stats[k] = minf(float(stats[k]), float(GearDefs.STAT_CAP[k]))
 	gear = {"stats": stats, "sets": sets, "mods": mods, "weapon_item": witem,
-		"legendary": str(witem.get("legendary", ""))}
+		"legendary": str(witem.get("legendary", "")), "vial_resist": vial_resist}
 
 func gear_stat(id: String) -> float:
 	var st: Variant = gear.get("stats", {})
@@ -719,6 +760,7 @@ func _bank_run_loot() -> void:
 		result_unlocks.append("+%d %s" % [int(run_materials[k]), GearDefs.MATERIAL_NAME.get(str(k), str(k))])
 	run_loot = []
 	run_materials = {}
+	_bank_pack()
 
 ## Death: found gear and brought-in gear are lost, except the insured item.
 func _lose_run_loot() -> void:
@@ -735,6 +777,170 @@ func _lose_run_loot() -> void:
 		loadout_of(hero).erase(sl)
 	run_loot = []
 	run_materials = {}
+	var lost_med := medicine_carried()
+	if lost_med > 0:
+		result_unlocks_pending.append("Lost %d medicine in the dust" % lost_med)
+	run_pack = {}
+
+## =============================================================================
+## Depth Update E1: backpack, medicine, ingredients, tonics, plague exposure.
+
+func pack_capacity() -> int:
+	return MedicineDefs.pack_capacity(camp_rank("backpack"))
+
+func pack_weight() -> int:
+	var w := 0
+	for k in run_pack.keys():
+		w += MedicineDefs.weight(str(k)) * int(run_pack[k])
+	return w
+
+func pack_has_room(id: String, n: int = 1) -> bool:
+	return pack_weight() + MedicineDefs.weight(id) * n <= pack_capacity()
+
+func pack_count(id: String) -> int:
+	return int(run_pack.get(id, 0))
+
+## Into the backpack (false = no room).
+func add_to_pack(id: String, n: int = 1) -> bool:
+	if n <= 0 or not MedicineDefs.INGREDIENTS.has(id) or not pack_has_room(id, n):
+		return false
+	run_pack[id] = pack_count(id) + n
+	if id == "medicine":
+		quest_event("medicine", n)
+	return true
+
+func drop_from_pack(id: String, n: int = 1) -> bool:
+	if pack_count(id) < n or n <= 0:
+		return false
+	run_pack[id] = pack_count(id) - n
+	if int(run_pack[id]) <= 0:
+		run_pack.erase(id)
+	return true
+
+func medicine_carried() -> int:
+	return pack_count("medicine")
+
+## Medicine slows you unless a Saint's Tincture was drunk.
+func carry_speed_mult() -> float:
+	if tonic_fx("carry_free") > 0.0:
+		return 1.0
+	return MedicineDefs.carry_mult(medicine_carried())
+
+## The plague can smell carried medicine (spawns + plague speed).
+func smells_medicine() -> bool:
+	return medicine_carried() > 0 and tonic_fx("carry_free") <= 0.0
+
+## Extract: the pack goes home (medicine also pays through bag_value()).
+func _bank_pack() -> void:
+	for k in run_pack.keys():
+		var id := str(k)
+		var n := int(run_pack[k])
+		if n <= 0:
+			continue
+		ingredients[id] = int(ingredients.get(id, 0)) + n
+		result_unlocks.append("+%d %s" % [n, MedicineDefs.item_name(id)])
+	run_pack = {}
+
+func ingredient_count(id: String) -> int:
+	return int(ingredients.get(id, 0))
+
+func tonic_count(id: String) -> int:
+	return int(tonics.get(id, 0))
+
+func tonic_slot_count() -> int:
+	return MedicineDefs.tonic_slots(station_rank(CharacterDefs.CINDER_ID))
+
+func can_brew(tid: String) -> bool:
+	var r: Dictionary = (MedicineDefs.TONICS.get(tid, {}) as Dictionary).get("recipe", {})
+	if r.is_empty():
+		return false
+	for k in r.keys():
+		if ingredient_count(str(k)) < int(r[k]):
+			return false
+	return true
+
+## Brew one batch at the Apothecary (Cinder's rank 4+ brews two).
+func brew(tid: String) -> bool:
+	if not can_brew(tid):
+		return false
+	var r: Dictionary = MedicineDefs.TONICS[tid]["recipe"]
+	for k in r.keys():
+		ingredients[str(k)] = ingredient_count(str(k)) - int(r[k])
+		if int(ingredients[str(k)]) <= 0:
+			ingredients.erase(str(k))
+	tonics[tid] = tonic_count(tid) + MedicineDefs.brew_yield(station_rank(CharacterDefs.CINDER_ID))
+	save_profile()
+	meta_changed.emit()
+	return true
+
+## Put a tonic in (or take it out of) the slots for the next deploy.
+func toggle_tonic(tid: String) -> bool:
+	if tid in tonic_loadout:
+		tonic_loadout.erase(tid)
+		save_profile()
+		return true
+	if not MedicineDefs.TONICS.has(tid) or tonic_count(tid) <= 0:
+		return false
+	while tonic_loadout.size() >= tonic_slot_count():
+		tonic_loadout.pop_front()
+	tonic_loadout.append(tid)
+	save_profile()
+	return true
+
+## On deploy: every slotted tonic in stock is drunk (stock −1) for this run.
+func _drink_tonics() -> void:
+	run_tonics = []
+	var slots := tonic_slot_count()
+	for tid in tonic_loadout.duplicate():
+		if run_tonics.size() >= slots:
+			break
+		if tonic_count(str(tid)) <= 0:
+			continue
+		tonics[str(tid)] = tonic_count(str(tid)) - 1
+		if int(tonics[str(tid)]) <= 0:
+			tonics.erase(str(tid))
+		run_tonics.append(str(tid))
+	## Empty slots stay empty once the stock runs out.
+	for tid in tonic_loadout.duplicate():
+		if tonic_count(str(tid)) <= 0:
+			tonic_loadout.erase(tid)
+
+## Sum of a tonic effect over the tonics drunk this run.
+func tonic_fx(key: String) -> float:
+	var t := 0.0
+	for tid in run_tonics:
+		t += float(((MedicineDefs.TONICS.get(str(tid), {}) as Dictionary).get("fx", {}) as Dictionary).get(key, 0.0))
+	return t
+
+## Product of a multiplier effect (1.0 when none).
+func tonic_fx_mult(key: String) -> float:
+	var m := 1.0
+	for tid in run_tonics:
+		var fx: Dictionary = (MedicineDefs.TONICS.get(str(tid), {}) as Dictionary).get("fx", {})
+		if fx.has(key):
+			m *= float(fx[key])
+	return m
+
+func exposure_active() -> bool:
+	return int(get_mode().get("tier", 1)) >= MedicineDefs.EXPOSURE_FROM_TIER
+
+## How fast exposure builds for this hero / kit (tonics, Cinder, gear resist).
+func exposure_gain_mult() -> float:
+	var m := tonic_fx_mult("exposure_mult")
+	if selected_character_id == CharacterDefs.CINDER_ID:
+		m *= MedicineDefs.CINDER_EXPOSURE_MULT
+	## Vials (a charged one counts extra) and the Plague Doctor set.
+	var vr := float(gear.get("vial_resist", 0.0)) + (0.25 if has_set("plague_doctor", 2) else 0.0)
+	m *= 1.0 - minf(vr * 2.0, MedicineDefs.GEAR_RESIST_CAP)
+	return m
+
+func add_exposure(v: float) -> void:
+	if not exposure_active() or run_finished:
+		return
+	exposure = clampf(exposure + v * exposure_gain_mult(), 0.0, MedicineDefs.EXPOSURE_MAX)
+
+func cleanse_exposure(v: float) -> void:
+	exposure = maxf(0.0, exposure - v)
 
 ## =============================================================================
 ## Logbook: daily quests, survivor stories, camp milestones, Pet Bond.
@@ -898,6 +1104,9 @@ func reset_profile() -> void:
 	milestones.clear()
 	kennel_bond.clear()
 	pending_rewards.clear()
+	ingredients.clear()
+	tonics.clear()
+	tonic_loadout.clear()
 	migrated_hangar_v4 = true
 	garage_tokens = 0
 	successful_extracts = 0
@@ -959,6 +1168,9 @@ func begin_run() -> void:
 	events_done_run = 0
 	extract_bonus_scrap = 0
 	extract_bonus_notes = PackedStringArray()
+	run_pack = {}
+	exposure = 0.0
+	_drink_tonics()
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
@@ -995,7 +1207,7 @@ func set_loot_mult(mult: float) -> void:
 
 ## What the bag is worth right now (before the multiplier).
 func bag_value() -> int:
-	return scrap_found * 2 + kills * 5
+	return scrap_found * 2 + kills * 5 + medicine_carried() * MedicineDefs.MEDICINE_SCRAP
 
 ## Add bag scrap with meta magnet applied.
 func add_scrap(amount: int) -> int:

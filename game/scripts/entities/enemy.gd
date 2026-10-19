@@ -44,6 +44,8 @@ var tier: int = 1
 var role: String = ""
 ## Mechanical mob (Short Circuit bonus when stunned).
 var machine: bool = false
+## Depth Update: "plague" | "machine" | "raider" (EnemyDefs.faction).
+var faction: String = "plague"
 ## Status effects (Phase 4): id -> {time, value}. poison / burn (value = dps),
 ## stun, slow (value = speed multiplier), mark (value = damage-taken mult).
 var _status: Dictionary = {}
@@ -124,6 +126,7 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	body_scale = float(_def.get("scale", 1.0))
 	tier = int(_def.get("tier", 1))
 	machine = kind in EnemyDefs.MACHINE_IDS
+	faction = EnemyDefs.faction(kind)
 	max_hp = float(_def["hp"]) * hp_mult
 	hp = max_hp
 	damage = float(_def["damage"]) * dmg_mult
@@ -386,6 +389,9 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var chase := speed * _slow_mult()
+	## Carried medicine: the plague smells it and comes faster.
+	if faction == EnemyDefs.PLAGUE and GameState.smells_medicine():
+		chase *= MedicineDefs.SMELL_PLAGUE_SPEED
 	if _player.has_method("get_active_buffs") and (_player.get_active_buffs() as Dictionary).has("quiet") and dist > 220.0:
 		chase *= 0.75
 	var pref := _pref_range()
@@ -547,6 +553,7 @@ func _die() -> void:
 	var xp := int(_def.get("xp", 3))
 	LootDrop.spawn_burst(parent, global_position, "scrap", clampi(scrap, 1, 4), float(scrap))
 	LootDrop.spawn_burst(parent, global_position, "xp", clampi(xp / 4 + 1, 1, 4), float(xp))
+	HaulPickup.drop_kill(parent, global_position + Vector2(randf_range(-10, 10), 6), faction, role)
 	if randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)
 	## Rare special-ammo can (more likely from elites / bosses).

@@ -6,8 +6,8 @@ extends "res://scripts/ui/menu_base.gd"
 ## then Logbook / Trophy wall / Deploy. One thumb: big rows, big buttons.
 
 const HANGAR_DIR := "res://assets/sprites/hangar/"
-const TABS := ["camp", "survivors", "kennel", "stash"]
-const TAB_LABEL := {"camp": "CAMP", "survivors": "SURVIVORS", "kennel": "KENNEL", "stash": "STASH"}
+const TABS := ["camp", "survivors", "kennel", "brew", "stash"]
+const TAB_LABEL := {"camp": "CAMP", "survivors": "CREW", "kennel": "KENNEL", "brew": "BREW", "stash": "STASH"}
 const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
 const PET_ON_BED := {"noel": Vector2(110, 141.5), "bentley": Vector2(125, 141.5), "lillie": Vector2(140, 141.5)}
 ## Painted layers are cropped PNGs; this gives each one's rect on the painted canvas.
@@ -262,6 +262,7 @@ func _rebuild() -> void:
 			_list.add_child(_note("Shared camp upgrades help every survivor."))
 			for id in HangarDefs.ids_for("shared"):
 				_list.add_child(_row(str(id), null))
+			_list.add_child(_row("backpack", load(MedicineDefs.icon_path("backpack"))))
 		"survivors":
 			_list.add_child(_note("Each survivor's corner: their weapon and signature trick."))
 			var ids: Array = HangarDefs.ids_for("station")
@@ -276,6 +277,8 @@ func _rebuild() -> void:
 			_list.add_child(_note("Three ranks per dog. Noel guards, Bentley scouts, Lillie rams."))
 			for id in HangarDefs.ids_for("kennel"):
 				_list.add_child(_row(str(id), _pet_frame(str(id).substr(7), true)))
+		"brew":
+			_build_brew()
 		"stash":
 			_build_stash()
 	var pad := Control.new()
@@ -372,6 +375,116 @@ func buy(id: String) -> bool:
 	_refresh_view(true)
 	_rebuild()
 	return true
+
+
+## =========================================================================
+## Apothecary (Depth Update E1): Cinder brews tonics from run ingredients.
+
+func _build_brew() -> void:
+	_list.add_child(_note("Cinder's Apothecary. Brew tonics from what you carry home. Slotted tonics are drunk when you deploy and last the whole run."))
+	var inv := HFlowContainer.new()
+	inv.add_theme_constant_override("h_separation", 14)
+	inv.add_theme_constant_override("v_separation", 6)
+	inv.mouse_filter = Control.MOUSE_FILTER_PASS
+	_list.add_child(inv)
+	for id in MedicineDefs.INGREDIENT_IDS + ["medicine"]:
+		inv.add_child(_chip(str(id), GameState.ingredient_count(str(id)), 40, UiTheme.TEXT))
+	var slots := GameState.tonic_slot_count()
+	var sl := UiTheme.body_label("TONIC SLOTS %d/%d%s" % [GameState.tonic_loadout.size(), slots,
+		"" if slots >= 2 else "  ·  2nd slot at Cinder's Medicine Table rank %d" % MedicineDefs.TONIC_SLOT_RANK], 15, UiTheme.AMBER)
+	_list.add_child(sl)
+	for tid in MedicineDefs.TONIC_IDS:
+		_list.add_child(_tonic_row(str(tid)))
+
+
+## Icon + count chip (ingredients, recipe parts).
+func _chip(id: String, n: int, px: float, col: Color, need: int = -1) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 2)
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	var ic := TextureRect.new()
+	ic.custom_minimum_size = Vector2(px, px)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ic.texture = load(MedicineDefs.icon_path(id))
+	h.add_child(ic)
+	var txt := "%d" % n if need < 0 else "%d/%d" % [n, need]
+	var l := UiTheme.body_label(txt, 15 if px < 36 else 17, col, false)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	h.add_child(l)
+	return h
+
+
+func _tonic_row(tid: String) -> PanelContainer:
+	var td: Dictionary = MedicineDefs.TONICS[tid]
+	var slotted := tid in GameState.tonic_loadout
+	var p := card(UiTheme.AMBER if slotted else UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.add_child(h)
+	var ic := TextureRect.new()
+	ic.texture = load(MedicineDefs.icon_path(tid))
+	ic.custom_minimum_size = Vector2(64, 64)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(ic)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 2)
+	info.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(info)
+	var nm := UiTheme.body_label("%s  ·  %d in stock" % [str(td["name"]), GameState.tonic_count(tid)], 18, UiTheme.AMBER, false)
+	nm.clip_text = true
+	info.add_child(nm)
+	info.add_child(UiTheme.body_label(str(td["desc"]), 13, UiTheme.TEXT))
+	var rec := HBoxContainer.new()
+	rec.add_theme_constant_override("separation", 8)
+	rec.mouse_filter = Control.MOUSE_FILTER_PASS
+	info.add_child(rec)
+	var r: Dictionary = td["recipe"]
+	for k in r.keys():
+		var have := GameState.ingredient_count(str(k))
+		rec.add_child(_chip(str(k), have, 28, UiTheme.TEAL if have >= int(r[k]) else UiTheme.RUST, int(r[k])))
+	var btns := VBoxContainer.new()
+	btns.add_theme_constant_override("separation", 6)
+	btns.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(btns)
+	var can := GameState.can_brew(tid)
+	var b := UiTheme.big_button("BREW", UiTheme.TEAL if can else UiTheme.RUST, 50, 17)
+	b.custom_minimum_size.x = 104
+	b.disabled = not can
+	b.mouse_force_pass_scroll_events = true
+	b.pressed.connect(brew.bind(tid))
+	btns.add_child(b)
+	var s := UiTheme.big_button("IN SLOT" if slotted else "BRING", UiTheme.AMBER if slotted else UiTheme.LINE, 46, 16)
+	s.custom_minimum_size.x = 104
+	s.disabled = not slotted and GameState.tonic_count(tid) <= 0
+	s.mouse_force_pass_scroll_events = true
+	s.pressed.connect(toggle_tonic.bind(tid))
+	btns.add_child(s)
+	return p
+
+
+func brew(tid: String) -> bool:
+	if not GameState.brew(tid):
+		Juice.sfx("ui_tap")
+		return false
+	Juice.sfx("pickup")
+	_toast("Brewed %s" % MedicineDefs.item_name(tid))
+	_rebuild()
+	return true
+
+
+func toggle_tonic(tid: String) -> bool:
+	var ok := GameState.toggle_tonic(tid)
+	Juice.sfx("ui_tap")
+	_rebuild()
+	return ok
 
 
 ## =========================================================================

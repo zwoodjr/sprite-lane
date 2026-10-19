@@ -9,6 +9,10 @@ const TIER_MID := 2
 const TIER_FINAL := 3
 ## Mechanical mobs — Bolt Juno's Short Circuit hits these hardest.
 const MACHINE_IDS := ["iron_horse", "coil_spider", "scrap_hound", "fusion_golem", "dread_naught", "mech_wyrm", "mech_wyrm_b", "cyber_juggernaut"]
+## Factions (Depth Update): every mob is "plague" or "machine" ("raider" crews come later).
+const PLAGUE := "plague"
+const MACHINE := "machine"
+const RAIDER := "raider"
 
 
 ## Elite / boss roles (Part 3). These kinds never come from the random pools;
@@ -56,6 +60,15 @@ static func all_kinds() -> Array[Dictionary]:
 		_k("wasteland_god_entity", "Wasteland God-Entity", 3, "brute", 360.0, 60.0, 20.0, 1.8),
 		_k("apocalypse_wraith", "Apocalypse Wraith", 3, "raider", 240.0, 120.0, 16.0, 1.55),
 	]
+
+
+## Faction of a mob kind: machines from MACHINE_IDS, raiders by id, the rest are plague.
+static func faction(id: String) -> String:
+	if id in MACHINE_IDS:
+		return MACHINE
+	if id.begins_with("raider"):
+		return RAIDER
+	return PLAGUE
 
 
 static func ids_for_tier(tier: int) -> Array[String]:

@@ -79,6 +79,9 @@ func _show_main() -> void:
 	var resume := UiTheme.big_button("RESUME", UiTheme.TEAL, 70, 26)
 	resume.pressed.connect(close)
 	v.add_child(resume)
+	var pack := UiTheme.big_button("BACKPACK  %d/%d" % [GameState.pack_weight(), GameState.pack_capacity()], UiTheme.TEAL, 58, 20)
+	pack.pressed.connect(show_pack)
+	v.add_child(pack)
 	var help := UiTheme.big_button("HOW TO PLAY", UiTheme.AMBER, 58, 20)
 	help.pressed.connect(_show_help)
 	v.add_child(help)
@@ -98,6 +101,64 @@ func _show_main() -> void:
 	)
 	v.add_child(quit)
 	_set_content(center)
+
+## Backpack: what you carry home. Drop things to make room for better loot.
+func show_pack() -> void:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var head := HBoxContainer.new()
+	var t := UiTheme.title_label("BACKPACK", 34)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	head.add_child(t)
+	var done := UiTheme.big_button("DONE", UiTheme.TEAL, 52, 20)
+	done.pressed.connect(_show_main)
+	head.add_child(done)
+	v.add_child(head)
+	var slow := 1.0 - GameState.carry_speed_mult()
+	v.add_child(UiTheme.body_label("%d / %d carried. Medicine weighs %d%s. Everything here is lost if you go down." % [
+		GameState.pack_weight(), GameState.pack_capacity(), MedicineDefs.MEDICINE_WEIGHT,
+		(" and slows you %d%%" % int(round(slow * 100.0))) if slow > 0.0 else ""], 15, UiTheme.TEXT_DIM))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 8)
+	scroll.add_child(list)
+	if GameState.run_pack.is_empty():
+		list.add_child(UiTheme.body_label("Empty. Ingredients drop from kills; medicine crates are marked on the map.", 16))
+	for id in GameState.run_pack.keys():
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var ic := TextureRect.new()
+		ic.custom_minimum_size = Vector2(48, 48)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ic.texture = load(MedicineDefs.icon_path(str(id)))
+		row.add_child(ic)
+		var l := UiTheme.body_label("%s ×%d  (weight %d each)" % [MedicineDefs.item_name(str(id)), int(GameState.run_pack[id]), MedicineDefs.weight(str(id))], 17)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
+		var drop := UiTheme.big_button("DROP", UiTheme.RUST, 52, 18)
+		drop.custom_minimum_size.x = 100
+		drop.pressed.connect(drop_item.bind(str(id)))
+		row.add_child(drop)
+		list.add_child(row)
+	_set_content(v)
+
+## Drop one of an item on the ground at the hero's feet (pick it up again later).
+func drop_item(id: String) -> void:
+	if not GameState.drop_from_pack(id, 1):
+		return
+	var p := get_tree().get_first_node_in_group("player") as Node2D
+	if p != null:
+		var h := HaulPickup.spawn(p.get_parent(), p.global_position + Vector2(randf_range(-20, 20), 18), id, 1, false)
+		if h:
+			h.dropped = true
+	Juice.sfx("ui_tap")
+	show_pack()
 
 func _show_help() -> void:
 	var v := VBoxContainer.new()
