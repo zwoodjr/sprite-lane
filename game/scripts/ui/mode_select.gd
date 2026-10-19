@@ -174,7 +174,8 @@ func _refresh() -> void:
 		var unlocked: bool = _cards[id]["unlocked"]
 		var col := UiTheme.AMBER if on else (UiTheme.LINE if unlocked else Color(0.3, 0.25, 0.2))
 		var bg := Color(0.24, 0.17, 0.1, 0.95) if on else (Color(0.14, 0.1, 0.075, 0.9) if unlocked else Color(0.09, 0.07, 0.05, 0.8))
+		var kind := "panel_hi" if on else ("panel" if unlocked else "panel_steel")
 		for st in ["normal", "hover", "pressed", "hover_pressed"]:
-			b.add_theme_stylebox_override(st, UiTheme.box(bg, col, 16, 4 if on else 2, 12))
+			b.add_theme_stylebox_override(st, UiTheme.plate(kind, 12.0, Color.WHITE if unlocked or on else Color(0.7, 0.7, 0.7)))
 	_build_detail(GameState.get_mode())
 	_fast.text = "Dev: quick-test timers %s" % ("ON (12%)" if GameState.fast_timers else "OFF")

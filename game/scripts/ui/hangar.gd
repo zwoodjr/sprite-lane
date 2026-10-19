@@ -146,6 +146,10 @@ func _build_view() -> Control:
 
 
 func _pet_frame(pet_id: String, tight: bool = false) -> Texture2D:
+	## Row icons use the painted pet portrait (tools/gen_portraits.py).
+	var portrait := "res://assets/sprites/portraits/pet_%s.png" % pet_id
+	if tight and ResourceLoader.exists(portrait):
+		return load(portrait)
 	var def := PetDefs.get_pet(pet_id)
 	var path := str(def.get("anim", "")) + "_idle.png"
 	if not ResourceLoader.exists(path):
@@ -226,8 +230,7 @@ func show_tab(t: String) -> void:
 	for k in _tab_btns.keys():
 		var b: Button = _tab_btns[k]
 		var on := str(k) == t
-		b.add_theme_stylebox_override("normal", UiTheme.box(
-			UiTheme.AMBER.darkened(0.45) if on else UiTheme.PANEL_LIGHT, UiTheme.AMBER if on else UiTheme.LINE, 14, 3 if on else 2))
+		UiTheme.skin_button(b, UiTheme.AMBER if on else UiTheme.LINE, 12.0)
 	_rebuild()
 
 
@@ -341,7 +344,7 @@ func _pips(rank: int, max_r: int) -> HBoxContainer:
 		var r := Panel.new()
 		r.custom_minimum_size = Vector2(12, 12)
 		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		r.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.TEAL if i < rank else Color(0.1, 0.08, 0.06), UiTheme.TEAL, 3, 2, 0))
+		r.add_theme_stylebox_override("panel", UiTheme.plate("bar_fill", 0.0, UiTheme.TEAL) if i < rank else UiTheme.plate("bar_bg", 0.0))
 		hb.add_child(r)
 	return hb
 

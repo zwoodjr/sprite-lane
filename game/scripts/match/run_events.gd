@@ -51,7 +51,7 @@ func _build_ui() -> void:
 	_layer.layer = 6
 	add_child(_layer)
 	_radio = PanelContainer.new()
-	_radio.add_theme_stylebox_override("panel", UiTheme.box(Color(0.08, 0.1, 0.08, 0.9), Color(0.55, 0.85, 0.55), 14, 2, 14))
+	_radio.add_theme_stylebox_override("panel", UiTheme.plate("panel_steel", 14.0, Color(0.85, 1.0, 0.85, 0.95)))
 	_radio.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_radio.offset_left = 24
 	_radio.offset_right = -24

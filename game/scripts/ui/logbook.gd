@@ -51,8 +51,7 @@ func show_tab(t: String) -> void:
 	_tab = t
 	for k in _tab_btns.keys():
 		var on := str(k) == t
-		(_tab_btns[k] as Button).add_theme_stylebox_override("normal", UiTheme.box(
-			UiTheme.AMBER.darkened(0.45) if on else UiTheme.PANEL_LIGHT, UiTheme.AMBER if on else UiTheme.LINE, 14, 3 if on else 2))
+		UiTheme.skin_button(_tab_btns[k] as Button, UiTheme.AMBER if on else UiTheme.LINE, 12.0)
 	_rebuild()
 
 

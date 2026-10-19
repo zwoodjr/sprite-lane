@@ -118,10 +118,12 @@ func _slot_tile(sl: String, item: Dictionary) -> Control:
 	var rar := str(item.get("rarity", "common"))
 	var sel := sl == _slot
 	var border: Color = GearDefs.RARITY_COLOR.get(rar, UiTheme.LINE) if not item.is_empty() else UiTheme.LINE
-	var sb := UiTheme.box(Color(0.1, 0.075, 0.05, 0.95), UiTheme.AMBER if sel else border, 12, 4 if sel else 2, 6)
+	## Painted tile, tinted by rarity; selected slot glows brass.
+	var sb := UiTheme.plate("tile_on", 6.0) if sel else UiTheme.plate("tile", 6.0, Color.WHITE.lerp(border, 0.55) if not item.is_empty() else Color(0.85, 0.85, 0.85))
 	b.add_theme_stylebox_override("normal", sb)
 	b.add_theme_stylebox_override("hover", sb)
-	b.add_theme_stylebox_override("pressed", UiTheme.box(Color(0.2, 0.14, 0.08), UiTheme.AMBER, 12, 4, 6))
+	b.add_theme_stylebox_override("pressed", UiTheme.plate("tile_on", 6.0))
+	b.add_theme_stylebox_override("hover_pressed", UiTheme.plate("tile_on", 6.0))
 	b.pressed.connect(select_slot.bind(sl))
 	var ic := TextureRect.new()
 	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
