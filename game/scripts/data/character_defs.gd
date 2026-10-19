@@ -55,6 +55,24 @@ static func get_character(char_id: String) -> Dictionary:
 	return (table[ASH_ROOK_ID] as Dictionary).duplicate(true)
 
 
+## Bottle-cap ability button art per hero (HD pack ui/btn_ability_*.png).
+const ABILITY_ICONS := {
+	ASH_ROOK_ID: "rook_rush",
+	VESPER_THORN_ID: "vesper_vial_shot",
+	PEBBLE_ID: "pebble_maul_slam",
+	BOLT_JUNO_ID: "juno_overload",
+	CINDER_ID: "cinder_heal",
+	QUILL_MARROW_ID: "quill_dissect",
+	NYX_CALDERA_ID: "nyx_blade_rush",
+	HELM_WISP_ID: "helm_drone",
+}
+
+
+static func ability_icon_path(char_id: String) -> String:
+	var id := _canonicalize(char_id)
+	return "res://assets/sprites/ui/btn_ability_%s.png" % str(ABILITY_ICONS.get(id, "rook_rush"))
+
+
 static func _canonicalize(char_id: String) -> String:
 	if char_id == "rook_vex":
 		return ASH_ROOK_ID
@@ -183,7 +201,7 @@ static func _table() -> Dictionary:
 		CINDER_ID: {
 			"id": CINDER_ID,
 			"display_name": "Sister Cinder",
-			"fantasy": "Field medic — medkit + bayonet spray",
+			"fantasy": "Field medic — medkit + suppressor rifle",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/sister_cinder.png",
 			"color": Color(0.85, 0.45, 0.35),
@@ -215,20 +233,20 @@ static func _table() -> Dictionary:
 		QUILL_MARROW_ID: {
 			"id": QUILL_MARROW_ID,
 			"display_name": "Quill Marrow",
-			"fantasy": "Dustcoat swordsman — slash dash through the pack",
+			"fantasy": "Dustcoat gunner — bayonet SMG, hose the pack",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/quill_marrow.png",
 			"color": Color(0.55, 0.42, 0.28),
 			"accent": Color(0.90, 0.78, 0.40),
 			"perks": [
-				{"id": "slash_dash", "name": "Slash Dash", "desc": "Dash leaves a brief damage trail."},
-				{"id": "dustcoat", "name": "Dustcoat", "desc": "Slightly faster move."},
+				{"id": "suppress", "name": "Suppress", "desc": "Sustained fire slows nearby foes slightly."},
+				{"id": "advance", "name": "Advance", "desc": "Moving while shooting loses less accuracy feel."},
 			],
 			"equipment_unlocks": [],
 			"ability": {
-				"id": "blade_rush", "name": "Blade Rush", "short": "SLASH",
-				"desc": "Dash through foes, damaging what you pass.",
-				"cooldown": 10.0, "duration": 0.55, "speed_mult": 1.85,
+				"id": "suppressing_fire", "name": "Suppressing Fire", "short": "SUPP",
+				"desc": "5s fire-rate surge — lock the lane down.",
+				"cooldown": 14.0, "duration": 5.0,
 			},
 			"move_speed_mult": 1.1,
 			"max_hp_bonus": 0,
@@ -244,20 +262,20 @@ static func _table() -> Dictionary:
 		NYX_CALDERA_ID: {
 			"id": NYX_CALDERA_ID,
 			"display_name": "Nyx Caldera",
-			"fantasy": "Heavy rifle — suppress & advance",
+			"fantasy": "Twin dustblades — dance in close and carve",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/nyx_caldera.png",
 			"color": Color(0.30, 0.45, 0.75),
 			"accent": Color(0.45, 0.65, 0.95),
 			"perks": [
-				{"id": "suppress", "name": "Suppress", "desc": "Sustained fire slows nearby foes slightly."},
-				{"id": "advance", "name": "Advance", "desc": "Moving while shooting loses less accuracy feel."},
+				{"id": "slash_dash", "name": "Slash Dash", "desc": "Dash leaves a brief damage trail."},
+				{"id": "dustcoat", "name": "Dustcoat", "desc": "Slightly faster move."},
 			],
 			"equipment_unlocks": [],
 			"ability": {
-				"id": "suppressing_fire", "name": "Suppressing Fire", "short": "SUPP",
-				"desc": "5s fire-rate surge — lock the lane down.",
-				"cooldown": 14.0, "duration": 5.0,
+				"id": "blade_rush", "name": "Blade Rush", "short": "SLASH",
+				"desc": "Dash through foes, damaging what you pass.",
+				"cooldown": 10.0, "duration": 0.55, "speed_mult": 1.85,
 			},
 			"move_speed_mult": 0.97,
 			"max_hp_bonus": 8,

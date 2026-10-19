@@ -82,16 +82,28 @@ static func run_upgrade_pool() -> Array[Dictionary]:
 		{"id": "quick_mag", "name": "Quick Mag", "desc": "+20% fire rate", "stat": "firerate", "add": 0.20},
 		{"id": "thick_plate", "name": "Thick Plate", "desc": "+30 max HP (heals the gain)", "stat": "max_hp", "add": 30.0},
 		{"id": "dust_runner", "name": "Dust Runner", "desc": "+12% move speed", "stat": "move", "add": 0.12},
-		{"id": "deep_mag", "name": "Deep Mag", "desc": "+8 mag size", "stat": "mag", "add": 8.0},
+		{"id": "deep_mag", "name": "Deep Mag", "desc": "+8 mag size", "stat": "mag", "add": 8.0, "ranged_only": true},
 		{"id": "cool_head", "name": "Cool Head", "desc": "−20% ability cooldown", "stat": "ability_cd", "add": 0.20},
+		## Hero-specific, stackable: Helm gets up to 3 extra drones (4 total).
+		{"id": "extra_drone", "name": "Extra Drone", "desc": "+1 support drone", "stat": "drones", "add": 1.0,
+			"hero": CharacterDefs.HELM_WISP_ID, "max_total": 3.0},
 	]
 
 
 static func roll_run_choices(count: int = 2, exclude: Array = []) -> Array[Dictionary]:
 	var pool := run_upgrade_pool()
 	var available: Array[Dictionary] = []
+	var hero := GameState.selected_character_id if GameState else ""
 	for u in pool:
-		if str(u["id"]) in exclude:
+		if u.has("hero") and str(u["hero"]) != hero:
+			continue
+		if bool(u.get("ranged_only", false)) and GameState and GameState.weapon.has("melee"):
+			continue
+		if u.has("max_total"):
+			## Stackable pick: offered until the stat hits its cap.
+			if GameState and float(GameState.run_mods.get(str(u["stat"]), 0.0)) >= float(u["max_total"]):
+				continue
+		elif str(u["id"]) in exclude:
 			continue
 		available.append(u)
 	available.shuffle()

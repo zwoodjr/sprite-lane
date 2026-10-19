@@ -42,12 +42,6 @@ var settings: Dictionary = {
 	"sfx": true,
 	"haptics": true,
 	"screen_shake": true,
-	## Default: survivor single move-stick. twin_stick restores classic dual sticks.
-	"twin_stick": false,
-	"auto_fire": true,
-	"auto_aim": true,
-	"aim_autofire": true,
-	"aim_assist": 0.6,
 	"stick_scale": 1.0,
 	"left_handed": false,
 	"show_hints": true,
@@ -89,6 +83,7 @@ var run_mods: Dictionary = {
 	"move": 0.0,
 	"mag": 0.0,
 	"ability_cd": 0.0,
+	"drones": 0.0,
 }
 var run_picks_taken: Array = [] ## upgrade ids chosen this run
 var pending_run_choices: Array = []
@@ -321,7 +316,7 @@ func begin_run() -> void:
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
-	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0}
+	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0, "drones": 0.0}
 	run_picks_taken.clear()
 	pending_run_choices.clear()
 	run_level_paused = false
@@ -494,7 +489,7 @@ func on_wipe() -> void:
 func _reset_run_power_after_end() -> void:
 	## Permanent power never comes from run levels — clear after banking rewards.
 	run_xp = 0
-	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0}
+	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0, "drones": 0.0}
 	run_picks_taken.clear()
 	pending_run_choices.clear()
 	run_level_paused = false

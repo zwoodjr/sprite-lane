@@ -11,6 +11,20 @@ var lifetime: float = 1.1
 var source: Node = null
 var splash_radius: float = 0.0
 var splash_mult: float = 0.5
+## Look: rocket / slug / tracer / smg / pistol / drone (player); enemy shots ignore it.
+var style: String = "pistol"
+var crit: bool = false
+
+## Per-style look: sprite tint/scale, trail colour/width/length, glow texture.
+const STYLES := {
+	"rocket": {"color": Color(1.0, 0.62, 0.25), "scale": Vector2(0.55, 0.55), "trail": 4.0, "len": 6, "tex": "res://assets/sprites/fx/bullet_explosive.png", "smoke": true},
+	"slug": {"color": Color(0.55, 1.0, 0.35), "scale": Vector2(1.7, 0.75), "trail": 3.0, "len": 7, "tex": ""},
+	"tracer": {"color": Color(1.0, 0.72, 0.25), "scale": Vector2(0.9, 0.9), "trail": 2.5, "len": 6, "tex": "res://assets/sprites/fx/tracer_standard.png"},
+	"smg": {"color": Color(1.0, 0.9, 0.55), "scale": Vector2(0.55, 0.55), "trail": 1.5, "len": 3, "tex": ""},
+	"pistol": {"color": Color(1.0, 0.95, 0.75), "scale": Vector2(0.8, 0.8), "trail": 2.0, "len": 4, "tex": ""},
+	"drone": {"color": Color(0.45, 1.0, 0.85), "scale": Vector2(0.6, 0.6), "trail": 1.5, "len": 4, "tex": ""},
+}
+var _smoke: CPUParticles2D
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -63,23 +77,55 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	if sprite and sprite.texture == null:
 		sprite.texture = load("res://assets/sprites/props/bullet.png")
-	var col := Color(1.0, 0.88, 0.4) if from_player else Color(1.0, 0.32, 0.22)
-	if not from_player and sprite:
-		## Slightly larger enemy shots so they read against dust at survivor FOV.
-		sprite.scale = Vector2(1.25, 1.25)
+	var look: Dictionary = STYLES.get(style, STYLES["pistol"]) if from_player else {}
+	var col: Color = look.get("color", Color(1.0, 0.88, 0.4)) if from_player else Color(1.0, 0.32, 0.22)
+	var glow := CanvasItemMaterial.new()
+	glow.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	if sprite:
-		sprite.modulate = col * 1.4
+		if from_player:
+			var tex_path := str(look.get("tex", ""))
+			if tex_path != "" and ResourceLoader.exists(tex_path):
+				sprite.texture = load(tex_path)
+				sprite.modulate = Color(1, 1, 1)
+			else:
+				sprite.modulate = col * 1.5
+			sprite.scale = look.get("scale", Vector2.ONE)
+			if style != "rocket":
+				sprite.material = glow
+		else:
+			## Slightly larger enemy shots so they read against dust at survivor FOV.
+			sprite.scale = Vector2(1.25, 1.25)
+			sprite.modulate = col * 1.4
 	_trail = Line2D.new()
-	_trail.width = 3.0 if from_player else 5.0
+	_trail.width = float(look.get("trail", 3.0)) if from_player else 5.0
 	_trail.top_level = true
 	_trail.z_index = 4
+	_trail.material = glow
 	var g := Gradient.new()
 	g.set_color(0, Color(col.r, col.g, col.b, 0.0))
-	g.set_color(1, Color(col.r, col.g, col.b, 0.7))
+	g.set_color(1, Color(col.r, col.g, col.b, 0.75))
 	_trail.gradient = g
 	_trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	_trail.end_cap_mode = Line2D.LINE_CAP_ROUND
 	add_child(_trail)
+	if from_player and bool(look.get("smoke", false)):
+		_smoke = CPUParticles2D.new()
+		_smoke.amount = 24
+		_smoke.lifetime = 0.5
+		_smoke.local_coords = false
+		_smoke.direction = -direction
+		_smoke.spread = 18.0
+		_smoke.gravity = Vector2(0, -20)
+		_smoke.initial_velocity_min = 10.0
+		_smoke.initial_velocity_max = 30.0
+		_smoke.scale_amount_min = 3.0
+		_smoke.scale_amount_max = 6.0
+		var sg := Gradient.new()
+		sg.set_color(0, Color(0.75, 0.7, 0.65, 0.6))
+		sg.set_color(1, Color(0.5, 0.48, 0.45, 0.0))
+		_smoke.color_ramp = sg
+		_smoke.z_index = 3
+		add_child(_smoke)
 
 
 func _physics_process(delta: float) -> void:
@@ -89,7 +135,8 @@ func _physics_process(delta: float) -> void:
 		_arm_left -= delta
 	global_position += direction * speed * delta
 	_trail.add_point(global_position)
-	while _trail.get_point_count() > (5 if from_player else 7):
+	var max_pts := int((STYLES.get(style, {}) as Dictionary).get("len", 5)) if from_player else 7
+	while _trail.get_point_count() > max_pts:
 		_trail.remove_point(0)
 	lifetime -= delta
 	if lifetime <= 0.0:
@@ -116,7 +163,7 @@ func _on_body_entered(body: Node2D) -> void:
 	if from_player:
 		if body.is_in_group("enemies") and body.has_method("take_damage"):
 			## Enemy signature: (float, Vector2 knock dir)
-			body.take_damage(damage, direction)
+			body.take_damage(damage, direction, -1.0, crit)
 			_apply_splash(body)
 			_impact(Color(1, 0.85, 0.45))
 		elif body.is_in_group("breakables") and body.has_method("take_damage"):
@@ -172,6 +219,11 @@ func _apply_splash(primary: Node) -> void:
 
 func _impact(col: Color) -> void:
 	_hit = true
+	if splash_radius > 0.0 and from_player:
+		## Small blast ring for the rocket splash.
+		Juice.burst(global_position, Color(1.0, 0.55, 0.2), 16, 260.0, 0.3, 1.6)
+		Juice.burst(global_position, Color(0.5, 0.45, 0.4, 0.7), 10, 90.0, 0.6, 2.2)
+		Juice.shake(0.06)
 	var amount := 10 if splash_radius > 0.0 else 6
 	var spd := 180.0 if splash_radius > 0.0 else 140.0
 	Juice.burst(global_position, col, amount, spd, 0.28, 1.1 if splash_radius > 0.0 else 0.8)
@@ -187,6 +239,8 @@ func _cleanup() -> void:
 	set_deferred("monitoring", false)
 	if sprite:
 		sprite.visible = false
+	if _smoke:
+		_smoke.emitting = false
 	var tw := _trail.create_tween()
-	tw.tween_property(_trail, "modulate:a", 0.0, 0.08)
+	tw.tween_property(_trail, "modulate:a", 0.0, 0.3 if _smoke else 0.08)
 	tw.tween_callback(queue_free)
