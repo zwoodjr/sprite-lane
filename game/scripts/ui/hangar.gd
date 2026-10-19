@@ -1,74 +1,476 @@
 extends "res://scripts/ui/menu_base.gd"
 
-## Meta scrap shop — permanent upgrades between runs.
-## Touch-first ScrollContainer: rows must not eat drag; list width drives autowrap height.
+## The Hangar (home base). Top: the hangar itself, built from stacked painted
+## layers that appear as ranks are bought (assets/sprites/hangar, see
+## tools/gen_hangar_art.py). Below: tabs for the three upgrade layers + stash,
+## then Logbook / Trophy wall / Deploy. One thumb: big rows, big buttons.
+
+const HANGAR_DIR := "res://assets/sprites/hangar/"
+const TABS := ["camp", "survivors", "kennel", "stash"]
+const TAB_LABEL := {"camp": "CAMP", "survivors": "SURVIVORS", "kennel": "KENNEL", "stash": "STASH"}
+const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
+const PET_ON_BED := {"noel": Vector2(106, 135), "bentley": Vector2(120, 135), "lillie": Vector2(134, 135)}
 
 var _scrap_label: Label
+var _view: Control
+var _layers: Dictionary = {} ## layer name -> TextureRect
+var _pets: Dictionary = {} ## pet id -> TextureRect (dog on its bed)
+var _tab_btns: Dictionary = {}
+var _tab: String = "camp"
 var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _scroll_y_keep: int = 0
+var _popup: Control
 
 
 func build(c: VBoxContainer) -> void:
-	var portrait := MobileLayout.is_portrait()
-	c.add_child(header("HANGAR", GameState.go_main_menu))
-	## Short copy on portrait so the catalog keeps vertical room under Xogot chrome.
-	var intro := UiTheme.body_label(
-		"Banked scrap → permanent upgrades. In-run levels never carry." if portrait
-		else "Spend banked scrap on permanent upgrades. In-run levels never carry — only what you buy here sticks after a wipe.",
-		14 if portrait else 15, UiTheme.TEXT_DIM
-	)
-	c.add_child(intro)
-
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 16 if portrait else 24)
-	c.add_child(top)
-	_scrap_label = UiTheme.title_label("SCRAP %d" % GameState.account_scrap, 30 if portrait else 36, UiTheme.AMBER)
-	_scrap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	c.add_theme_constant_override("separation", 10)
+	var top := header("HANGAR", GameState.go_main_menu)
+	_scrap_label = UiTheme.title_label("", 30, UiTheme.AMBER)
+	_scrap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top.add_child(_scrap_label)
-	var prestige := UiTheme.body_label(
-		"Account Lv %d" % GameState.account_level if portrait
-		else "Account Lv %d  ·  unlocks higher upgrades" % GameState.account_level,
-		14 if portrait else 16, UiTheme.TEXT_DIM, false
-	)
-	prestige.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	top.add_child(prestige)
+	c.add_child(top)
+
+	_view = _build_view()
+	c.add_child(_view)
+
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	c.add_child(tabs)
+	for t in TABS:
+		var b := UiTheme.big_button(TAB_LABEL[t], UiTheme.LINE, 54, 17)
+		b.custom_minimum_size.x = 0
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(show_tab.bind(t))
+		tabs.add_child(b)
+		_tab_btns[t] = b
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "HangarScroll"
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	_scroll.follow_focus = true
-	## Distinguish tap-to-buy from drag-to-scroll on skill rows.
 	_scroll.scroll_deadzone = 18
-	_scroll.clip_contents = true
 	c.add_child(_scroll)
-
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list.add_theme_constant_override("separation", 10)
-	## Do not expand-fill height inside the scroller — content must be taller than the viewport.
-	_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_list.add_theme_constant_override("separation", 8)
 	_scroll.add_child(_list)
 	_scroll.resized.connect(_sync_list_width)
-	_rebuild()
 
 	var bottom := HBoxContainer.new()
-	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
-	bottom.add_theme_constant_override("separation", 14)
+	bottom.add_theme_constant_override("separation", 8)
 	c.add_child(bottom)
-	## Slightly shorter CTAs on portrait — Xogot Play toolbar eats bottom pixels.
-	var btn_h := 64 if portrait else 72
-	var play := UiTheme.big_button("DEPLOY", UiTheme.AMBER, btn_h, 24 if portrait else 26)
-	play.custom_minimum_size.x = 240 if portrait else 280
+	var log_b := UiTheme.big_button("LOGBOOK", UiTheme.TEAL, 64, 17)
+	log_b.custom_minimum_size.x = 0
+	log_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	log_b.pressed.connect(open_logbook)
+	bottom.add_child(log_b)
+	var tro_b := UiTheme.big_button("TROPHIES", UiTheme.TEAL, 64, 17)
+	tro_b.custom_minimum_size.x = 0
+	tro_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tro_b.pressed.connect(open_trophies)
+	bottom.add_child(tro_b)
+	var play := UiTheme.big_button("DEPLOY", UiTheme.AMBER, 64, 22)
+	play.custom_minimum_size.x = 0
+	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	play.size_flags_stretch_ratio = 1.4
 	play.pressed.connect(GameState.go_mode_select)
 	bottom.add_child(play)
-	var menu := UiTheme.big_button("MENU", UiTheme.LINE, btn_h, 18 if portrait else 20)
-	menu.pressed.connect(GameState.go_main_menu)
-	bottom.add_child(menu)
 
+	show_tab("camp")
+	if GameState.hangar_notice != "":
+		_toast(GameState.hangar_notice)
+		GameState.hangar_notice = ""
+
+
+## =========================================================================
+## The hangar picture
+
+func _build_view() -> Control:
+	var v := Control.new()
+	_view = v
+	v.name = "HangarView"
+	v.custom_minimum_size = Vector2(0, 400)
+	v.clip_contents = true
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var names: Array = ["backdrop", "trophy_wall"]
+	for s in [0, 1, 2, 3]:
+		names.append("stash_%d" % s)
+	for id in HangarDefs.SHARED_IDS:
+		for s in [1, 3, 5]:
+			names.append("%s_%d" % [id, s])
+	for h in CharacterDefs.PLAYABLE_IDS:
+		for s in [1, 3, 5]:
+			names.append("station_%s_%d" % [h, s])
+	for p in ["noel", "bentley", "lillie"]:
+		for s in [1, 2, 3]:
+			names.append("kennel_%s_%d" % [p, s])
+	for b in ["dread_naught", "mutant_overlord"]:
+		names.append("trophy_%s" % b)
+	for n in names:
+		var path := HANGAR_DIR + str(n) + ".png"
+		if not ResourceLoader.exists(path):
+			continue
+		var tr := TextureRect.new()
+		tr.texture = load(path)
+		tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(tr)
+		_layers[n] = tr
+	## The dogs nap on their beds once the kennel has one.
+	for p in PET_ON_BED.keys():
+		var tex := _pet_frame(str(p))
+		if tex == null:
+			continue
+		var pr := TextureRect.new()
+		pr.texture = tex
+		pr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		pr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(pr)
+		_pets[p] = pr
+	v.resized.connect(_place_pets)
+	_refresh_view(false)
+	return v
+
+
+func _pet_frame(pet_id: String, tight: bool = false) -> Texture2D:
+	var def := PetDefs.get_pet(pet_id)
+	var path := str(def.get("anim", "")) + "_idle.png"
+	if not ResourceLoader.exists(path):
+		return null
+	var strip: Texture2D = load(path)
+	var at := AtlasTexture.new()
+	at.atlas = strip
+	var h := float(strip.get_height())
+	at.region = Rect2(h * 0.2, h * 0.28, h * 0.6, h * 0.6) if tight else Rect2(0, 0, h, h)
+	return at
+
+
+## Art-space (240x150) → view-space transform for the stacked layers.
+func _art_rect() -> Rect2:
+	var sz := _view.size
+	var s := minf(sz.x / 240.0, sz.y / 150.0)
+	var w := 240.0 * s
+	var h := 150.0 * s
+	return Rect2((sz.x - w) * 0.5, (sz.y - h) * 0.5, w, h)
+
+
+func _place_pets() -> void:
+	var r := _art_rect()
+	var s := r.size.x / 240.0
+	for p in _pets.keys():
+		var pr: TextureRect = _pets[p]
+		var feet: Vector2 = PET_ON_BED[p]
+		var size := 30.0 * s
+		pr.size = Vector2(size, size)
+		pr.position = r.position + feet * s - Vector2(size * 0.5, size * 0.82)
+
+
+func _layer_visible(n: String) -> bool:
+	if n == "backdrop" or n == "trophy_wall" or n == "stash_0":
+		return true
+	if n.begins_with("trophy_"):
+		return GameState.has_trophy(n.substr(7))
+	var cut := n.rfind("_")
+	var id := n.substr(0, cut)
+	var stage := int(n.substr(cut + 1))
+	return GameState.camp_rank(id) >= stage
+
+
+func _refresh_view(animate: bool) -> void:
+	for n in _layers.keys():
+		var tr: TextureRect = _layers[n]
+		var want := _layer_visible(str(n))
+		if want and not tr.visible and animate:
+			tr.visible = true
+			tr.modulate.a = 0.0
+			tr.create_tween().tween_property(tr, "modulate:a", 1.0, 0.45)
+		else:
+			tr.visible = want
+	## The Generator lights the whole hangar.
+	var g := GameState.camp_rank("generator")
+	var lit := 0.62 + 0.076 * float(g)
+	var tint := Color(lit, lit * 0.97, lit * 0.92)
+	for n in _layers.keys():
+		(_layers[n] as TextureRect).self_modulate = tint
+	for p in _pets.keys():
+		var pr: TextureRect = _pets[p]
+		pr.visible = GameState.kennel_rank(str(p)) >= 1
+		pr.self_modulate = tint
+	_place_pets()
+
+
+## =========================================================================
+## Tabs + rows
+
+func show_tab(t: String) -> void:
+	if not t in TABS:
+		return
+	if t != _tab:
+		_scroll_y_keep = 0
+	_tab = t
+	for k in _tab_btns.keys():
+		var b: Button = _tab_btns[k]
+		var on := str(k) == t
+		b.add_theme_stylebox_override("normal", UiTheme.box(
+			UiTheme.AMBER.darkened(0.45) if on else UiTheme.PANEL_LIGHT, UiTheme.AMBER if on else UiTheme.LINE, 14, 3 if on else 2))
+	_rebuild()
+
+
+func get_tab() -> String:
+	return _tab
+
+
+func _rebuild() -> void:
+	if _scroll != null:
+		_scroll_y_keep = _scroll.scroll_vertical
+	for c in _list.get_children():
+		_list.remove_child(c)
+		c.free()
+	_scrap_label.text = "%d SCRAP" % GameState.account_scrap
+	match _tab:
+		"camp":
+			_list.add_child(_note("Shared camp upgrades help every survivor."))
+			for id in HangarDefs.ids_for("shared"):
+				_list.add_child(_row(str(id), null))
+		"survivors":
+			_list.add_child(_note("Each survivor's corner: their weapon and signature trick."))
+			var ids: Array = HangarDefs.ids_for("station")
+			## Selected survivor first.
+			var mine := HangarDefs.station_id(GameState.selected_character_id)
+			ids.erase(mine)
+			ids.push_front(mine)
+			for id in ids:
+				var hero := str(id).substr(8)
+				_list.add_child(_row(str(id), load(CharacterDefs.ability_icon_path(hero))))
+		"kennel":
+			_list.add_child(_note("Three ranks per dog. Noel guards, Bentley scouts, Lillie rams."))
+			for id in HangarDefs.ids_for("kennel"):
+				_list.add_child(_row(str(id), _pet_frame(str(id).substr(7), true)))
+		"stash":
+			_build_stash()
+	var pad := Control.new()
+	pad.custom_minimum_size = Vector2(0, 24)
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_list.add_child(pad)
+	_sync_list_width()
+	call_deferred("_clamp_scroll")
+
+
+func _note(text: String) -> Label:
+	return UiTheme.body_label(text, 15, UiTheme.TEXT_DIM)
+
+
+func _row(id: String, icon: Texture2D) -> PanelContainer:
+	var rank := GameState.camp_rank(id)
+	var max_r := HangarDefs.max_rank(id)
+	var cost := GameState.camp_cost(id)
+	var maxed := cost < 0
+	var mine := HangarDefs.layer_of(id) == "station" and id.substr(8) == GameState.selected_character_id
+	var p := card(UiTheme.AMBER if mine else UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var h := HBoxContainer.new()
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_theme_constant_override("separation", 12)
+	p.add_child(h)
+	if icon != null:
+		var ir := TextureRect.new()
+		ir.texture = icon
+		ir.custom_minimum_size = Vector2(56, 56)
+		ir.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ir.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ir.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ir.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(ir)
+	var info := VBoxContainer.new()
+	info.mouse_filter = Control.MOUSE_FILTER_PASS
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 2)
+	h.add_child(info)
+	var title := HBoxContainer.new()
+	title.mouse_filter = Control.MOUSE_FILTER_PASS
+	info.add_child(title)
+	var nm := UiTheme.body_label(HangarDefs.display_name(id), 19, UiTheme.AMBER, false)
+	nm.clip_text = true
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_child(nm)
+	title.add_child(_pips(rank, max_r))
+	if rank > 0:
+		info.add_child(UiTheme.body_label("Now: " + HangarDefs.rank_text(id, rank), 13, UiTheme.TEXT))
+	if not maxed:
+		info.add_child(UiTheme.body_label("Next: " + HangarDefs.rank_text(id, rank + 1), 13, UiTheme.TEXT_DIM))
+	else:
+		info.add_child(UiTheme.body_label(HangarDefs.blurb(id), 13, UiTheme.TEXT_DIM))
+	var btn: Button
+	if maxed:
+		btn = UiTheme.big_button("MAX", UiTheme.LINE, 60, 17)
+		btn.disabled = true
+	else:
+		var afford := GameState.account_scrap >= cost
+		btn = UiTheme.big_button("%d" % cost, UiTheme.TEAL if afford else UiTheme.RUST, 60, 19)
+		btn.disabled = not afford
+		btn.pressed.connect(buy.bind(id))
+	btn.custom_minimum_size.x = 104
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	btn.mouse_force_pass_scroll_events = true
+	h.add_child(btn)
+	return p
+
+
+## Rank pips: filled teal squares for owned ranks.
+func _pips(rank: int, max_r: int) -> HBoxContainer:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 4)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	for i in range(max_r):
+		var r := Panel.new()
+		r.custom_minimum_size = Vector2(12, 12)
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		r.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.TEAL if i < rank else Color(0.1, 0.08, 0.06), UiTheme.TEAL, 3, 2, 0))
+		hb.add_child(r)
+	return hb
+
+
+func buy(id: String) -> bool:
+	if not GameState.try_buy_camp(id):
+		Juice.sfx("ui_tap")
+		return false
+	Juice.sfx("pickup")
+	_refresh_view(true)
+	_rebuild()
+	return true
+
+
+## =========================================================================
+## Stash (Phase B fills it with gear)
+
+func _build_stash() -> void:
+	var cap := GameState.stash_capacity()
+	_list.add_child(_note("Shared lockbox: %d / %d slots. Gear you extract with lands here." % [GameState.stash.size(), cap]))
+	_list.add_child(_row("stash", null))
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	grid.mouse_filter = Control.MOUSE_FILTER_PASS
+	_list.add_child(grid)
+	for i in range(cap):
+		grid.add_child(_slot(GameState.stash[i] if i < GameState.stash.size() else {}))
+
+
+func _slot(item: Dictionary) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(120, 104)
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.mouse_filter = Control.MOUSE_FILTER_PASS
+	var rar := str(item.get("rarity", "common"))
+	var fr := TextureRect.new()
+	var fpath := RARITY_FRAME % rar
+	if ResourceLoader.exists(fpath):
+		fr.texture = load(fpath)
+	fr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	fr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fr.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.35)
+	c.add_child(fr)
+	var ipath := str(item.get("icon", ""))
+	if ipath != "" and ResourceLoader.exists(ipath):
+		var ic := TextureRect.new()
+		ic.texture = load(ipath)
+		ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		ic.offset_left = 22
+		ic.offset_right = -22
+		ic.offset_top = 16
+		ic.offset_bottom = -16
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		c.add_child(ic)
+	return c
+
+
+## =========================================================================
+## Logbook + trophy wall (placeholders until Phase C)
+
+func open_logbook() -> void:
+	var lines: Array = [
+		"DAILY — three small jobs a day for scrap.",
+		"SURVIVOR STORIES — five steps each, ending in their named weapon.",
+		"CAMP MILESTONES — long goals that dress up the hangar.",
+		"",
+		"Helm's still sorting the radio logs. Check back soon.",
+	]
+	_open_popup("LOGBOOK", lines)
+
+
+func open_trophies() -> void:
+	var lines: Array = []
+	for b in [["dread_naught", "Dread Naught"], ["mutant_overlord", "Mutant Overlord"]]:
+		lines.append("%s — %s" % [b[1], "TROPHY MOUNTED" if GameState.has_trophy(str(b[0])) else "not yet slain"])
+	lines.append("")
+	lines.append("First kill of each boss puts a trophy over the hangar door.")
+	_open_popup("TROPHY WALL", lines)
+
+
+func _open_popup(title: String, lines: Array) -> void:
+	close_popup()
+	_popup = Control.new()
+	_popup.name = "Popup"
+	_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_popup)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_popup.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_popup.add_child(center)
+	var p := card(UiTheme.AMBER, UiTheme.PANEL)
+	p.custom_minimum_size = Vector2(minf(640.0, get_viewport_rect().size.x - 40.0), 0)
+	center.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	p.add_child(v)
+	v.add_child(UiTheme.title_label(title, 34))
+	for l in lines:
+		v.add_child(UiTheme.body_label(str(l), 17, UiTheme.TEXT))
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 60, 20)
+	close.pressed.connect(close_popup)
+	v.add_child(close)
+
+
+func close_popup() -> void:
+	if _popup != null and is_instance_valid(_popup):
+		_popup.queue_free()
+	_popup = null
+
+
+func _toast(text: String) -> void:
+	var l := UiTheme.body_label(text, 17, UiTheme.AMBER)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	l.offset_top = 90
+	l.offset_left = 30
+	l.offset_right = -30
+	add_child(l)
+	var tw := l.create_tween()
+	tw.tween_interval(4.0)
+	tw.tween_property(l, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(l.queue_free)
+
+
+## =========================================================================
+## Scroll helpers (touch: rows pass drags through to the scroller)
 
 func _sync_list_width() -> void:
 	if _scroll == null or _list == null:
@@ -88,85 +490,6 @@ func _clamp_scroll() -> void:
 	_sync_list_width()
 	var vbar := _scroll.get_v_scroll_bar()
 	if vbar == null:
-		_scroll.scroll_vertical = 0
 		return
 	var max_y := maxi(0, int(vbar.max_value - vbar.page))
 	_scroll.scroll_vertical = clampi(_scroll_y_keep, 0, max_y)
-	_scroll_y_keep = _scroll.scroll_vertical
-
-
-func _clear_list() -> void:
-	## queue_free keeps old rows for a frame → doubled height / stuck scroll after buy.
-	var kids := _list.get_children()
-	for c in kids:
-		_list.remove_child(c)
-		c.free()
-
-
-func _rebuild() -> void:
-	if _scroll != null:
-		_scroll_y_keep = _scroll.scroll_vertical
-	_clear_list()
-	_scrap_label.text = "SCRAP %d" % GameState.account_scrap
-	for entry in Progression.hangar_catalog_visible():
-		_list.add_child(_row(entry))
-	## End pad so the last skill clears thumbs / home indicator / Xogot chrome when scrolled down.
-	var pad := Control.new()
-	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pad.custom_minimum_size = Vector2(0, 36 if MobileLayout.is_portrait() else 16)
-	_list.add_child(pad)
-	_sync_list_width()
-	call_deferred("_clamp_scroll")
-
-
-func _row(entry: Dictionary) -> PanelContainer:
-	var id := str(entry["id"])
-	var rank := GameState.meta_rank(id)
-	var max_r := int(entry.get("max_rank", 1))
-	var need_lv := int(entry.get("min_account_level", 1))
-	var cost := Progression.hangar_cost(entry, rank)
-	var locked_lv := GameState.account_level < need_lv
-	var maxed := rank >= max_r
-
-	var p := card(UiTheme.LINE if not locked_lv else Color(0.3, 0.25, 0.2), Color(0.11, 0.08, 0.055, 0.9))
-	## PASS: drag on the card body scrolls the list; only the buy button captures taps.
-	p.mouse_filter = Control.MOUSE_FILTER_PASS
-	p.mouse_force_pass_scroll_events = true
-	var h := HBoxContainer.new()
-	h.mouse_filter = Control.MOUSE_FILTER_PASS
-	h.add_theme_constant_override("separation", 16)
-	p.add_child(h)
-
-	var info := VBoxContainer.new()
-	info.mouse_filter = Control.MOUSE_FILTER_PASS
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(info)
-	info.add_child(UiTheme.body_label(str(entry["name"]), 20, UiTheme.AMBER if not locked_lv else UiTheme.TEXT_DIM, false))
-	var desc := str(entry.get("desc", ""))
-	if locked_lv:
-		desc += "  ·  needs Account Lv %d" % need_lv
-	info.add_child(UiTheme.body_label(desc, 14, UiTheme.TEXT_DIM))
-	info.add_child(UiTheme.body_label("Rank %d / %d" % [rank, max_r], 13, UiTheme.TEAL, false))
-
-	var btn: Button
-	if maxed:
-		btn = UiTheme.big_button("MAXED", UiTheme.LINE, 64, 18)
-		btn.disabled = true
-	elif locked_lv:
-		btn = UiTheme.big_button("LOCKED", UiTheme.LINE, 64, 18)
-		btn.disabled = true
-	else:
-		btn = UiTheme.big_button("%d SCRAP" % cost, UiTheme.TEAL if GameState.account_scrap >= cost else UiTheme.RUST, 64, 18)
-		btn.disabled = GameState.account_scrap < cost
-		btn.pressed.connect(func() -> void:
-			if GameState.try_buy_hangar(id):
-				Juice.sfx("pickup")
-				_rebuild()
-			else:
-				Juice.sfx("ui_tap")
-		)
-	btn.custom_minimum_size.x = 140 if MobileLayout.is_portrait() else 160
-	btn.focus_mode = Control.FOCUS_NONE
-	btn.mouse_force_pass_scroll_events = true
-	h.add_child(btn)
-	return p
