@@ -14,12 +14,19 @@ func _init() -> void:
 	assert(EnemyDefs.ids_for_tier(1).size() >= 8)
 	assert(EnemyDefs.ids_for_tier(2).size() >= 5)
 	assert(EnemyDefs.ids_for_tier(3).size() >= 4)
-	## Walk strips exist for sheet units (synthesized, look-locked).
-	assert(ResourceLoader.exists("res://assets/sprites/characters/ash_rook_walk.png"))
-	assert(ResourceLoader.exists("res://assets/sprites/enemies/rad_gator_walk.png"))
-	var anim = UnitAnim.new()
-	anim.setup_from_walk_path("res://assets/sprites/characters/ash_rook_walk.png")
-	assert(anim.has_frames())
+	## Every hero / pet / mob ships the per-state animation strips.
+	for c in CharacterDefs.all_characters():
+		var st := UnitAnim.load_states(str(c["anim"]))
+		for k in ["idle", "walk", "windup", "attack", "hit", "death", "dash", "ability"]:
+			assert(st.has(k))
+		assert(not UnitAnim.load_json(str(c["anim"]) + "_weapon.json").is_empty())
+	for k in EnemyDefs.all_kinds():
+		var st2 := UnitAnim.load_states(str(k["anim"]))
+		for s2 in ["idle", "walk", "windup", "attack", "hit", "death"]:
+			assert(st2.has(s2))
+		assert(not UnitAnim.load_json(str(k["anim"]) + "_attack.json").is_empty())
+	for p in PetDefs.all_pets():
+		assert(UnitAnim.load_states(str(p["anim"])).has("walk"))
 	assert(Progression.run_xp_to_next(1) == 30)
 	assert(Progression.hangar_catalog().size() >= 16)
 	assert(Progression.hangar_catalog_visible().size() >= 15)

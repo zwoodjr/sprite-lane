@@ -63,7 +63,6 @@ var _armor: Dictionary = {}
 var _buffs: Dictionary = {}  ## id -> {time_left, def}
 var _ability: Dictionary = {}
 var _target: Node2D = null
-var _swing_left: float = -1.0 ## counts down to the melee impact moment
 var _swing_dir: Vector2 = Vector2.RIGHT
 var _swing_index: int = 0
 var _drones: Array = []
@@ -73,14 +72,20 @@ var _drones: Array = []
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
-## Sheet-detail heroes at survivor portrait FOV (~1/14 of 720-wide).
-const BODY_FOV_PX := 52.0
-var _body_base_scale: float = 1.0
-var _walk: RefCounted = UnitAnim.new()
-var _attack_flash: float = 0.0
+## One 128 px hero frame spans this many world px (hero body ≈ 45 px tall).
+const HERO_FRAME_WORLD := 56.0
+## Local y where the hero's feet stand (collision centre is the origin).
+const FEET_Y := 20.0
+var _anim: UnitAnim = UnitAnim.new()
+## <id>_weapon.json: per-state/frame weapon tip, hit_frames, melee|ranged.
+var _wpn_art: Dictionary = {}
+var _swing_hits_left: int = 0
+var _swing_atk_fps: float = 12.0
+var _swing_hit_frames: Array = []
+var _dead: bool = false
 
 var _muzzle_flash: Polygon2D
-var _shadow: Polygon2D
+var _flash_pos: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	add_to_group("player")
@@ -99,31 +104,17 @@ func _apply_loadout() -> void:
 	_ability = _char.get("ability", {})
 	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
-	var still_path := str(_char.get("sprite", "res://assets/sprites/characters/ash_rook.png"))
-	var still := load(still_path) as Texture2D
-	body.texture = still
-	var walk_path := still_path.replace(".png", "_walk.png")
-	_walk.setup_from_walk_path(walk_path, still)
-	_sync_body_fov_scale()
+	var prefix := str(_char.get("anim", "res://assets/sprites/characters/ash_rook/ash_rook"))
+	_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y)
+	_wpn_art = UnitAnim.load_json(prefix + "_weapon.json")
+	if not _anim.frame_event.is_connected(_on_anim_frame):
+		_anim.frame_event.connect(_on_anim_frame)
+		_anim.finished.connect(_on_anim_finished)
 	label.text = str(_char.get("display_name", "Wanderer"))
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", _char.get("accent", Color(0.9, 0.8, 0.5)))
 	if not GameState.loadout_changed.is_connected(_on_loadout_changed):
 		GameState.loadout_changed.connect(_on_loadout_changed)
-
-func _sync_body_fov_scale() -> void:
-	## Walk frames are 96×96 cells; stills may vary — normalize to FOV footprint.
-	var tw := 96.0
-	if body.texture != null:
-		if body.texture is AtlasTexture:
-			tw = (body.texture as AtlasTexture).region.size.x
-		else:
-			tw = float(body.texture.get_width())
-			if tw >= 192.0:
-				tw = 96.0
-	_body_base_scale = BODY_FOV_PX / maxf(tw, 1.0)
-	body.scale = Vector2.ONE * _body_base_scale
-	_walk.set_base_scale(_body_base_scale)
 
 func _on_loadout_changed() -> void:
 	## In-run upgrade pick or meta refresh mid-match.
@@ -161,21 +152,11 @@ func _mag_size() -> int:
 	return int(_weapon.get("mag_size", 24)) + int(GameState.run_mods.get("mag", 0.0))
 
 func _build_visuals() -> void:
-	## Soft ground shadow (no coloured ring — reads as a bar at survivor zoom).
-	_shadow = Polygon2D.new()
-	var pts := PackedVector2Array()
-	for i in range(20):
-		var a := TAU * i / 20.0
-		pts.append(Vector2(cos(a) * 15.0, sin(a) * 5.0 + 22.0))
-	_shadow.polygon = pts
-	_shadow.color = Color(0.05, 0.03, 0.02, 0.32)
-	_shadow.z_index = -1
-	add_child(_shadow)
-	move_child(_shadow, 0)
+	## (Ground shadow is baked into the hero strips.)
 	## Muzzle flash (a 4-point star, additive) placed at the per-hero muzzle.
 	_muzzle_flash = Polygon2D.new()
 	_muzzle_flash.polygon = PackedVector2Array([
-		Vector2(-3, 0), Vector2(0, -5), Vector2(16, 0), Vector2(0, 5),
+		Vector2(-2, 0), Vector2(0, -3.5), Vector2(11, 0), Vector2(0, 3.5),
 	])
 	_muzzle_flash.color = Color(1.0, 0.85, 0.45, 0.95)
 	var add := CanvasItemMaterial.new()
@@ -279,31 +260,33 @@ func _update_regen(delta: float) -> void:
 func _facing_dir() -> Vector2:
 	return Vector2.LEFT if _facing_left else Vector2.RIGHT
 
+## Animation runs in _process so the death strip still plays after physics stops.
+func _process(delta: float) -> void:
+	_anim.tick(delta)
+	## A swing interrupted (hit / dash) before its hit frames still lands.
+	if _swing_hits_left > 0 and not (_anim.state == "windup" or _anim.state == "attack"):
+		while _swing_hits_left > 0:
+			_melee_impact()
+
 func _update_visuals(delta: float) -> void:
-	_attack_flash = maxf(0.0, _attack_flash - delta)
 	var moving := velocity.length() > 30.0
 	## Face the target while attacking, otherwise face where you run.
 	if _attack_hold > 0.0 and absf(_last_aim.x) > 0.05:
 		_facing_left = _last_aim.x < 0.0
 	elif absf(velocity.x) > 20.0:
 		_facing_left = velocity.x < 0.0
-	body.flip_h = _facing_left
-	## 4-frame walk strip + procedural bob/lean (sheet look locked).
-	_walk.tick(body, velocity if moving else Vector2.ZERO, delta, {
-		"move_thresh": 30.0,
-		"speed_ref": base_speed,
-		"bob_amp": 3.5,
-		"attack": _attack_flash > 0.0,
-	})
+	_anim.set_facing(_facing_left)
+	## Real walk cycle; its rate follows actual speed (no procedural bob).
+	if moving:
+		_anim.set_locomotion("walk", clampf(velocity.length() / base_speed, 0.55, 1.6))
+	else:
+		_anim.set_locomotion("idle")
 	if moving:
 		_step_t += delta
 		if _step_t > 0.26:
 			_step_t = 0.0
 			Juice.dust_puff(global_position + Vector2(0, 18), 3)
 	_muzzle_flash.visible = _flash_left > 0.0
-	if _muzzle_flash.visible:
-		_muzzle_flash.position = _muzzle_offset()
-		_muzzle_flash.rotation = _last_aim.angle()
 	## Blink during i-frames
 	if _iframes > 0.0 and _dash_left <= 0.0:
 		body.modulate.a = 0.45 if int(_iframes * 30.0) % 2 == 0 else 1.0
@@ -374,11 +357,18 @@ func _try_dash() -> void:
 	_iframes = maxf(_iframes, DASH_IFRAMES * GameState.endurance_iframe_mult())
 	Juice.sfx("dash")
 	Juice.dust_puff(global_position + Vector2(0, 16), 8)
+	if absf(_dash_dir.x) > 0.1:
+		_facing_left = _dash_dir.x < 0.0
+		_anim.set_facing(_facing_left)
+	_anim.play_over("dash", DASH_TIME + 0.04)
 	dashed.emit()
 
 func _spawn_afterimage() -> void:
 	var ghost := Sprite2D.new()
 	ghost.texture = body.texture
+	ghost.hframes = body.hframes
+	ghost.frame = body.frame
+	ghost.offset = body.offset
 	ghost.flip_h = body.flip_h
 	ghost.scale = body.scale
 	ghost.global_position = body.global_position
@@ -418,6 +408,7 @@ func _try_ability() -> void:
 		Juice.sfx("empty", -6.0)
 		return
 	_ability_cd = _ability_cooldown()
+	_anim.play("ability")
 	match str(_ability.get("id", "")):
 		"field_draught":
 			var amt := float(_ability.get("heal", 28.0))
@@ -448,10 +439,35 @@ func get_trigger_range() -> float:
 func get_target() -> Node2D:
 	return _target if _target != null and is_instance_valid(_target) else null
 
-## Muzzle offset in local space (x mirrored with facing).
+## Weapon tip for a state/frame from <id>_weapon.json, in local space
+## (mirrored with facing). Falls back to the data muzzle when art has none.
+## Returns {"pos": Vector2, "dir": Vector2}.
+func _tip_info(state: String = "", frame: int = -1) -> Dictionary:
+	var st := state if state != "" else _anim.state
+	var fr := frame if frame >= 0 else _anim.frame
+	var arr: Array = (_wpn_art.get("states", {}) as Dictionary).get(st, [])
+	if arr.is_empty() or not _anim.is_ready():
+		var m: Vector2 = _weapon.get("muzzle", Vector2(18, -4))
+		return {"pos": Vector2(-m.x if _facing_left else m.x, m.y), "dir": _facing_dir()}
+	var e: Dictionary = arr[clampi(fr, 0, arr.size() - 1)]
+	var tip: Array = e.get("tip", [64.0, 64.0])
+	return {
+		"pos": _anim.frame_to_local(Vector2(float(tip[0]), float(tip[1]))),
+		"dir": _anim.angle_to_dir(float(e.get("angle", 0.0))),
+	}
+
 func _muzzle_offset() -> Vector2:
-	var m: Vector2 = _weapon.get("muzzle", Vector2(18, -4))
-	return Vector2(-m.x if _facing_left else m.x, m.y)
+	return _tip_info()["pos"]
+
+func _art_hit_frames(state: String, fallback: Array) -> Array:
+	var hf: Variant = (_wpn_art.get("hit_frames", {}) as Dictionary).get(state, fallback)
+	return hf if hf is Array and not (hf as Array).is_empty() else fallback
+
+## Turn to face the current aim (attacks always face their target).
+func _face_aim() -> void:
+	if absf(_last_aim.x) > 0.05:
+		_facing_left = _last_aim.x < 0.0
+		_anim.set_facing(_facing_left)
 
 func muzzle_global() -> Vector2:
 	return global_position + _muzzle_offset()
@@ -497,12 +513,7 @@ func _pick_target(range_px: float) -> Node2D:
 				return cur
 	return best
 
-func _update_combat(delta: float) -> void:
-	## Pending melee impact lands even mid-dash (the swing already started).
-	if _swing_left >= 0.0:
-		_swing_left -= delta
-		if _swing_left < 0.0:
-			_melee_impact()
+func _update_combat(_delta: float) -> void:
 	if _dash_left > 0.0:
 		return
 	if Input.is_action_just_pressed("reload") and not is_melee() and _ammo < _mag_size() and _reload_left <= 0.0:
@@ -519,7 +530,7 @@ func _update_combat(delta: float) -> void:
 	if to.length() > 0.5:
 		_last_aim = to.normalized()
 	_attack_hold = 0.35
-	if _fire_cd > 0.0 or _swing_left >= 0.0:
+	if _fire_cd > 0.0 or _swing_hits_left > 0:
 		return
 	if is_melee():
 		_start_swing()
@@ -536,8 +547,8 @@ func _try_shoot() -> void:
 	_fire_cd = 1.0 / maxf(0.1, rate)
 	_fire_one_shot()
 
-func _roll_damage() -> Array:
-	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage()
+func _roll_damage(mult: float = 1.0) -> Array:
+	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage() * mult
 	var crit := false
 	if randf() < GameState.crit_chance():
 		crit = true
@@ -546,7 +557,20 @@ func _roll_damage() -> Array:
 
 func _fire_one_shot() -> void:
 	_ammo -= 1
-	var origin := muzzle_global()
+	_face_aim()
+	## Standing: play the firing strip (recoil on its hit frame). Moving: keep
+	## the walk cycle and fire from the gun tip of the current walk frame.
+	var tip_state := _anim.state
+	var tip_frame := _anim.frame
+	if velocity.length() < 60.0 and _anim.has_state("attack") and not _anim.is_playing("dash") and not _anim.is_playing("ability"):
+		var hf := int(_art_hit_frames("attack", [0])[0])
+		var atk_fps := maxf(12.0, float(_anim.frame_count("attack")) * float(_weapon.get("fire_rate", 8.0)) * _buff_firerate() * 0.5)
+		_anim.play("attack", atk_fps)
+		tip_state = "attack"
+		tip_frame = hf
+	var tip := _tip_info(tip_state, tip_frame)
+	_flash_pos = tip["pos"]
+	var origin := global_position + _flash_pos
 	var aim := _last_aim
 	var tgt := get_target()
 	if tgt != null:
@@ -574,7 +598,8 @@ func _fire_one_shot() -> void:
 	bullet.set("crit", bool(roll[1]))
 	get_tree().current_scene.add_child(bullet)
 	_flash_left = 0.05
-	_attack_flash = 0.12
+	_muzzle_flash.position = _flash_pos
+	_muzzle_flash.rotation = aim.angle()
 	Juice.sfx("shot", -4.0)
 	Juice.shake(float(_weapon.get("shake", 0.035)))
 	ammo_changed.emit(_ammo, _mag_size(), false)
@@ -594,13 +619,37 @@ func _start_swing() -> void:
 		## Twin blades: alternate the slash left / right of the target line.
 		_swing_dir = _swing_dir.rotated(alt if _swing_index % 2 == 0 else -alt)
 	_swing_index += 1
-	_swing_left = float(m.get("windup", 0.1))
-	_attack_flash = 0.18
+	_face_aim()
+	## Windup strip over the weapon's windup, then the attack strip; damage
+	## lands on the art's hit frames (split evenly across them).
+	_swing_hit_frames = _art_hit_frames("attack", [1])
+	_swing_hits_left = _swing_hit_frames.size()
+	var windup := float(m.get("windup", 0.1))
+	_swing_atk_fps = maxf(12.0, float(_anim.frame_count("attack")) / maxf(_fire_cd - windup, 0.08))
+	if not _anim.has_state("attack"):
+		while _swing_hits_left > 0:
+			_melee_impact()
+	elif windup > 0.02 and _anim.has_state("windup"):
+		_anim.play_over("windup", windup)
+	else:
+		_anim.play("attack", _swing_atk_fps)
 	Juice.sfx("dash", -10.0, 0.2)
+
+func _on_anim_finished(state: String) -> void:
+	if state == "windup" and _swing_hits_left > 0:
+		_anim.play("attack", _swing_atk_fps)
+
+func _on_anim_frame(state: String, frame: int) -> void:
+	if state == "attack" and _swing_hits_left > 0 and frame in _swing_hit_frames:
+		_melee_impact()
 
 ## Damage is applied once, at the impact moment, to every enemy in the hitbox.
 func _melee_impact() -> void:
-	_swing_left = -1.0
+	if _swing_hits_left <= 0:
+		return
+	var first := _swing_hits_left == _swing_hit_frames.size()
+	var share := 1.0 / float(maxi(1, _swing_hit_frames.size()))
+	_swing_hits_left -= 1
 	var m: Dictionary = _weapon["melee"]
 	var shape := str(m.get("shape", "arc"))
 	var hits := 0
@@ -611,17 +660,19 @@ func _melee_impact() -> void:
 		var e := n as Node2D
 		if not _in_melee_box(e, shape, m):
 			continue
-		var roll := _roll_damage()
+		var roll := _roll_damage(share)
 		any_crit = any_crit or bool(roll[1])
 		var dir := (e.global_position - global_position).normalized()
-		e.call("take_damage", float(roll[0]), dir, float(m.get("knockback", 200.0)), bool(roll[1]))
+		e.call("take_damage", float(roll[0]), dir, float(m.get("knockback", 200.0)) * (1.0 if first else 0.35), bool(roll[1]))
 		hits += 1
 	for n in get_tree().get_nodes_in_group("breakables"):
 		if n is Node2D and is_instance_valid(n) and n.has_method("take_damage") and _in_melee_box(n as Node2D, shape, m):
-			n.call("take_damage", float(_weapon.get("damage", 12)) * damage_mult)
-	_spawn_smear(shape, m)
+			n.call("take_damage", float(_weapon.get("damage", 12)) * damage_mult * share)
+	if first:
+		_spawn_smear(shape, m)
 	if hits > 0:
-		Juice.hitstop(0.05)
+		if first:
+			Juice.hitstop(0.05)
 		Juice.sfx("hit", -2.0)
 		var sh := float(m.get("shake", 0.0))
 		if sh > 0.0:
@@ -717,6 +768,8 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	Juice.shake(0.28)
 	Juice.haptic(30)
 	Juice.flash(body, Color(2.5, 0.6, 0.5), 0.15)
+	if not (_anim.is_playing("dash") or _anim.is_playing("ability")):
+		_anim.play("hit")
 	Juice.damage_number(global_position + Vector2(0, -30), dmg, false, UiTheme.DANGER)
 	if hp <= 0.0 and _last_stitch_available:
 		_last_stitch_available = false
@@ -732,7 +785,11 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		remove_from_group("player")
 		died.emit()
 		set_physics_process(false)
-		visible = false
+		_dead = true
+		_swing_hits_left = 0
+		_muzzle_flash.visible = false
+		body.modulate = Color.WHITE
+		_anim.play("death")
 		collision_layer = 0
 		for d in _drones:
 			if is_instance_valid(d):

@@ -5,8 +5,12 @@ extends CharacterBody2D
 signal rampage_started(target: Node)
 signal rampage_ended
 
-## Pets sit near hero FOV so companions aren't tiny ants beside the cast.
-const BODY_FOV_PX := 50.0
+## One 128 px pet frame spans this many world px (same px density as heroes,
+## so the dogs read dog-sized next to their human).
+const PET_FRAME_WORLD := 58.0
+const FEET_Y := 12.0
+## Standing still this long → sit down.
+const SIT_AFTER := 2.0
 
 var _def: Dictionary = {}
 var _player: Node2D
@@ -22,11 +26,10 @@ var _ram_dir: Vector2 = Vector2.RIGHT
 var _ram_wake_hit: Dictionary = {} ## instance_id -> true this charge
 var _accent_left: float = 0.0
 var _bob_t: float = 0.0
-var _body_base_scale: float = 1.0
 var _flash_left: float = 0.0
-var _walk: RefCounted = UnitAnim.new()
-var _walk_calm_path: String = ""
-var _walk_accent_path: String = ""
+var _anim: UnitAnim = UnitAnim.new()
+var _anim_prefix: String = ""
+var _still_t: float = 0.0
 
 @onready var body: Sprite2D = $Body
 @onready var name_label: Label = $NameLabel
@@ -60,22 +63,10 @@ func _accent_active() -> bool:
 	return _rampaging or _ram_left > 0.0 or _accent_left > 0.0
 
 func _apply_look() -> void:
-	var path := str(_def.get("sprite", "res://assets/sprites/pets/noel.png"))
-	## Prefer sprite_accent; fall back to legacy sprite_rampage key.
-	var accent := str(_def.get("sprite_accent", _def.get("sprite_rampage", "")))
-	_walk_calm_path = path.replace(".png", "_walk.png")
-	_walk_accent_path = accent.replace(".png", "_walk.png") if accent != "" else ""
-	if _accent_active() and accent != "":
-		path = accent
-	var tex := load(path) as Texture2D
-	if body and tex:
-		body.texture = tex
-	## Walk strip from calm art (accent uses same walk + modulate punch).
-	var walk_path := _walk_calm_path
-	if _accent_active() and _walk_accent_path != "" and ResourceLoader.exists(_walk_accent_path):
-		walk_path = _walk_accent_path
-	_walk.setup_from_walk_path(walk_path, tex)
-	_sync_body_scale()
+	var prefix := str(_def.get("anim", "res://assets/sprites/pets/noel/noel"))
+	if body and prefix != _anim_prefix:
+		_anim_prefix = prefix
+		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y)
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
 		name_label.add_theme_font_size_override("font_size", 10)
@@ -85,20 +76,6 @@ func _apply_look() -> void:
 		elif _accent_left > 0.0:
 			col = Color(1.0, 0.85, 0.45)
 		name_label.add_theme_color_override("font_color", col)
-
-func _sync_body_scale() -> void:
-	var tw := 96.0
-	if body and body.texture != null:
-		if body.texture is AtlasTexture:
-			tw = (body.texture as AtlasTexture).region.size.x
-		else:
-			tw = float(body.texture.get_width())
-			if tw >= 192.0:
-				tw = 96.0
-	_body_base_scale = BODY_FOV_PX / maxf(tw, 1.0)
-	if body:
-		body.scale = Vector2.ONE * _body_base_scale
-	_walk.set_base_scale(_body_base_scale)
 
 func _physics_process(delta: float) -> void:
 	_bite_cd = maxf(0.0, _bite_cd - delta)
@@ -189,8 +166,8 @@ func _update_move(delta: float) -> void:
 	else:
 		velocity = velocity.move_toward(Vector2.ZERO, 2200.0 * delta)
 	move_and_slide()
-	if body and to.length() > 4.0:
-		body.flip_h = to.x < 0.0
+	if to.length() > 4.0 and absf(to.x) > 2.0 and velocity.length() > 20.0:
+		_anim.set_facing(to.x < 0.0)
 
 func _update_combat(delta: float) -> void:
 	match _ability_id():
@@ -253,6 +230,7 @@ func _do_bark() -> void:
 	var dur := float(_def.get("bark_distract_sec", 1.4))
 	Juice.sfx("ability", -4.0)
 	Juice.float_text(global_position + Vector2(0, -26), "BARK!", Color(1.0, 0.9, 0.5), 16)
+	_anim.play("bark")
 	Juice.burst(global_position, Color(1.0, 0.85, 0.4), 12, radius * 0.6, 0.35)
 	var n := 0
 	for node in get_tree().get_nodes_in_group("enemies"):
@@ -273,6 +251,7 @@ func _do_find() -> void:
 	var radius := float(_def.get("find_radius", 520.0))
 	Juice.sfx("pickup", -6.0)
 	Juice.float_text(global_position + Vector2(0, -26), "FOUND!", Color(0.7, 0.95, 0.6), 15)
+	_anim.play("drop")
 	## Ping breakables in range.
 	for crate in get_tree().get_nodes_in_group("breakables"):
 		if not (crate is Node2D) or not is_instance_valid(crate):
@@ -316,6 +295,8 @@ func _try_start_ram() -> void:
 	_ram_cd = float(_def.get("ram_cooldown", 6.5))
 	_apply_look()
 	Juice.sfx("dash", -2.0)
+	_anim.set_facing(_ram_dir.x < 0.0)
+	_anim.play("charge")
 	Juice.float_text(global_position + Vector2(0, -28), "LILLIE RAM!", Color(1.0, 0.55, 0.3), 16)
 	Juice.dust_puff(global_position + Vector2(0, 12), 8)
 
@@ -329,8 +310,7 @@ func _tick_ram(delta: float) -> void:
 	var spd := float(_def.get("ram_speed", 520.0))
 	velocity = _ram_dir * spd
 	move_and_slide()
-	if body:
-		body.flip_h = _ram_dir.x < 0.0
+	_anim.set_facing(_ram_dir.x < 0.0)
 	## Wake: enemies we pass (not the primary — they get the impact hit).
 	var wake_r := float(_def.get("ram_wake_radius", 42.0))
 	var wake_dmg := float(_def.get("ram_wake_damage", 14.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
@@ -364,6 +344,8 @@ func _ram_impact(connected: bool) -> void:
 		Juice.dust_puff(global_position + Vector2(0, 10), 6)
 		Juice.float_text(global_position + Vector2(0, -24), "MISS", Color(0.75, 0.7, 0.6), 14)
 		_target = null
+		_anim.set_locomotion("idle")
+		_anim.play("idle")
 		_apply_look()
 		return
 	var radius := float(_def.get("ram_impact_radius", 95.0))
@@ -372,6 +354,7 @@ func _ram_impact(connected: bool) -> void:
 	if _target != null and is_instance_valid(_target):
 		global_position = global_position.lerp((_target as Node2D).global_position, 0.55)
 	Juice.sfx("enemy_die", -4.0)
+	_anim.play("impact")
 	Juice.burst(global_position, Color(1.0, 0.5, 0.25), 22, radius * 1.5, 0.5)
 	Juice.shake(0.22)
 	Juice.float_text(global_position + Vector2(0, -30), "BOOM!", Color(1.0, 0.6, 0.3), 18)
@@ -389,6 +372,9 @@ func _ram_impact(connected: bool) -> void:
 func _bite(enemy: Node2D) -> void:
 	_bite_cd = float(_def.get("bite_cooldown", 0.6))
 	var dmg := float(_def.get("bite_damage", 8.0)) * GameState.pet_power_mult()
+	_anim.set_facing(enemy.global_position.x < global_position.x)
+	if not _anim.is_busy():
+		_anim.play("attack")
 	if enemy.has_method("take_damage"):
 		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized())
 	Juice.sfx("hit", -10.0)
@@ -409,16 +395,24 @@ func _nearest_enemy(max_d: float) -> Node2D:
 func _update_visuals(delta: float) -> void:
 	if body == null:
 		return
-	var hot := _rampaging or _ram_left > 0.0
-	_walk.tick(body, velocity, delta, {
-		"move_thresh": 24.0,
-		"speed_ref": float(_def.get("follow_speed", 260.0)),
-		## Strip already has the doodle trot — keep secondary motion tiny.
-		"bob_amp": 1.4 if hot else 0.9,
-		"squash_amp": 0.012,
-		"lean_amp": 0.03,
-		"attack": hot or _accent_left > 0.0,
-	})
+	_anim.tick(delta)
+	var v := velocity.length()
+	if _ram_left > 0.0:
+		## Lillie's charge loop runs for the whole ram.
+		if not _anim.is_playing("charge"):
+			_anim.play("charge")
+	elif v > 24.0:
+		_still_t = 0.0
+		var mult := clampf(v / float(_def.get("follow_speed", 260.0)), 0.6, 1.6)
+		_anim.set_locomotion("rampage" if _rampaging and _anim.has_state("rampage") else "walk", mult)
+	else:
+		_still_t += delta
+		if _rampaging and _anim.has_state("rampage"):
+			_anim.set_locomotion("rampage")
+		else:
+			_anim.set_locomotion("idle")
+			if _still_t > SIT_AFTER and _anim.state == "idle" and _anim.has_state("sit"):
+				_anim.play("sit")
 	if _ram_left > 0.0:
 		body.modulate = Color(1.4, 0.9, 0.7)
 	elif _rampaging:

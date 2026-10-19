@@ -1,7 +1,6 @@
-[gd_scene load_steps=4 format=3 uid="uid://wanderer_pet"]
+[gd_scene load_steps=3 format=3 uid="uid://wanderer_pet"]
 
 [ext_resource type="Script" path="res://scripts/entities/pet.gd" id="1_pet"]
-[ext_resource type="Texture2D" path="res://assets/sprites/pets/noel.png" id="2_tex"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_1"]
 radius = 10.0
@@ -12,7 +11,6 @@ collision_mask = 1
 script = ExtResource("1_pet")
 
 [node name="Body" type="Sprite2D" parent="."]
-texture = ExtResource("2_tex")
 centered = true
 texture_filter = 0
 

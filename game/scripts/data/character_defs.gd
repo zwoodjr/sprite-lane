@@ -86,7 +86,8 @@ static func _table() -> Dictionary:
 			"display_name": "Ash Rook",
 			"fantasy": "Heavy ordnance scavenger — scrap boom, long wind-up",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/ash_rook.png",
+			"sprite": "res://assets/sprites/characters/ash_rook/ash_rook.png",
+			"anim": "res://assets/sprites/characters/ash_rook/ash_rook",
 			"color": Color(0.75, 0.35, 0.28),
 			"accent": Color(0.95, 0.55, 0.25),
 			"perks": [
@@ -116,7 +117,8 @@ static func _table() -> Dictionary:
 			"display_name": "Vesper Thorn",
 			"fantasy": "Dust-apothecary marksman — coated rounds from the belt vials",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/vesper_thorn.png",
+			"sprite": "res://assets/sprites/characters/vesper_thorn/vesper_thorn.png",
+			"anim": "res://assets/sprites/characters/vesper_thorn/vesper_thorn",
 			"color": Color(0.55, 0.35, 0.70),
 			"accent": Color(0.70, 0.45, 0.90),
 			"perks": [
@@ -145,7 +147,8 @@ static func _table() -> Dictionary:
 			"display_name": "Pebble",
 			"fantasy": "Small frame, oversized scrap hammer — crack the line",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/pebble.png",
+			"sprite": "res://assets/sprites/characters/pebble/pebble.png",
+			"anim": "res://assets/sprites/characters/pebble/pebble",
 			"color": Color(0.85, 0.80, 0.75),
 			"accent": Color(0.95, 0.45, 0.55),
 			"perks": [
@@ -174,7 +177,8 @@ static func _table() -> Dictionary:
 			"display_name": "Bolt Juno",
 			"fantasy": "Boosted scrap-fist + flail pull — yank, then punch",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/bolt_juno.png",
+			"sprite": "res://assets/sprites/characters/bolt_juno/bolt_juno.png",
+			"anim": "res://assets/sprites/characters/bolt_juno/bolt_juno",
 			"color": Color(0.80, 0.25, 0.22),
 			"accent": Color(0.95, 0.40, 0.30),
 			"perks": [
@@ -203,7 +207,8 @@ static func _table() -> Dictionary:
 			"display_name": "Sister Cinder",
 			"fantasy": "Field medic — medkit + suppressor rifle",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/sister_cinder.png",
+			"sprite": "res://assets/sprites/characters/sister_cinder/sister_cinder.png",
+			"anim": "res://assets/sprites/characters/sister_cinder/sister_cinder",
 			"color": Color(0.85, 0.45, 0.35),
 			"accent": Color(0.35, 0.75, 0.55),
 			"perks": [
@@ -235,7 +240,8 @@ static func _table() -> Dictionary:
 			"display_name": "Quill Marrow",
 			"fantasy": "Dustcoat gunner — bayonet SMG, hose the pack",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/quill_marrow.png",
+			"sprite": "res://assets/sprites/characters/quill_marrow/quill_marrow.png",
+			"anim": "res://assets/sprites/characters/quill_marrow/quill_marrow",
 			"color": Color(0.55, 0.42, 0.28),
 			"accent": Color(0.90, 0.78, 0.40),
 			"perks": [
@@ -264,7 +270,8 @@ static func _table() -> Dictionary:
 			"display_name": "Nyx Caldera",
 			"fantasy": "Twin dustblades — dance in close and carve",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/nyx_caldera.png",
+			"sprite": "res://assets/sprites/characters/nyx_caldera/nyx_caldera.png",
+			"anim": "res://assets/sprites/characters/nyx_caldera/nyx_caldera",
 			"color": Color(0.30, 0.45, 0.75),
 			"accent": Color(0.45, 0.65, 0.95),
 			"perks": [
@@ -293,7 +300,8 @@ static func _table() -> Dictionary:
 			"display_name": "Helm Wisp",
 			"fantasy": "Pilot-rig drone assist + sidearm",
 			"playable": true,
-			"sprite": "res://assets/sprites/characters/helm_wisp.png",
+			"sprite": "res://assets/sprites/characters/helm_wisp/helm_wisp.png",
+			"anim": "res://assets/sprites/characters/helm_wisp/helm_wisp",
 			"color": Color(0.40, 0.55, 0.40),
 			"accent": Color(0.55, 0.85, 0.55),
 			"perks": [

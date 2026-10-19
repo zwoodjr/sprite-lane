@@ -72,6 +72,7 @@ static func combat_kinds_table() -> Dictionary:
 		entry["damage"] = float(k["damage"])
 		entry["scale"] = float(k["scale"])
 		entry["sprite"] = str(k["sprite"])
+		entry["anim"] = str(k["anim"])
 		entry["display_name"] = str(k["display_name"])
 		entry["tier"] = int(k["tier"])
 		entry["archetype"] = arch
@@ -125,7 +126,8 @@ static func _k(
 		"speed": speed,
 		"damage": damage,
 		"scale": scale,
-		"sprite": "res://assets/sprites/enemies/%s.png" % id,
+		"sprite": "res://assets/sprites/enemies/%s/%s_idle.png" % [id, id],
+		"anim": "res://assets/sprites/enemies/%s/%s" % [id, id],
 		"scrap": scrap,
 		"xp": xp,
 	}
