@@ -483,8 +483,9 @@ func pet_available(pet_id: String) -> bool:
 		return mechs_built.has(pet_id)
 	return PetDefs.is_equipable(pet_id)
 
+## Cores banked from the pouch (E6 kill drops) plus the older boss-material cores.
 func salvage_cores() -> int:
-	return int(ingredients.get("salvage_core", 0))
+	return int(ingredients.get("salvage_core", 0)) + material_count("salvage_core")
 
 func can_build_mech(pet_id: String) -> bool:
 	if not PetDefs.is_mech(pet_id) or mechs_built.has(pet_id):
@@ -496,7 +497,10 @@ func build_mech(pet_id: String) -> bool:
 	if not can_build_mech(pet_id):
 		return false
 	var d := PetDefs.get_pet(pet_id)
-	ingredients["salvage_core"] = salvage_cores() - int(d["build_cores"])
+	var need := int(d["build_cores"])
+	var from_pouch := mini(need, int(ingredients.get("salvage_core", 0)))
+	ingredients["salvage_core"] = int(ingredients.get("salvage_core", 0)) - from_pouch
+	materials["salvage_core"] = material_count("salvage_core") - (need - from_pouch)
 	account_scrap -= int(d["build_scrap"])
 	mechs_built[pet_id] = true
 	save_profile()

@@ -1087,11 +1087,18 @@ func _test_depth_e6() -> void:
 	## Workshop gating.
 	GameState.mechs_built = {}
 	GameState.ingredients["salvage_core"] = 0
+	var keep_mat := GameState.material_count("salvage_core")
+	GameState.materials["salvage_core"] = 0
 	GameState.account_scrap = 5000
 	_check(not GameState.can_build_mech("mech_hound") and not GameState.try_buy_camp("kennel_mech_hound"), "e6 needs cores; bay closed")
 	GameState.ingredients["salvage_core"] = 10
 	_check(GameState.build_mech("mech_hound") and GameState.salvage_cores() == 6 and GameState.account_scrap == 4700, "e6 build spends cores + scrap")
 	_check(not GameState.build_mech("mech_hound") and GameState.pet_available("mech_hound") and not GameState.pet_available("drone_bat"), "e6 built once")
+	GameState.ingredients["salvage_core"] = 1
+	GameState.materials["salvage_core"] = 4
+	_check(GameState.salvage_cores() == 5 and GameState.build_mech("drone_bat") and GameState.salvage_cores() == 0, "e6 boss-material cores count too")
+	GameState.mechs_built.erase("drone_bat")
+	GameState.materials["salvage_core"] = keep_mat
 	_check(GameState.try_buy_camp("kennel_mech_hound") and GameState.kennel_rank("mech_hound") == 1, "e6 mech bay ranks")
 	var hk := HangarDefs.apply_kennel(PetDefs.get_pet("mech_hound"), 3)
 	_check(int(hk["shock_chain"]) == 6, "e6 kennel ranks reach the mech")
