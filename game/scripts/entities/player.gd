@@ -607,6 +607,7 @@ func _try_ability() -> void:
 	_ability_hit_left = float(hf) / float(UnitAnim.DEFAULT_FPS.get("ability", 12.0)) + 0.03
 	Juice.sfx("ability")
 	ability_used.emit(str(_ability.get("name", "Ability")))
+	GameState.quest_event("ability")
 
 ## Closest on-screen enemy within r of the hero (abilities).
 func _ability_pick(r: float) -> Node2D:
@@ -1294,6 +1295,9 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.sfx("hit", -2.0, 0.1)
 		return
 	var dmg := float(amount) * resist_mult
+	## Dust Surge: enemies hit harder while it lasts.
+	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("enemies"):
+		dmg *= GameState.event_enemy_damage
 	## Gear: armor resist; Plague Doctor (2) halves poison / Dust hazards.
 	dmg *= 1.0 - GameState.gear_stat("resist")
 	var hazard := attacker == null or not is_instance_valid(attacker) or not attacker.is_in_group("enemies")

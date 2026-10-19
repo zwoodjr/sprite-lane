@@ -54,6 +54,23 @@ var result_lost_items: Array = []
 var result_salvaged: int = 0
 ## Unlock lines raised mid-run (trophies), shown on the result screen.
 var result_unlocks_pending: PackedStringArray = []
+## --- Logbook (Phase C) ---
+## {"date": "YYYY-MM-DD", "quests": [...]} — refreshed each day (QuestDefs.roll_daily).
+var daily: Dictionary = {}
+## Survivor stories: hero -> {"step": 0..5, "have": progress on the current step}.
+var stories: Dictionary = {}
+## Camp milestones done: id -> true (cosmetics / trophies in the hangar).
+var milestones: Dictionary = {}
+## Pet Bond XP per dog (EventDefs.PET_BOND / BOND_*).
+var kennel_bond: Dictionary = {}
+## Story Legendaries waiting for stash room.
+var pending_rewards: Array = []
+## In-run event state (reset every deploy).
+var event_scrap_mult: float = 1.0
+var event_enemy_damage: float = 1.0
+var events_done_run: int = 0
+var extract_bonus_scrap: int = 0
+var extract_bonus_notes: PackedStringArray = []
 ## First boss kills: boss kind -> true. Trophies show over the hangar door.
 var trophies: Dictionary = {}
 ## One-time v3 → v4 Hangar migration done (old spend refunded as scrap).
@@ -159,6 +176,11 @@ func save_profile() -> void:
 		"insured": insured,
 		"next_uid": next_uid,
 		"materials": materials,
+		"daily": daily,
+		"stories": stories,
+		"milestones": milestones,
+		"kennel_bond": kennel_bond,
+		"pending_rewards": pending_rewards,
 		"migrated_hangar_v4": migrated_hangar_v4,
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
@@ -250,6 +272,27 @@ func apply_save(d: Dictionary) -> void:
 		if int(it["uid"]) <= 0:
 			it["uid"] = next_uid
 		next_uid = maxi(next_uid, int(it["uid"]) + 1)
+	daily = _dict_or_empty(d.get("daily", {}))
+	if not (daily.get("quests", null) is Array):
+		daily = {}
+	stories = {}
+	var st_raw := _dict_or_empty(d.get("stories", {}))
+	for h in st_raw.keys():
+		var e: Variant = st_raw[h]
+		if typeof(e) == TYPE_DICTIONARY:
+			stories[str(h)] = {"step": clampi(int((e as Dictionary).get("step", 0)), 0, QuestDefs.STORY_STEPS.size()),
+				"have": maxi(0, int((e as Dictionary).get("have", 0)))}
+	milestones = _dict_or_empty(d.get("milestones", {}))
+	kennel_bond = {}
+	var kb := _dict_or_empty(d.get("kennel_bond", {}))
+	for k in kb.keys():
+		kennel_bond[str(k)] = maxi(0, int(kb[k]))
+	var pr: Variant = d.get("pending_rewards", [])
+	pending_rewards = []
+	if typeof(pr) == TYPE_ARRAY:
+		for it in (pr as Array):
+			if typeof(it) == TYPE_DICTIONARY:
+				pending_rewards.append(it)
 	var tr: Variant = d.get("trophies", {})
 	trophies = (tr as Dictionary).duplicate() if typeof(tr) == TYPE_DICTIONARY else {}
 	garage_tokens = int(d.get("garage_tokens", 0))
@@ -270,6 +313,9 @@ func apply_save(d: Dictionary) -> void:
 	if PetDefs.is_equipable(pet_id):
 		selected_pet_id = pet_id
 	_migrate_hangar_v4()
+
+func _dict_or_empty(v: Variant) -> Dictionary:
+	return (v as Dictionary).duplicate(true) if typeof(v) == TYPE_DICTIONARY else {}
 
 ## v3 flat %-stat Hangar → v4 camp: refund every scrap spent on the old list once.
 func _migrate_hangar_v4() -> void:
@@ -431,8 +477,12 @@ func move_speed_bonus() -> float:
 func pickup_radius_bonus() -> float:
 	return gear_stat("pickup")
 
+## Pet Bond levels (extracting with the dog close by) add pet damage.
 func pet_power_mult() -> float:
-	return 1.0
+	return 1.0 + EventDefs.BOND_DAMAGE_PER_LEVEL * float(bond_level(selected_pet_id))
+
+func bond_level(pet_id: String) -> int:
+	return mini(EventDefs.BOND_MAX_LEVEL, int(kennel_bond.get(pet_id, 0)) / EventDefs.BOND_XP_PER_LEVEL)
 
 func loot_quality_bonus() -> float:
 	return 0.0
@@ -613,6 +663,7 @@ func gear_luck() -> float:
 ## In-run pickups: gear (kept on extract), materials, boss bonus + trophy.
 func add_run_loot(item: Dictionary) -> void:
 	run_loot.append(item.duplicate(true))
+	quest_event("gear", 1)
 
 func add_run_material(id: String, n: int) -> void:
 	run_materials[id] = int(run_materials.get(id, 0)) + n
@@ -657,6 +708,142 @@ func _lose_run_loot() -> void:
 	run_loot = []
 	run_materials = {}
 
+## =============================================================================
+## Logbook: daily quests, survivor stories, camp milestones, Pet Bond.
+
+func today() -> String:
+	return Time.get_date_string_from_system()
+
+func highest_unlocked_tier() -> int:
+	return ModeDefs.EXPOSED_TIERS
+
+## New quests each day.
+func refresh_daily() -> void:
+	var d := today()
+	if str(daily.get("date", "")) != d or not (daily.get("quests", null) is Array):
+		daily = {"date": d, "quests": QuestDefs.roll_daily(d, highest_unlocked_tier())}
+
+func daily_quests() -> Array:
+	refresh_daily()
+	return daily["quests"]
+
+func claim_daily(i: int) -> int:
+	var qs := daily_quests()
+	if i < 0 or i >= qs.size():
+		return 0
+	var q: Dictionary = qs[i]
+	if bool(q.get("claimed", false)) or int(q.get("have", 0)) < int(q.get("need", 1)):
+		return 0
+	q["claimed"] = true
+	var r := int(q.get("reward", 0))
+	account_scrap += r
+	save_profile()
+	meta_changed.emit()
+	return r
+
+func story_state(hero: String) -> Dictionary:
+	if not stories.has(hero):
+		stories[hero] = {"step": 0, "have": 0}
+	return stories[hero]
+
+## Progress for dailies and the current survivor's story.
+func quest_event(type: String, amount: int = 1, ctx: Dictionary = {}) -> void:
+	for q in daily_quests():
+		if bool(q.get("claimed", false)) or int(q.get("have", 0)) >= int(q.get("need", 1)):
+			continue
+		var add := QuestDefs.progress_amount(q, type, amount, ctx)
+		if add > 0:
+			q["have"] = mini(int(q["need"]), int(q.get("have", 0)) + add)
+			if int(q["have"]) >= int(q["need"]):
+				result_unlocks_pending.append("Daily done: %s" % str(q.get("label", "")))
+	var hero := selected_character_id
+	if not QuestDefs.STORIES.has(hero):
+		return
+	var st := story_state(hero)
+	var step := int(st["step"])
+	if step >= QuestDefs.STORY_STEPS.size():
+		return
+	var sd: Dictionary = QuestDefs.STORY_STEPS[step]
+	var gain := QuestDefs.progress_amount(sd, type, amount, ctx)
+	if gain <= 0:
+		return
+	st["have"] = int(st["have"]) + gain
+	if int(st["have"]) >= int(sd["need"]):
+		_complete_story_step(hero)
+
+func _complete_story_step(hero: String) -> void:
+	var st := story_state(hero)
+	var step := int(st["step"])
+	var sd: Dictionary = QuestDefs.STORY_STEPS[step]
+	st["step"] = step + 1
+	st["have"] = 0
+	account_scrap += int(sd.get("reward", 0))
+	var story := QuestDefs.story(hero)
+	result_unlocks_pending.append("%s — chapter %d" % [str(story.get("title", "Story")), step + 1])
+	if int(st["step"]) >= QuestDefs.STORY_STEPS.size():
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		var w := GearDefs.make_weapon(hero, "legendary", rng)
+		if not add_to_stash(w):
+			pending_rewards.append(w)
+		result_unlocks_pending.append("Legendary earned: %s" % str(w.get("name", "")))
+
+## Story Legendaries that waited for stash space.
+func claim_pending_rewards() -> int:
+	var n := 0
+	while not pending_rewards.is_empty() and stash.size() < stash_capacity():
+		add_to_stash(pending_rewards.pop_front())
+		n += 1
+	if n > 0:
+		save_profile()
+	return n
+
+func add_bond(pet_id: String, xp: int) -> void:
+	kennel_bond[pet_id] = int(kennel_bond.get(pet_id, 0)) + xp
+
+## Marks newly reached milestones; returns them.
+func check_milestones() -> Array:
+	var out: Array = []
+	for m in QuestDefs.MILESTONES:
+		var id := str(m["id"])
+		if bool(milestones.get(id, false)):
+			continue
+		if _milestone_progress(m) >= int(m["need"]):
+			milestones[id] = true
+			out.append(m)
+	return out
+
+func _milestone_progress(m: Dictionary) -> int:
+	match str(m["check"]):
+		"camp_rank":
+			return camp_rank(str(m["key"]))
+		"stations_min":
+			var lo := 99
+			for h in CharacterDefs.PLAYABLE_IDS:
+				lo = mini(lo, station_rank(h))
+			return lo
+		"kennel_min":
+			return mini(kennel_rank("noel"), mini(kennel_rank("bentley"), kennel_rank("lillie")))
+		"extracts":
+			return successful_extracts
+		"legendary":
+			for it in stash:
+				if str(it.get("legendary", "")) != "":
+					return 1
+			return 0
+		"trophy":
+			return 1 if has_trophy(str(m["key"])) else 0
+	return 0
+
+func milestone_progress(id: String) -> int:
+	return _milestone_progress(QuestDefs.milestone(id))
+
+func has_cosmetic(c: String) -> bool:
+	for m in QuestDefs.MILESTONES:
+		if str(m.get("cosmetic", "")) == c and bool(milestones.get(str(m["id"]), false)):
+			return true
+	return false
+
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
 	save_profile()
@@ -674,6 +861,11 @@ func reset_profile() -> void:
 	loadouts.clear()
 	insured.clear()
 	materials.clear()
+	daily.clear()
+	stories.clear()
+	milestones.clear()
+	kennel_bond.clear()
+	pending_rewards.clear()
 	migrated_hangar_v4 = true
 	garage_tokens = 0
 	successful_extracts = 0
@@ -729,6 +921,11 @@ func begin_run() -> void:
 	run_materials = {}
 	boss_loot_bonus = 0.0
 	result_unlocks_pending = PackedStringArray()
+	event_scrap_mult = 1.0
+	event_enemy_damage = 1.0
+	events_done_run = 0
+	extract_bonus_scrap = 0
+	extract_bonus_notes = PackedStringArray()
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
@@ -769,7 +966,7 @@ func bag_value() -> int:
 
 ## Add bag scrap with meta magnet applied.
 func add_scrap(amount: int) -> int:
-	var gained := maxi(0, int(round(float(amount) * scrap_find_mult())))
+	var gained := maxi(0, int(round(float(amount) * scrap_find_mult() * event_scrap_mult)))
 	scrap_found += gained
 	return gained
 
@@ -836,6 +1033,7 @@ func use_reroll() -> bool:
 
 func note_kill(kind: String) -> void:
 	run_kind_kills[kind] = int(run_kind_kills.get(kind, 0)) + 1
+	quest_event("kills", 1, {"kind": kind})
 
 ## Scavenger's Eye (+ Field Salvager 2) multiplier on kill scrap.
 func run_scrap_mult() -> float:
@@ -868,7 +1066,7 @@ func on_extract_success() -> void:
 	var base := 100 + bag_value()
 	payout_this_run = int(
 		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult()
-	)
+	) + extract_bonus_scrap
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
 	result_scrap_banked = payout_this_run
@@ -889,6 +1087,8 @@ func on_extract_success() -> void:
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d (Hangar gates)" % account_level)
 	_bank_run_loot()
+	result_unlocks.append_array(extract_bonus_notes)
+	quest_event("extract", 1, {"tier": int(mode.get("tier", 1)), "mult": loot_mult})
 	result_unlocks.append_array(result_unlocks_pending)
 	result_unlocks_pending = PackedStringArray()
 	result_summary = "Extracted. +%d scrap banked (×%.1f loot) · run Lv %d · Threat %d" % [
@@ -898,6 +1098,8 @@ func on_extract_success() -> void:
 	total_runs += 1
 	## In-run power dies here — only banked scrap/meta remain.
 	_reset_run_power_after_end()
+	for m in check_milestones():
+		result_unlocks.append("Milestone: %s" % str(m["name"]))
 	save_profile()
 
 func on_wipe() -> void:
@@ -927,14 +1129,14 @@ func on_wipe() -> void:
 		result_unlocks.append("Account prestige Lv %d" % account_level)
 	var kept_item := stash_item(int(insured.get(selected_character_id, -1)))
 	_lose_run_loot()
+	result_unlocks.append_array(result_unlocks_pending)
+	result_unlocks_pending = PackedStringArray()
 	result_lost_keys = PackedStringArray()
 	result_kept_keys = PackedStringArray()
 	for it in result_lost_items:
 		result_lost_keys.append(str(it.get("name", "item")))
 	if not kept_item.is_empty():
 		result_kept_keys.append(str(kept_item.get("name", "item")))
-	result_unlocks.append_array(result_unlocks_pending)
-	result_unlocks_pending = PackedStringArray()
 	result_summary = "Wiped. Kept %d%% of the bag (+%d scrap). Lost %d. Lost gear: %s" % [
 		int(round(float(mode.get("death_keep", 0.1)) * 100.0)),
 		keep,
@@ -943,6 +1145,8 @@ func on_wipe() -> void:
 	]
 	total_runs += 1
 	_reset_run_power_after_end()
+	for m in check_milestones():
+		result_unlocks.append("Milestone: %s" % str(m["name"]))
 	save_profile()
 
 func _reset_run_power_after_end() -> void:
@@ -979,6 +1183,10 @@ func go_loadout(from: String = "hangar") -> void:
 	loadout_from = from
 	get_tree().paused = false
 	get_tree().change_scene_to_file("res://scenes/ui/loadout.tscn")
+
+func go_logbook() -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/logbook.tscn")
 
 func go_hangar() -> void:
 	get_tree().paused = false

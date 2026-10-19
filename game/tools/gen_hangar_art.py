@@ -383,7 +383,41 @@ def trophy(boss):
     return im
 
 
+def cosmetic(c):
+    """Camp milestone rewards (QuestDefs.MILESTONES cosmetic ids)."""
+    im = img()
+    d = ImageDraw.Draw(im)
+    if c == "banner":  # Generator maxed: a lit banner under the roof
+        oline(d, [(102, 4), (138, 4)], WOOD_D)
+        box(d, 106, 5, 134, 26, CLOTH)
+        d.polygon([(106, 26), (120, 33), (134, 26)], fill=CLOTH + (255,))
+        box(d, 116, 10, 124, 18, AMBER)
+        px(d, 120, 14, BULB)
+    elif c == "flag":  # 25 extracts: flag on the roof
+        oline(d, [(12, 0), (12, 30)], STEEL_L)
+        box(d, 13, 2, 26, 10, TEAL)
+        line(d, [(15, 6), (24, 6)], BONE)
+    elif c == "campfire":  # every station rank 3: a little fire on the floor
+        for k in range(3):
+            line(d, [(142 + k * 3, 147), (146 + k * 2, 143)], WOOD_D, 2)
+        d.polygon([(141, 145), (145, 136), (147, 141), (149, 134), (152, 145)], fill=O)
+        d.polygon([(142, 144), (145, 138), (147, 142), (149, 136), (151, 144)], fill=(250, 150, 50, 255))
+        d.polygon([(144, 144), (147, 140), (149, 144)], fill=BULB + (255,))
+    elif c == "toys":  # kennel maxed: ball + rope toy by the beds
+        disc(d, 95, 142, 2, RED)
+        oline(d, [(96, 132), (99, 129)], BONE, 1)
+        px(d, 96, 132, BONE)
+    elif c == "case":  # first Legendary: wall display case
+        box(d, 150, 38, 168, 60, (60, 80, 90))
+        box(d, 152, 40, 166, 58, (110, 150, 160))
+        oline(d, [(154, 54), (164, 44)], AMBER, 1)
+        line(d, [(152, 40), (156, 44)], (200, 230, 240))
+    return im
+
+
 LAYERS = {"backdrop": backdrop}
+for c in ("banner", "flag", "campfire", "toys", "case"):
+    LAYERS["cosmetic_%s" % c] = (lambda c=c: cosmetic(c))
 for s in (1, 3, 5):
     LAYERS["generator_%d" % s] = (lambda s=s: generator(s))
     LAYERS["radio_tower_%d" % s] = (lambda s=s: radio_tower(s))

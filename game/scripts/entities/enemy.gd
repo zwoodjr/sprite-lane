@@ -558,6 +558,7 @@ func _die() -> void:
 	## Gear: elites / bosses pay out their rewards; everyone else rolls a small chance.
 	if role != "":
 		GearPickup.drop_role_reward(parent, global_position, role, kind)
+		GameState.quest_event("elite")
 		if role == "boss":
 			GameState.on_boss_killed(kind)
 			Juice.float_text(global_position + Vector2(0, -60), "BOSS DOWN  +×%.1f LOOT" % GearDefs.BOSS_LOOT_BONUS, UiTheme.AMBER, 22)

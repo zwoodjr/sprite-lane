@@ -78,6 +78,11 @@ func build(c: VBoxContainer) -> void:
 	bottom.add_child(play)
 
 	show_tab("camp")
+	if not GameState.check_milestones().is_empty():
+		GameState.save_profile()
+		_refresh_view(false)
+	if GameState.claim_pending_rewards() > 0:
+		_toast("A story reward was waiting — it's in the stash now")
 	if GameState.hangar_notice != "":
 		_toast(GameState.hangar_notice)
 		GameState.hangar_notice = ""
@@ -107,6 +112,8 @@ func _build_view() -> Control:
 			names.append("kennel_%s_%d" % [p, s])
 	for b in ["dread_naught", "mutant_overlord"]:
 		names.append("trophy_%s" % b)
+	for cz in ["banner", "flag", "campfire", "toys", "case"]:
+		names.append("cosmetic_%s" % cz)
 	for n in names:
 		var path := HANGAR_DIR + str(n) + ".png"
 		if not ResourceLoader.exists(path):
@@ -176,6 +183,8 @@ func _layer_visible(n: String) -> bool:
 		return true
 	if n.begins_with("trophy_"):
 		return GameState.has_trophy(n.substr(7))
+	if n.begins_with("cosmetic_"):
+		return GameState.has_cosmetic(n.substr(9))
 	var cut := n.rfind("_")
 	var id := n.substr(0, cut)
 	var stage := int(n.substr(cut + 1))
@@ -342,6 +351,9 @@ func buy(id: String) -> bool:
 		Juice.sfx("ui_tap")
 		return false
 	Juice.sfx("pickup")
+	for m in GameState.check_milestones():
+		_toast("Milestone: %s — the hangar changes" % str(m["name"]))
+		GameState.save_profile()
 	_refresh_view(true)
 	_rebuild()
 	return true
@@ -425,14 +437,7 @@ func inspect_item(uid: int) -> void:
 ## Logbook + trophy wall (placeholders until Phase C)
 
 func open_logbook() -> void:
-	var lines: Array = [
-		"DAILY — three small jobs a day for scrap.",
-		"SURVIVOR STORIES — five steps each, ending in their named weapon.",
-		"CAMP MILESTONES — long goals that dress up the hangar.",
-		"",
-		"Helm's still sorting the radio logs. Check back soon.",
-	]
-	_open_popup("LOGBOOK", lines)
+	GameState.go_logbook()
 
 
 func open_trophies() -> void:
@@ -440,7 +445,11 @@ func open_trophies() -> void:
 	for b in [["dread_naught", "Dread Naught"], ["mutant_overlord", "Mutant Overlord"]]:
 		lines.append("%s — %s" % [b[1], "TROPHY MOUNTED" if GameState.has_trophy(str(b[0])) else "not yet slain"])
 	lines.append("")
-	lines.append("First kill of each boss puts a trophy over the hangar door.")
+	for m in QuestDefs.MILESTONES:
+		if str(m.get("cosmetic", "")) != "":
+			lines.append("%s %s — %s" % ["[x]" if bool(GameState.milestones.get(str(m["id"]), false)) else "[ ]", str(m["name"]), str(m["desc"])])
+	lines.append("")
+	lines.append("First kill of each boss puts a trophy over the hangar door; milestones dress up the hangar.")
 	_open_popup("TROPHY WALL", lines)
 
 
