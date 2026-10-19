@@ -38,7 +38,41 @@ func _show(path: String, name: String, frames: int = 30) -> void:
 	await get_tree().process_frame
 
 
+## `-- OUTDIR hangar`: the Hangar at a few build-outs, every tab.
+func _hangar_shots() -> void:
+	var keep_camp: Dictionary = GameState.camp.duplicate()
+	var keep_scrap := GameState.account_scrap
+	GameState.account_scrap = 1240
+	GameState.camp = {"generator": 2, "scrap_press": 1, "station_ash_rook": 3, "station_pebble": 1, "kennel_noel": 1}
+	for step in [["early", ["camp", "survivors"]], ["max", ["kennel", "stash", "camp"]]]:
+		if str(step[0]) == "max":
+			GameState.camp = {}
+			for id in HangarDefs.all_ids():
+				GameState.camp[id] = HangarDefs.max_rank(str(id))
+		var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+		get_tree().root.add_child(h)
+		get_tree().current_scene = h
+		for t in step[1]:
+			h.call("show_tab", t)
+			for i in range(30):
+				await get_tree().process_frame
+			await _snap("hangar_%s_%s" % [step[0], t])
+		if str(step[0]) == "max":
+			h.call("open_trophies")
+			for i in range(10):
+				await get_tree().process_frame
+			await _snap("hangar_trophies")
+		h.queue_free()
+		await get_tree().process_frame
+	GameState.camp = keep_camp
+	GameState.account_scrap = keep_scrap
+	get_tree().quit()
+
+
 func _run() -> void:
+	if _char == "hangar":
+		await _hangar_shots()
+		return
 	GameState.tutorial_done = _match_only
 	GameState.selected_character_id = _char
 	if not _match_only:

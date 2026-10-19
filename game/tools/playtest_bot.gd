@@ -54,7 +54,15 @@ var _picking := false
 var _going := false
 var _pad_dist := INF
 var _force_ammo := ""
+var _keep_camp: Dictionary = {}
+var _camp_override := false
 var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
+
+
+func _exit_tree() -> void:
+	if _camp_override:
+		GameState.camp = _keep_camp
+		GameState.save_profile()
 
 
 func _ready() -> void:
@@ -78,6 +86,12 @@ func _ready() -> void:
 	if a.size() > 10: _grants = a[10]
 	if a.size() > 11: _force_ammo = a[11]
 	if a.size() > 12: _start_hp = float(a[12])
+	## arg 13 "max": every Hangar upgrade at full rank for this run (not saved).
+	if a.size() > 13 and a[13] == "max":
+		_keep_camp = GameState.camp.duplicate()
+		_camp_override = true
+		for id in HangarDefs.all_ids():
+			GameState.camp[id] = HangarDefs.max_rank(str(id))
 	_headless = DisplayServer.get_name() == "headless"
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()

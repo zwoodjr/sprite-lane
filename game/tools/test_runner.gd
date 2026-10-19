@@ -101,7 +101,15 @@ func _run() -> void:
 				n.queue_free()
 		await get_tree().process_frame
 	await _test_picker()
+	var keep_scrap := GameState.account_scrap
+	var keep_camp: Dictionary = GameState.camp.duplicate()
+	var keep_stash: Array = GameState.stash.duplicate(true)
+	await _test_hangar()
 	await _test_upgrades()
+	GameState.camp = keep_camp
+	GameState.stash = keep_stash
+	GameState.account_scrap = keep_scrap
+	GameState.save_profile()
 	Engine.time_scale = 1.0
 	print("TEST_PASS" if _bad == 0 else "TEST_FAIL bad=%d" % _bad)
 	get_tree().quit(0 if _bad == 0 else 1)
@@ -156,6 +164,7 @@ func _test_upgrades() -> void:
 	var hi := 0
 	for hero in CharacterDefs.PLAYABLE_IDS:
 		GameState.selected_character_id = hero
+		GameState.selected_pet_id = ["noel", "bentley", "lillie"][hi % 3]
 		GameState.selected_mode_id = "drift"
 		GameState.fast_timers = true
 		GameState.tutorial_done = true
@@ -198,3 +207,76 @@ func _test_upgrades() -> void:
 			await get_tree().process_frame
 		hi += 1
 	print("UPGRADES_OK")
+
+
+func _check(ok: bool, what: String) -> void:
+	if not ok:
+		print("FAIL ", what)
+		_bad += 1
+
+
+## 6) Hangar v4: old-save refund, prices, every rank's effect, ammo gating,
+## the screen (tabs, buy, stash grid, popups). Leaves the camp maxed so the
+## upgrade pass below runs with stations + kennel at full rank.
+func _test_hangar() -> void:
+	## Old v3 save: flat list refunded once, then never again.
+	GameState.migrated_hangar_v4 = false
+	GameState.camp.clear()
+	GameState.apply_save({"version": 3, "migrated_v3": true, "account_scrap": 10,
+		"meta_upgrades": {"starting_hp": 2, "crit_chance": 1, "bogus": 4}})
+	var refund := 90 + int(round((90.0 + 55.0) * 1.35)) + 100
+	_check(GameState.account_scrap == 10 + refund, "hangar refund %d" % GameState.account_scrap)
+	_check(GameState.meta_upgrades.is_empty() and GameState.migrated_hangar_v4, "hangar migrated flag")
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "account_scrap": 5,
+		"meta_upgrades": {"starting_hp": 3}, "camp": {"generator": 9, "nonsense": 2}, "stash": [{"id": "x"}, 4]})
+	_check(GameState.account_scrap == 5, "hangar no double refund")
+	_check(GameState.camp_rank("generator") == 5 and not GameState.camp.has("nonsense"), "camp load clamps")
+	_check(GameState.stash.size() == 1, "stash load filters")
+	GameState.stash.clear()
+	## Prices per the brief.
+	_check(HangarDefs.cost("generator", 0) == 100 and HangarDefs.cost("generator", 4) == 1500, "shared prices")
+	_check(HangarDefs.cost("station_pebble", 4) == 1100 and HangarDefs.cost("kennel_noel", 2) == 900, "station/kennel prices")
+	_check(HangarDefs.cost("stash", 0) == 300 and HangarDefs.cost("stash", 3) == -1, "stash prices")
+	## Ammo Bench gating.
+	GameState.camp.clear()
+	_check(not GameState.ammo_pickups_enabled() and RunFx.random_bench_ammo_id() == "", "ammo gated at bench 0")
+	GameState.camp["ammo_bench"] = 1
+	_check(RunFx.random_bench_ammo_id() in ["incendiary", "frost"], "bench 1 types")
+	GameState.camp.clear()
+	## The screen: tabs, buying, stash, popups.
+	GameState.account_scrap = HangarDefs.full_max_cost()
+	GameState.selected_character_id = "ash_rook"
+	GameState.selected_pet_id = "noel"
+	var base_cd := float(GameState.hero_ability().get("cooldown", 0.0))
+	var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(h)
+	for i in range(3):
+		await get_tree().process_frame
+	for t in ["camp", "survivors", "kennel", "stash"]:
+		h.call("show_tab", t)
+		await get_tree().process_frame
+	for id in HangarDefs.all_ids():
+		while GameState.camp_cost(str(id)) >= 0:
+			if not bool(h.call("buy", str(id))):
+				_check(false, "buy %s" % id)
+				break
+	_check(GameState.account_scrap == 0, "full max costs exactly %d" % HangarDefs.full_max_cost())
+	_check(GameState.stash_capacity() == 50, "stash 50 slots")
+	_check(GameState.starting_hp_bonus() == 50.0 and is_equal_approx(GameState.scrap_find_mult(), 1.4), "generator/press")
+	_check(GameState.pad_ping_lead() == ModeDefs.PING_LEAD + 15.0, "radio tower")
+	_check(float(GameState.hero_ability().get("cooldown", 0.0)) < base_cd, "station cooldown")
+	_check(is_equal_approx(GameState.starting_damage_bonus(), 0.32), "station damage")
+	GameState.reset_loadout_to_defaults()
+	_check(int(GameState.pet.get("rampage_chain", 0)) == 2 and int(GameState.pet.get("kennel_rank", 0)) == 3, "kennel noel r3")
+	GameState.selected_character_id = "helm_wisp"
+	_check(int(GameState.hero_ability().get("temp_drones", 0)) == 2, "helm station drones")
+	h.call("open_logbook")
+	await get_tree().process_frame
+	h.call("open_trophies")
+	await get_tree().process_frame
+	h.call("close_popup")
+	h.call("show_tab", "stash")
+	await get_tree().process_frame
+	h.queue_free()
+	await get_tree().process_frame
+	print("HANGAR_OK")
