@@ -238,10 +238,10 @@ func _tick_rampage_aoe() -> void:
 		if global_position.distance_to(e.global_position) > radius:
 			continue
 		if e.has_method("take_damage"):
-			e.call("take_damage", dmg, (e.global_position - global_position).normalized())
+			e.call("take_damage", dmg, (e.global_position - global_position).normalized(), float(_def.get("bite_knock", 30.0)))
 	if _target != null and is_instance_valid(_target) and _target.has_method("take_damage"):
 		if global_position.distance_to(_target.global_position) <= radius:
-			_target.call("take_damage", dmg * 0.35, (_target.global_position - global_position).normalized())
+			_target.call("take_damage", dmg * 0.35, (_target.global_position - global_position).normalized(), float(_def.get("bite_knock", 30.0)))
 
 func _tick_bentley() -> void:
 	if _bark_cd <= 0.0:
@@ -463,7 +463,7 @@ func _bite(enemy: Node2D) -> void:
 	if not _anim.is_busy():
 		_anim.play("attack")
 	if enemy.has_method("take_damage"):
-		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized())
+		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized(), float(_def.get("bite_knock", 30.0)))
 	Juice.sfx("hit", -10.0)
 	Juice.burst(enemy.global_position, Color(0.95, 0.75, 0.45), 6, 90.0, 0.25)
 

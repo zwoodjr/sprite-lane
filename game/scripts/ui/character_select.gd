@@ -107,7 +107,7 @@ func _pet_tile(def: Dictionary) -> Control:
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(72, 72)
 	b.expand_icon = true
-	b.icon = load(str(def.get("sprite", ""))) as Texture2D
+	b.icon = _first_frame(str(def.get("sprite", "")))
 	b.tooltip_text = str(def.get("name", "Pet"))
 	b.pressed.connect(func() -> void:
 		GameState.selected_pet_id = id
@@ -118,6 +118,21 @@ func _pet_tile(def: Dictionary) -> Control:
 	)
 	_pet_tabs[id] = b
 	return b
+
+## Pet art is an animation strip (square frames side by side): show frame 0.
+func _first_frame(path: String) -> Texture2D:
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var tex := load(path) as Texture2D
+	if tex == null:
+		return null
+	var h := float(tex.get_height())
+	if float(tex.get_width()) <= h * 1.5:
+		return tex
+	var at := AtlasTexture.new()
+	at.atlas = tex
+	at.region = Rect2(0, 0, h, h)
+	return at
 
 func _roster_tile(id: String) -> Control:
 	var def := CharacterDefs.get_character(id)
