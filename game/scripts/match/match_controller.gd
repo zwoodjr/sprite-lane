@@ -359,7 +359,22 @@ func _spawn_point_outside_view(dir: Vector2) -> Vector2:
 	var edge := center + dir * (minf(tx, ty) + SPAWN_MARGIN)
 	var from_hero := edge - player.global_position
 	var d := clampf(from_hero.length(), SPAWN_MIN, SPAWN_MAX)
-	return player.global_position + from_hero.normalized() * d
+	var spot := player.global_position + from_hero.normalized() * d
+	## Keep spawn lanes clear: never drop a mob inside a wreck / wall footprint.
+	for k in range(4):
+		if _spot_free(spot, 26.0):
+			break
+		spot = player.global_position + from_hero.normalized().rotated(0.35 * (k + 1) * (1.0 if k % 2 == 0 else -1.0)) * d
+	return spot
+
+func _spot_free(p: Vector2, r: float) -> bool:
+	var q := PhysicsShapeQueryParameters2D.new()
+	var c := CircleShape2D.new()
+	c.radius = r
+	q.shape = c
+	q.transform = Transform2D(0.0, p)
+	q.collision_mask = 1
+	return get_world_2d().direct_space_state.intersect_shape(q, 1).is_empty()
 
 ## Drop stragglers far behind the player so T2/T3 pressure doesn't accumulate.
 func _cull_far_enemies() -> void:

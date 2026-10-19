@@ -45,6 +45,7 @@ var settings: Dictionary = {
 	"stick_scale": 1.0,
 	"left_handed": false,
 	"show_hints": true,
+	"heat_shimmer": false,
 }
 var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.

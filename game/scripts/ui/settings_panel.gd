@@ -12,6 +12,7 @@ const ROWS := [
 	{"key": "sfx", "type": "toggle", "label": "Sound effects", "desc": ""},
 	{"key": "haptics", "type": "toggle", "label": "Vibration", "desc": ""},
 	{"key": "screen_shake", "type": "toggle", "label": "Screen shake", "desc": ""},
+	{"key": "heat_shimmer", "type": "toggle", "label": "Heat shimmer", "desc": "Faint heat haze over the map. Off saves battery."},
 ]
 
 

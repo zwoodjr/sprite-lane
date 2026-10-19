@@ -22,6 +22,11 @@ func _ready() -> void:
 	zoom = Vector2(SURVIVOR_ZOOM, SURVIVOR_ZOOM)
 	make_current()
 	_add_ambient_dust()
+	var amb := Node2D.new()
+	amb.name = "AmbientFx"
+	amb.set_script(load("res://scripts/fx/ambient_fx.gd"))
+	add_child(amb)
+	amb.call("setup", self)
 
 
 ## Slow wind-blown dust drifting across the screen — sells the wasteland.
