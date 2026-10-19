@@ -238,7 +238,7 @@ static func _table() -> Dictionary:
 		QUILL_MARROW_ID: {
 			"id": QUILL_MARROW_ID,
 			"display_name": "Quill Marrow",
-			"fantasy": "Dustcoat gunner — bayonet SMG, hose the pack",
+			"fantasy": "Dustcoat cutthroat — bayonet knife, carve through the pack",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/quill_marrow/quill_marrow.png",
 			"anim": "res://assets/sprites/characters/quill_marrow/quill_marrow",
