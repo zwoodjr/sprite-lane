@@ -847,8 +847,8 @@ func _reach_dist(e: Node2D, from: Vector2) -> float:
 		d -= ENEMY_BODY_R * float(e.get("body_scale") if "body_scale" in e else 1.0)
 	return d
 
-## Closest on-screen enemy within range; keeps the current target unless a new
-## one is 10% closer (hysteresis) and drops it beyond range × 1.1.
+## Always the closest on-screen enemy within range (re-checked every frame).
+## Hysteresis only keeps a target that drifts just past range (× 1.1).
 func _pick_target(range_px: float) -> Node2D:
 	var best: Node2D = null
 	var best_d := INF
@@ -867,7 +867,7 @@ func _pick_target(range_px: float) -> Node2D:
 	if cur != null and cur.is_in_group("enemies") and is_on_screen(self, cur.global_position):
 		var cd := _reach_dist(cur, global_position)
 		if cd <= range_px * (1.0 + TARGET_HYSTERESIS):
-			if best == null or best == cur or best_d > cd * (1.0 - TARGET_HYSTERESIS):
+			if best == null:
 				return cur
 	return best
 
