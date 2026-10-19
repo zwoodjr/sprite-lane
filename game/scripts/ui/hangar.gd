@@ -352,7 +352,11 @@ func buy(id: String) -> bool:
 
 func _build_stash() -> void:
 	var cap := GameState.stash_capacity()
-	_list.add_child(_note("Shared lockbox: %d / %d slots. Gear you extract with lands here." % [GameState.stash.size(), cap]))
+	_list.add_child(_note("Shared lockbox: %d / %d slots. Gear you extract with lands here. Tap an item to inspect or salvage it." % [GameState.stash.size(), cap]))
+	var eqb := UiTheme.big_button("EQUIP SURVIVORS", UiTheme.TEAL, 58, 18)
+	eqb.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
+	_list.add_child(eqb)
+	_list.add_child(UiTheme.body_label("Dust Hearts %d  ·  Salvage Cores %d" % [GameState.material_count("dust_heart"), GameState.material_count("salvage_core")], 14, UiTheme.TEXT_DIM))
 	_list.add_child(_row("stash", null))
 	var grid := GridContainer.new()
 	grid.columns = 5
@@ -365,37 +369,56 @@ func _build_stash() -> void:
 
 
 func _slot(item: Dictionary) -> Control:
-	var c := Control.new()
-	c.custom_minimum_size = Vector2(120, 104)
-	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.mouse_filter = Control.MOUSE_FILTER_PASS
-	var rar := str(item.get("rarity", "common"))
-	var fr := TextureRect.new()
-	var fpath := RARITY_FRAME % rar
-	if ResourceLoader.exists(fpath):
-		fr.texture = load(fpath)
-	fr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	fr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fr.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.35)
-	c.add_child(fr)
-	var ipath := str(item.get("icon", ""))
-	if ipath != "" and ResourceLoader.exists(ipath):
-		var ic := TextureRect.new()
-		ic.texture = load(ipath)
-		ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		ic.offset_left = 22
-		ic.offset_right = -22
-		ic.offset_top = 16
-		ic.offset_bottom = -16
-		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		c.add_child(ic)
-	return c
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(120, 104)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_force_pass_scroll_events = true
+	var clear := StyleBoxEmpty.new()
+	for st in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(st, clear)
+	var ic := LoadoutScreen.item_icon(item if not item.is_empty() else {"rarity": "common"}, 96.0)
+	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ic.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.35)
+	b.add_child(ic)
+	if item.is_empty():
+		b.disabled = true
+	else:
+		if not GameState.equipped_by(int(item.get("uid", -1))).is_empty():
+			var e := Label.new()
+			e.text = "E"
+			e.add_theme_font_size_override("font_size", 14)
+			e.add_theme_color_override("font_color", UiTheme.TEAL)
+			e.position = Vector2(10, 4)
+			e.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(e)
+		b.pressed.connect(inspect_item.bind(int(item.get("uid", -1))))
+	return b
+
+
+## Item detail popup: stats, who wears it, salvage for scrap.
+func inspect_item(uid: int) -> void:
+	var it := GameState.stash_item(uid)
+	if it.is_empty():
+		return
+	var lines: Array = []
+	var rar := str(it.get("rarity", "common"))
+	lines.append(GearDefs.RARITY_NAME.get(rar, rar))
+	for l in GearDefs.stat_lines(it):
+		lines.append(str(l))
+	var by := GameState.equipped_by(uid)
+	if not by.is_empty():
+		lines.append("Worn by %s" % str(CharacterDefs.get_character(str(by[0])).get("display_name", by[0])))
+	_open_popup(str(it.get("name", "Item")), lines)
+	var v: VBoxContainer = _popup.find_children("*", "VBoxContainer", true, false)[0]
+	var sal := UiTheme.big_button("SALVAGE  +%d SCRAP" % GearDefs.salvage_value(it), UiTheme.RUST, 60, 18)
+	sal.pressed.connect(func() -> void:
+		GameState.salvage(uid)
+		Juice.sfx("pickup")
+		close_popup()
+		_rebuild())
+	v.add_child(sal)
+	v.move_child(sal, v.get_child_count() - 2)
 
 
 ## =========================================================================

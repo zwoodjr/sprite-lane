@@ -88,6 +88,13 @@ func build(c: VBoxContainer) -> void:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(sp)
+	var gear := UiTheme.big_button("GEAR", UiTheme.TEAL, 70, 22)
+	gear.custom_minimum_size.x = 150
+	gear.pressed.connect(func() -> void: GameState.go_loadout("character_select"))
+	bottom.add_child(gear)
+	var gap := Control.new()
+	gap.custom_minimum_size.x = 12
+	bottom.add_child(gap)
 	var deploy := UiTheme.big_button("DEPLOY ›", UiTheme.AMBER, 70, 28)
 	deploy.custom_minimum_size.x = 240 if MobileLayout.is_portrait() else 300
 	deploy.pressed.connect(GameState.go_match)

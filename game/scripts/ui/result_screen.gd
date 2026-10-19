@@ -75,6 +75,30 @@ func build(c: VBoxContainer) -> void:
 	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	c.add_child(nl)
 
+	## Gear: what reached the stash (extract) or was lost (death).
+	var gear_list: Array = GameState.result_found if won else GameState.result_lost_items
+	if not gear_list.is_empty():
+		var gb := VBoxContainer.new()
+		gb.add_theme_constant_override("separation", 1)
+		c.add_child(gb)
+		var head := UiTheme.body_label("GEAR TO STASH" if won else "GEAR LOST", 15, UiTheme.AMBER if won else UiTheme.RUST, false)
+		head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		gb.add_child(head)
+		for i in range(mini(gear_list.size(), 6)):
+			var it: Dictionary = gear_list[i]
+			var r := str(it.get("rarity", "common"))
+			var gl := UiTheme.body_label("%s  (%s)" % [str(it.get("name", "item")), GearDefs.RARITY_NAME.get(r, r)], 14, GearDefs.RARITY_COLOR.get(r, UiTheme.TEXT), false)
+			gl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			gb.add_child(gl)
+		if gear_list.size() > 6:
+			var more := UiTheme.body_label("+%d more" % (gear_list.size() - 6), 13, UiTheme.TEXT_DIM, false)
+			more.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			gb.add_child(more)
+	if won and GameState.result_salvaged > 0:
+		var sl := UiTheme.body_label("Stash full — extras salvaged for %d scrap" % GameState.result_salvaged, 13, UiTheme.TEXT_DIM)
+		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		c.add_child(sl)
+
 	if GameState.result_unlocks.size() > 0:
 		var ub := VBoxContainer.new()
 		ub.add_theme_constant_override("separation", 2)
