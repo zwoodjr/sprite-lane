@@ -67,6 +67,11 @@ func build(c: VBoxContainer) -> void:
 	log_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	log_b.pressed.connect(open_logbook)
 	bottom.add_child(log_b)
+	var gear_b := UiTheme.big_button("GEAR", UiTheme.TEAL, 64, 17)
+	gear_b.custom_minimum_size.x = 0
+	gear_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gear_b.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
+	bottom.add_child(gear_b)
 	var tro_b := UiTheme.big_button("TROPHIES", UiTheme.TEAL, 64, 17)
 	tro_b.custom_minimum_size.x = 0
 	tro_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -441,6 +446,18 @@ func inspect_item(uid: int) -> void:
 		_rebuild())
 	v.add_child(sal)
 	v.move_child(sal, v.get_child_count() - 2)
+	## One-tap equip onto the selected survivor when it fits them.
+	var hero := GameState.selected_character_id
+	if GameState.slot_for(uid, hero) != "" and (by.is_empty() or str(by[0]) != hero):
+		var hname := str(CharacterDefs.get_character(hero).get("display_name", hero))
+		var eq := UiTheme.big_button("EQUIP ON %s" % hname.to_upper(), UiTheme.TEAL, 60, 18)
+		eq.pressed.connect(func() -> void:
+			if GameState.quick_equip(uid, hero):
+				Juice.sfx("pickup")
+			close_popup()
+			_rebuild())
+		v.add_child(eq)
+		v.move_child(eq, v.get_child_count() - 3)
 
 
 ## =========================================================================

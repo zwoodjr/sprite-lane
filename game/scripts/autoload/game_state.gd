@@ -553,6 +553,29 @@ func equip(hero: String, slot: String, uid: int) -> bool:
 	save_profile()
 	return true
 
+## Slot an item would go in for this survivor ("" if it can't be worn).
+func slot_for(uid: int, hero: String = "") -> String:
+	var h := hero if hero != "" else selected_character_id
+	var it := stash_item(uid)
+	if it.is_empty():
+		return ""
+	var kind := str(it.get("kind", ""))
+	if kind == "weapon":
+		return "weapon" if GearDefs.fits(it, "weapon", h) else ""
+	if kind == "mod":
+		if not GearDefs.fits(it, "mod1", h):
+			return ""
+		var lo := loadout_of(h)
+		return "mod2" if lo.has("mod1") and not lo.has("mod2") else "mod1"
+	var sl := str(it.get("slot", ""))
+	return sl if sl != "" and GearDefs.fits(it, sl, h) else ""
+
+## One-tap equip onto a survivor (defaults to the selected one).
+func quick_equip(uid: int, hero: String = "") -> bool:
+	var h := hero if hero != "" else selected_character_id
+	var sl := slot_for(uid, h)
+	return sl != "" and equip(h, sl, uid)
+
 func unequip(hero: String, slot: String) -> void:
 	var lo := loadout_of(hero)
 	if lo.has(slot):

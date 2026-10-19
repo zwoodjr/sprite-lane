@@ -21,12 +21,22 @@ func _ready() -> void:
 	_apply_margins()
 	get_viewport().size_changed.connect(_apply_margins)
 	build(content)
-	## Entrance: fade + short rise.
+	## Entrance: fade in. (No position tween: moving an anchored container
+	## freezes its size, and autowrap labels report a huge height on the first
+	## layout pass, which pushed bottom buttons off-screen.)
 	content.modulate.a = 0.0
-	var tw := create_tween().set_parallel(true)
+	var tw := create_tween()
 	tw.tween_property(content, "modulate:a", 1.0, 0.22)
-	frame.position.y += 18.0
-	tw.tween_property(frame, "position:y", frame.position.y - 18.0, 0.28).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	frame.resized.connect(_fit_frame)
+	_fit_frame.call_deferred()
+
+## Keep the frame exactly the screen size (it may never grow past it).
+func _fit_frame() -> void:
+	if not is_instance_valid(frame):
+		return
+	var vp := get_viewport_rect().size
+	if absf(frame.size.y - vp.y) > 0.5 or absf(frame.size.x - vp.x) > 0.5 or frame.position != Vector2.ZERO:
+		frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 func _apply_margins() -> void:
 	var m := MobileLayout.control_safe_margin()

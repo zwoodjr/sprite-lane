@@ -127,6 +127,12 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(upgrade)
 	_pulse(upgrade)
 
+	if won and not GameState.result_found.is_empty():
+		var eqg := UiTheme.big_button("EQUIP NEW GEAR", UiTheme.TEAL, 64, 22)
+		eqg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		eqg.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
+		c.add_child(eqg)
+
 	_continue_row = HBoxContainer.new()
 	_continue_row.add_theme_constant_override("separation", 12)
 	c.add_child(_continue_row)
