@@ -100,7 +100,9 @@ func _layout() -> void:
 	## corner, ABILITY up-and-left of it.
 	_place(btn_dash, Vector2(w - 78, h - 92))
 	_place(btn_ability, Vector2(w - 186, h - 150))
-	_place(btn_pause, Vector2(w - 26, 28), false)
+	## Pause sits low in the bottom-left corner, in easy left-thumb reach; the
+	## floating stick still starts anywhere else in the left area.
+	_place(btn_pause, Vector2(30, h - 30))
 
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	var c := center

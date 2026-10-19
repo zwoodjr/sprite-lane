@@ -18,7 +18,14 @@ const ExtractBarScript = preload("res://scripts/ui/extract_bar.gd")
 const BAR_FRAME := "res://assets/sprites/ui/hud_bar_frame.png"
 const BAR_HP := "res://assets/sprites/ui/hud_bar_fill_health.png"
 const BAR_XP := "res://assets/sprites/ui/hud_bar_fill_xp.png"
-const BAR_W := 216.0 ## on-screen width (art scaled 0.6)
+const BAR_W := 200.0 ## on-screen width of the slim bars
+## Compact HUD (playtest feedback): slim bars, big minimap top-right with the loot
+## panel under it, a slim phase strip at the top centre, hints that fade.
+const HP_BAR_H := 15.0
+const XP_BAR_H := 7.0
+const MAP_SIZE := 150.0
+const PANEL_ALPHA := 0.5
+const HINT_SHOW := 4.0
 var root: Control
 var _match: Node = null
 var _player: Node = null
@@ -75,6 +82,7 @@ var _last_tl: int = 0
 var _extract_open: bool = false
 var _t: float = 0.0
 var _hint_cycle_t: float = 0.0
+var _pack_panel: PanelContainer
 var _hint_index: int = 0
 
 const ROTATING_HINTS := [
@@ -192,38 +200,47 @@ func _build() -> void:
 	root.add_child(_vignette)
 
 	## Top-left: vitals
-	var vit := _panel()
+	var vit := _panel(PANEL_ALPHA)
 	vit.name = "Vitals"
 	root.add_child(vit)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vit.add_child(vb)
-	vb.add_child(_caption("HEALTH"))
+	vb.add_theme_constant_override("separation", 2)
 	var hp_row := Control.new()
-	hp_row.custom_minimum_size = Vector2(BAR_W, BAR_W / 10.0)
+	hp_row.custom_minimum_size = Vector2(BAR_W, HP_BAR_H)
 	hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(hp_row)
 	_hp_bar = _tex_bar(BAR_HP)
+	_hp_bar.scale = Vector2(BAR_W / 360.0, HP_BAR_H / 36.0)
 	hp_row.add_child(_hp_bar)
-	_hp_text = _label("100 / 100", 12)
+	_hp_text = _label("100 / 100", 11)
 	_hp_text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hp_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hp_text.add_theme_constant_override("outline_size", 4)
 	_hp_text.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	hp_row.add_child(_hp_text)
-	_run_level_label = _caption("XP · LV 1")
-	vb.add_child(_run_level_label)
+	var xp_line := HBoxContainer.new()
+	xp_line.add_theme_constant_override("separation", 5)
+	xp_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(xp_line)
+	_run_level_label = _caption("LV 1")
+	_run_level_label.add_theme_font_size_override("font_size", 11)
+	_run_level_label.custom_minimum_size = Vector2(34, 0)
+	xp_line.add_child(_run_level_label)
 	var xp_row := Control.new()
-	xp_row.custom_minimum_size = Vector2(BAR_W, BAR_W / 10.0)
+	xp_row.custom_minimum_size = Vector2(BAR_W - 39.0, XP_BAR_H)
+	xp_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	xp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(xp_row)
+	xp_line.add_child(xp_row)
 	_run_xp_bar = _tex_bar(BAR_XP)
+	_run_xp_bar.scale = Vector2((BAR_W - 39.0) / 360.0, XP_BAR_H / 36.0)
 	_run_xp_bar.max_value = 1.0
 	_run_xp_bar.step = 0.0
 	xp_row.add_child(_run_xp_bar)
-	_ammo_label = _label("24 / 24", 15)
+	_ammo_label = _label("24 / 24", 12)
 	_ammo_label.add_theme_font_override("font", UiTheme.font_button)
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
@@ -233,16 +250,24 @@ func _build() -> void:
 	_reload_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_reload_bar.custom_minimum_size = Vector2(BAR_W, 8)
 	UiTheme.skin_bar(_reload_bar, UiTheme.AMBER)
+	## Reload progress is folded into the ammo line (no separate bar).
 	_reload_bar.visible = false
-	vb.add_child(_reload_bar)
 	_buff_row = HBoxContainer.new()
 	_buff_row.add_theme_constant_override("separation", 6)
 	_buff_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_buff_row)
-	_build_depth(vb)
+	## Pack / pouch / plague: a compact chip right under the vitals block.
+	_pack_panel = _panel(PANEL_ALPHA)
+	_pack_panel.name = "PackChip"
+	root.add_child(_pack_panel)
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 2)
+	pv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pack_panel.add_child(pv)
+	_build_depth(pv)
 
 	## Top-center: phase card
-	_phase_card = _panel(0.82)
+	_phase_card = _panel(0.35)
 	root.add_child(_phase_card)
 	var pc := VBoxContainer.new()
 	pc.add_theme_constant_override("separation", 0)
@@ -253,41 +278,41 @@ func _build() -> void:
 	row.add_theme_constant_override("separation", 14)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(row)
-	_phase_label = _label("LOCKOUT", 20, UiTheme.AMBER)
+	_phase_label = _label("LOCKOUT", 15, UiTheme.AMBER)
 	_phase_label.add_theme_font_override("font", UiTheme.font_display)
 	row.add_child(_phase_label)
-	_timer_label = _label("1:30", 36)
+	_timer_label = _label("1:30", 22)
 	_timer_label.add_theme_font_override("font", UiTheme.font_display)
-	_timer_label.add_theme_constant_override("outline_size", 6)
+	_timer_label.add_theme_constant_override("outline_size", 4)
 	row.add_child(_timer_label)
 	_phase_bar = ProgressBar.new()
-	_phase_bar.custom_minimum_size = Vector2(300, 8)
+	_phase_bar.custom_minimum_size = Vector2(120, 4)
 	UiTheme.skin_bar(_phase_bar, UiTheme.AMBER)
 	_phase_bar.show_percentage = false
 	_phase_bar.max_value = 1.0
 	_phase_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(_phase_bar)
-	_phase_hint = _label("", 13, UiTheme.TEXT_DIM)
+	_phase_hint = _label("", 11, UiTheme.TEXT_DIM)
 	_phase_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_phase_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pc.add_child(_phase_hint)
 
 	## Top-right: threat + counters
-	_threat_panel = _panel()
+	_threat_panel = _panel(PANEL_ALPHA)
 	root.add_child(_threat_panel)
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 0)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
-	_threat_label = _label("LOOT ×1.0", 24, UiTheme.AMBER)
+	_threat_label = _label("LOOT ×1.0", 19, UiTheme.AMBER)
 	_threat_label.add_theme_font_override("font", UiTheme.font_display)
-	_threat_label.add_theme_constant_override("outline_size", 6)
+	_threat_label.add_theme_constant_override("outline_size", 4)
 	_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_label)
-	_threat_sub = _label("THREAT 0", 12, UiTheme.TEXT_DIM)
+	_threat_sub = _label("THREAT 0", 10, UiTheme.TEXT_DIM)
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_sub)
-	_counter_label = _label("", 14, UiTheme.AMBER)
+	_counter_label = _label("", 11, UiTheme.AMBER)
 	_counter_label.add_theme_font_override("font", UiTheme.font_button)
 	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_counter_label)
@@ -315,7 +340,7 @@ func _build() -> void:
 	_extract_prompt.add_theme_constant_override("outline_size", 6)
 	_extract_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_extract_prompt)
-	_hint_label = _label("", 13, Color(0.85, 0.78, 0.65, 0.8))
+	_hint_label = _label("", 11, Color(0.85, 0.78, 0.65, 0.75))
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_hint_label)
 	## Red screen-edge flash when the hero takes a hit.
@@ -338,31 +363,35 @@ func _layout() -> void:
 	_vignette.size = vp
 	_hit_flash.position = Vector2.ZERO
 	_hit_flash.size = vp
-	## Row 1: vitals (left) · threat (right, beside the pause cap in the corner).
+	## Top-left: slim vitals, the pack chip right under it.
 	var vit := root.get_node("Vitals") as Control
 	vit.position = m.position
 	vit.reset_size()
+	if _pack_panel:
+		_pack_panel.position = Vector2(m.position.x, m.position.y + vit.size.y + 4.0)
+		_pack_panel.reset_size()
+	## Top-right: a big minimap, the loot / threat panel under it.
 	var right := m.position.x + m.size.x
-	var threat_w := minf(170.0, vp.x * 0.26)
-	_threat_panel.custom_minimum_size = Vector2(threat_w, 0)
-	_threat_panel.reset_size()
-	_threat_panel.position = Vector2(right - _threat_panel.size.x - 58.0, m.position.y)
-	## Row 2: phase card centred below the taller of the two, so nothing overlaps.
-	var row2_y := m.position.y + maxf(vit.size.y, _threat_panel.size.y) + 8.0
-	var map_s := 96.0
-	var phase_w := minf(vp.x - 2.0 * (map_s + m.position.x + 12.0), 360.0)
-	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
-	_phase_hint.custom_minimum_size = Vector2(phase_w - 28.0, 0)
-	_phase_card.reset_size()
-	_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, row2_y)
+	var map_s := minf(MAP_SIZE, vp.x * 0.24)
 	if _minimap:
 		_minimap.custom_minimum_size = Vector2(map_s, map_s)
 		_minimap.size = Vector2(map_s, map_s)
-		_minimap.position = Vector2(right - map_s, row2_y)
+		_minimap.position = Vector2(right - map_s, m.position.y)
+	_threat_panel.custom_minimum_size = Vector2(map_s, 0)
+	_threat_panel.reset_size()
+	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + map_s + 4.0)
+	## Top-centre: a slim phase strip between the two corners.
+	var left_w := vit.size.x + 8.0
+	var phase_w := clampf(vp.x - 2.0 * maxf(left_w, map_s + 8.0) - 2.0 * m.position.x, 180.0, 340.0)
+	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
+	_phase_hint.custom_minimum_size = Vector2(phase_w - 20.0, 0)
+	_phase_bar.custom_minimum_size = Vector2(phase_w - 24.0, 4)
+	_phase_card.reset_size()
+	_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y)
 	if _extract_bar:
 		_extract_bar.position = Vector2(m.position.x, vp.y * 0.36)
 		_extract_bar.size = Vector2(22, vp.y * 0.28)
-	var below := row2_y + maxf(_phase_card.size.y, map_s) + 10.0
+	var below := maxf(_threat_panel.position.y + _threat_panel.size.y, m.position.y + vit.size.y + 60.0) + 10.0
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)
@@ -502,6 +531,10 @@ func open_pause() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	## Keep the pack chip glued under the vitals (buff chips can grow them).
+	if _pack_panel and root:
+		var vit := root.get_node("Vitals") as Control
+		_pack_panel.position.y = vit.position.y + vit.size.y + 4.0
 	if Input.is_action_just_pressed("pause_menu"):
 		_open_pause()
 	## Vignette pulses harder the lower you are.
@@ -509,17 +542,17 @@ func _process(delta: float) -> void:
 	_vignette.modulate.a = low * (0.55 + 0.25 * sin(_t * (4.0 + low * 4.0)))
 	if _player and is_instance_valid(_player) and _player.has_method("is_reloading"):
 		var rel: bool = _player.call("is_reloading")
-		_reload_bar.visible = rel
 		if rel:
-			_reload_bar.value = float(_player.call("get_reload_ratio"))
-			_ammo_label.text = "RELOADING…"
+			_ammo_label.text = "RELOADING %d%%" % int(float(_player.call("get_reload_ratio")) * 100.0)
 	## Rotating tips (when the tutorial isn't talking)
 	if GameState.settings.get("show_hints", true) and (tutorial == null or not is_instance_valid(tutorial)):
 		_hint_cycle_t += delta
-		if _hint_cycle_t > 9.0 or _hint_label.text == "":
+		if _hint_cycle_t > 14.0 or _hint_label.text == "":
 			_hint_cycle_t = 0.0
 			_hint_label.text = ROTATING_HINTS[_hint_index % ROTATING_HINTS.size()]
 			_hint_index += 1
+		## Each hint shows briefly, then fades away until the next one.
+		_hint_label.modulate.a = clampf((HINT_SHOW - _hint_cycle_t) / 0.8, 0.0, 1.0)
 	else:
 		_hint_label.text = ""
 	## Buff timers tick visibly
@@ -554,11 +587,11 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 			_phase_bar.set_meta("fill_col", oc)
 			UiTheme.skin_bar(_phase_bar, oc)
 		if is_last:
-			_phase_hint.text = "LAST CHANCE — reach a red pad or the Dust storm takes you"
+			_phase_hint.text = "Reach a red pad before the storm"
 		elif urgent:
-			_phase_hint.text = "Closing! Leave now at ×%.1f, or stay for more loot" % loot
+			_phase_hint.text = "Closing! Leave at ×%.1f or stay" % loot
 		else:
-			_phase_hint.text = "Extract OPEN — hold a pad for 3s to leave at ×%.1f" % loot
+			_phase_hint.text = "Hold a pad 3s to leave at ×%.1f" % loot
 	else:
 		_phase_label.add_theme_color_override("font_color", UiTheme.AMBER)
 		if _phase_bar.get_meta("fill_col", Color.BLACK) != UiTheme.AMBER:
@@ -566,9 +599,9 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 			UiTheme.skin_bar(_phase_bar, UiTheme.AMBER)
 		var pid := str(phase.get("id", ""))
 		if pid == "lockout":
-			_phase_hint.text = "Survive & loot — the first extract opens at 0:00"
+			_phase_hint.text = "Survive & loot until the first window"
 		else:
-			_phase_hint.text = "Sealed — loot climbs while you stay. Next window at 0:00"
+			_phase_hint.text = "Sealed — loot climbs while you stay"
 	_timer_label.add_theme_color_override("font_color", UiTheme.DANGER if urgent and (is_open or is_last) else UiTheme.TEXT)
 	if urgent:
 		var p := 1.0 + 0.06 * absf(sin(_t * 6.0))
@@ -580,13 +613,13 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	_threat_label.text = "LOOT ×%.1f" % loot
 	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
 	_threat_label.add_theme_color_override("font_color", tl_col)
-	_threat_sub.text = "THREAT %d · enemies +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
+	_threat_sub.text = "THREAT %d · +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
 	if tl != _last_tl:
 		_last_tl = tl
 		_pulse(_threat_panel)
 	_counter_label.text = "Bag %d · Kills %d" % [GameState.bag_value(), GameState.kills]
 	var rp: Dictionary = GameState.run_bar_state()
-	_run_level_label.text = "XP · LV %d%s" % [
+	_run_level_label.text = "LV %d%s" % [
 		int(rp["level"]),
 		"  MAX" if bool(rp.get("capped", false)) else "",
 	]
