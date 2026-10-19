@@ -30,6 +30,10 @@ var _flash_left: float = 0.0
 var _anim: UnitAnim = UnitAnim.new()
 var _anim_prefix: String = ""
 var _still_t: float = 0.0
+## Kennel: rampage linger / chain state.
+var _linger_left: float = 0.0
+var _lingering: bool = false
+var _chains_left: int = 0
 
 @onready var body: Sprite2D = $Body
 @onready var name_label: Label = $NameLabel
@@ -100,11 +104,29 @@ func _physics_process(delta: float) -> void:
 func _refresh_rampage_target() -> void:
 	if not _rampaging:
 		return
-	if _target == null or not is_instance_valid(_target) or _target.is_queued_for_deletion():
-		_end_rampage()
+	var alive := _target != null and is_instance_valid(_target) and not _target.is_queued_for_deletion() \
+		and _target.is_in_group("enemies")
+	if alive:
 		return
-	if not _target.is_in_group("enemies"):
-		_end_rampage()
+	## Kennel top rank: chain to the next attacker close by.
+	if _chains_left > 0:
+		var nxt := _nearest_enemy(float(_def.get("rampage_aoe_radius", 110.0)) * 2.5)
+		if nxt != null:
+			_chains_left -= 1
+			_target = nxt
+			Juice.float_text(global_position + Vector2(0, -28), "NEXT!", Color(1.0, 0.45, 0.25), 15)
+			return
+	## Kennel: the rampage lingers a moment after the attacker drops.
+	if not _lingering and float(_def.get("rampage_linger", 0.0)) > 0.0:
+		_lingering = true
+		_linger_left = float(_def.get("rampage_linger", 0.0))
+		_target = null
+		return
+	if _lingering:
+		_linger_left -= get_physics_process_delta_time()
+		if _linger_left > 0.0:
+			return
+	_end_rampage()
 
 func _on_player_attacked(attacker: Node) -> void:
 	if attacker == null or not is_instance_valid(attacker):
@@ -119,6 +141,9 @@ func _on_player_attacked(attacker: Node) -> void:
 func _begin_rampage(attacker: Node2D) -> void:
 	_target = attacker
 	_rampaging = true
+	_linger_left = 0.0
+	_lingering = false
+	_chains_left = int(_def.get("rampage_chain", 0))
 	_aoe_cd = 0.05
 	_apply_look()
 	Juice.sfx("ability", -2.0)
@@ -133,6 +158,8 @@ func _end_rampage() -> void:
 		return
 	_rampaging = false
 	_target = null
+	_linger_left = 0.0
+	_lingering = false
 	_apply_look()
 	Juice.float_text(global_position + Vector2(0, -24), "Settled", Color(0.85, 0.8, 0.7), 14)
 	rampage_ended.emit()
@@ -226,8 +253,11 @@ func _do_bark() -> void:
 	_bark_cd = float(_def.get("bark_cooldown", 5.5))
 	_accent_left = 0.55
 	_apply_look()
-	var radius := float(_def.get("bark_radius", 180.0))
+	var radius := float(_def.get("bark_radius", 200.0))
 	var dur := float(_def.get("bark_distract_sec", 1.4))
+	var stun := float(_def.get("bark_stun", 0.0))
+	var mark_mult := float(_def.get("bark_mark_mult", 1.0))
+	var mark_t := float(_def.get("bark_mark_time", 0.0))
 	Juice.sfx("ability", -4.0)
 	Juice.float_text(global_position + Vector2(0, -26), "BARK!", Color(1.0, 0.9, 0.5), 16)
 	_anim.play("bark")
@@ -241,6 +271,12 @@ func _do_bark() -> void:
 		if node.has_method("distract"):
 			node.call("distract", dur)
 			n += 1
+		## Flag: marked enemies take extra damage; kennel ranks add a short stun.
+		if node.has_method("apply_status"):
+			if mark_t > 0.0 and mark_mult > 1.0:
+				node.call("apply_status", "mark", mark_t, mark_mult)
+			if stun > 0.0:
+				node.call("apply_status", "stun", stun)
 	if n > 0:
 		Juice.shake(0.08)
 
@@ -274,11 +310,34 @@ func _do_find() -> void:
 		if lt is Node2D and is_instance_valid(lt) and _player.global_position.distance_to((lt as Node2D).global_position) <= radius:
 			lt.call("magnetize")
 			pulled += 1
-	## Always a little scrap sniff.
-	var scrap := GameState.add_scrap(randi_range(1, 3))
-	Juice.float_text(_player.global_position + Vector2(0, -40), "+%d scrap" % scrap, UiTheme.AMBER, 14)
+	_drop_gift()
 	if pulled > 0:
 		Juice.burst(_player.global_position, Color(0.6, 1.0, 0.7), 10, 120.0, 0.4)
+
+## Bentley's "important" find at your feet: junk, a scrap pile, or something great.
+func _drop_gift() -> void:
+	var roll := randf()
+	var great := float(_def.get("gift_great", 0.04))
+	var good := float(_def.get("gift_good", 0.2))
+	var feet := _player.global_position + Vector2(randf_range(-18, 18), 14)
+	var parent := get_parent()
+	if roll < great:
+		var pick := randi() % 3
+		if pick == 0:
+			LootDrop.spawn_burst(parent, feet, "tonic", 1, 18.0)
+			Juice.float_text(feet + Vector2(0, -40), "Bentley found a tonic!", Color(0.6, 1.0, 0.6), 15)
+		elif pick == 1:
+			RunFx.spawn_ammo_pickup(parent, feet)
+			Juice.float_text(feet + Vector2(0, -40), "Bentley found ammo!", Color(1.0, 0.85, 0.4), 15)
+		else:
+			var r: Vector2i = _def.get("gift_great_scrap", Vector2i(18, 30))
+			var big := GameState.add_scrap(randi_range(r.x, r.y))
+			Juice.float_text(feet + Vector2(0, -40), "Jackpot! +%d scrap" % big, UiTheme.AMBER, 16)
+		return
+	var rng: Vector2i = _def.get("gift_good_scrap" if roll < great + good else "gift_junk_scrap", Vector2i(1, 3))
+	var scrap := GameState.add_scrap(randi_range(rng.x, rng.y))
+	Juice.float_text(feet + Vector2(0, -40), ("+%d scrap" if roll < great + good else "junk… +%d scrap") % scrap, UiTheme.AMBER, 14)
+
 
 func _try_start_ram() -> void:
 	if _ram_cd > 0.0:
@@ -311,7 +370,12 @@ func _tick_ram(delta: float) -> void:
 	velocity = _ram_dir * spd
 	move_and_slide()
 	_anim.set_facing(_ram_dir.x < 0.0)
-	## Wake: enemies we pass (not the primary — they get the impact hit).
+	## Wake (kennel rank 2): enemies we pass (not the primary — they get the impact hit).
+	if int(_def.get("ram_trail", 0)) <= 0:
+		_ram_contact_check()
+		return
+	if randf() < 0.5:
+		Juice.dust_puff(global_position + Vector2(0, 10), 3)
 	var wake_r := float(_def.get("ram_wake_radius", 42.0))
 	var wake_dmg := float(_def.get("ram_wake_damage", 14.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
 	var primary_id := _target.get_instance_id() if _target != null and is_instance_valid(_target) else -1
@@ -329,6 +393,10 @@ func _tick_ram(delta: float) -> void:
 			## No knock on wake — normalized dirs would still full-yeet the pack.
 			e.call("take_damage", wake_dmg, Vector2.ZERO)
 		Juice.burst(e.global_position, Color(1.0, 0.7, 0.4), 6, 80.0, 0.2)
+	_ram_contact_check()
+
+
+func _ram_contact_check() -> void:
 	## Real contact only — timer expire without contact = miss, no phantom AOE.
 	var contact_r := float(_def.get("ram_contact_radius", 48.0))
 	if _target != null and is_instance_valid(_target):
@@ -355,6 +423,23 @@ func _ram_impact(connected: bool) -> void:
 		global_position = global_position.lerp((_target as Node2D).global_position, 0.55)
 	Juice.sfx("enemy_die", -4.0)
 	_anim.play("impact")
+	var stun := float(_def.get("ram_stun", 0.7))
+	var knock := float(_def.get("ram_knock", 420.0))
+	## Base headbutt: the target only — stun + knockback.
+	if int(_def.get("ram_blast", 0)) <= 0:
+		if _target != null and is_instance_valid(_target):
+			var t := _target as Node2D
+			if t.has_method("take_damage"):
+				t.call("take_damage", dmg, (t.global_position - global_position).normalized(), knock)
+			if t.has_method("apply_status") and is_instance_valid(t):
+				t.call("apply_status", "stun", stun)
+		Juice.burst(global_position, Color(1.0, 0.6, 0.3), 12, 140.0, 0.35)
+		Juice.shake(0.12)
+		Juice.float_text(global_position + Vector2(0, -30), "BONK!", Color(1.0, 0.6, 0.3), 16)
+		_target = null
+		_apply_look()
+		return
+	## Kennel rank 3: fierce AoE blast on contact.
 	Juice.burst(global_position, Color(1.0, 0.5, 0.25), 22, radius * 1.5, 0.5)
 	Juice.shake(0.22)
 	Juice.float_text(global_position + Vector2(0, -30), "BOOM!", Color(1.0, 0.6, 0.3), 18)
@@ -365,7 +450,9 @@ func _ram_impact(connected: bool) -> void:
 		if global_position.distance_to(e.global_position) > radius:
 			continue
 		if e.has_method("take_damage"):
-			e.call("take_damage", dmg, (e.global_position - global_position).normalized())
+			e.call("take_damage", dmg, (e.global_position - global_position).normalized(), knock)
+		if is_instance_valid(e) and e.has_method("apply_status"):
+			e.call("apply_status", "stun", stun)
 	_target = null
 	_apply_look()
 
