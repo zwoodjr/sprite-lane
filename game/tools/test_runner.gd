@@ -100,6 +100,8 @@ func _run() -> void:
 			if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
 				n.queue_free()
 		await get_tree().process_frame
+	await _test_picker()
+	await _test_upgrades()
 	Engine.time_scale = 1.0
 	print("TEST_PASS" if _bad == 0 else "TEST_FAIL bad=%d" % _bad)
 	get_tree().quit(0 if _bad == 0 else 1)
@@ -115,3 +117,84 @@ func _walk(dir: String) -> Array[String]:
 	for sub in d.get_directories():
 		out.append_array(_walk(dir + "/" + sub))
 	return out
+
+
+## 4) Level-up picker: 3 cards, reroll, pick → unpaused, rank applied.
+func _test_picker() -> void:
+	GameState.selected_character_id = "helm_wisp"
+	GameState.fast_timers = false
+	GameState.begin_run()
+	var picker := CanvasLayer.new()
+	picker.set_script(load("res://scripts/ui/run_upgrade_picker.gd"))
+	get_tree().root.add_child(picker)
+	await get_tree().process_frame
+	picker.call("open", 2, Progression.roll_run_choices())
+	await get_tree().process_frame
+	var ch: Array = picker.call("get_choices")
+	if ch.size() != 3 or not get_tree().paused:
+		print("FAIL picker open choices=%d" % ch.size())
+		_bad += 1
+	if not bool(picker.call("reroll")) or GameState.run_rerolls_left != 1:
+		print("FAIL picker reroll")
+		_bad += 1
+	var id := str((picker.call("get_choices") as Array)[0]["id"])
+	picker.call("pick_index", 0)
+	await get_tree().process_frame
+	if get_tree().paused or GameState.run_rank(id) != 1:
+		print("FAIL picker pick")
+		_bad += 1
+	picker.queue_free()
+	get_tree().paused = false
+	await get_tree().process_frame
+	print("PICKER_OK")
+
+
+## 5) Every hero with every card it can take at max rank + each special ammo,
+## a small horde and the ability spammed (catches runtime script errors).
+func _test_upgrades() -> void:
+	var ammo_ids: Array = UpgradeDefs.AMMO.keys()
+	var hi := 0
+	for hero in CharacterDefs.PLAYABLE_IDS:
+		GameState.selected_character_id = hero
+		GameState.selected_mode_id = "drift"
+		GameState.fast_timers = true
+		GameState.tutorial_done = true
+		GameState.begin_run()
+		for u in UpgradeDefs.all():
+			while Progression.can_offer(u):
+				GameState.apply_run_upgrade(u)
+		var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+		get_tree().root.add_child(m)
+		get_tree().current_scene = m
+		var player: Node2D = m.get_node("World/Player")
+		await get_tree().process_frame
+		player.call("apply_powerup", RunFx.ammo_def(str(ammo_ids[hi % ammo_ids.size()])))
+		var es: PackedScene = load("res://scenes/entities/enemy.tscn")
+		var frames := 0
+		while frames < 700 and is_instance_valid(m) and not bool(m.get("_ended")):
+			frames += 1
+			if frames % 40 == 1 and get_tree().get_nodes_in_group("enemies").size() < 10:
+				var e: CharacterBody2D = es.instantiate()
+				var kinds := ["rad_gator", "iron_horse", "muck_golem", "scrap_hound"]
+				e.call("setup", player.global_position + Vector2.RIGHT.rotated(randf() * TAU) * 140.0, 1.0, 0.3, 1.0, kinds[frames % 4])
+				player.get_parent().add_child(e)
+			TouchInput.set_move(Vector2(cos(frames * 0.03), sin(frames * 0.04)))
+			if frames % 70 == 0:
+				TouchInput.pulse_dash()
+			if frames % 90 == 5:
+				TouchInput.pulse_ability()
+			if frames % 200 == 0 and is_instance_valid(player) and player.has_method("heal"):
+				player.call("take_damage", 5.0, null)
+				player.call("heal", 3.0)
+			await get_tree().physics_frame
+		print("UPG_%s frames=%d kills=%d ranks=%d drones=%d" % [hero, frames, GameState.kills, GameState.run_ranks.size(),
+			(player.call("get_drones") as Array).size() if is_instance_valid(player) else -1])
+		TouchInput.clear_sticks()
+		m.queue_free()
+		for n in get_tree().root.get_children():
+			if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
+				n.queue_free()
+		for k in range(5):
+			await get_tree().process_frame
+		hi += 1
+	print("UPGRADES_OK")

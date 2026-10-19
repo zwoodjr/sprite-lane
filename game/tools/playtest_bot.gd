@@ -42,6 +42,18 @@ var _leave_at := 1
 var _stuck_frames := 0
 var _unstick_t := 0.0
 var _unstick_side := 1.0
+## Phase 4: upgrade picks, rerolls, ability snaps, forced grants (arg 10:
+## "id:rank,id:rank"), forced special ammo (arg 11).
+var _picks: Array = []
+var _rerolls := 0
+var _abil_snap_t := -1.0
+var _abil_snaps := 0
+var _picker_snaps := 0
+var _grants := ""
+var _picking := false
+var _going := false
+var _force_ammo := ""
+var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 
 
 func _ready() -> void:
@@ -62,6 +74,9 @@ func _ready() -> void:
 	## arg 8: fixed run seed · arg 9: leave at window N (stay-or-go, 1 = first).
 	var fixed_seed := int(a[8]) if a.size() > 8 else 0
 	if a.size() > 9: _leave_at = int(a[9])
+	if a.size() > 10: _grants = a[10]
+	if a.size() > 11: _force_ammo = a[11]
+	if a.size() > 12: _start_hp = float(a[12])
 	_headless = DisplayServer.get_name() == "headless"
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()
@@ -74,6 +89,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	get_tree().current_scene = _m
 	_p = _m.get_node("World/Player")
+	_apply_grants()
 	_p.died.connect(func() -> void: print("EVENT died t=%.1f" % _t))
 	_p.health_changed.connect(func(c: float, mx: float) -> void:
 		if c < _last_hp: _dmg_events += 1
@@ -122,13 +138,14 @@ func _process(delta: float) -> void:
 			get_tree().quit()
 		return
 	if get_tree().paused:
-		## Upgrade picker or pause menu — log and click first choice-ish by unpausing via picker API.
+		if _picking:
+			return
+		## Level-up picker: score the 3 cards, maybe reroll, pick the best.
 		for n in get_tree().root.find_children("*", "", true, false):
-			if n.has_method("_pick") and n.get("_open"):
-				print("EVENT upgrade_picker t=%.1f" % _t)
-				await _snap("upgrade_%02d" % _n)
-				var ch: Array = Progression.roll_run_choices(2)
-				n._pick(ch[0])
+			if n.has_method("pick_index") and bool(n.call("is_open")):
+				_picking = true
+				await _handle_picker(n)
+				_picking = false
 				break
 		return
 	_t += delta
@@ -176,6 +193,7 @@ func _drive(delta: float) -> void:
 	## Head for pads once they're pinged on the window we plan to leave on;
 	## extract when open.
 	var going: bool = int(GameState.extract_windows_seen) >= _leave_at - 1 and (_m.call("get_pads") as Array).size() > 0
+	_going = going
 	if going:
 		var best: Node2D = null
 		var bd := INF
@@ -198,6 +216,12 @@ func _drive(delta: float) -> void:
 				TouchInput.pulse_dash()
 			TouchInput.move_vector = mv
 			return
+	## Like a player: sweep up nearby XP / scrap when nothing is in reach.
+	var loot := _nearest("loot")
+	var ed: float = e.global_position.distance_to(_p.global_position) if e else INF
+	if loot and loot.global_position.distance_to(_p.global_position) < 420.0 and ed > (rng * 1.05 if not melee else 200.0):
+		TouchInput.move_vector = (loot.global_position - _p.global_position).normalized()
+		return
 	if e:
 		var to: Vector2 = e.global_position - _p.global_position
 		var d := to.length()
@@ -263,14 +287,123 @@ func _extra(delta: float) -> void:
 		_stuck_frames = 0
 	_last_pos = _p.global_position
 	_abil_t -= delta
-	var e := _nearest("enemies")
-	if _abil_t <= 0.0 and e and e.global_position.distance_to(_p.global_position) < 300.0:
-		_abil_t = 4.0
+	if _abil_t <= 0.0 and bool(_p.call("ability_ready")) and _want_ability():
+		_abil_t = 0.6
 		TouchInput.pulse_ability()
 		_abil_uses += 1
+		if _abil_snaps < 2:
+			_abil_snap_t = 0.32
+	if _abil_snap_t > 0.0:
+		_abil_snap_t -= delta
+		if _abil_snap_t <= 0.0:
+			_abil_snaps += 1
+			_snap("ability_%s_%d" % [GameState.selected_character_id, _abil_snaps])
 	for pet in get_tree().get_nodes_in_group("pets"):
 		if is_instance_valid(pet) and pet.global_position.distance_to(_p.global_position) > 500.0:
 			_pet_far += delta
+
+
+## Per-hero "good moment" for the ability.
+func _want_ability() -> bool:
+	var near := func(r: float) -> int:
+		var c := 0
+		for n in get_tree().get_nodes_in_group("enemies"):
+			if is_instance_valid(n) and (n as Node2D).global_position.distance_to(_p.global_position) < r:
+				c += 1
+		return c
+	var hp_k: float = float(_p.get("hp")) / maxf(1.0, float(_p.get("max_hp")))
+	## Heading for a pad: no gap-closers that drag the hero toward enemies.
+	if _going and GameState.selected_character_id in ["nyx_caldera", "quill_marrow", "pebble"]:
+		return near.call(70.0) >= 2
+	match GameState.selected_character_id:
+		"sister_cinder":
+			return hp_k < 0.8 or (near.call(250.0) >= 2 and hp_k < 0.95)
+		"helm_wisp":
+			return near.call(400.0) >= 1
+		"ash_rook":
+			return near.call(220.0) >= 1
+		"vesper_thorn":
+			return near.call(float(_p.call("get_trigger_range"))) >= 1
+		"pebble":
+			return near.call(170.0) >= 2 or near.call(90.0) >= 1
+		"bolt_juno":
+			return near.call(200.0) >= 2 or near.call(120.0) >= 1
+		"quill_marrow":
+			return near.call(260.0) >= 1
+		"nyx_caldera":
+			return near.call(240.0) >= 2 or near.call(120.0) >= 1
+	return near.call(300.0) >= 1
+
+
+func _score_card(u: Dictionary) -> float:
+	var sc: float = {"common": 1.0, "uncommon": 1.6, "rare": 2.2, "epic": 2.8}.get(str(u.get("rarity", "common")), 1.0)
+	var id := str(u["id"])
+	if u.has("hero"):
+		sc += 1.2
+	if GameState.run_rank(id) > 0:
+		sc += 0.8
+	for c in u.get("combos", []):
+		if GameState.run_rank(str(c)) > 0:
+			sc += 0.5
+	var hp_k: float = float(_p.get("hp")) / maxf(1.0, float(_p.get("max_hp")))
+	if "Defense" in u.get("tags", []) and hp_k < 0.6:
+		sc += 1.0
+	if id in ["lucky_vial", "scavengers_eye"]:
+		sc -= 0.8
+	if id in ["harder_hit", "quick_mag", "thick_plate"]:
+		sc += 0.4
+	return sc + randf() * 0.3
+
+
+func _handle_picker(n: Node) -> void:
+	print("EVENT upgrade_picker t=%.1f lv=%d" % [_t, GameState.run_level])
+	await get_tree().process_frame
+	if _picker_snaps < 2:
+		_picker_snaps += 1
+		await _snap("picker_%d" % _picker_snaps)
+	var ch: Array = n.call("get_choices")
+	var best := 0
+	var bs := -INF
+	for i in range(ch.size()):
+		var sc := _score_card(ch[i])
+		if sc > bs:
+			bs = sc
+			best = i
+	if bs < 2.2 and int(n.call("rerolls_left")) > 0 and GameState.run_level >= 3:
+		if bool(n.call("reroll")):
+			_rerolls += 1
+			print("EVENT reroll best=%.1f" % bs)
+			await get_tree().process_frame
+			ch = n.call("get_choices")
+			bs = -INF
+			for i in range(ch.size()):
+				var sc2 := _score_card(ch[i])
+				if sc2 > bs:
+					bs = sc2
+					best = i
+	var u: Dictionary = ch[best]
+	_picks.append("%s%d" % [str(u["id"]), GameState.run_rank(str(u["id"])) + 1])
+	print("PICK lv=%d %s from %s" % [GameState.run_level, str(u["id"]), ",".join(ch.map(func(c: Dictionary) -> String: return str(c["id"])))])
+	n.call("pick_index", best)
+
+
+## arg 10 "id:rank,…" grants upgrades up front; arg 11 forces a special ammo.
+func _apply_grants() -> void:
+	if _grants != "":
+		for g in _grants.split(","):
+			var parts := g.split(":")
+			var u := UpgradeDefs.get_def(parts[0])
+			if u.is_empty():
+				print("BOT unknown grant ", parts[0])
+				continue
+			for i in range(int(parts[1]) if parts.size() > 1 else 1):
+				if Progression.can_offer(u):
+					GameState.apply_run_upgrade(u)
+	if _force_ammo != "":
+		_p.call("apply_powerup", RunFx.ammo_def(_force_ammo))
+	if _start_hp < 1.0:
+		_p.set("hp", float(_p.get("max_hp")) * _start_hp)
+		_p.emit_signal("health_changed", _p.get("hp"), _p.get("max_hp"))
 
 
 func _top_up_horde(delta: float) -> void:
@@ -294,6 +427,7 @@ func _summary() -> void:
 	if _fps_n > 0:
 		print("FPS avg=%.0f min=%d horde=%d" % [_fps_sum / _fps_n, _fps_min, _horde])
 	var hp_end: float = float(_p.get("hp")) if is_instance_valid(_p) else -1.0
+	print("PICKS %s rerolls=%d" % [" ".join(_picks), _rerolls])
 	print("SUMMARY char=%s pet=%s mode=%s seed=%d t=%.0f result=%s payout=%d loot=%.1f hp_end=%.0f min_hp=%.0f kills=%d bag=%d runlv=%d hits=%d abil=%d reload_s=%.0f" % [
 		GameState.selected_character_id, GameState.selected_pet_id, GameState.selected_mode_id, GameState.run_seed, _t,
 		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
