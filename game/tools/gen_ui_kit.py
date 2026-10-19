@@ -1,17 +1,29 @@
 """Painted scrap-metal UI kit for Wanderer (9-slice plates, buttons, caps,
 bars, tile frames), the WANDERER logo and the painted menu backdrop.
 
-Look: dust-apothecary wasteland. Riveted iron/brass plates, light from the
-top-left, 3-4 tone shading, ordered-dither grit, dark seams.
+Look (locked Oct 2026, matches the smashed amber HP readout): near-black dented
+steel plates with chewed edges, rust, grime, a few bullet holes and bead welds
+in the corners; buttons are dark worn metal lit by an amber / green / red
+phosphor stroke. Wear in the 9-slice edge bands and centre uses noise that is
+periodic over the centre tile, so tiled/stretched plates never show seams; the
+one-off damage (holes, dents, welds) lives in the corner squares only.
+Item rarity frames and the ability / dash / pause bottle caps get the same wear
+from their pristine sources in tools/art_src/.
 
 usage: python3 tools/gen_ui_kit.py          (run from game/)
 Writes assets/sprites/ui/kit/*.png, assets/sprites/ui/logo_wanderer.png,
 assets/sprites/ui/menu_backdrop.png
 """
 import os
+import random
+import sys
+
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from scipy import ndimage as ndi
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import worn_fx as WF  # noqa: E402
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 OUT = "assets/sprites/ui/kit"
@@ -69,7 +81,7 @@ def sdf_normal(sdf):
 
 
 def plate(w, h, radius, rim, face_top, face_bot, rim_hi, rim_lo, rivets=True, inset=False,
-          margin=24, seed=1, grit=14.0, scratches=6, bolt_col=None, glow=None):
+          margin=24, seed=1, grit=14.0, scratches=6, bolt_col=None, glow=None, accent=None, accent_a=1.0):
     """A riveted metal plate. Returns RGBA uint8 (h, w, 4)."""
     face_top = np.array(face_top, np.float32); face_bot = np.array(face_bot, np.float32)
     rim_hi = np.array(rim_hi, np.float32); rim_lo = np.array(rim_lo, np.float32)
@@ -136,6 +148,13 @@ def plate(w, h, radius, rim, face_top, face_bot, rim_hi, rim_lo, rivets=True, in
             ring = np.clip(rr_ + 1.4 - dd, 0, 1) - m
             img = lerp(img, SEAM, np.clip(ring, 0, 1) * 0.8)
             img = lerp(img, col, m)
+    if accent is not None:
+        # phosphor stroke just inside the rim + its glow onto the face and rim
+        ac = np.array(accent, np.float32)
+        line = np.exp(-((inner + 1.4) ** 2) / 1.1)
+        halo = np.exp(-((inner + 1.4) ** 2) / 14.0) * 0.45
+        k = np.clip(line + halo, 0, 1) * accent_a
+        img = img * (1 - k[..., None]) + np.maximum(img, ac * (0.55 + 0.45 * line[..., None])) * k[..., None]
     img = quant(img, 7.0, 1.0)
     img = np.clip(img, 0, 255)
     alpha = cov(sdf, 0.0)
@@ -156,47 +175,179 @@ def save(a, name):
     Image.fromarray(a, "RGBA").save(os.path.join(OUT, name))
 
 
+# --- worn pass ------------------------------------------------------------------
+def tiled_noise(h, w, margin, sigma, seed):
+    """Noise that repeats with the 9-slice centre period (seamless when tiled)."""
+    ch, cw = max(4, h - 2 * margin), max(4, w - 2 * margin)
+    t = periodic_noise(ch, cw, sigma, seed) * 0.5 + 0.5
+    yy, xx = np.mgrid[0:h, 0:w]
+    return t[(yy - margin) % ch, (xx - margin) % cw]
+
+
+def wear_plate(a, margin, seed, rust=0.45, grime=0.55, holes=1, dents=1, welds=1, chew=1.0, edge_grime=False):
+    """Worn post-pass for a 9-slice plate (uint8 RGBA). Seamless outside the corners."""
+    h, w = a.shape[:2]
+    rr = random.Random(seed)
+    img = a[..., :3].astype(np.float32)
+    al = a[..., 3].astype(np.float32) / 255.0
+    inside = al > 0.5
+    dist = ndi.distance_transform_edt(inside)  # perpendicular in the bands -> seamless
+    # grime: dark blotches, heavier toward the edge
+    n1 = tiled_noise(h, w, margin, 2.2, seed + 1)
+    fall = np.exp(-dist / 7.0) if edge_grime else (0.55 + 0.45 * np.exp(-dist / 10.0))
+    g = np.clip((n1 - 0.45) * 2.4, 0, 1) * grime * fall
+    img = img * (1 - g[..., None] * 0.6)
+    # rust: patchy, concentrated along the rim
+    n2 = tiled_noise(h, w, margin, 1.6, seed + 2)
+    n3 = tiled_noise(h, w, margin, 0.6, seed + 3)
+    rv = np.clip((n2 - (1 - rust * 0.62)) * 5 + (n3 - 0.5) * 0.6, 0, 1) * np.exp(-dist / 7.0)
+    rc = np.dstack([88 + 46 * n3, 40 + 24 * n3, 18 + 10 * n3])
+    img = img * (1 - rv[..., None] * 0.85) + rc * rv[..., None] * 0.85
+    pit = (n3 > 0.8) & (rv > 0.3)
+    img[pit] *= 0.45
+    # edge chips (bare steel catching light) on the outer edge
+    n4 = tiled_noise(h, w, margin, 1.4, seed + 4)
+    chip = ((dist > 1.5) & (dist < 3.0) & (n4 > 0.8)).astype(np.float32)
+    img = img * (1 - chip[..., None] * 0.4) + np.array([132, 124, 110], np.float32) * chip[..., None] * 0.4
+    # chewed silhouette: sparse irregular bites out of the outer edge
+    if chew > 0:
+        n5 = tiled_noise(h, w, margin, 2.0, seed + 5)
+        n6 = tiled_noise(h, w, margin, 0.7, seed + 6)
+        depth = np.clip((n5 - 0.6) * 9.0, 0, 1) * 3.5 * chew + (n6 > 0.75) * 0.9
+        bite = dist < depth
+        al = np.where(bite, 0.0, al)
+        # the torn edge is darker (no bevel highlight left)
+        torn = (dist < depth + 1.6) & ~bite & (depth > 0.5)
+        img[torn] *= 0.55
+    out = np.dstack([np.clip(img, 0, 255), al * 255]).astype(np.uint8)
+    im = Image.fromarray(out, "RGBA")
+    # one-off damage, inside the corner squares only (they are never tiled)
+    m = Image.fromarray((inside * 255).astype(np.uint8), "L")
+    corners = [(margin * 0.5, margin * 0.5), (w - margin * 0.5, margin * 0.5),
+               (margin * 0.5, h - margin * 0.5), (w - margin * 0.5, h - margin * 0.5)]
+    rr.shuffle(corners)
+    k = 0
+    for _ in range(holes):
+        x, y = corners[k % 4]; k += 1
+        im = WF.bullet_hole(im, m, x + rr.uniform(-2, 2), y + rr.uniform(-2, 2), max(1.8, margin * 0.085),
+                            rr.randrange(999), petal=(96, 90, 80))
+    for _ in range(dents):
+        x, y = corners[k % 4]; k += 1
+        im = WF.dent(im, m, x, y, margin * 0.32, 90)
+    for _ in range(welds):  # short bead weld across a corner (a cracked plate welded up)
+        x, y = corners[k % 4]; k += 1
+        d = ImageDraw.Draw(im)
+        a0 = rr.uniform(0, 6.28)
+        L = margin * 0.38
+        pts = [(x + np.cos(a0) * L * t, y + np.sin(a0) * L * t) for t in np.linspace(-1, 1, 7)]
+        r = max(1.1, margin * 0.05)
+        for (px, py) in pts:
+            d.ellipse((px - r, py - r, px + r, py + r), fill=(96, 86, 72, 255), outline=(26, 21, 17, 255))
+        for (px, py) in pts:
+            d.point((px - r * 0.3, py - r * 0.4), fill=(160, 148, 124, 255))
+    out = np.array(im)
+    out[..., 3] = np.minimum(out[..., 3], (al * 255).astype(np.uint8))
+    return out
+
+
+def wear_icon(im, seed, dark=0.8, sat=0.72, rust=0.3, chew=0.0, dent=True, cracks=False, scratch_rim_only=False):
+    """Same wear for round caps / item frames (keeps the silhouette and hue identity)."""
+    rr = random.Random(seed)
+    a0 = im.getchannel("A")
+    m = a0.point(lambda v: 255 if v > 160 else 0)
+    w, h = im.size
+    u = max(1.0, w / 48.0)
+    out = WF.grade(im, dark, sat, (1.0, 0.94, 0.86), 1.08)
+    rim = ImageChops_sub(m, m.filter(ImageFilter.MinFilter(int(max(3, w * 0.12)) | 1)))
+    out = WF.rust_patches(out, rim, rust, u * 0.9, seed + 1, alpha=210)
+    out = WF.rust_patches(out, m, rust * 0.35, u * 1.2, seed + 2, alpha=150)
+    out = WF.grime(out, m, 170, (12, 9, 6), u * 1.5, seed + 3)
+    out = WF.edge_wear(out, m, 120, u, seed + 4)
+    out = WF.scratches(out, rim if scratch_rim_only else m, max(4, w // 10), u, (2, 6), seed + 5, amt=80)
+    if dent:
+        x, y = rr.uniform(0.3, 0.7) * w, rr.uniform(0.25, 0.45) * h
+        out = WF.dent(out, m, x, y, w * 0.12, 80)
+    if cracks:
+        out = WF.cracks(out, w * rr.uniform(0.6, 0.75), h * rr.uniform(0.25, 0.4), 4, w * 0.35,
+                        (230, 228, 215, 150), max(1, int(u * 0.5)), seed + 6, clip=m)
+    a = a0
+    if chew > 0:
+        a = Image.fromarray(np.minimum(np.asarray(a0), np.asarray(WF.chew_alpha(a0, chew, 0.8, seed + 7)) * 0 + np.asarray(
+            WF.chew_alpha(a0, chew, 0.8, seed + 7))), "L")
+    out.putalpha(a)
+    return out
+
+
+def ImageChops_sub(a, b):
+    from PIL import ImageChops
+    return ImageChops.subtract(a, b)
+
+
+def save_worn(a, name, margin, seed, **kw):
+    save(wear_plate(a, margin, seed, **kw), name)
+
+
 # --- palettes -----------------------------------------------------------------
 IRON_T, IRON_B = (58, 45, 36), (36, 28, 22)
 BRASS_HI, BRASS_LO = (226, 180, 104), (96, 64, 34)
 STEEL_HI, STEEL_LO = (170, 160, 150), (62, 56, 52)
+DARK_HI, DARK_LO = (104, 98, 90), (22, 20, 19)  # near-black dented steel rim
+BOLT = (92, 86, 78)
+PHOS_AMBER = (236, 150, 46)
+PHOS_GREEN = (120, 214, 128)
+PHOS_RED = (226, 84, 52)
 
 BUTTONS = {
-    # name: (face_top, face_bot, rim_hi, rim_lo)
-    "amber": ((214, 150, 58), (150, 88, 30), (255, 214, 130), (104, 62, 22)),
-    "teal": ((70, 150, 112), (36, 92, 70), (170, 232, 196), (24, 64, 48)),
-    "rust": ((176, 72, 44), (112, 38, 24), (240, 150, 110), (76, 26, 16)),
-    "steel": ((96, 82, 70), (62, 52, 44), (178, 160, 140), (52, 44, 38)),
-    "neutral": ((190, 190, 190), (128, 128, 128), (250, 250, 250), (80, 80, 80)),
+    # name: (face_top, face_bot, rim_hi, rim_lo, accent)
+    "amber": ((66, 48, 28), (36, 26, 16), (128, 104, 74), (26, 20, 14), PHOS_AMBER),
+    "teal": ((40, 52, 42), (22, 30, 25), (96, 116, 100), (18, 24, 20), PHOS_GREEN),
+    "rust": ((66, 36, 27), (36, 20, 15), (124, 84, 66), (26, 16, 12), PHOS_RED),
+    "steel": ((58, 54, 50), (34, 32, 30), (122, 116, 106), (24, 22, 21), (150, 136, 112)),
+    "neutral": ((150, 148, 144), (100, 98, 96), (220, 216, 210), (60, 58, 56), (236, 232, 224)),
 }
 
 
 def build_kit():
-    # Panels (96px, 28px margins, rivets in the corners)
-    # Panel faces are flat (no vertical ramp): the centre tiles, so a ramp would band.
-    save(plate(96, 96, 12, 7, (44, 34, 27), (44, 34, 27), BRASS_HI, BRASS_LO, margin=28, seed=3, grit=7, scratches=0), "panel.png")
-    save(plate(96, 96, 12, 7, (54, 41, 31), (54, 41, 31), (255, 210, 120), (120, 80, 40), margin=28, seed=4, grit=7, scratches=0), "panel_hi.png")
-    save(plate(64, 64, 9, 4, (28, 22, 18), (28, 22, 18), STEEL_HI, STEEL_LO, rivets=False, inset=True, margin=18, seed=5, grit=5, scratches=0), "inset.png")
-    save(plate(96, 96, 12, 7, (34, 29, 26), (34, 29, 26), STEEL_HI, STEEL_LO, margin=28, seed=6, grit=7, scratches=0), "panel_steel.png")
-    # Slim HUD plate: thin brass rim, small rivets, see-through smoky face.
+    # Panels (96px, 28px margins, rivets in the corners). Faces are flat: the centre tiles.
+    save_worn(plate(96, 96, 10, 7, (30, 27, 25), (30, 27, 25), DARK_HI, DARK_LO, margin=28, seed=3, grit=7,
+                    scratches=0, bolt_col=BOLT), "panel.png", 28, 103, holes=1, dents=1, welds=1)
+    save_worn(plate(96, 96, 10, 7, (38, 32, 27), (38, 32, 27), (130, 112, 88), (30, 24, 18), margin=28, seed=4, grit=7,
+                    scratches=0, bolt_col=BOLT, accent=PHOS_AMBER, accent_a=0.55), "panel_hi.png", 28, 104,
+              holes=1, dents=1, welds=1)
+    save_worn(plate(64, 64, 8, 4, (14, 11, 9), (14, 11, 9), (90, 86, 80), (18, 16, 15), rivets=False, inset=True,
+                    margin=18, seed=5, grit=5, scratches=0), "inset.png", 18, 105, rust=0.3, holes=0, dents=0,
+              welds=0, chew=0.6)
+    save_worn(plate(96, 96, 10, 7, (24, 23, 23), (24, 23, 23), (96, 98, 100), (20, 20, 22), margin=28, seed=6, grit=7,
+                    scratches=0, bolt_col=BOLT), "panel_steel.png", 28, 106, holes=1, dents=1, welds=0)
+    # Slim HUD plate: thin brass rim, small rivets, see-through smoky face (HUD: unchanged).
     hud = plate(48, 48, 8, 3, (26, 20, 16), (26, 20, 16), BRASS_HI, BRASS_LO, margin=14, seed=8, grit=5, scratches=0)
     sdf = rrect_sdf(48, 48, 2, 2, 46, 46, 8)
     face = sdf < -5
     hud[..., 3] = np.where(face, (hud[..., 3] * 0.8).astype(np.uint8), hud[..., 3])
     save(hud, "hud.png")
-    # Buttons (normal / hover / pressed / disabled)
-    for name, (ft, fb, rh, rl) in BUTTONS.items():
-        ft, fb, rh, rl = [np.array(c, np.float32) for c in (ft, fb, rh, rl)]
-        save(plate(80, 64, 12, 5, ft, fb, rh, rl, margin=22, seed=11, grit=10, scratches=4), "btn_%s.png" % name)
-        save(plate(80, 64, 12, 5, ft * 1.12 + 8, fb * 1.12 + 6, rh, rl, margin=22, seed=11, grit=10, scratches=4), "btn_%s_hover.png" % name)
-        save(plate(80, 64, 12, 5, fb * 0.9, ft * 0.85, rl * 1.4, rh * 0.8, margin=22, seed=11, grit=10, scratches=4, inset=True), "btn_%s_pressed.png" % name)
-    g = np.array([90, 82, 74], np.float32)
-    save(plate(80, 64, 12, 5, g * 0.7, g * 0.5, g * 1.2, g * 0.4, margin=22, seed=11, grit=6, scratches=0), "btn_disabled.png")
+    # Buttons (normal / hover / pressed / disabled): dark worn metal + phosphor stroke
+    for i, (name, (ft, fb, rh, rl, ac)) in enumerate(BUTTONS.items()):
+        ft, fb, rh, rl, ac = [np.array(c, np.float32) for c in (ft, fb, rh, rl, ac)]
+        sd = 200 + i * 10
+        save_worn(plate(80, 64, 10, 5, ft, fb, rh, rl, margin=22, seed=11, grit=8, scratches=0, bolt_col=BOLT,
+                        accent=ac, accent_a=0.85), "btn_%s.png" % name, 22, sd, rust=0.35, holes=1, dents=0, welds=0,
+                  edge_grime=True)
+        save_worn(plate(80, 64, 10, 5, ft * 1.25 + 8, fb * 1.2 + 6, rh * 1.1, rl, margin=22, seed=11, grit=8,
+                        scratches=0, bolt_col=BOLT, accent=np.minimum(255, ac * 1.12 + 12), accent_a=1.0),
+                  "btn_%s_hover.png" % name, 22, sd, rust=0.35, holes=1, dents=0, welds=0, edge_grime=True)
+        save_worn(plate(80, 64, 10, 5, fb * 0.8, ft * 0.75, rl * 1.6, rh * 0.7, margin=22, seed=11, grit=8,
+                        scratches=0, inset=True, accent=ac * 0.8, accent_a=0.6), "btn_%s_pressed.png" % name, 22,
+                  sd, rust=0.35, holes=1, dents=0, welds=0, edge_grime=True)
+    g = np.array([60, 56, 52], np.float32)
+    save_worn(plate(80, 64, 10, 5, g * 0.62, g * 0.45, g * 1.2, g * 0.35, margin=22, seed=11, grit=6, scratches=0,
+                    bolt_col=BOLT), "btn_disabled.png", 22, 260, rust=0.55, grime=0.8, holes=1, dents=1, welds=0)
     # Tile frames (roster / pet / slot tiles)
-    save(plate(72, 72, 10, 5, (40, 31, 25), (28, 22, 18), BRASS_HI, BRASS_LO, margin=20, seed=21, grit=6, scratches=0), "tile.png")
-    save(plate(84, 84, 10, 6, (64, 46, 30), (40, 30, 22), (255, 226, 150), (176, 112, 40), margin=26, seed=21, grit=6,
-               scratches=0, glow=(255, 190, 80)), "tile_on.png")
-    # Progress bar groove + fill (fill is neutral: tinted per use)
+    save_worn(plate(72, 72, 8, 5, (32, 29, 26), (22, 20, 18), DARK_HI, DARK_LO, margin=20, seed=21, grit=6,
+                    scratches=0, bolt_col=BOLT), "tile.png", 20, 121, rust=0.4, holes=0, dents=1, welds=0)
+    save_worn(plate(84, 84, 8, 6, (44, 34, 24), (28, 22, 16), (150, 116, 70), (40, 28, 16), margin=26, seed=21,
+                    grit=6, scratches=0, glow=(236, 150, 46), bolt_col=BOLT, accent=PHOS_AMBER, accent_a=0.9),
+              "tile_on.png", 26, 122, rust=0.3, holes=0, dents=0, welds=0, chew=0.0)
+    # Progress bar groove + fill (fill is neutral: tinted per use) — HUD bars: unchanged
     save(plate(48, 24, 7, 3, (16, 12, 10), (24, 19, 15), STEEL_HI, STEEL_LO, rivets=False, inset=True, margin=10, seed=31, grit=4, scratches=0), "bar_bg.png")
     bar = np.zeros((20, 32, 4), np.float32)
     yy = np.mgrid[0:20, 0:32][0].astype(np.float32)
@@ -213,6 +364,22 @@ def build_kit():
     build_caps()
     build_divider()
     build_hud_bits()
+    build_worn_icons()
+
+
+def build_worn_icons():
+    """Rarity frames + ability/dash/pause caps from their pristine sources."""
+    src = "tools/art_src"
+    for i, r in enumerate(("common", "rare", "epic", "legendary")):
+        im = Image.open(os.path.join(src, "frames", "frame_%s.png" % r)).convert("RGBA")
+        wear_icon(im, 400 + i, dark=0.85, sat=0.8, rust=0.35, chew=0.0, dent=False, scratch_rim_only=True).save(
+            "assets/sprites/icons/frames/frame_%s.png" % r)
+    for i, f in enumerate(sorted(os.listdir(os.path.join(src, "ui")))):
+        if not f.endswith(".png"):
+            continue
+        im = Image.open(os.path.join(src, "ui", f)).convert("RGBA")
+        wear_icon(im, 500 + i, dark=0.78, sat=0.7, rust=0.4, dent=True, cracks=(i % 3 == 0)).save(
+            os.path.join("assets/sprites/ui", f))
 
 
 def cap(size, face, rim_dark, glyph, seed=0):
@@ -259,10 +426,12 @@ def cap(size, face, rim_dark, glyph, seed=0):
 
 
 def build_caps():
-    save(cap(96, (96, 88, 80), (70, 64, 60), "back"), "cap_back.png")
-    save(cap(96, (176, 72, 44), (90, 40, 26), "close"), "cap_close.png")
-    save(cap(96, (214, 150, 58), (110, 70, 30), "none"), "cap_amber.png")
-    save(cap(36, (214, 150, 58), (110, 70, 30), "none"), "cap_grab.png")
+    for k, (sz, face, rim, glyph, name) in enumerate([(96, (70, 66, 62), (52, 48, 46), "back", "cap_back"),
+                                                      (96, (150, 62, 40), (80, 36, 24), "close", "cap_close"),
+                                                      (96, (200, 136, 50), (100, 64, 28), "none", "cap_amber"),
+                                                      (36, (200, 136, 50), (100, 64, 28), "none", "cap_grab")]):
+        im = Image.fromarray(cap(sz, face, rim, glyph), "RGBA")
+        wear_icon(im, 300 + k, dark=0.9, sat=0.8, rust=0.4, dent=sz > 40).save(os.path.join(OUT, name + ".png"))
 
 
 def ring(size, r_out, r_in, hi, lo, rivets=0, face=None, face_alpha=0.0, ticks=False, seed=0):

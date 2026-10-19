@@ -18,8 +18,10 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from scipy import ndimage as ndi
+
+import worn_fx as WF
 
 S = 5
 AW, AH = 240, 150
@@ -28,6 +30,8 @@ SS = 3  # mask supersampling
 OUT = "assets/sprites/hangar"
 LAYOUT_GD = "scripts/data/hangar_art_layout.gd"
 F = np.float32
+# Lamps / gauges painted by the current layer (the worn pass kills or lights them).
+_REC = {"lights": [], "gauges": []}
 
 
 def C(*c):
@@ -804,6 +808,7 @@ def cshadow(L, cx, cy, rx, ry, a=0.55):
 
 
 def glow2(L, cx, cy, r, col, strength=0.5):
+    _REC["lights"].append(("glow", cx * S, cy * S, r * S))
     pad = int(r * S * 1.6)
     x0, y0 = int(cx * S) - pad, int(cy * S) - pad
     yy, xx = np.mgrid[0:2 * pad, 0:2 * pad].astype(F)
@@ -863,6 +868,7 @@ def drum(L, cx, y0, y1, rx, base, ry=None, top=None, ol=2.6, open_top=False, **k
 
 def bulb(L, x, y, r, col=BULB, glow_r=None, strength=0.42):
     glow2(L, x, y, glow_r or r * 4.0, AMBER, strength)
+    _REC["lights"][-1] = ("bulb", x * S, y * S, r * S * 1.2, (glow_r or r * 4.0) * S)
     cel(L, [("ell", x, y, r, r * 1.2)], col, form="sphere", ol=1.2, bevel=1.0, rim=0, t1=0.0, t2=0.3,
         line=C(120, 70, 30))
     fill(L, [("ell", x - r * 0.3, y - r * 0.4, r * 0.28, r * 0.32)], C(255, 255, 240), 0.95)
@@ -898,6 +904,7 @@ def vents(L, x0, y0, x1, y1, n, base):
 
 
 def gauge(L, x, y, r, face=BONE, needle=-0.6):
+    _REC["gauges"].append((x * S, y * S, r * S))
     cel(L, [("ell", x, y, r + 0.45, r + 0.45)], STEEL_L, form="sphere", ol=1.4, bevel=1.0, metal=0.8)
     cel(L, [("ell", x, y, r, r)], face, n=(0, 0, 1), ol=0.8, bevel=0, rim=0)
     for k in range(5):
@@ -1764,6 +1771,279 @@ def cosmetic(cz):
     return L
 
 
+# =========================================================== worn pass (art direction: polished but worn down)
+# Rank 1 (stash rank 0, kennel rank 1) of every prop is dark and smashed: graded down,
+# grime, rust, dents, bullet holes, scorch, cracked gauge glass, loose wires, dead lamps.
+# Each higher rank layer of the same prop carries REPAIRS painted over that base
+# (welded scrap patches with bead welds + bolts, spliced cables, a cleaner replaced
+# panel) and switches more of its lamps/gauges on in dim amber, so the camp visibly
+# gets fixed up as scrap is spent. All seeded per layer name: fully regenerable.
+U = 3.0  # wear detail unit, canvas px (the hangar shows at ~0.5x on a phone)
+_BASE = {}  # family -> what its base layer looked like (for the repair layers)
+
+
+def _split(name):
+    cut = name.rfind("_")
+    if cut > 0 and name[cut + 1:].isdigit():
+        return name[:cut], int(name[cut + 1:])
+    return None, None
+
+
+def _stages(fam):
+    return sorted(int(n[len(fam) + 1:]) for n in ORDER if n.startswith(fam + "_") and n[len(fam) + 1:].isdigit())
+
+
+def _wseed(name):
+    import zlib
+    return zlib.crc32(name.encode()) & 0xFFFF
+
+
+def _box(im, pad=40):
+    bb = im.getchannel("A").point(lambda v: 255 if v > 2 else 0).getbbox()
+    if bb is None:
+        return None
+    return (max(0, bb[0] - pad), max(0, bb[1] - pad), min(W, bb[2] + pad), min(H, bb[3] + pad))
+
+
+def _pick(mask, rr, n, avoid=(), min_d=10.0, erode=6):
+    """n random points well inside the mask, spread apart, away from `avoid`."""
+    m = np.asarray(mask.filter(ImageFilter.MinFilter(erode * 2 + 1))) > 0
+    ys, xs = np.nonzero(m)
+    out = []
+    if len(xs) == 0:
+        return out
+    for _ in range(n * 30):
+        if len(out) >= n:
+            break
+        i = rr.randrange(len(xs))
+        x, y = float(xs[i]), float(ys[i])
+        if all(math.hypot(x - a, y - b) > min_d for (a, b) in out) and \
+                all(math.hypot(x - a, y - b) > r for (a, b, r) in avoid):
+            out.append((x, y))
+    return out
+
+
+def _lights_gauges(rec, ox, oy):
+    lights = []
+    for L in rec["lights"]:
+        if L[0] == "bulb":
+            lights.append((L[1] - ox, L[2] - oy, L[3], L[4]))
+        else:  # bare glow: the lamp is ~0.4 of the glow radius
+            lights.append((L[1] - ox, L[2] - oy, max(2.0, L[3] * 0.4), L[3]))
+    gauges = [(x - ox, y - oy, r) for (x, y, r) in rec["gauges"]]
+    return lights, gauges
+
+
+def _wear_base(im, rec, seed, cloth):
+    """Dark & smashed (look D). im is a crop; returns (worn crop, info for repairs)."""
+    import random
+    rr = random.Random(seed)
+    m = WF.body_mask(im)
+    area = int((np.asarray(m) > 0).sum())
+    bb = m.getbbox() or (0, 0, im.width, im.height)
+    bw, bh = bb[2] - bb[0], bb[3] - bb[1]
+    lights, gauges = _lights_gauges(rec, *im.info.get("origin", (0, 0)))
+    clean = im.copy()
+    out = WF.grade(im, 0.6 if not cloth else 0.66, 0.5, (1.0, 0.92, 0.82))
+    for (x, y, r, g) in lights:
+        out = WF.kill_light(out, x, y, r, g)
+    if cloth:
+        out = WF.rust_patches(out, m, 0.35, U, seed + 1, alpha=150)  # stains
+        out = WF.grime(out, m, 235, (12, 9, 6), 1.6 * U, seed + 2)
+        out = WF.scratches(out, m, max(4, area // 2500), U, (2, 6), seed + 3, col=(150, 132, 104), amt=80)
+    else:
+        out = WF.rust_patches(out, m, 0.36, 1.8 * U, seed + 1, alpha=200)
+        out = WF.rust_streaks(out, m, int(np.clip(area / 1800, 4, 36)), U, (5, 16), seed + 2)
+        out = WF.grime(out, m, 235, (10, 8, 6), 1.7 * U, seed + 3)
+        out = WF.edge_wear(out, m, 90, U, seed + 4)
+        out = WF.scratches(out, m, int(np.clip(area / 900, 6, 70)), U, (2, 8), seed + 5)
+    avoid = [(x, y, r + 2 * U) for (x, y, r, g) in lights] + [(x, y, r + 2 * U) for (x, y, r) in gauges]
+    sites = []
+    small = min(bw, bh)
+    if cloth:
+        for (x, y) in _pick(m, rr, int(np.clip(area / 1500, 1, 3)), avoid, 4 * U, 4):
+            out = WF.cracks(out, x, y, 3, 6 * U, (14, 10, 8, 235), max(2, int(U * 0.7)), rr.randrange(999), clip=m)
+            sites.append(("tear", x, y, 2.4 * U))
+    else:
+        nd = int(np.clip(area / 9000, 1, 4)) if small > 8 * U else 0
+        for (x, y) in _pick(m, rr, nd, avoid, 8 * U, 5):
+            r = min(rr.uniform(4.0, 7.5) * U, small * 0.28)
+            out = WF.dent(out, m, x, y, r)
+            sites.append(("dent", x, y, r))
+        nh = int(np.clip(area / 4500, 1, 7)) if small > 5 * U else 0
+        for (x, y) in _pick(m, rr, nh, avoid + [(a, b, 2 * U) for (_, a, b, _r) in sites], 4 * U, 3):
+            r = rr.uniform(1.3, 1.9) * U
+            out = WF.bullet_hole(out, m, x, y, r, rr.randrange(999))
+            sites.append(("hole", x, y, r))
+        if area > 9000:
+            for (x, y) in _pick(m, rr, 1, avoid, 0, 6):
+                r = small * rr.uniform(0.28, 0.4)
+                out = WF.scorch(out, m, x, y, r, seed + 6)
+                sites.append(("scorch", x, y, r * 0.75))
+    for (x, y, r) in gauges:  # cracked gauge glass, dark face
+        gm = Image.new("L", out.size, 0)
+        ImageDraw.Draw(gm).ellipse((x - r, y - r, x + r, y + r), fill=255)
+        out = WF.over(out, (0, 0, 0), gm.point(lambda v: v * 90 // 255))
+        out = WF.cracks(out, x + rr.uniform(-0.3, 0.3) * r, y + rr.uniform(-0.3, 0.3) * r, 6, r * 3.2,
+                        (225, 225, 215, 200), max(1, int(U * 0.4)), rr.randrange(999), clip=gm)
+    wire_at = None
+    if not cloth and area > 12000:
+        lower = Image.new("L", m.size, 0)
+        ImageDraw.Draw(lower).rectangle((bb[0], bb[1] + bh * 0.55, bb[2], bb[3] - 2 * U), fill=255)
+        pts = _pick(Image.fromarray(np.minimum(np.asarray(m), np.asarray(lower))), rr, 1, avoid, 0, 4)
+        if pts:
+            wire_at = pts[0]
+            lay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+            WF.wires(lay, wire_at, 3, U, rr.randrange(999), 0.8)
+            out = Image.alpha_composite(out, lay)
+            sites.append(("wires", wire_at[0], wire_at[1], 3 * U))
+    out = WF.grime(out, m, 140, (8, 6, 4), 2.4 * U, seed + 9)
+    info = dict(clean=clean, mask=m, sites=sites, lights=lights, gauges=gauges, cloth=cloth, seed=seed, bb=bb)
+    return out, info
+
+
+def _wear_content(im, rec, p, seed):
+    """Lighter wear for upgrade content (later ranks look less beaten up)."""
+    import random
+    rr = random.Random(seed)
+    m = WF.body_mask(im)
+    area = int((np.asarray(m) > 0).sum())
+    if area < 30:
+        return im
+    lights, gauges = _lights_gauges(rec, *im.info.get("origin", (0, 0)))
+    out = WF.grade(im, 0.68 + 0.14 * p, 0.58 + 0.17 * p, (1.0, 0.94, 0.86))
+    out = WF.rust_patches(out, m, 0.32 - 0.18 * p, 1.8 * U, seed + 1, alpha=190)
+    out = WF.rust_streaks(out, m, int(np.clip(area / 2600 * (1.2 - p), 2, 24)), U, (4, 12), seed + 2)
+    out = WF.grime(out, m, int(225 - 70 * p), (12, 9, 6), 1.7 * U, seed + 3)
+    out = WF.edge_wear(out, m, 80, U, seed + 4)
+    out = WF.scratches(out, m, int(np.clip(area / 1300, 3, 50)), U, (2, 7), seed + 5)
+    if p < 0.6 and area > 6000:
+        avoid = [(x, y, r + 2 * U) for (x, y, r, g) in lights]
+        for (x, y) in _pick(m, rr, 1, avoid, 0, 4):
+            out = WF.bullet_hole(out, m, x, y, 1.5 * U, rr.randrange(999))
+    lay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    ox, oy = im.info.get("origin", (0, 0))
+    for L in rec["lights"]:  # its own bulbs burn dim amber phosphor (flames/eyes stay as painted)
+        if L[0] == "bulb":
+            WF.amber_lamp(lay, L[1] - ox, L[2] - oy, L[3] * 0.8, 2.6, 0.55)
+    return Image.alpha_composite(out, lay)
+
+
+def _repairs(info, k, R, size):
+    """Repair overlay for repair stage k of R (1-based) on the family's base crop."""
+    import random
+    rr = random.Random(info["seed"] * 31 + k)
+    m = info["mask"]
+    lay = Image.new("RGBA", size, (0, 0, 0, 0))
+    sites = list(info["sites"])
+    random.Random(info["seed"]).shuffle(sites)
+    # Fix up to ~70% of the damage by the top rank (it's still the wasteland).
+    fixable = sites[:max(1, int(math.ceil(len(sites) * 0.7)))] if sites else []
+    mine = [st for j, st in enumerate(fixable) if j % R == k - 1]
+    did = 0
+    # patches stay clear of lamps and gauges (those get their own fix)
+    keep = Image.new("L", size, 255)
+    kd = ImageDraw.Draw(keep)
+    for (x, y, r, g) in info["lights"]:
+        kd.ellipse((x - r - 1.5 * U, y - r - 1.5 * U, x + r + 1.5 * U, y + r + 1.5 * U), fill=0)
+    for (x, y, r) in info["gauges"]:
+        kd.ellipse((x - r - U, y - r - U, x + r + U, y + r + U), fill=0)
+    pm = ImageChops.multiply(m, keep)
+    clean_src = WF.grade(info["clean"], 0.78, 0.7, (1.0, 0.95, 0.88))
+    clean_src = WF.grime(clean_src, m, 150, (14, 10, 7), 1.6 * U, info["seed"] + 40)
+    cl = np.asarray(info["clean"], np.float32)
+    for (kind, x, y, r) in mine:
+        if kind == "wires":
+            WF.splice(lay, (x, y), (x + rr.uniform(3, 6) * U, y + rr.uniform(-4, -1) * U), U, rr.randrange(999))
+        elif info["cloth"]:
+            h = max(r * 1.3, 2.6 * U)
+            WF.stitch_patch(lay, m, (x - h * 1.2, y - h, x + h * 1.2, y + h), U, rr.randrange(999),
+                            col=rr.choice([(104, 90, 70), (80, 86, 66), (112, 80, 60)]))
+        else:
+            # scrap colour: the prop's own paint, darker (re-used panel) or bare steel
+            px = cl[int(np.clip(y, 0, cl.shape[0] - 1)), int(np.clip(x, 0, cl.shape[1] - 1))]
+            col = tuple(int(c * 0.62) for c in px[:3]) if rr.random() < 0.5 else None
+            if kind == "hole":  # small plug plate
+                h = max(r * 1.5, 2.3 * U)
+                WF.weld_patch(lay, pm, (x - h, y - h * 0.85, x + h, y + h * 0.85), U, rr.randrange(999), col=col,
+                              bolts=False)
+            else:
+                h = min(max(r * 0.95, 3.2 * U), 7 * U)
+                box = (x - h * rr.uniform(1.0, 1.3), y - h * 0.8, x + h * rr.uniform(1.0, 1.3), y + h * 0.8)
+                src = clean_src if kind == "scorch" else None
+                WF.weld_patch(lay, pm, box, U, rr.randrange(999), col=col, src=src)
+        did += 1
+    lights, gauges = info["lights"], info["gauges"]
+    for j, (x, y, r, g) in enumerate(lights):
+        if min(R - 1, j * R // max(1, len(lights))) == k - 1:
+            WF.amber_lamp(lay, x, y, r, min(4.0, g / max(r, 1) * 0.6 + 1.5), 0.75)
+            did += 1
+    for j, (x, y, r) in enumerate(gauges):
+        if min(R - 1, (j + len(lights)) * R // max(1, len(lights) + len(gauges))) == k - 1:
+            g = Image.new("RGBA", size, (0, 0, 0, 0))
+            d = ImageDraw.Draw(g)
+            d.ellipse((x - r * 0.95, y - r * 0.95, x + r * 0.95, y + r * 0.95), fill=(150, 92, 30, 120))
+            g = g.filter(ImageFilter.GaussianBlur(r * 0.25))
+            lay.alpha_composite(g)
+            WF.amber_lamp(lay, x, y, max(1.2, r * 0.18), 5.0, 0.6)
+            did += 1
+    if did == 0:  # nothing assigned: at least a welded seam / bracket
+        for (x, y) in _pick(m, rr, 1, (), 0, 3):
+            h = 2.6 * U
+            WF.weld_patch(lay, m, (x - h * 1.5, y - h, x + h * 1.5, y + h), U, rr.randrange(999))
+    return lay
+
+
+def worn(name, im, rec):
+    """Apply the worn art direction to one full-canvas layer image."""
+    if name == "backdrop":
+        return im
+    fam, st = _split(name)
+    seed = _wseed(name)
+    box = None
+    if fam is not None and _stages(fam)[0] != st and fam in _BASE:
+        box = _BASE[fam]["box"]
+    bx = _box(im)
+    if box is None:
+        box = bx
+    elif bx is not None:
+        box = (min(box[0], bx[0]), min(box[1], bx[1]), max(box[2], bx[2]), max(box[3], bx[3]))
+    if box is None:
+        return im
+    cr = im.crop(box)
+    cr.info["origin"] = (box[0], box[1])
+    if fam is None:  # trophies, cosmetics, trophy wall: weathered, lamps lit
+        out = _wear_content(cr, rec, 0.45, seed)
+    else:
+        stages = _stages(fam)
+        i = stages.index(st)
+        R = len(stages) - 1
+        if i == 0:
+            out, info = _wear_base(cr, rec, seed, fam.startswith("kennel"))
+            info["box"] = box
+            _BASE[fam] = info
+        else:
+            base = _BASE[fam]
+            # re-home the base info into this layer's (possibly larger) crop
+            ox, oy = base["box"][0] - box[0], base["box"][1] - box[1]
+            size = cr.size
+            sh = dict(base)
+            mm = Image.new("L", size, 0)
+            mm.paste(base["mask"], (ox, oy))
+            cl = Image.new("RGBA", size, (0, 0, 0, 0))
+            cl.paste(base["clean"], (ox, oy))
+            sh.update(mask=mm, clean=cl,
+                      sites=[(t, x + ox, y + oy, r) for (t, x, y, r) in base["sites"]],
+                      lights=[(x + ox, y + oy, r, g) for (x, y, r, g) in base["lights"]],
+                      gauges=[(x + ox, y + oy, r) for (x, y, r) in base["gauges"]])
+            rep = _repairs(sh, i, R, size)
+            own = _wear_content(cr, rec, i / R, seed)
+            out = Image.alpha_composite(rep, own)
+    full = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    full.paste(out, (box[0], box[1]))
+    return full
+
+
 # =========================================================== registry
 LAYERS = {"backdrop": backdrop, "trophy_wall": (lambda: trophy("wall"))}
 for c in ("banner", "flag", "campfire", "toys", "case"):
@@ -1783,10 +2063,18 @@ for s in (0, 1, 2, 3):
 for b in ("dread_naught", "mutant_overlord"):
     LAYERS["trophy_%s" % b] = (lambda b=b: trophy(b))
 
+# Ranks 2 and 4 of the 5-rank props are pure repair layers (welds, splices, lamps
+# coming back on) painted over the rank-1 prop by the worn pass below.
+for s in (2, 4):
+    for i in ("generator", "radio_tower", "scrap_press", "ammo_bench"):
+        LAYERS["%s_%d" % (i, s)] = Layer
+    for h in HEROES:
+        LAYERS["station_%s_%d" % (h, s)] = Layer
+
 # Same stacking order as scripts/ui/hangar.gd builds the view.
 ORDER = (["backdrop", "trophy_wall"] + ["stash_%d" % s for s in range(4)]
-         + ["%s_%d" % (i, s) for i in ("generator", "radio_tower", "scrap_press", "ammo_bench") for s in (1, 3, 5)]
-         + ["station_%s_%d" % (h, s) for h in HEROES for s in (1, 3, 5)]
+         + ["%s_%d" % (i, s) for i in ("generator", "radio_tower", "scrap_press", "ammo_bench") for s in range(1, 6)]
+         + ["station_%s_%d" % (h, s) for h in HEROES for s in range(1, 6)]
          + ["kennel_%s_%d" % (p, s) for p in ("noel", "bentley", "lillie") for s in (1, 2, 3)]
          + ["trophy_dread_naught", "trophy_mutant_overlord"]
          + ["cosmetic_%s" % c for c in ("banner", "flag", "campfire", "toys", "case")])
@@ -1802,8 +2090,11 @@ def crop(im):
 def build():
     os.makedirs(OUT, exist_ok=True)
     rects = {}
+    _BASE.clear()
     for name in ORDER:
-        im = LAYERS[name]().image()
+        _REC["lights"].clear()
+        _REC["gauges"].clear()
+        im = worn(name, LAYERS[name]().image(), _REC)
         if name == "backdrop":
             bb = (0, 0, W, H)
         else:

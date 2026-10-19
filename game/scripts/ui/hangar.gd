@@ -108,11 +108,12 @@ func _build_view() -> Control:
 	var names: Array = ["backdrop", "trophy_wall"]
 	for s in [0, 1, 2, 3]:
 		names.append("stash_%d" % s)
+	## Ranks 2 and 4 are repair layers (welds, lamps back on) over the rank-1 prop.
 	for id in HangarDefs.SHARED_IDS:
-		for s in [1, 3, 5]:
+		for s in [1, 2, 3, 4, 5]:
 			names.append("%s_%d" % [id, s])
 	for h in CharacterDefs.PLAYABLE_IDS:
-		for s in [1, 3, 5]:
+		for s in [1, 2, 3, 4, 5]:
 			names.append("station_%s_%d" % [h, s])
 	for p in ["noel", "bentley", "lillie"]:
 		for s in [1, 2, 3]:
