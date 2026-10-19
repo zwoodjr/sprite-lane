@@ -15,6 +15,13 @@ extends RefCounted
 ##   - facing flip, white hit flash (shared shader, so batching survives)
 ## `frame_event(state, frame)` fires whenever a frame is shown (frame 0
 ## included), which is how weapon/attack JSON hit frames trigger damage.
+##
+## Optional sidecar `<prefix>_anim.json`: {"fps": {state: fps}, "alive": {...}}
+## overrides the default fps per unit (smoother idle / walk with more frames).
+## "Alive" layer (subtle, data-driven, all units): random start phase + small
+## rate jitter on looping states so packs never animate in lockstep, a lean
+## into the move direction (rotation about the feet) and a squash-and-recover
+## on hits / stops (scale about the feet).
 
 signal frame_event(state: String, frame: int)
 signal finished(state: String)
@@ -23,21 +30,35 @@ const FEET_FROM_BOTTOM := 10.0
 const STATE_NAMES := [
 	"idle", "walk", "windup", "attack", "hit", "death", "dash", "ability",
 	"sit", "roar", "emerge", "rampage", "bark", "drop", "charge", "impact",
+	"sit_idle",
 ]
 const DEFAULT_FPS := {
 	"idle": 8.0, "walk": 14.0, "windup": 10.0, "attack": 12.0, "hit": 12.0,
 	"death": 10.0, "dash": 24.0, "ability": 12.0, "sit": 6.0, "roar": 10.0,
 	"emerge": 10.0, "rampage": 12.0, "bark": 12.0, "drop": 10.0,
-	"charge": 14.0, "impact": 12.0,
+	"charge": 14.0, "impact": 12.0, "sit_idle": 10.0,
 }
 ## Loop forever until something else is played.
-const LOOPING := {"idle": true, "walk": true, "rampage": true, "charge": true}
+const LOOPING := {"idle": true, "walk": true, "rampage": true, "charge": true, "sit_idle": true}
 ## One-shot that freezes on its last frame (never returns to locomotion).
 const HOLD_LAST := {"death": true, "sit": true}
+## A finished one-shot that hands over to a resting loop (sit -> sit_idle).
+const REST_LOOP := {"sit": "sit_idle"}
+## Alive layer defaults (per unit override: "alive" in <prefix>_anim.json).
+##   lean: max rotation (rad) into the move direction at ref_speed
+##   lean_rate: how fast the lean follows (1/s)
+##   rate_jitter: ± fraction applied to looping fps per unit
+##   hit_squash / stop_squash: scale kick (x wider, y shorter), springs back
+const ALIVE := {
+	"lean": 0.07, "lean_rate": 10.0, "ref_speed": 220.0, "rate_jitter": 0.06,
+	"hit_squash": 0.14, "stop_squash": 0.05, "squash_freq": 9.0, "squash_damp": 0.35,
+}
 
 ## prefix -> {state: {"tex": Texture2D, "n": int}} ; shared by every unit.
 static var _cache: Dictionary = {}
 static var _flash_mat: ShaderMaterial = null
+## prefix -> "alive" overrides from the sidecar.
+static var _alive_cache: Dictionary = {}
 
 var sprite: Sprite2D
 var states: Dictionary = {}
@@ -53,6 +74,12 @@ var _loco: String = "idle"
 var _loco_fps_mult: float = 1.0
 var _flash_left: float = 0.0
 var _px_scale: float = 1.0
+var _alive: Dictionary = ALIVE
+var _rate: float = 1.0
+var _lean: float = 0.0
+var _lean_target: float = 0.0
+var _sq: float = 0.0
+var _sq_v: float = 0.0
 
 
 ## Load (and cache) every state strip for `prefix` (e.g.
@@ -69,6 +96,12 @@ static func load_states(prefix: String) -> Dictionary:
 		if tex == null or tex.get_height() <= 0:
 			continue
 		out[s] = {"tex": tex, "n": maxi(1, int(round(float(tex.get_width()) / float(tex.get_height()))))}
+	var side := load_json(prefix + "_anim.json")
+	var fps_over: Dictionary = side.get("fps", {})
+	for s in fps_over:
+		if out.has(s):
+			out[s]["fps"] = float(fps_over[s])
+	_alive_cache[prefix] = side.get("alive", {})
 	_cache[prefix] = out
 	return out
 
@@ -99,8 +132,11 @@ static func flash_material() -> ShaderMaterial:
 func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0) -> bool:
 	sprite = spr
 	states = load_states(prefix)
+	_alive = ALIVE.duplicate()
+	_alive.merge(_alive_cache.get(prefix, {}), true)
 	if states.is_empty() or sprite == null:
 		return false
+	_rate = 1.0 + randf_range(-1.0, 1.0) * float(_alive["rate_jitter"])
 	var any: Dictionary = states.get("idle", states.values()[0])
 	frame_size = (any["tex"] as Texture2D).get_height()
 	feet_y = feet
@@ -124,6 +160,13 @@ func has_state(s: String) -> bool:
 	return states.has(s)
 
 
+## fps for `s`: the unit's sidecar value, else the shared default.
+func state_fps(s: String) -> float:
+	if states.has(s) and states[s].has("fps"):
+		return float(states[s]["fps"])
+	return float(DEFAULT_FPS.get(s, 10.0))
+
+
 func frame_count(s: String) -> int:
 	return int(states[s]["n"]) if states.has(s) else 0
 
@@ -141,11 +184,18 @@ func play(s: String, fps: float = -1.0, restart: bool = true) -> void:
 		if fps > 0.0:
 			_fps = fps
 		return
+	var prev := state
 	state = s
-	_fps = fps if fps > 0.0 else float(DEFAULT_FPS.get(s, 10.0))
+	_fps = fps if fps > 0.0 else state_fps(s)
 	_t = 0.0
 	_done = false
-	_show(0)
+	if LOOPING.has(s):
+		_fps *= _rate
+		## Entering a loop from nothing / another loop: random phase, so a
+		## pack of the same unit never breathes or trots in lockstep.
+		if prev == "" or LOOPING.has(prev):
+			_t = randf() * float(frame_count(s))
+	_show(int(_t))
 
 
 ## Play `s` so the whole strip lasts `seconds`.
@@ -160,17 +210,19 @@ func play_over(s: String, seconds: float) -> void:
 func set_locomotion(s: String, fps_mult: float = 1.0) -> void:
 	if not states.has(s):
 		s = "idle"
+	if _loco == "walk" and s == "idle":
+		squash(float(_alive["stop_squash"]))
 	_loco = s
 	_loco_fps_mult = fps_mult
 	## Death never yields; a finished sit holds until the unit moves.
 	if state == "death" or (is_busy() and state != "sit"):
 		return
-	if state == "sit" and s == "idle":
+	if (state == "sit" or state == "sit_idle") and s == "idle":
 		return
 	if state != s:
-		play(s, float(DEFAULT_FPS.get(s, 8.0)) * fps_mult)
+		play(s, state_fps(s) * fps_mult)
 	else:
-		_fps = float(DEFAULT_FPS.get(s, 8.0)) * fps_mult
+		_fps = state_fps(s) * fps_mult * _rate
 
 
 ## True while a non-looping state is still playing.
@@ -195,11 +247,41 @@ func flash(dur: float = 0.07) -> void:
 	_flash_left = maxf(_flash_left, dur)
 	if sprite:
 		sprite.material = flash_material()
+	squash(float(_alive["hit_squash"]))
+
+
+## Squash kick (positive = wider + shorter), springs back with overshoot.
+func squash(amount: float) -> void:
+	_sq_v -= amount * TAU * float(_alive["squash_freq"])
+
+
+## Feed the unit's velocity each frame for the lean-into-motion layer.
+func set_motion(vel: Vector2, ref_speed: float = -1.0) -> void:
+	var ref := ref_speed if ref_speed > 0.0 else float(_alive["ref_speed"])
+	_lean_target = clampf(vel.x / maxf(ref, 1.0), -1.0, 1.0) * float(_alive["lean"])
+
+
+func _alive_tick(delta: float) -> void:
+	if state == "death":
+		_lean_target = 0.0
+	_lean = lerpf(_lean, _lean_target, clampf(delta * float(_alive["lean_rate"]), 0.0, 1.0))
+	var w := TAU * float(_alive["squash_freq"])
+	var steps := 4
+	var h := delta / float(steps)
+	for _i in steps:
+		var a := -w * w * _sq - 2.0 * float(_alive["squash_damp"]) * w * _sq_v
+		_sq_v += a * h
+		_sq += _sq_v * h
+	_sq = clampf(_sq, -0.3, 0.3)
+	sprite.rotation = _lean
+	## Volume-preserving squash about the feet (sprite origin = feet).
+	sprite.scale = Vector2(_px_scale * (1.0 - _sq), _px_scale * (1.0 + _sq))
 
 
 func tick(delta: float) -> void:
 	if sprite == null or state == "":
 		return
+	_alive_tick(delta)
 	if _flash_left > 0.0:
 		_flash_left -= delta
 		if _flash_left <= 0.0:
@@ -216,11 +298,13 @@ func tick(delta: float) -> void:
 		else:
 			var ended := state
 			_done = true
-			if HOLD_LAST.has(state):
+			if REST_LOOP.has(state) and states.has(REST_LOOP[state]):
+				play(REST_LOOP[state])
+			elif HOLD_LAST.has(state):
 				_show(n - 1, false)
 			else:
 				## Back to locomotion (on this same frame, no blank tick).
-				play(_loco, float(DEFAULT_FPS.get(_loco, 8.0)) * _loco_fps_mult)
+				play(_loco, state_fps(_loco) * _loco_fps_mult)
 			finished.emit(ended)
 			return
 	if f != frame:

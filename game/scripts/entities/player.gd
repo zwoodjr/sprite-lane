@@ -416,6 +416,7 @@ func _facing_dir() -> Vector2:
 
 ## Animation runs in _process so the death strip still plays after physics stops.
 func _process(delta: float) -> void:
+	_anim.set_motion(velocity)
 	_anim.tick(delta)
 	## A swing interrupted (hit / dash) before its hit frames still lands.
 	if _swing_hits_left > 0 and not (_anim.state == "windup" or _anim.state == "attack"):
@@ -1335,6 +1336,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	Juice.shake(0.28)
 	Juice.haptic(30)
 	Juice.flash(body, Color(2.5, 0.6, 0.5), 0.15)
+	_anim.squash(0.12)
 	if not (_anim.is_playing("dash") or _anim.is_playing("ability")):
 		_anim.play("hit")
 	Juice.damage_number(global_position + Vector2(0, -30), dmg, false, UiTheme.DANGER)

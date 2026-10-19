@@ -36,6 +36,14 @@ func set_strip(path: String) -> void:
 		return
 	var h := float(tex.get_height())
 	_frames = maxi(1, int(round(float(tex.get_width()) / h)))
+	## Units with a per-state fps sidecar (<prefix>_anim.json) play at their own rate.
+	var cut := path.rfind("_")
+	if cut > 0 and path.ends_with(".png"):
+		var side := UnitAnim.load_json(path.substr(0, cut) + "_anim.json")
+		var st := path.substr(cut + 1).trim_suffix(".png")
+		var f: Dictionary = side.get("fps", {})
+		if f.has(st):
+			fps = float(f[st])
 	_atlas = AtlasTexture.new()
 	_atlas.atlas = tex
 	_atlas.region = Rect2(0, 0, h, h)

@@ -482,6 +482,7 @@ func _nearest_enemy(max_d: float) -> Node2D:
 func _update_visuals(delta: float) -> void:
 	if body == null:
 		return
+	_anim.set_motion(velocity, float(_def.get("follow_speed", 260.0)))
 	_anim.tick(delta)
 	var v := velocity.length()
 	if _ram_left > 0.0:
