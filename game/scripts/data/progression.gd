@@ -7,10 +7,10 @@ extends RefCounted
 ## Account XP is soft prestige only (gates a few Hangar tiers); scrap is the fuel.
 
 ## --- In-run level curve (fast) ---
-## L1→2: 30 · L2→3: 42 · L3→4: 54 · …
-const RUN_XP_BASE := 30
-const RUN_XP_STEP := 12
-const RUN_LEVEL_CAP := 8
+## L1→2: 20 · L2→3: 29 · L3→4: 38 · … (many small picks — Phase 4 cards)
+const RUN_XP_BASE := 20
+const RUN_XP_STEP := 9
+const RUN_LEVEL_CAP := 20
 
 ## --- Soft account prestige (not spend power) ---
 const ACCOUNT_XP_BASE := 120
@@ -75,41 +75,72 @@ static func award_wipe_account_xp(kills: int, mode_payout: float) -> int:
 	return maxi(WIPE_ACCOUNT_XP_FLOOR + kills, int(float(WIPE_ACCOUNT_XP_FLOOR + kills) * mode_payout))
 
 
-## In-run upgrade pick pool (temporary — gone on extract/wipe).
-static func run_upgrade_pool() -> Array[Dictionary]:
-	return [
-		{"id": "harder_hit", "name": "Harder Hit", "desc": "+15% weapon damage", "stat": "damage", "add": 0.15},
-		{"id": "quick_mag", "name": "Quick Mag", "desc": "+20% fire rate", "stat": "firerate", "add": 0.20},
-		{"id": "thick_plate", "name": "Thick Plate", "desc": "+30 max HP (heals the gain)", "stat": "max_hp", "add": 30.0},
-		{"id": "dust_runner", "name": "Dust Runner", "desc": "+12% move speed", "stat": "move", "add": 0.12},
-		{"id": "deep_mag", "name": "Deep Mag", "desc": "+8 mag size", "stat": "mag", "add": 8.0, "ranged_only": true},
-		{"id": "cool_head", "name": "Cool Head", "desc": "−20% ability cooldown", "stat": "ability_cd", "add": 0.20},
-		## Hero-specific, stackable: Helm gets up to 3 extra drones (4 total).
-		{"id": "extra_drone", "name": "Extra Drone", "desc": "+1 support drone", "stat": "drones", "add": 1.0,
-			"hero": CharacterDefs.HELM_WISP_ID, "max_total": 3.0},
-	]
+## In-run upgrade cards (temporary — gone on extract/wipe). Definitions and
+## numbers live in UpgradeDefs; ranks owned are in GameState.run_ranks.
+static func run_upgrade_pool() -> Array:
+	return UpgradeDefs.all()
 
 
-static func roll_run_choices(count: int = 2, exclude: Array = []) -> Array[Dictionary]:
-	var pool := run_upgrade_pool()
-	var available: Array[Dictionary] = []
+## True when this card can still be offered to the current hero.
+static func can_offer(u: Dictionary) -> bool:
 	var hero := GameState.selected_character_id if GameState else ""
-	for u in pool:
-		if u.has("hero") and str(u["hero"]) != hero:
+	if u.has("hero") and str(u["hero"]) != hero:
+		return false
+	var melee := GameState != null and GameState.weapon.has("melee")
+	if bool(u.get("ranged_only", false)) and melee:
+		return false
+	var rank := GameState.run_rank(str(u["id"])) if GameState else 0
+	if rank >= int(u.get("max_rank", 1)):
+		return false
+	## Drone cards stop once Helm's rig is full (4 drones).
+	if hero == CharacterDefs.HELM_WISP_ID and str(u["id"]) in ["squadron", "scrap_drone"] and GameState:
+		var w := GameState.weapon
+		var have := int(w.get("drone_count", 0)) + GameState.run_rank("squadron") + GameState.run_rank("scrap_drone")
+		if have >= int(w.get("drone_max", 4)):
+			return false
+	return true
+
+
+## Weighted roll of `count` distinct cards. luck > 1 boosts rare / epic odds
+## (Lucky Vial). `exclude` ids are skipped (e.g. the cards being rerolled away).
+static func roll_run_choices(count: int = UpgradeDefs.CHOICES_PER_LEVEL, exclude: Array = [], luck: float = 1.0, rng: RandomNumberGenerator = null) -> Array:
+	var avail: Array = []
+	var weights: Array = []
+	for u in UpgradeDefs.all():
+		if str(u["id"]) in exclude or not can_offer(u):
 			continue
-		if bool(u.get("ranged_only", false)) and GameState and GameState.weapon.has("melee"):
-			continue
-		if u.has("max_total"):
-			## Stackable pick: offered until the stat hits its cap.
-			if GameState and float(GameState.run_mods.get(str(u["stat"]), 0.0)) >= float(u["max_total"]):
-				continue
-		elif str(u["id"]) in exclude:
-			continue
-		available.append(u)
-	available.shuffle()
-	var out: Array[Dictionary] = []
-	for i in range(mini(count, available.size())):
-		out.append(available[i])
+		var r := str(u.get("rarity", "common"))
+		var w := float(UpgradeDefs.RARITY_WEIGHT.get(r, 10.0))
+		if r == "rare":
+			w *= luck
+		elif r == "epic":
+			w *= luck * 1.4
+		if u.has("hero"):
+			w *= UpgradeDefs.CLASS_WEIGHT_MULT
+		if GameState and GameState.run_rank(str(u["id"])) > 0:
+			w *= UpgradeDefs.OWNED_WEIGHT_MULT
+		avail.append(u)
+		weights.append(w)
+	var out: Array = []
+	while out.size() < count and not avail.is_empty():
+		var total := 0.0
+		for w in weights:
+			total += float(w)
+		var roll := (rng.randf() if rng else randf()) * total
+		var i := 0
+		while i < avail.size() - 1 and roll > float(weights[i]):
+			roll -= float(weights[i])
+			i += 1
+		out.append(avail[i])
+		avail.remove_at(i)
+		weights.remove_at(i)
+	## Too few new cards (late run) — refill from excluded ones so there are 3.
+	if out.size() < count and not exclude.is_empty():
+		for u in UpgradeDefs.all():
+			if out.size() >= count:
+				break
+			if str(u["id"]) in exclude and can_offer(u) and not out.has(u):
+				out.append(u)
 	return out
 
 

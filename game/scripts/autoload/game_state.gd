@@ -78,16 +78,15 @@ var extract_pad_info: Array = []
 ## In-run leveling (temporary power)
 var run_xp: int = 0 ## toward next run level
 var run_level: int = 1
-var run_mods: Dictionary = {
-	"damage": 0.0,
-	"firerate": 0.0,
-	"max_hp": 0.0,
-	"move": 0.0,
-	"mag": 0.0,
-	"ability_cd": 0.0,
-	"drones": 0.0,
-}
+var run_mods: Dictionary = _fresh_run_mods()
 var run_picks_taken: Array = [] ## upgrade ids chosen this run
+## Phase 4 cards: id -> rank owned this run (see UpgradeDefs).
+var run_ranks: Dictionary = {}
+var run_rerolls_left: int = 2
+var run_luck_charges: int = 0 ## Lucky Vial: level-ups left with better odds
+var run_luck: float = 1.0
+## Field Notes: kills per enemy kind this run.
+var run_kind_kills: Dictionary = {}
 var pending_run_choices: Array = []
 var run_level_paused: bool = false
 
@@ -319,8 +318,7 @@ func begin_run() -> void:
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
-	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0, "drones": 0.0}
-	run_picks_taken.clear()
+	_reset_run_cards()
 	pending_run_choices.clear()
 	run_level_paused = false
 	_clear_result_meta()
@@ -371,7 +369,7 @@ func add_run_xp(amount: int) -> void:
 		run_xp -= Progression.run_xp_to_next(run_level)
 		run_level += 1
 		leveled = true
-		var choices := Progression.roll_run_choices(2, run_picks_taken)
+		var choices := Progression.roll_run_choices(UpgradeDefs.CHOICES_PER_LEVEL, [], consume_luck())
 		pending_run_choices = choices
 		run_level_paused = true
 		run_level_up.emit(run_level, choices)
@@ -387,11 +385,55 @@ func apply_run_upgrade(upgrade: Dictionary) -> void:
 	if run_mods.has(stat):
 		run_mods[stat] = float(run_mods[stat]) + add
 	var uid := str(upgrade.get("id", ""))
-	if uid != "" and uid not in run_picks_taken:
-		run_picks_taken.append(uid)
+	if uid != "":
+		run_ranks[uid] = mini(run_rank(uid) + 1, int(upgrade.get("max_rank", 3)))
+		if uid not in run_picks_taken:
+			run_picks_taken.append(uid)
+		if uid == "lucky_vial":
+			run_luck_charges = int(UpgradeDefs.val(uid, "charges", run_rank(uid), 0))
+			run_luck = float(UpgradeDefs.val(uid, "luck", run_rank(uid), 1.0))
 	pending_run_choices.clear()
 	run_level_paused = false
 	loadout_changed.emit()
+
+func run_rank(id: String) -> int:
+	return int(run_ranks.get(id, 0))
+
+## Shorthand: an upgrade's value at the rank owned this run.
+func up(id: String, key: String, default: Variant = 0.0) -> Variant:
+	return UpgradeDefs.val(id, key, run_rank(id), default)
+
+## Lucky Vial: returns the luck multiplier for this level-up (uses a charge).
+func consume_luck() -> float:
+	if run_luck_charges <= 0:
+		return 1.0
+	run_luck_charges -= 1
+	return run_luck
+
+func use_reroll() -> bool:
+	if run_rerolls_left <= 0:
+		return false
+	run_rerolls_left -= 1
+	return true
+
+func note_kill(kind: String) -> void:
+	run_kind_kills[kind] = int(run_kind_kills.get(kind, 0)) + 1
+
+## Scavenger's Eye multiplier on kill scrap.
+func run_scrap_mult() -> float:
+	return 1.0 + float(up("scavengers_eye", "scrap", 0.0))
+
+static func _fresh_run_mods() -> Dictionary:
+	return {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0}
+
+func _reset_run_cards() -> void:
+	run_mods = _fresh_run_mods()
+	run_picks_taken.clear()
+	run_ranks.clear()
+	run_rerolls_left = UpgradeDefs.REROLLS_PER_RUN
+	run_luck_charges = 0
+	run_luck = 1.0
+	run_kind_kills.clear()
 
 func try_buy_hangar(entry_id: String) -> bool:
 	var entry: Dictionary = {}
@@ -504,8 +546,7 @@ func on_wipe() -> void:
 func _reset_run_power_after_end() -> void:
 	## Permanent power never comes from run levels — clear after banking rewards.
 	run_xp = 0
-	run_mods = {"damage": 0.0, "firerate": 0.0, "max_hp": 0.0, "move": 0.0, "mag": 0.0, "ability_cd": 0.0, "drones": 0.0}
-	run_picks_taken.clear()
+	_reset_run_cards()
 	pending_run_choices.clear()
 	run_level_paused = false
 
