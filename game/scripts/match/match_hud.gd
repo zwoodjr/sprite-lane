@@ -26,6 +26,10 @@ const XP_BAR_H := 7.0
 const MAP_SIZE := 150.0
 const PANEL_ALPHA := 0.5
 const HINT_SHOW := 4.0
+## Locked "smashed readout" bars (scripts/ui/readout_bar.gd).
+const ReadoutScript := preload("res://scripts/ui/readout_bar.gd")
+const HP_READOUT := Vector2(232, 34)
+const XP_READOUT := Vector2(232, 24)
 var root: Control
 var _match: Node = null
 var _player: Node = null
@@ -83,6 +87,8 @@ var _extract_open: bool = false
 var _t: float = 0.0
 var _hint_cycle_t: float = 0.0
 var _pack_panel: PanelContainer
+var _hp_readout: Control
+var _xp_readout: Control
 var _hint_index: int = 0
 
 const ROTATING_HINTS := [
@@ -202,13 +208,20 @@ func _build() -> void:
 	## Top-left: vitals
 	var vit := _panel(PANEL_ALPHA)
 	vit.name = "Vitals"
+	## The readouts carry their own housings — no plate behind them.
+	vit.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(vit)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vit.add_child(vb)
 	vb.add_theme_constant_override("separation", 2)
+	_hp_readout = _readout("hp", "HP", HP_READOUT)
+	vb.add_child(_hp_readout)
+	_xp_readout = _readout("xp", "LV", XP_READOUT)
+	vb.add_child(_xp_readout)
 	var hp_row := Control.new()
+	hp_row.visible = false
 	hp_row.custom_minimum_size = Vector2(BAR_W, HP_BAR_H)
 	hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(hp_row)
@@ -223,6 +236,7 @@ func _build() -> void:
 	_hp_text.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	hp_row.add_child(_hp_text)
 	var xp_line := HBoxContainer.new()
+	xp_line.visible = false
 	xp_line.add_theme_constant_override("separation", 5)
 	xp_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(xp_line)
@@ -241,6 +255,8 @@ func _build() -> void:
 	_run_xp_bar.step = 0.0
 	xp_row.add_child(_run_xp_bar)
 	_ammo_label = _label("24 / 24", 12)
+	_ammo_label.add_theme_constant_override("outline_size", 4)
+	_ammo_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_ammo_label.add_theme_font_override("font", UiTheme.font_button)
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
@@ -509,6 +525,14 @@ func set_exposure(v: float, stage: int) -> void:
 		UiTheme.skin_bar(_expo_bar, col)
 		_expo_label.add_theme_color_override("font_color", col)
 
+func _readout(kind: String, label: String, sz: Vector2) -> Control:
+	var c := Control.new()
+	c.set_script(ReadoutScript)
+	c.set("kind", kind)
+	c.set("label_text", label)
+	c.custom_minimum_size = sz
+	return c
+
 func _flash_hit() -> void:
 	if _hit_flash == null:
 		return
@@ -624,6 +648,8 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 		"  MAX" if bool(rp.get("capped", false)) else "",
 	]
 	_run_xp_bar.value = float(rp["ratio"])
+	if _xp_readout:
+		_xp_readout.call("set_value", float(rp["ratio"]), 1.0, "%d" % int(rp["level"]))
 	if player and is_instance_valid(player) and not bool(player.call("is_reloading")):
 		_refresh_ammo()
 
@@ -658,6 +684,10 @@ func on_health_changed(current: float, maximum: float) -> void:
 	_hp_bar.value = current
 	_hp_ratio = current / maxf(maximum, 1.0)
 	_hp_text.text = "%d / %d" % [int(ceil(maxf(current, 0.0))), int(maximum)]
+	if _hp_readout:
+		## Low health: the phosphor runs hot red.
+		_hp_readout.set("on_color", Color(0.95, 0.3, 0.18) if _hp_ratio < 0.3 else Color(0.87, 0.54, 0.14))
+		_hp_readout.call("set_value", current, maximum, "%d" % int(ceil(maxf(current, 0.0))))
 	_hp_bar.tint_progress = Color(1, 1, 1) if _hp_ratio >= 0.3 else Color(1.0, 0.6, 0.55)
 
 func on_buffs_changed(buffs: Dictionary) -> void:
