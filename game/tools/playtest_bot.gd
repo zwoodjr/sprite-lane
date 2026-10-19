@@ -52,6 +52,7 @@ var _picker_snaps := 0
 var _grants := ""
 var _picking := false
 var _going := false
+var _pad_dist := INF
 var _force_ammo := ""
 var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 
@@ -164,9 +165,14 @@ func _process(delta: float) -> void:
 			_fps_min = mini(_fps_min, f)
 			_fps_sum += f
 			_fps_n += 1
-		print("T %5.1f fps=%d hp=%.0f/%.0f enemies=%d nearest=%.0f phase=%d extract=%s pos=(%.0f,%.0f) hits=%d" % [
+		var pd := -1.0
+		for pad in _m.call("get_pads"):
+			if is_instance_valid(pad):
+				var dd: float = pad.global_position.distance_to(_p.global_position)
+				pd = dd if pd < 0.0 else minf(pd, dd)
+		print("T %5.1f fps=%d hp=%.0f/%.0f enemies=%d nearest=%.0f phase=%d extract=%s pos=(%.0f,%.0f) hits=%d pad=%.0f stuck=%.1f" % [
 			_t, Engine.get_frames_per_second(), _p.hp, _p.max_hp, en, nd,
-			_m.get("_phase_index"), _m.call("is_extract_open"), _p.global_position.x, _p.global_position.y, _dmg_events])
+			_m.get("_phase_index"), _m.call("is_extract_open"), _p.global_position.x, _p.global_position.y, _dmg_events, pd, _stuck_s])
 	if _snap_t >= (1.5 if _stand else (5.0 if _secs < 30.0 else 8.0)):
 		_snap_t = 0.0
 		_n += 1
@@ -212,7 +218,9 @@ func _drive(delta: float) -> void:
 				_unstick_t = 0.6
 				_unstick_side = -_unstick_side
 				_stuck_frames = 0
-			if e and e.global_position.distance_to(_p.global_position) < 70.0:
+			_pad_dist = to.length()
+			## Dash only on the way in — a dash on the pad throws you off it.
+			if e and e.global_position.distance_to(_p.global_position) < 70.0 and to.length() > 90.0:
 				TouchInput.pulse_dash()
 			TouchInput.move_vector = mv
 			return
@@ -314,7 +322,7 @@ func _want_ability() -> bool:
 	var hp_k: float = float(_p.get("hp")) / maxf(1.0, float(_p.get("max_hp")))
 	## Heading for a pad: no gap-closers that drag the hero toward enemies.
 	if _going and GameState.selected_character_id in ["nyx_caldera", "quill_marrow", "pebble"]:
-		return near.call(70.0) >= 2
+		return near.call(70.0) >= 2 and _pad_dist > 120.0
 	match GameState.selected_character_id:
 		"sister_cinder":
 			return hp_k < 0.8 or (near.call(250.0) >= 2 and hp_k < 0.95)
