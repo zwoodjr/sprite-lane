@@ -50,6 +50,9 @@ static func drop_kill(parent: Node, pos: Vector2, faction: String, role: String)
 	for k in rd.keys():
 		for i in range(int(rd[k])):
 			spawn(parent, pos + Vector2(randf_range(-12, 12), randf_range(-8, 8)), str(k))
+	if faction == "machine":
+		for i in range(int(MedicineDefs.MACHINE_ROLE_CORES.get(role, 0))):
+			spawn(parent, pos + Vector2(randf_range(-14, 14), randf_range(-10, 10)), "salvage_core")
 	if role == "elite" and randf() < MedicineDefs.ELITE_MEDICINE_CHANCE:
 		spawn(parent, pos + Vector2(0, 14), "medicine")
 	elif role == "boss":

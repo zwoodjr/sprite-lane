@@ -34,7 +34,7 @@ func _init() -> void:
 	assert(Progression.account_level_from_xp(0) == 1)
 	assert(EventDefs.catalog().size() >= 4)
 	assert(not EventDefs.debug_radio_ping().is_empty())
-	assert(PetDefs.all_pets().size() == 3)
+	assert(PetDefs.all_pets().size() == 3 + PetDefs.MECH_IDS.size())
 	assert(PetDefs.get_pet(PetDefs.NOEL_ID)["ability_id"] == "territorial_rampage")
 	assert(PetDefs.get_pet(PetDefs.BENTLEY_ID)["ability_id"] == "talker_finder")
 	assert(PetDefs.get_pet(PetDefs.LILLIE_ID)["ability_id"] == "ram_headbutt")

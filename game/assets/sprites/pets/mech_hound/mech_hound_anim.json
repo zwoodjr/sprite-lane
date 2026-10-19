@@ -1,0 +1,10 @@
+{
+ "fps": {
+  "idle": 8,
+  "walk": 14,
+  "windup": 10,
+  "attack": 12,
+  "hit": 12,
+  "death": 10
+ }
+}

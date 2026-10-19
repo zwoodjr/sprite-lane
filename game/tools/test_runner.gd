@@ -140,6 +140,11 @@ func _run() -> void:
 	var keep_kit := GameState.kit.duplicate(true)
 	await _test_depth_e5()
 	GameState.kit = keep_kit
+	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
+	await _test_depth_e6()
+	GameState.mechs_built = keep_mech[0]
+	GameState.selected_pet_id = keep_mech[1]
+	GameState.account_scrap = keep_mech[2]
 	GameState.ingredients = keep_depth[0]
 	GameState.tonics = keep_depth[1]
 	GameState.tonic_loadout = keep_depth[2]
@@ -336,12 +341,17 @@ func _test_hangar() -> void:
 	for t in ["camp", "survivors", "kennel", "brew", "stash"]:
 		h.call("show_tab", t)
 		await get_tree().process_frame
+	## Mech bays (Depth E6) open once the mech is built.
+	var keep_mechs := GameState.mechs_built.duplicate()
+	for mid in PetDefs.MECH_IDS:
+		GameState.mechs_built[mid] = true
 	for id in HangarDefs.all_ids():
 		while GameState.camp_cost(str(id)) >= 0:
 			if not bool(h.call("buy", str(id))):
 				_check(false, "buy %s" % id)
 				break
 	_check(GameState.account_scrap == 0, "full max costs exactly %d" % HangarDefs.full_max_cost())
+	GameState.mechs_built = keep_mechs
 	_check(GameState.stash_capacity() == 50, "stash 50 slots")
 	_check(GameState.starting_hp_bonus() == 50.0 and is_equal_approx(GameState.scrap_find_mult(), 1.4), "generator/press")
 	_check(GameState.pad_ping_lead() == ModeDefs.PING_LEAD + 15.0, "radio tower")
@@ -1055,6 +1065,106 @@ func _test_depth_e5() -> void:
 	print("DEPTH_E5_OK")
 
 
+## Depth E6: Salvage Cores, the Workshop, mech pets and their tricks.
+func _test_depth_e6() -> void:
+	for mid in PetDefs.MECH_IDS:
+		var d := PetDefs.get_pet(str(mid))
+		_check(str(d["id"]) == str(mid) and HangarDefs.KENNEL.has(mid), "e6 mech def %s" % mid)
+		var st := UnitAnim.load_states(str(d["anim"]))
+		_check(st.has("idle") and st.has("walk") and st.has("attack") and st.has("death"), "e6 mech art %s" % mid)
+	_check(ResourceLoader.exists(MedicineDefs.icon_path("salvage_core")) and MedicineDefs.weight("salvage_core") == 0, "e6 salvage core is a pouch item")
+	## Machine elites always drop cores.
+	var holder := Node2D.new()
+	get_tree().root.add_child(holder)
+	HaulPickup.drop_kill(holder, Vector2.ZERO, "machine", "elite")
+	await get_tree().process_frame
+	var cores := 0
+	for n in holder.get_children():
+		if str(n.get("id")) == "salvage_core":
+			cores += 1
+	_check(cores >= 1, "e6 machine elite drops a core")
+	holder.queue_free()
+	## Workshop gating.
+	GameState.mechs_built = {}
+	GameState.ingredients["salvage_core"] = 0
+	GameState.account_scrap = 5000
+	_check(not GameState.can_build_mech("mech_hound") and not GameState.try_buy_camp("kennel_mech_hound"), "e6 needs cores; bay closed")
+	GameState.ingredients["salvage_core"] = 10
+	_check(GameState.build_mech("mech_hound") and GameState.salvage_cores() == 6 and GameState.account_scrap == 4700, "e6 build spends cores + scrap")
+	_check(not GameState.build_mech("mech_hound") and GameState.pet_available("mech_hound") and not GameState.pet_available("drone_bat"), "e6 built once")
+	_check(GameState.try_buy_camp("kennel_mech_hound") and GameState.kennel_rank("mech_hound") == 1, "e6 mech bay ranks")
+	var hk := HangarDefs.apply_kennel(PetDefs.get_pet("mech_hound"), 3)
+	_check(int(hk["shock_chain"]) == 6, "e6 kennel ranks reach the mech")
+	## Save sanitize.
+	GameState.selected_pet_id = "rust_mule"
+	GameState._load_depth({"mechs_built": {"mech_hound": true, "noel": true, "bogus": true}})
+	_check(GameState.mechs_built.size() == 1 and GameState.mechs_built.has("mech_hound"), "e6 save keeps only real mechs")
+	_check(GameState.selected_pet_id == PetDefs.default_id(), "e6 unbuilt mech falls back to Noel")
+	GameState._load_depth({})
+	_check(GameState.mechs_built.is_empty(), "e6 old saves: no mechs")
+	## Rust Mule carries extra pack room.
+	GameState.mechs_built = {"mech_hound": true, "drone_bat": true, "rust_mule": true}
+	GameState.selected_pet_id = "noel"
+	GameState.reset_loadout_to_defaults()
+	var cap0 := GameState.pack_capacity()
+	GameState.selected_pet_id = "rust_mule"
+	GameState.reset_loadout_to_defaults()
+	_check(GameState.pack_capacity() == cap0 + 2, "e6 mule pack room")
+	## In match: each trick.
+	for mid in ["mech_hound", "drone_bat", "rust_mule"]:
+		GameState.selected_pet_id = mid
+		var m: Node = await _depth_match("smog", "ash_rook", {"generator": 0})
+		var player: Node2D = m.get_node("World/Player")
+		player.set("max_hp", 99999.0)
+		player.set("hp", 99999.0)
+		var pet: Node2D = get_tree().get_first_node_in_group("pets")
+		_check(pet != null and str(pet.call("get_pet_name")) == str(PetDefs.get_pet(mid)["name"]), "e6 %s deployed" % mid)
+		if pet == null:
+			await _end_depth_match(m)
+			continue
+		var mobs: Array = []
+		for i in range(3):
+			var e := _mob(m, "scrap_hound", pet.global_position + Vector2(90 + i * 40, 10 * i))
+			e.set("max_hp", 5000.0)
+			e.set("hp", 5000.0)
+			mobs.append(e)
+		await get_tree().physics_frame
+		match mid:
+			"mech_hound":
+				_check(int(pet.call("_shock_chain", mobs[0])) >= 2 and float(mobs[1].get("hp")) < 5000.0, "e6 hound shock chain")
+			"drone_bat":
+				_check(pet.collision_mask == 0, "e6 drone bat flies")
+				_check(int(pet.call("_do_strafe")) >= 3 and float(mobs[0].get("hp")) < 5000.0, "e6 drone strafe")
+			"rust_mule":
+				var at: Vector2 = pet.call("_do_mortar")
+				_check(at != Vector2.INF, "e6 mule fires")
+				var t_end := Time.get_ticks_msec() + 1500
+				var hit := false
+				while Time.get_ticks_msec() < t_end and not hit:
+					await get_tree().process_frame
+					for e in mobs:
+						if is_instance_valid(e) and float(e.get("hp")) < 5000.0:
+							hit = true
+				_check(hit, "e6 mule mortar lands")
+		await _end_depth_match(m)
+	## Hangar workshop builds from the kennel tab.
+	GameState.mechs_built = {}
+	GameState.ingredients["salvage_core"] = 20
+	GameState.account_scrap = 5000
+	var hg: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(hg)
+	await get_tree().process_frame
+	hg.set("_tab", "kennel")
+	hg.call("_rebuild")
+	await get_tree().process_frame
+	_check(bool(hg.call("build_mech", "drone_bat")) and GameState.pet_available("drone_bat"), "e6 hangar workshop build")
+	hg.queue_free()
+	GameState.selected_pet_id = "noel"
+	GameState.reset_loadout_to_defaults()
+	await get_tree().process_frame
+	print("DEPTH_E6_OK")
+
+
 func _depth_match(mode: String, hero: String, camp_set: Dictionary = {}) -> Node:
 	GameState.camp.clear()
 	GameState.selected_mode_id = mode
@@ -1365,6 +1475,7 @@ func _test_depth_e4() -> void:
 	player.set("hp", 99999.0)
 	var q: Array = jobs.call("queued_ids")
 	_check(q.size() >= 2 and not ("vault" in q), "e4 jobs scheduled %s" % str(q))
+	_check(not ("elite_pair" in RadioDefs.stakes_for(2)) and "elite_pair" in RadioDefs.stakes_for(3), "e4 no elite stakes before tier 3")
 	GameState.stories = {}
 	var s0 := GameState.extract_bonus_scrap
 	## Bounty: kill the marked elite.

@@ -96,6 +96,8 @@ var lore_pages: Dictionary = {}
 var run_pack_locked: bool = false
 ## --- Depth E5: per-survivor kit (KitDefs): {"style", "ability" a|b, "quirk"} ---
 var kit: Dictionary = {}
+## Depth E6: mech pets rebuilt in the Workshop ({pet id: true}).
+var mechs_built: Dictionary = {}
 ## Contract rewards waiting for extract: ingredients -> count.
 var run_job_rewards: Dictionary = {}
 var jobs_done_run: int = 0
@@ -220,6 +222,7 @@ func save_profile() -> void:
 		"bestiary": bestiary,
 		"lore_pages": lore_pages,
 		"kit": kit,
+		"mechs_built": mechs_built,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -382,6 +385,14 @@ func _load_depth(d: Dictionary) -> void:
 			if str(ed.get("quirk", "")) in KitDefs.quirks(str(h)):
 				clean["quirk"] = str(ed["quirk"])
 			kit[str(h)] = clean
+	mechs_built = {}
+	var mb: Variant = d.get("mechs_built", {})
+	if typeof(mb) == TYPE_DICTIONARY:
+		for k in (mb as Dictionary).keys():
+			if PetDefs.is_mech(str(k)) and bool((mb as Dictionary)[k]):
+				mechs_built[str(k)] = true
+	if not pet_available(selected_pet_id):
+		selected_pet_id = PetDefs.default_id()
 	lore_pages = {}
 	var lp: Variant = d.get("lore_pages", {})
 	if typeof(lp) == TYPE_DICTIONARY:
@@ -452,11 +463,42 @@ func camp_cost(id: String) -> int:
 func try_buy_camp(id: String) -> bool:
 	if HangarDefs.layer_of(id) == "":
 		return false
+	## A mech's bay only opens once it is built.
+	if id.begins_with("kennel_") and not pet_available(id.substr(7)):
+		return false
 	var c := camp_cost(id)
 	if c < 0 or account_scrap < c:
 		return false
 	account_scrap -= c
 	camp[id] = camp_rank(id) + 1
+	save_profile()
+	meta_changed.emit()
+	return true
+
+## =============================================================================
+## Depth E6: Workshop — mech pets rebuilt from Salvage Cores.
+
+func pet_available(pet_id: String) -> bool:
+	if PetDefs.is_mech(pet_id):
+		return mechs_built.has(pet_id)
+	return PetDefs.is_equipable(pet_id)
+
+func salvage_cores() -> int:
+	return int(ingredients.get("salvage_core", 0))
+
+func can_build_mech(pet_id: String) -> bool:
+	if not PetDefs.is_mech(pet_id) or mechs_built.has(pet_id):
+		return false
+	var d := PetDefs.get_pet(pet_id)
+	return salvage_cores() >= int(d["build_cores"]) and account_scrap >= int(d["build_scrap"])
+
+func build_mech(pet_id: String) -> bool:
+	if not can_build_mech(pet_id):
+		return false
+	var d := PetDefs.get_pet(pet_id)
+	ingredients["salvage_core"] = salvage_cores() - int(d["build_cores"])
+	account_scrap -= int(d["build_scrap"])
+	mechs_built[pet_id] = true
 	save_profile()
 	meta_changed.emit()
 	return true
@@ -846,7 +888,7 @@ func _bank_pack_into_pending() -> void:
 ## Depth Update E1: backpack, medicine, ingredients, tonics, plague exposure.
 
 func pack_capacity() -> int:
-	return MedicineDefs.pack_capacity(camp_rank("backpack")) + int(quirk_fx("pack"))
+	return MedicineDefs.pack_capacity(camp_rank("backpack")) + int(quirk_fx("pack")) + int(pet.get("pack_bonus", 0))
 
 func pack_weight() -> int:
 	var w := 0

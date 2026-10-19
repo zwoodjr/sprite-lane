@@ -8,6 +8,8 @@ extends RefCounted
 const NOEL_ID := "noel"
 const BENTLEY_ID := "bentley"
 const LILLIE_ID := "lillie"
+## Depth E6: mech pets, rebuilt from Salvage Cores in the hangar Workshop.
+const MECH_IDS: Array = ["mech_hound", "drone_bat", "rust_mule"]
 
 
 static func all_pets() -> Array[Dictionary]:
@@ -111,6 +113,103 @@ static func all_pets() -> Array[Dictionary]:
 			"ram_blast": 0,
 			"note": "Tank build — sturdy parti ginger/white.",
 		},
+		## --- Depth E6 mech pets (kind "mech": must be built in the Workshop first) ---
+		{
+			"id": "mech_hound",
+			"name": "Mech Hound",
+			"kind": "mech",
+			"branch": "Hunter",
+			"species": "rebuilt scrap hound",
+			"damage": 10,
+			"loyalty": 100,
+			"active": true,
+			"equipable": true,
+			"sprite": "res://assets/sprites/pets/mech_hound/mech_hound_idle.png",
+			"anim": "res://assets/sprites/pets/mech_hound/mech_hound",
+			"frame_world": 66.0,
+			"build_cores": 4,
+			"build_scrap": 300,
+			"follow_speed": 290.0,
+			"bite_damage": 9.0,
+			"bite_range": 42.0,
+			"bite_cooldown": 0.6,
+			"ability_id": "shock_pounce",
+			"ability_name": "Shock Pounce",
+			"ability_desc": "Pounces on a foe; the impact arcs shock to nearby enemies (machines take extra).",
+			"ram_cooldown": 5.0,
+			"ram_speed": 640.0,
+			"ram_range": 260.0,
+			"ram_duration": 0.55,
+			"ram_contact_radius": 46.0,
+			"ram_impact_damage": 30.0,
+			"ram_stun": 0.45,
+			"ram_knock": 220.0,
+			"shock_chain": 2,
+			"shock_damage": 16.0,
+			"shock_range": 150.0,
+			"note": "A scrap hound Helm pulled out of the dust and rewired to heel.",
+		},
+		{
+			"id": "drone_bat",
+			"name": "Drone Bat",
+			"kind": "mech",
+			"branch": "Scout",
+			"species": "rotor-wing drone",
+			"damage": 6,
+			"loyalty": 100,
+			"active": true,
+			"equipable": true,
+			"flying": true,
+			"sprite": "res://assets/sprites/pets/drone_bat/drone_bat_idle.png",
+			"anim": "res://assets/sprites/pets/drone_bat/drone_bat",
+			"frame_world": 60.0,
+			"build_cores": 5,
+			"build_scrap": 350,
+			"follow_speed": 320.0,
+			"bite_damage": 5.0,
+			"bite_range": 44.0,
+			"bite_cooldown": 0.7,
+			"ability_id": "strafe_run",
+			"ability_name": "Strafe Run",
+			"ability_desc": "Flies over walls; every few seconds it strafes the nearest enemies and marks them (+15% damage taken).",
+			"strafe_cooldown": 4.5,
+			"strafe_range": 320.0,
+			"strafe_shots": 4,
+			"strafe_damage": 7.0,
+			"strafe_mark_mult": 1.15,
+			"strafe_mark_time": 3.0,
+			"note": "A gutted rad-bat frame with a rotor heart. Sees over everything.",
+		},
+		{
+			"id": "rust_mule",
+			"name": "Rust Mule",
+			"kind": "mech",
+			"branch": "Hauler",
+			"species": "rebuilt iron horse",
+			"damage": 12,
+			"loyalty": 100,
+			"active": true,
+			"equipable": true,
+			"sprite": "res://assets/sprites/pets/rust_mule/rust_mule_idle.png",
+			"anim": "res://assets/sprites/pets/rust_mule/rust_mule",
+			"frame_world": 78.0,
+			"build_cores": 6,
+			"build_scrap": 450,
+			"follow_speed": 235.0,
+			"bite_damage": 10.0,
+			"bite_range": 46.0,
+			"bite_cooldown": 0.9,
+			"ability_id": "mortar_back",
+			"ability_name": "Mortar Back",
+			"ability_desc": "Carries +2 backpack room and lobs a mortar shell at the thickest crowd every few seconds.",
+			"pack_bonus": 2,
+			"mortar_cooldown": 7.0,
+			"mortar_range": 380.0,
+			"mortar_radius": 90.0,
+			"mortar_damage": 34.0,
+			"mortar_delay": 0.7,
+			"note": "An iron horse with its furnace swapped for a mortar and a pack frame.",
+		},
 	]
 
 
@@ -126,6 +225,10 @@ static func is_equipable(id: String) -> bool:
 		if str(p["id"]) == id:
 			return bool(p.get("equipable", false))
 	return false
+
+
+static func is_mech(id: String) -> bool:
+	return id in MECH_IDS
 
 
 static func default_id() -> String:

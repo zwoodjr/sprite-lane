@@ -77,7 +77,7 @@ const WARDEN_PULSE_DAMAGE := 22.0
 ## From window 2 on, each window shows what staying brings next.
 const STAKES_FROM_WINDOW := 2
 const STAKES := {
-	"elite_pair": {"label": "elite pair", "min_tier": 1},
+	"elite_pair": {"label": "elite pair", "min_tier": 3},
 	"raider_crew": {"label": "raider crew", "min_tier": 3},
 	"boss": {"label": "a boss", "min_tier": 5},
 	"swarm": {"label": "a swarm", "min_tier": 1, "count": 9},

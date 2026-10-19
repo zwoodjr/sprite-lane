@@ -109,7 +109,11 @@ func _ready() -> void:
 	TouchInput.touch_primary = true
 	if ch != "": GameState.selected_character_id = ch
 	if a.size() > 3: GameState.selected_mode_id = a[3]
-	if a.size() > 4 and a[4] != "": GameState.selected_pet_id = a[4]
+	if a.size() > 4 and a[4] != "":
+		## Mech pets (Depth E6) count as built for the bot run (not saved).
+		if PetDefs.is_mech(a[4]):
+			GameState.mechs_built[a[4]] = true
+		GameState.selected_pet_id = a[4]
 	if a.size() > 5: _horde = int(a[5])
 	if a.size() > 6 and a[6] != "": _kinds = Array(a[6].split(","))
 	if a.size() > 7: _stand = a[7] == "stand"

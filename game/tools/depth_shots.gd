@@ -281,3 +281,62 @@ func _shots_e5() -> void:
 	await _snap("e5_hot_barrel_hud")
 	m.queue_free()
 	await _frames(3)
+
+
+## E6: Workshop in the kennel tab, mech pets on the survivor screen and in a run.
+func _shots_e6() -> void:
+	GameState.camp = {}
+	GameState.mechs_built = {"mech_hound": true}
+	GameState.ingredients["salvage_core"] = 7
+	GameState.account_scrap = 2000
+	var hg := await _open("res://scenes/ui/hangar.tscn")
+	hg.call("show_tab", "kennel")
+	await _frames(10)
+	var sc: ScrollContainer = null
+	for n in hg.find_children("*", "ScrollContainer", true, false):
+		sc = n
+	if sc:
+		sc.scroll_vertical = 100000
+	await _frames(6)
+	await _snap("e6_workshop")
+	hg.queue_free()
+	GameState.mechs_built = {"mech_hound": true, "drone_bat": true, "rust_mule": true}
+	GameState.selected_pet_id = "rust_mule"
+	GameState.selected_character_id = "pebble"
+	GameState.reset_loadout_to_defaults()
+	var cs := await _open("res://scenes/ui/character_select.tscn")
+	await _snap("e6_select_pets")
+	cs.queue_free()
+	await _frames(3)
+	for mid in ["mech_hound", "drone_bat", "rust_mule"]:
+		GameState.selected_pet_id = mid
+		GameState.reset_loadout_to_defaults()
+		var m := await _match("smog", "pebble")
+		var player: Node2D = m.get_node("World/Player")
+		player.set("max_hp", 9999.0)
+		player.set("hp", 9999.0)
+		for e in get_tree().get_nodes_in_group("enemies"):
+			e.queue_free()
+		var pet: Node2D = get_tree().get_first_node_in_group("pets")
+		pet.global_position = player.global_position + Vector2(-50, 10)
+		var foes: Array = []
+		for i in range(3):
+			var e := _mob(m, "rad_gator", player.global_position + Vector2(120 + i * 36, -20 + 26 * i))
+			foes.append(e)
+		await _frames(2)
+		for e in foes:
+			e.set("max_hp", 99999.0)
+			e.set("hp", 99999.0)
+			e.call("apply_status", "stun", 5.0)
+		await _frames(12)
+		match mid:
+			"mech_hound":
+				pet.call("_shock_chain", foes[0])
+			"drone_bat":
+				pet.call("_do_strafe")
+			"rust_mule":
+				pet.call("_do_mortar")
+		await _frames(4)
+		await _snap("e6_%s" % mid)
+		m.queue_free()
+		await _frames(3)

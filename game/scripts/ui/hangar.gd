@@ -277,7 +277,9 @@ func _rebuild() -> void:
 		"kennel":
 			_list.add_child(_note("Three ranks per dog. Noel guards, Bentley scouts, Lillie rams."))
 			for id in HangarDefs.ids_for("kennel"):
-				_list.add_child(_row(str(id), _pet_frame(str(id).substr(7), true)))
+				if not PetDefs.is_mech(str(id).substr(7)):
+					_list.add_child(_row(str(id), _pet_frame(str(id).substr(7), true)))
+			_build_workshop()
 		"brew":
 			_build_brew()
 		"stash":
@@ -374,6 +376,79 @@ func buy(id: String) -> bool:
 		_toast("Milestone: %s — the hangar changes" % str(m["name"]))
 		GameState.save_profile()
 	_refresh_view(true)
+	_rebuild()
+	return true
+
+
+## =========================================================================
+## Workshop (Depth Update E6): Helm rebuilds war machines into mech pets.
+
+func _build_workshop() -> void:
+	var hd := UiTheme.body_label("WORKSHOP", 17, UiTheme.AMBER, false)
+	_list.add_child(hd)
+	var core_row := HBoxContainer.new()
+	core_row.add_theme_constant_override("separation", 8)
+	var ci := TextureRect.new()
+	ci.texture = load(MedicineDefs.icon_path("salvage_core"))
+	ci.custom_minimum_size = Vector2(30, 30)
+	ci.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ci.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	core_row.add_child(ci)
+	var cl := UiTheme.body_label("Salvage Cores: %d" % GameState.salvage_cores(), 16, UiTheme.TEAL, false)
+	core_row.add_child(cl)
+	_list.add_child(core_row)
+	_list.add_child(_note("Torn from war machines — elites and bosses always carry them. Helm rebuilds them into mech pets."))
+	for mid in PetDefs.MECH_IDS:
+		if GameState.pet_available(str(mid)):
+			_list.add_child(_row(HangarDefs.kennel_id(str(mid)), _pet_frame(str(mid), true)))
+		else:
+			_list.add_child(_mech_build_row(str(mid)))
+
+
+func _mech_build_row(mid: String) -> PanelContainer:
+	var d := PetDefs.get_pet(mid)
+	var p := card(UiTheme.TEAL, Color(0.07, 0.09, 0.09, 0.92))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var h := HBoxContainer.new()
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_theme_constant_override("separation", 12)
+	p.add_child(h)
+	var ir := TextureRect.new()
+	ir.texture = _pet_frame(mid, true)
+	ir.custom_minimum_size = Vector2(56, 56)
+	ir.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ir.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ir.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ir.modulate = Color(0.55, 0.6, 0.62)
+	ir.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(ir)
+	var info := VBoxContainer.new()
+	info.mouse_filter = Control.MOUSE_FILTER_PASS
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 2)
+	h.add_child(info)
+	info.add_child(UiTheme.body_label("Rebuild: %s" % str(d["name"]), 19, UiTheme.TEAL, false))
+	info.add_child(UiTheme.body_label("%s — %s" % [str(d["ability_name"]), str(d["ability_desc"])], 13, UiTheme.TEXT_DIM))
+	var need := UiTheme.body_label("%d cores · %d scrap" % [int(d["build_cores"]), int(d["build_scrap"])], 13,
+		UiTheme.TEXT if GameState.can_build_mech(mid) else UiTheme.RUST, false)
+	info.add_child(need)
+	var ok := GameState.can_build_mech(mid)
+	var btn := UiTheme.big_button("BUILD", UiTheme.TEAL if ok else UiTheme.RUST, 60, 19)
+	btn.disabled = not ok
+	btn.custom_minimum_size.x = 104
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	btn.mouse_force_pass_scroll_events = true
+	btn.pressed.connect(build_mech.bind(mid))
+	h.add_child(btn)
+	return p
+
+
+func build_mech(mid: String) -> bool:
+	if not GameState.build_mech(mid):
+		Juice.sfx("ui_tap")
+		return false
+	Juice.sfx("pickup")
+	_toast("%s rebuilt — equip it on the survivor screen" % str(PetDefs.get_pet(mid)["name"]))
 	_rebuild()
 	return true
 
@@ -648,9 +723,11 @@ func _toast(text: String) -> void:
 func _sync_list_width() -> void:
 	if _scroll == null or _list == null:
 		return
+	## Always reserve the bar's width: sizing to its visibility can loop forever
+	## (bar shows -> text wraps taller/shorter -> bar hides -> ...).
 	var bar_w := 0.0
 	var vbar := _scroll.get_v_scroll_bar()
-	if vbar != null and vbar.visible:
+	if vbar != null:
 		bar_w = vbar.get_combined_minimum_size().x
 	var w := _scroll.size.x - bar_w
 	if w > 1.0:

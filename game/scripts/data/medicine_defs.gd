@@ -12,7 +12,7 @@ extends RefCounted
 const ICON_DIR := "res://assets/sprites/depth/icons/"
 
 ## --- Ingredients --------------------------------------------------------------
-const INGREDIENT_IDS: Array = ["herb", "plague_gland", "dust_shard", "machine_oil"]
+const INGREDIENT_IDS: Array = ["herb", "plague_gland", "dust_shard", "machine_oil", "salvage_core"]
 const INGREDIENTS := {
 	"herb": {"name": "Ashroot", "icon": "herb", "weight": 0, "color": Color(0.55, 0.85, 0.45),
 		"desc": "A bitter root that still grows in the cracks."},
@@ -22,16 +22,21 @@ const INGREDIENTS := {
 		"desc": "Hard amber Dust. Elites and bosses carry the most."},
 	"machine_oil": {"name": "Machine Oil", "icon": "machine_oil", "weight": 0, "color": Color(0.7, 0.75, 0.85),
 		"desc": "Black oil drained from war machines."},
+	## Depth E6: abandoned tech from war machines; the Workshop rebuilds mech pets from it.
+	"salvage_core": {"name": "Salvage Core", "icon": "salvage_core", "weight": 0, "color": Color(0.45, 0.9, 1.0),
+		"desc": "A still-warm core torn from a war machine. Helm's Workshop can rebuild with it."},
 	"medicine": {"name": "Medicine", "icon": "medicine", "weight": 3, "color": Color(1.0, 0.45, 0.4),
 		"desc": "Real medicine. The most valuable thing left."},
 }
 ## Kill drops by faction (chance per kill, per ingredient). Elites / bosses add ROLE_DROP.
 const KILL_DROP := {
 	"plague": {"plague_gland": 0.10, "herb": 0.04},
-	"machine": {"machine_oil": 0.10, "dust_shard": 0.015},
+	"machine": {"machine_oil": 0.10, "dust_shard": 0.015, "salvage_core": 0.035},
 	"raider": {"herb": 0.07, "machine_oil": 0.05},
 }
 const ROLE_DROP := {"elite": {"dust_shard": 1}, "boss": {"dust_shard": 3, "plague_gland": 2, "machine_oil": 2}}
+## Machine elites / bosses always carry Salvage Cores (on top of ROLE_DROP).
+const MACHINE_ROLE_CORES := {"elite": 1, "boss": 3}
 ## Breakable crates sometimes hold a herb.
 const CRATE_HERB_CHANCE := 0.3
 ## Herb Bloom event herbs also go to the pack (one each).

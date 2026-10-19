@@ -102,8 +102,17 @@ func build(c: VBoxContainer) -> void:
 	var pet_row := HBoxContainer.new()
 	pet_row.add_theme_constant_override("separation", 10)
 	dv.add_child(pet_row)
+	## Dogs + any mech pets built in the Workshop (tiles shrink to fit the row).
+	var pets: Array = []
 	for pdef in PetDefs.all_pets():
-		pet_row.add_child(_pet_tile(pdef))
+		if GameState.pet_available(str(pdef["id"])):
+			pets.append(pdef)
+	var tile := 84.0 if pets.size() <= 3 else (68.0 if pets.size() <= 5 else 60.0)
+	pet_row.add_theme_constant_override("separation", 10 if pets.size() <= 3 else 6)
+	for pdef in pets:
+		var t := _pet_tile(pdef)
+		t.custom_minimum_size = Vector2(tile, tile)
+		pet_row.add_child(t)
 	var pet_txt := VBoxContainer.new()
 	pet_txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pet_txt.alignment = BoxContainer.ALIGNMENT_CENTER

@@ -34,6 +34,9 @@ var _still_t: float = 0.0
 var _linger_left: float = 0.0
 var _lingering: bool = false
 var _chains_left: int = 0
+## Depth E6 mech tricks.
+var _strafe_cd: float = 2.0
+var _mortar_cd: float = 3.0
 
 @onready var body: Sprite2D = $Body
 @onready var name_label: Label = $NameLabel
@@ -53,6 +56,9 @@ func _ready() -> void:
 	if _player == null:
 		_player = get_tree().get_first_node_in_group("player") as Node2D
 	_apply_look()
+	## Drone Bat flies over walls and rocks.
+	if bool(_def.get("flying", false)):
+		collision_mask = 0
 	if _player and _player.has_signal("attacked"):
 		if not _player.attacked.is_connected(_on_player_attacked):
 			_player.attacked.connect(_on_player_attacked)
@@ -70,7 +76,7 @@ func _apply_look() -> void:
 	var prefix := str(_def.get("anim", "res://assets/sprites/pets/noel/noel"))
 	if body and prefix != _anim_prefix:
 		_anim_prefix = prefix
-		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y)
+		_anim.setup(body, prefix, float(_def.get("frame_world", PET_FRAME_WORLD)), FEET_Y)
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
 		name_label.add_theme_font_size_override("font_size", 10)
@@ -87,6 +93,8 @@ func _physics_process(delta: float) -> void:
 	_bark_cd = maxf(0.0, _bark_cd - delta)
 	_find_cd = maxf(0.0, _find_cd - delta)
 	_ram_cd = maxf(0.0, _ram_cd - delta)
+	_strafe_cd = maxf(0.0, _strafe_cd - delta)
+	_mortar_cd = maxf(0.0, _mortar_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
 	var was_accent := _accent_left > 0.0
 	_accent_left = maxf(0.0, _accent_left - delta)
@@ -206,9 +214,17 @@ func _update_combat(delta: float) -> void:
 		"talker_finder":
 			_tick_bentley()
 			_idle_bite()
-		"ram_headbutt":
+		"ram_headbutt", "shock_pounce":
 			if _ram_left <= 0.0:
 				_try_start_ram()
+			_idle_bite()
+		"strafe_run":
+			if _strafe_cd <= 0.0:
+				_do_strafe()
+			_idle_bite()
+		"mortar_back":
+			if _mortar_cd <= 0.0:
+				_do_mortar()
 			_idle_bite()
 		_:
 			_idle_bite()
@@ -355,8 +371,9 @@ func _try_start_ram() -> void:
 	_apply_look()
 	Juice.sfx("dash", -2.0)
 	_anim.set_facing(_ram_dir.x < 0.0)
-	_anim.play("charge")
-	Juice.float_text(global_position + Vector2(0, -28), "LILLIE RAM!", Color(1.0, 0.55, 0.3), 16)
+	_anim.play("charge" if _anim.has_state("charge") else "windup")
+	var lil := _ability_id() == "ram_headbutt"
+	Juice.float_text(global_position + Vector2(0, -28), "LILLIE RAM!" if lil else "POUNCE!", Color(1.0, 0.55, 0.3) if lil else Color(0.5, 0.9, 1.0), 16)
 	Juice.dust_puff(global_position + Vector2(0, 12), 8)
 
 func _tick_ram(delta: float) -> void:
@@ -422,7 +439,9 @@ func _ram_impact(connected: bool) -> void:
 	if _target != null and is_instance_valid(_target):
 		global_position = global_position.lerp((_target as Node2D).global_position, 0.55)
 	Juice.sfx("enemy_die", -4.0)
-	_anim.play("impact")
+	_anim.play("impact" if _anim.has_state("impact") else "attack")
+	if int(_def.get("shock_chain", 0)) > 0 and _target != null and is_instance_valid(_target):
+		_shock_chain(_target)
 	var stun := float(_def.get("ram_stun", 0.7))
 	var knock := float(_def.get("ram_knock", 420.0))
 	## Base headbutt: the target only — stun + knockback.
@@ -487,7 +506,7 @@ func _update_visuals(delta: float) -> void:
 	var v := velocity.length()
 	if _ram_left > 0.0:
 		## Lillie's charge loop runs for the whole ram.
-		if not _anim.is_playing("charge"):
+		if _anim.has_state("charge") and not _anim.is_playing("charge"):
 			_anim.play("charge")
 	elif v > 24.0:
 		_still_t = 0.0
@@ -516,3 +535,97 @@ func is_rampaging() -> bool:
 
 func get_pet_name() -> String:
 	return str(_def.get("name", "Pet"))
+
+
+## --- Depth E6 mech tricks ------------------------------------------------------
+
+## Mech Hound: the pounce's impact arcs to the nearest few enemies (machines take more).
+func _shock_chain(from: Node2D) -> int:
+	var n := int(_def.get("shock_chain", 0))
+	var rng := float(_def.get("shock_range", 150.0))
+	var dmg := float(_def.get("shock_damage", 16.0)) * GameState.pet_power_mult()
+	var hit: Array = [from]
+	var cur := from
+	var count := 0
+	for i in range(n):
+		var nxt := RunFx.nearest_enemy(get_tree(), cur.global_position, rng, hit)
+		if nxt == null:
+			break
+		RunFx.zap(get_parent(), cur.global_position + Vector2(0, -10), nxt.global_position + Vector2(0, -10), Color(0.5, 0.9, 1.0))
+		var fac: Variant = nxt.get("faction")
+		var mult := FactionDefs.weakness(str(fac), "shock") if fac != null else 1.0
+		if nxt.has_method("take_damage"):
+			nxt.call("take_damage", dmg * mult, (nxt.global_position - cur.global_position).normalized(), 60.0)
+		if is_instance_valid(nxt) and nxt.has_method("apply_status"):
+			nxt.call("apply_status", "stun", 0.25)
+		hit.append(nxt)
+		cur = nxt
+		count += 1
+	return count
+
+
+## Drone Bat: a strafing burst at the nearest enemies, marking them.
+func _do_strafe() -> int:
+	var rng := float(_def.get("strafe_range", 320.0))
+	var foes := RunFx.enemies_in(get_tree(), global_position, rng)
+	if foes.is_empty():
+		_strafe_cd = 0.6
+		return 0
+	_strafe_cd = float(_def.get("strafe_cooldown", 4.5))
+	var me := global_position
+	foes.sort_custom(func(a: Node, b: Node) -> bool:
+		return me.distance_squared_to((a as Node2D).global_position) < me.distance_squared_to((b as Node2D).global_position))
+	var shots := int(_def.get("strafe_shots", 4))
+	var dmg := float(_def.get("strafe_damage", 7.0)) * GameState.pet_power_mult()
+	_anim.play("attack")
+	_accent_left = 0.4
+	Juice.sfx("shoot", -8.0)
+	var n := 0
+	for i in range(shots):
+		var e: Variant = foes[i % foes.size()]
+		if not is_instance_valid(e):
+			continue
+		var en := e as Node2D
+		RunFx.zap(get_parent(), global_position + Vector2(0, -24), en.global_position + Vector2(randf_range(-6, 6), -8), Color(1.0, 0.85, 0.45), 0.14, 2.0)
+		if en.has_method("take_damage"):
+			en.call("take_damage", dmg, (en.global_position - global_position).normalized(), 20.0)
+		if is_instance_valid(en) and en.has_method("apply_status"):
+			en.call("apply_status", "mark", float(_def.get("strafe_mark_time", 3.0)), float(_def.get("strafe_mark_mult", 1.15)))
+		n += 1
+	return n
+
+
+## Rust Mule: lob a shell at the thickest crowd in range (telegraphed, then a blast).
+func _do_mortar() -> Vector2:
+	var rng := float(_def.get("mortar_range", 380.0))
+	var radius := float(_def.get("mortar_radius", 90.0))
+	var foes := RunFx.enemies_in(get_tree(), global_position, rng)
+	if foes.is_empty():
+		_mortar_cd = 0.8
+		return Vector2.INF
+	_mortar_cd = float(_def.get("mortar_cooldown", 7.0))
+	var best: Node2D = foes[0]
+	var best_n := -1
+	for a in foes:
+		var c := 0
+		for b in foes:
+			if (a as Node2D).global_position.distance_to((b as Node2D).global_position) <= radius:
+				c += 1
+		if c > best_n:
+			best_n = c
+			best = a
+	var at := best.global_position
+	_anim.set_facing(at.x < global_position.x)
+	_anim.play("attack")
+	Juice.sfx("ability", -6.0)
+	Juice.burst(global_position + Vector2(0, -30), Color(0.6, 0.9, 1.0), 8, 90.0, 0.3)
+	RunFx.ring(get_parent(), at, radius, Color(1.0, 0.6, 0.3, 0.8), float(_def.get("mortar_delay", 0.7)), 3.0)
+	var dmg := float(_def.get("mortar_damage", 34.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()
+	## Weak ref: the match may end (and free the hero) while the shell is in the air.
+	var plref: WeakRef = weakref(_player)
+	get_tree().create_timer(float(_def.get("mortar_delay", 0.7)), false).timeout.connect(func() -> void:
+		var pl: Variant = plref.get_ref()
+		if pl != null and is_instance_valid(pl):
+			RunFx.explosion(pl as Node2D, at, radius, dmg, Color(1.0, 0.65, 0.3), "pet", 240.0)
+			Juice.shake(0.12))
+	return at

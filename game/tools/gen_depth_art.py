@@ -807,11 +807,35 @@ E5_STYLES = [(h, s) for h, ss in (
     ("nyx_caldera", ("dustblades", "long", "viper")), ("helm_wisp", ("sidearm", "flare", "machine"))) for s in ss]
 
 
+# ================================================================== E6 salvage core
+def salvage_core():
+    """A war machine's core: a cyan glowing cell in a dented steel cage with torn wires."""
+    cv = Canvas(U, U)
+    L = cv.L
+    shadow(L, 12.5, 21.4, 8.5, 1.5)
+    glow(L, 12, 12.0, 10.5, C(90, 220, 255), 0.75)
+    for (x, c) in ((8.6, C(200, 60, 44)), (12.0, C(230, 196, 70)), (15.4, C(60, 120, 200))):
+        ink(L, [(x, 18.0), (x - 1.0, 19.8), (x + 0.5, 21.4)], 0.55, c, 1.0)
+    cel(L, [("rect", 6.6, 6.2, 17.4, 17.6)], C(30, 110, 140), form="cylv", ol=2.4, bevel=1.2, rim=0.6, gloss=0.4)
+    cel(L, [("ell", 12.0, 11.9, 3.9, 4.6)], C(120, 236, 255), form="sphere", ol=0.0, bevel=1.0, gloss=0.6, t1=0.22, t2=0.5)
+    fill(L, [("ell", 11.0, 10.2, 1.4, 1.8)], C(245, 255, 255), 0.95)
+    for x in (8.2, 12.0, 15.8):
+        cel(L, [("rect", x - 0.55, 6.0, x + 0.55, 17.8)], C(120, 126, 134), n=(0, 0, 1), ol=1.4, bevel=0.3, metal=0.9)
+    cel(L, [("rect", 5.0, 3.4, 19.0, 6.6)], C(96, 102, 110), form="cylh", ol=2.4, bevel=0.9, metal=0.8, wear=0.3, rust=0.2)
+    cel(L, [("rect", 5.0, 17.2, 19.0, 20.4)], C(96, 102, 110), form="cylh", ol=2.4, bevel=0.9, metal=0.8, wear=0.3, rust=0.2)
+    for x in (6.8, 17.2):
+        for y in (5.0, 18.8):
+            cel(L, [("ell", x, y, 0.7, 0.7)], C(190, 160, 90), form="sphere", ol=0.7, bevel=0.2, metal=1)
+    hline(L, [(7.4, 7.4), (7.4, 16.4)], 0.26, SPEC, 0.6)
+    return save_icon(cv, "salvage_core")
+
+
 GROUPS = {
     "e1": [herb, plague_gland, dust_shard, machine_oil, medicine, lambda: medicine(False), backpack, exposure,
            *[(lambda t=t: tonic(t)) for t in TONIC_LOOK], plague_fog],
     "e3": [lore_page],
     "e4": [field_tent, relay, watch_tower, vault, market_stall, plane_wreck],
+    "e6": [salvage_core],
     "e5": [(lambda h=h, s=s: style_icon(h, s)) for (h, s) in E5_STYLES],
 }
 

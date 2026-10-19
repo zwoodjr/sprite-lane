@@ -104,7 +104,11 @@ func _process(delta: float) -> void:
 	var mt := float(match_ctl.get("_match_time"))
 	if _active == "" and not _times.is_empty() and mt >= float(_times[0]):
 		_times.pop_front()
-		start_event(EventDefs.roll_event(rng, _done_ids))
+		## No elites before ModeDefs.ELITE_FROM_TIER, so no Elite Hunt there either.
+		var skip: Array = _done_ids.duplicate()
+		if int(GameState.get_mode().get("tier", 1)) < ModeDefs.ELITE_FROM_TIER:
+			skip.append("elite_hunt")
+		start_event(EventDefs.roll_event(rng, skip))
 	if _active != "":
 		_tick_event(delta)
 	_arrow.queue_redraw()

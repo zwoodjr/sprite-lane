@@ -104,6 +104,28 @@ const KENNEL := {
 		"ram_blast": [0, 0, 0, 1],
 		"rank_text": ["", "Headbutt +25% damage", "Charge leaves a damage trail", "Fierce AoE blast on contact"],
 	},
+	## Depth E6 mech pets (bays open once the mech is built in the Workshop).
+	"mech_hound": {
+		"name": "Mech Hound", "blurb": "Harder pounces, longer shock chains.",
+		"ram_impact_damage": [30.0, 38.0, 44.0, 54.0],
+		"shock_chain": [2, 3, 4, 6],
+		"ram_cooldown": [5.0, 4.5, 4.0, 3.4],
+		"rank_text": ["", "Pounce +25%, shock chains to 3", "Faster pounces, chains to 4", "Pounce +80%, chains to 6"],
+	},
+	"drone_bat": {
+		"name": "Drone Bat", "blurb": "More shots per strafe, harder marks.",
+		"strafe_shots": [4, 5, 6, 8],
+		"strafe_damage": [7.0, 8.0, 9.0, 11.0],
+		"strafe_mark_mult": [1.15, 1.18, 1.22, 1.28],
+		"rank_text": ["", "5 shots per strafe", "6 shots, marks +22%", "8 shots, marks +28%"],
+	},
+	"rust_mule": {
+		"name": "Rust Mule", "blurb": "Bigger shells, more to carry.",
+		"mortar_damage": [34.0, 42.0, 50.0, 62.0],
+		"mortar_radius": [90.0, 100.0, 110.0, 125.0],
+		"pack_bonus": [2, 2, 3, 3],
+		"rank_text": ["", "Shells +25% damage", "Bigger shells, +3 pack room", "Shells +80%, widest blast"],
+	},
 }
 
 ## Old flat %-stat Hangar (save v3). Only used to refund old spend: id -> [cost, step, curve].
@@ -336,7 +358,8 @@ static func ids_for(layer: String) -> Array:
 				out.append(station_id(h))
 			return out
 		"kennel":
-			return [kennel_id("noel"), kennel_id("bentley"), kennel_id("lillie")]
+			return [kennel_id("noel"), kennel_id("bentley"), kennel_id("lillie"),
+				kennel_id("mech_hound"), kennel_id("drone_bat"), kennel_id("rust_mule")]
 		"stash":
 			return ["stash"]
 		"pack":
