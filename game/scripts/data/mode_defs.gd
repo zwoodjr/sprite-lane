@@ -38,6 +38,33 @@ const BOSS_EVERY := 300.0
 const STORM_SECONDS := 3.0
 
 
+## --- Extract economy (Part 6 targets: ~250 scrap a Drift extract, ~1,500+ on
+## Blackout; a weekend of ~25 runs maxes a station + a couple of shared upgrades).
+## Bag value = scrap picked up × BAG_SCRAP_VALUE + kills × BAG_KILL_VALUE
+##   + medicine crates × MedicineDefs.MEDICINE_SCRAP, with diminishing returns
+##   above BAG_KNEE (see bag_curve). Death keeps death_keep of it.
+## Extract pays (BAG_STIPEND + bag) × loot multiplier × tier payout × set/pact
+## bonuses, plus flat bonuses (radio jobs, Ambush Bounty) × tier payout × BONUS_SCALE.
+const BAG_STIPEND := 30
+const BAG_SCRAP_VALUE := 0.3
+const BAG_KILL_VALUE := 0.35
+const BONUS_SCALE := 0.4
+## Diminishing returns: above BAG_KNEE the bag counts as KNEE × (bag/KNEE)^BAG_EXP,
+## so a huge late-tier bag doesn't multiply into a five-figure payout (loot ×,
+## tier payout and boss bonus already reward staying).
+const BAG_KNEE := 100.0
+const BAG_EXP := 0.6
+## Every scrap-find bonus (Scrap Press, gear, Scavenger's Eye, Fortune, quirk,
+## Field Salvager 2) adds together, capped here — they used to multiply.
+const FIND_MULT_CAP := 2.0
+
+
+static func bag_curve(raw: float) -> float:
+	if raw <= BAG_KNEE:
+		return raw
+	return BAG_KNEE * pow(raw / BAG_KNEE, BAG_EXP)
+
+
 ## Part 5 table: id, name, strength, payout, keep on death, blurb.
 const TIER_TABLE: Array = [
 	["haze", "Haze", 0.85, 0.75, 0.10, "Thin dust. Forgiving windows — learn when to leave."],

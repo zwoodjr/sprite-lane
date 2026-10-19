@@ -251,6 +251,9 @@ const MATERIAL_NAME := {"salvage_core": "Salvage Core", "dust_heart": "Dust Hear
 const MATERIAL_ICON := {"salvage_core": "res://assets/sprites/pickups/salvage_core.png", "dust_heart": "res://assets/sprites/pickups/dust_heart.png"}
 ## Boss kill: added to the run's loot multiplier immediately.
 const BOSS_LOOT_BONUS := 0.5
+## Boss loot bonus is paid once per run (Blackout / Dustfall bosses every 5 min +
+## the Dust Warden used to stack it to ×5 loot).
+const BOSS_LOOT_BONUS_CAP := 0.5
 ## Overflow on extract (stash full): items are salvaged at this fraction.
 const OVERFLOW_SALVAGE := 1.0
 

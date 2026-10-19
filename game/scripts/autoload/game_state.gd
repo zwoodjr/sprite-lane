@@ -961,8 +961,9 @@ func add_run_material(id: String, n: int) -> void:
 	run_materials[id] = int(run_materials.get(id, 0)) + n
 
 func on_boss_killed(kind: String) -> void:
-	boss_loot_bonus += GearDefs.BOSS_LOOT_BONUS
-	loot_mult += GearDefs.BOSS_LOOT_BONUS
+	var add := clampf(GearDefs.BOSS_LOOT_BONUS_CAP - boss_loot_bonus, 0.0, GearDefs.BOSS_LOOT_BONUS)
+	boss_loot_bonus += add
+	loot_mult += add
 	if not has_trophy(kind):
 		trophies[kind] = true
 		result_unlocks_pending.append("Trophy: first %s kill" % EnemyDefs.get_kind(kind).get("display_name", kind))
@@ -1465,11 +1466,21 @@ func set_loot_mult(mult: float) -> void:
 
 ## What the bag is worth right now (before the multiplier).
 func bag_value() -> int:
-	return scrap_found * 2 + kills * 5 + medicine_carried() * MedicineDefs.MEDICINE_SCRAP
+	return int(round(ModeDefs.bag_curve(float(bag_raw()))))
 
-## Add bag scrap with meta magnet applied.
+## The bag before diminishing returns.
+func bag_raw() -> int:
+	return int(round(float(scrap_found) * ModeDefs.BAG_SCRAP_VALUE + float(kills) * ModeDefs.BAG_KILL_VALUE)) \
+		+ medicine_carried() * MedicineDefs.MEDICINE_SCRAP
+
+## Every find bonus (meta Scrap Press + gear, run Scavenger's Eye / Fortune /
+## quirk / Field Salvager) adds up once, capped — no multiplicative stacking.
+func total_find_mult() -> float:
+	return minf(ModeDefs.FIND_MULT_CAP, scrap_find_mult() + run_scrap_mult() - 1.0)
+
+## Add bag scrap with every find bonus applied.
 func add_scrap(amount: int) -> int:
-	var gained := maxi(0, int(round(float(amount) * scrap_find_mult() * event_scrap_mult)))
+	var gained := maxi(0, int(round(float(amount) * total_find_mult() * event_scrap_mult)))
 	scrap_found += gained
 	return gained
 
@@ -1670,6 +1681,10 @@ func quirk_fx(key: String) -> float:
 func has_evo(id: String) -> bool:
 	return run_rank(id) > 0
 
+## Flat extract bonuses (radio jobs, Ambush Bounty) as paid on this tier.
+func extract_bonus_payout() -> int:
+	return int(round(float(extract_bonus_scrap) * float(get_mode()["payout_mult"]) * ModeDefs.BONUS_SCALE))
+
 func on_extract_success() -> void:
 	if run_finished:
 		return
@@ -1678,11 +1693,12 @@ func on_extract_success() -> void:
 	wiped = false
 	_clear_result_meta()
 	var mode := get_mode()
-	## Extract pays the full bag (plus a 100 scrap stipend) × loot multiplier.
-	var base := 100 + bag_value()
+	## Extract pays the full bag (plus a small stipend) × loot multiplier × tier
+	## payout; flat bonuses (jobs, Ambush Bounty) scale with the tier (ModeDefs).
+	var base := ModeDefs.BAG_STIPEND + bag_value()
 	payout_this_run = int(
 		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult() * (1.0 + pact_loot_bonus())
-	) + extract_bonus_scrap
+	) + extract_bonus_payout()
 	if pact_loot_bonus() > 0.0:
 		result_unlocks_pending.append("Dust Pacts: payout +%d%%" % int(round(pact_loot_bonus() * 100.0)))
 	_record_tier_clear(int(mode.get("tier", 1)))

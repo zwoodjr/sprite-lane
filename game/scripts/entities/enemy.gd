@@ -650,7 +650,8 @@ func _die() -> void:
 	if _tag:
 		_tag.visible = false
 	var range_v: Vector2i = _def.get("scrap", Vector2i(1, 3))
-	var scrap := int(round(float(randi_range(range_v.x, range_v.y)) * GameState.run_scrap_mult()))
+	## Find bonuses (Scavenger's Eye etc.) apply once, on pickup (GameState.add_scrap).
+	var scrap := randi_range(range_v.x, range_v.y)
 	GameState.kills += 1
 	GameState.note_kill(kind)
 	_status.clear()
@@ -678,8 +679,10 @@ func _die() -> void:
 			GearPickup.spawn(parent, global_position + Vector2(0, -20), GameState.make_exclusive(zt))
 		GameState.quest_event("elite")
 		if role == "boss":
+			var bb := GameState.boss_loot_bonus
 			GameState.on_boss_killed(kind)
-			Juice.float_text(global_position + Vector2(0, -60), "BOSS DOWN  +×%.1f LOOT" % GearDefs.BOSS_LOOT_BONUS, UiTheme.AMBER, 22)
+			var gained := GameState.boss_loot_bonus - bb
+			Juice.float_text(global_position + Vector2(0, -60), ("BOSS DOWN  +×%.1f LOOT" % gained) if gained > 0.0 else "BOSS DOWN", UiTheme.AMBER, 22)
 	else:
 		GearPickup.maybe_drop(parent, global_position, GearDefs.KILL_DROP_CHANCE)
 	var pl := get_tree().get_first_node_in_group("player")

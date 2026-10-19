@@ -65,6 +65,8 @@ var _full_at := -1.0
 var _full_window := -1
 var _raiders_seen := {}
 var _elite_traits := {}
+## Payout breakdown (backlog 1): last in-run snapshot of the bag parts.
+var _econ := [0, 0, 0]
 
 
 func _restore_profile() -> void:
@@ -273,7 +275,11 @@ func _drive(delta: float) -> void:
 	var low_hp: bool = float(_p.get("hp")) < float(_p.get("max_hp")) * 0.35
 	## Head for pads once they're pinged on the window we plan to leave on;
 	## extract when open.
-	var going: bool = int(GameState.extract_windows_seen) >= _leave_at - 1 and (_m.call("get_pads") as Array).size() > 0
+	## (Pads of window N appear at its ping while window N-1 may still be open:
+	## don't take window N-1 when planning to leave on N.)
+	var seen := int(GameState.extract_windows_seen)
+	var going: bool = seen >= _leave_at - 1 and (_m.call("get_pads") as Array).size() > 0 \
+		and not (seen == _leave_at - 1 and bool(_m.call("is_extract_open")))
 	_going = going
 	if going:
 		var best: Node2D = null
@@ -396,6 +402,8 @@ func _wander_dir(delta: float) -> Vector2:
 
 func _extra(delta: float) -> void:
 	_min_hp = min(_min_hp, _p.hp)
+	if not GameState.run_finished:
+		_econ = [GameState.scrap_found, GameState.medicine_carried(), GameState.extract_bonus_scrap]
 	_max_exposure = maxf(_max_exposure, GameState.exposure)
 	_max_pack = maxi(_max_pack, GameState.pack_weight())
 	if _full_at < 0.0 and GameState.pack_weight() >= GameState.pack_capacity():
@@ -560,6 +568,7 @@ func _summary() -> void:
 		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
+	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])
 	var evos: PackedStringArray = []
 	for c in RecipeDefs.all():

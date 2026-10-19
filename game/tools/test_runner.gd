@@ -775,7 +775,9 @@ func _test_tiers() -> void:
 				player.set("hp", player.get("max_hp"))
 			for e in get_tree().get_nodes_in_group("elites") + get_tree().get_nodes_in_group("bosses"):
 				var iid := e.get_instance_id()
-				if not seen.has(iid):
+				## Only the tier schedule counts (radio bounties, Elite Hunt, the Dust
+				## Warden etc. can add elites on any tier — that made this flaky).
+				if not seen.has(iid) and e.has_meta("scheduled"):
 					seen[iid] = true
 					if e.is_in_group("bosses"):
 						bosses += 1
@@ -868,7 +870,14 @@ func _test_depth_e1() -> void:
 	GameState.ingredients = {}
 	GameState.on_extract_success()
 	_check(GameState.ingredient_count("medicine") == 4 and GameState.ingredient_count("herb") == 2 and GameState.run_pack.is_empty(), "e1 pack banked")
-	_check(GameState.payout_this_run >= int((100 + bag) * float(GameState.get_mode()["payout_mult"])), "e1 medicine pays")
+	_check(GameState.payout_this_run >= int((ModeDefs.BAG_STIPEND + bag) * float(GameState.get_mode()["payout_mult"])), "e1 medicine pays")
+	## Backlog 1 economy: diminishing bag above the knee, boss bonus paid once.
+	_check(is_equal_approx(ModeDefs.bag_curve(80.0), 80.0) and ModeDefs.bag_curve(400.0) < 300.0 and ModeDefs.bag_curve(400.0) > ModeDefs.bag_curve(200.0), "econ bag curve")
+	GameState.begin_run()
+	GameState.on_boss_killed("dread_naught")
+	GameState.on_boss_killed("mutant_overlord")
+	_check(is_equal_approx(GameState.boss_loot_bonus, GearDefs.BOSS_LOOT_BONUS_CAP), "econ boss bonus capped")
+	GameState.boss_loot_bonus = 0.0
 	GameState.begin_run()
 	GameState.add_to_pack("medicine")
 	GameState.on_wipe()

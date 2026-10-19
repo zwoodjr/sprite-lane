@@ -397,17 +397,23 @@ func _tick_specials() -> void:
 		_next_elite_at += ModeDefs.ELITE_EVERY * ts
 		var n := 2 if int(_mode.get("tier", 1)) >= ModeDefs.DOUBLE_ELITE_FROM_TIER else 1
 		for i in range(n):
-			spawn_special("elite")
+			_mark_scheduled(spawn_special("elite"))
 	if _match_time >= _next_boss_at:
 		_next_boss_at += ModeDefs.BOSS_EVERY * ts
-		spawn_special("boss")
+		_mark_scheduled(spawn_special("boss"))
 		## Dustfall: bosses come in pairs.
 		if GameState.twist_on("double_boss"):
-			spawn_special("boss")
+			_mark_scheduled(spawn_special("boss"))
 	if _match_time >= _next_crew_at:
 		_next_crew_at += FactionDefs.CREW_EVERY * ts
 		if get_tree().get_nodes_in_group("raider_crews").size() < FactionDefs.CREW_MAX_ALIVE:
 			spawn_crew()
+
+## Tier-schedule specials are tagged so tests can tell them from event / radio /
+## pact / Dust Warden elites.
+func _mark_scheduled(e: Node) -> void:
+	if e != null:
+		e.set_meta("scheduled", true)
 
 ## Spawns an elite / boss just off screen (also used by events and tests).
 func spawn_special(role: String, kind: String = "") -> Node:
@@ -617,7 +623,8 @@ func _extract_bonuses() -> void:
 	if near > 0:
 		var bonus := mini(int(ab["cap"]), near * int(ab["per_enemy"]))
 		GameState.extract_bonus_scrap += bonus
-		GameState.extract_bonus_notes.append("Ambush Bounty: +%d scrap (%d on the pad)" % [bonus, near])
+		var paid := int(round(float(bonus) * float(GameState.get_mode()["payout_mult"]) * ModeDefs.BONUS_SCALE))
+		GameState.extract_bonus_notes.append("Ambush Bounty: +%d scrap (%d on the pad)" % [paid, near])
 	var pb: Dictionary = EventDefs.PET_BOND
 	for pet in get_tree().get_nodes_in_group("pets"):
 		if pet is Node2D and (pet as Node2D).global_position.distance_to(player.global_position) <= float(pb["radius"]):
