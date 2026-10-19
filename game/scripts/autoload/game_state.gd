@@ -97,6 +97,8 @@ var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.
 var migrated_v3: bool = false
 var best_payout: int = 0
+## Highest Dust tier extracted on (unlocks the next one).
+var best_tier_extracted: int = 0
 var total_runs: int = 0
 
 ## Deployed loadout (copied at deploy).
@@ -185,6 +187,7 @@ func save_profile() -> void:
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
 		"best_payout": best_payout,
+		"best_tier_extracted": best_tier_extracted,
 		"total_runs": total_runs,
 		"selected_mode_id": selected_mode_id,
 		"selected_character_id": selected_character_id,
@@ -298,11 +301,13 @@ func apply_save(d: Dictionary) -> void:
 	garage_tokens = int(d.get("garage_tokens", 0))
 	successful_extracts = int(d.get("successful_extracts", 0))
 	best_payout = int(d.get("best_payout", 0))
+	## Old saves: missing key = 0 (tiers 1–2 are always open).
+	best_tier_extracted = clampi(int(d.get("best_tier_extracted", 0)), 0, ModeDefs.EXPOSED_TIERS)
 	total_runs = int(d.get("total_runs", 0))
 	_sync_account_level()
 	var mode_id := str(d.get("selected_mode_id", selected_mode_id))
 	mode_id = ModeDefs.canonical_id(mode_id)
-	if ModeDefs.is_exposed(mode_id):
+	if ModeDefs.is_exposed(mode_id) and is_tier_unlocked(int(ModeDefs.get_mode(mode_id)["tier"])):
 		selected_mode_id = mode_id
 	var char_id := str(d.get("selected_character_id", selected_character_id))
 	if char_id == "rook_vex":
@@ -714,8 +719,12 @@ func _lose_run_loot() -> void:
 func today() -> String:
 	return Time.get_date_string_from_system()
 
+## Each tier unlocks after extracting on the one below (Part 5).
 func highest_unlocked_tier() -> int:
-	return ModeDefs.EXPOSED_TIERS
+	return clampi(maxi(ModeDefs.START_UNLOCKED, best_tier_extracted + 1), 1, ModeDefs.EXPOSED_TIERS)
+
+func is_tier_unlocked(tier: int) -> bool:
+	return tier <= highest_unlocked_tier()
 
 ## New quests each day.
 func refresh_daily() -> void:
@@ -870,6 +879,7 @@ func reset_profile() -> void:
 	garage_tokens = 0
 	successful_extracts = 0
 	best_payout = 0
+	best_tier_extracted = 0
 	total_runs = 0
 	save_profile()
 	meta_changed.emit()
@@ -1089,6 +1099,12 @@ func on_extract_success() -> void:
 	_bank_run_loot()
 	result_unlocks.append_array(extract_bonus_notes)
 	quest_event("extract", 1, {"tier": int(mode.get("tier", 1)), "mult": loot_mult})
+	var tier_n := int(mode.get("tier", 1))
+	if tier_n > best_tier_extracted:
+		var before := highest_unlocked_tier()
+		best_tier_extracted = tier_n
+		if highest_unlocked_tier() > before:
+			result_unlocks.append("New tier unlocked: %s" % str(ModeDefs.tier_mode(highest_unlocked_tier()).get("display_name", "")))
 	result_unlocks.append_array(result_unlocks_pending)
 	result_unlocks_pending = PackedStringArray()
 	result_summary = "Extracted. +%d scrap banked (×%.1f loot) · run Lv %d · Threat %d" % [

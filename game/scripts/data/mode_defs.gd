@@ -19,7 +19,7 @@ const EASY_ID := HAZE_ID
 const MEDIUM_ID := DRIFT_ID
 
 ## How many tiers players can pick right now.
-const EXPOSED_TIERS := 2
+const EXPOSED_TIERS := 10
 
 const LOOT_STEP := 0.1
 const LOOT_EVERY := 30.0
@@ -38,32 +38,53 @@ const BOSS_EVERY := 300.0
 const STORM_SECONDS := 3.0
 
 
+## Part 5 table: id, name, strength, payout, keep on death, blurb.
+const TIER_TABLE: Array = [
+	["haze", "Haze", 0.85, 0.75, 0.10, "Thin dust. Forgiving windows — learn when to leave."],
+	["drift", "Drift", 1.0, 1.0, 0.15, "Real pressure. Shorter windows, richer bags."],
+	["smog", "Smog", 1.15, 1.25, 0.20, "Elites start hunting. They carry good gear."],
+	["pall", "Pall", 1.30, 1.5, 0.25, "The sky goes grey at noon."],
+	["blight", "Blight", 1.50, 1.8, 0.30, "Bosses walk the dust now."],
+	["shroud", "Shroud", 1.70, 2.1, 0.35, "You hear them before you see them."],
+	["choke", "Choke", 1.95, 2.5, 0.40, "Every breath costs something."],
+	["blackout", "Blackout", 2.20, 3.0, 0.45, "Elites hunt in pairs."],
+	["deadfall", "Deadfall", 2.50, 3.5, 0.50, "Nothing out here wants you to leave."],
+	["dustfall", "Dustfall", 3.00, 4.5, 0.55, "Pay the dust its due."],
+]
+## Window rule above Drift: each tier 1s shorter open, longer gap / first window.
+const DRIFT_FIRST := 120.0
+const DRIFT_EVERY := 90.0
+const DRIFT_OPEN := 15.0
+const OPEN_STEP := -1.0
+const EVERY_STEP := 5.0
+const FIRST_STEP := 5.0
+const MIN_OPEN := 7.0
+const WINDOWS_BY_TIER: Array = [3, 4, 4, 4, 5, 5, 5, 6, 6, 6]
+const LOOT_CAP_HAZE := 2.5
+const LOOT_CAP := 3.0
+const SPAWN_STEP := 0.05
+## Damage scales a little gentler than HP so high tiers stay dodgeable.
+const DAMAGE_SHARE := 0.8
+## Tiers open from the start; the rest unlock by extracting on the tier below.
+const START_UNLOCKED := 2
+
+
 static func _tiers() -> Array[Dictionary]:
-	## id, name, first_window, window_every, window_open, windows (regular),
-	## last_chance_open, loot_cap, death_keep, enemy hp/dmg, spawn density,
-	## payout mult, insurance slots, blurb.
-	return [
-		_t(HAZE_ID, "Haze", 1, 90.0, 75.0, 20.0, 3, 20.0, 2.5, 0.10, 0.85, 0.85, 0.9, 0.75, 3,
-			"Thin dust. Forgiving windows — learn when to leave."),
-		_t(DRIFT_ID, "Drift", 2, 120.0, 90.0, 15.0, 4, 15.0, 3.0, 0.15, 1.0, 1.0, 1.0, 1.0, 2,
-			"Real pressure. Shorter windows, richer bags."),
-		_t("squall", "Squall", 3, 135.0, 95.0, 14.0, 4, 14.0, 3.2, 0.15, 1.15, 1.1, 1.1, 1.2, 2,
-			"Gusts hide the pads."),
-		_t("rustwind", "Rustwind", 4, 150.0, 100.0, 13.0, 4, 13.0, 3.4, 0.18, 1.3, 1.2, 1.15, 1.4, 2,
-			"Rust raiders run the dunes."),
-		_t("ashfall", "Ashfall", 5, 160.0, 105.0, 12.0, 5, 12.0, 3.6, 0.18, 1.45, 1.3, 1.2, 1.6, 2,
-			"Burning sky, burning ground."),
-		_t("blackout", "Blackout", 6, 170.0, 110.0, 12.0, 5, 12.0, 3.8, 0.2, 1.6, 1.4, 1.25, 1.85, 1,
-			"Signal dead. Trust the arrows."),
-		_t("glasstorm", "Glasstorm", 7, 180.0, 115.0, 11.0, 5, 11.0, 4.0, 0.2, 1.8, 1.5, 1.3, 2.1, 1,
-			"Sand turned to knives."),
-		_t("deadwind", "Deadwind", 8, 190.0, 120.0, 10.0, 6, 10.0, 4.3, 0.2, 2.0, 1.6, 1.35, 2.4, 1,
-			"Nothing lives out here. Something does."),
-		_t("maelstrom", "Maelstrom", 9, 200.0, 120.0, 10.0, 6, 10.0, 4.6, 0.22, 2.25, 1.75, 1.4, 2.75, 1,
-			"The storm has a centre. Don't find it."),
-		_t("dust_god", "Dust God", 10, 210.0, 125.0, 9.0, 6, 9.0, 5.0, 0.25, 2.5, 1.9, 1.5, 3.2, 0,
-			"Pay the dust its due."),
-	]
+	var out: Array[Dictionary] = []
+	for i in range(TIER_TABLE.size()):
+		var r: Array = TIER_TABLE[i]
+		var tier := i + 1
+		var strength := float(r[2])
+		if tier == 1:
+			out.append(_t(str(r[0]), str(r[1]), 1, 90.0, 75.0, 20.0, 3, 20.0, LOOT_CAP_HAZE, float(r[4]), strength, strength, 0.9, float(r[3]), 3, str(r[5])))
+			continue
+		var above := tier - 2
+		var open := maxf(MIN_OPEN, DRIFT_OPEN + OPEN_STEP * above)
+		var dmg := 1.0 + (strength - 1.0) * DAMAGE_SHARE
+		out.append(_t(str(r[0]), str(r[1]), tier, DRIFT_FIRST + FIRST_STEP * above, DRIFT_EVERY + EVERY_STEP * above,
+			open, int(WINDOWS_BY_TIER[i]), open, LOOT_CAP, float(r[4]), strength, dmg, 1.0 + SPAWN_STEP * above,
+			float(r[3]), 2, str(r[5])))
+	return out
 
 
 static func _t(id: String, name: String, tier: int, first: float, every: float, open: float,
@@ -86,6 +107,18 @@ static func canonical_id(mode_id: String) -> String:
 			return HAZE_ID
 		"medium":
 			return DRIFT_ID
+		"squall":
+			return "smog"
+		"rustwind":
+			return "pall"
+		"ashfall":
+			return "blight"
+		"glasstorm":
+			return "choke"
+		"deadwind":
+			return "deadfall"
+		"maelstrom", "dust_god":
+			return "dustfall"
 	return mode_id
 
 
