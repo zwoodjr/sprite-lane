@@ -24,6 +24,9 @@ var bounce_mult: float = 0.6
 var bounce_range: float = 220.0
 var ammo: String = ""
 var vial: bool = false
+## Lock-on: player shots steer toward their target (turn rate in rad/s).
+var homing_target: Node2D = null
+var homing_turn: float = 0.0
 var _hit_set: Array = []
 
 ## Per-style look: sprite tint/scale, trail colour/width/length, glow texture.
@@ -152,6 +155,13 @@ func _physics_process(delta: float) -> void:
 		return
 	if _arm_left > 0.0:
 		_arm_left -= delta
+	if homing_turn > 0.0 and homing_target != null and is_instance_valid(homing_target) and not homing_target.is_queued_for_deletion():
+		var want := homing_target.global_position - global_position
+		if want.length() > 4.0:
+			var diff := direction.angle_to(want)
+			var step := clampf(diff, -homing_turn * delta, homing_turn * delta)
+			direction = direction.rotated(step).normalized()
+			rotation = direction.angle()
 	global_position += direction * speed * delta
 	if sprite and from_player and STYLES.has(style) and (STYLES[style] as Dictionary).has("spin"):
 		sprite.rotation += float(STYLES[style]["spin"]) * delta
@@ -186,6 +196,7 @@ func _on_body_entered(body: Node2D) -> void:
 			if body in _hit_set:
 				return
 			_hit_set.append(body)
+			homing_target = null
 			## Through the hero's hit pipeline (on-hit upgrades / special ammo).
 			if source != null and is_instance_valid(source) and source.has_method("hit_enemy"):
 				source.call("hit_enemy", body, damage, direction, -1.0, crit, src_tag)

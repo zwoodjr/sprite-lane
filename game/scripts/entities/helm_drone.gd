@@ -178,6 +178,8 @@ func _fire() -> void:
 	bullet.setup(global_position + aim * 14.0, aim, 900.0, dmg, true, _player, 0.6, 0.0, 0.0)
 	bullet.set("style", "drone")
 	bullet.set("src_tag", "drone")
+	bullet.set("homing_target", _target)
+	bullet.set("homing_turn", 10.0)
 	if _player.has_method("special_ammo"):
 		bullet.set("ammo", str(_player.call("special_ammo")))
 	get_tree().current_scene.add_child(bullet)

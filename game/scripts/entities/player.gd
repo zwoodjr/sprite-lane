@@ -932,10 +932,16 @@ func _fire_one_shot() -> void:
 	var aim := _last_aim
 	var tgt := get_target()
 	if tgt != null:
-		var from_muzzle := tgt.global_position - origin
+		## Lead the target: aim where it will be when the shot arrives.
+		var tpos := tgt.global_position
+		var tvel = tgt.get("velocity")
+		var pspd := float(_weapon.get("projectile_speed", 720.0))
+		if tvel is Vector2 and pspd > 1.0:
+			tpos += (tvel as Vector2) * (origin.distance_to(tpos) / pspd)
+		var from_muzzle := tpos - origin
 		if from_muzzle.length() > 24.0:
 			aim = from_muzzle.normalized()
-	var spread := deg_to_rad(float(_weapon.get("spread_deg", 3.0)))
+	var spread := deg_to_rad(float(_weapon.get("spread_deg", 3.0))) * 0.5
 	if _buffs.has("quiet"):
 		spread *= 0.7
 	aim = aim.rotated(randf_range(-spread, spread))
@@ -1178,6 +1184,10 @@ func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: f
 	bullet.set("style", str(_weapon.get("projectile", "pistol")))
 	bullet.set("crit", crit)
 	bullet.set("ammo", special_ammo())
+	var lock := get_target()
+	if lock != null:
+		bullet.set("homing_target", lock)
+		bullet.set("homing_turn", float(_weapon.get("homing_turn", 10.0)))
 	bullet.set("pierce_left", int(GameState.up("piercing", "pierce", 0)))
 	bullet.set("pierce_falloff", float(GameState.up("piercing", "falloff", 0.8)))
 	bullet.set("bounces_left", int(GameState.up("ricochet", "bounces", 0)))
