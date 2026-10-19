@@ -66,6 +66,7 @@ static func _weapon_table() -> Dictionary:
 			"muzzle": Vector2(24, -10),
 			"projectile": "rocket",
 			"recoil": 10.0,
+			"bullet_knock": 120.0,
 			"shake": 0.07,
 			"weapon_xp": 0,
 			"weapon_level": 1,

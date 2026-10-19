@@ -17,7 +17,7 @@ const OrbitScript := preload("res://scripts/entities/orbit_blades.gd")
 const TONIC_TEX := "res://assets/sprites/fx/fx_iron_tonic.png"
 const OVERLOAD_TEX := "res://assets/sprites/fx/fx_overload_arc.png"
 ## --- Movement feel (tuned for thumbs) ---
-@export var base_speed: float = 235.0
+@export var base_speed: float = 205.0
 @export var accel: float = 2400.0       ## px/s² toward target velocity
 @export var decel: float = 3000.0       ## px/s² when the stick is released
 @export var turn_boost: float = 1.8     ## extra accel when reversing direction
@@ -1184,6 +1184,7 @@ func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: f
 	bullet.set("style", str(_weapon.get("projectile", "pistol")))
 	bullet.set("crit", crit)
 	bullet.set("ammo", special_ammo())
+	bullet.set("knock", float(_weapon.get("bullet_knock", 30.0)))
 	var lock := get_target()
 	if lock != null:
 		bullet.set("homing_target", lock)

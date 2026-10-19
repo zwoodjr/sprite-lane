@@ -24,6 +24,8 @@ var bounce_mult: float = 0.6
 var bounce_range: float = 220.0
 var ammo: String = ""
 var vial: bool = false
+## Knockback per bullet hit (small flinch; melee/rockets bring their own).
+var knock: float = 30.0
 ## Lock-on: player shots steer toward their target (turn rate in rad/s).
 var homing_target: Node2D = null
 var homing_turn: float = 0.0
@@ -199,9 +201,9 @@ func _on_body_entered(body: Node2D) -> void:
 			homing_target = null
 			## Through the hero's hit pipeline (on-hit upgrades / special ammo).
 			if source != null and is_instance_valid(source) and source.has_method("hit_enemy"):
-				source.call("hit_enemy", body, damage, direction, -1.0, crit, src_tag)
+				source.call("hit_enemy", body, damage, direction, knock, crit, src_tag)
 			else:
-				body.take_damage(damage, direction, -1.0, crit)
+				body.take_damage(damage, direction, knock, crit)
 			_apply_splash(body)
 			if pierce_left > 0:
 				## Piercing Slugs: keep flying, a little weaker.
@@ -248,10 +250,10 @@ func _apply_splash(primary: Node) -> void:
 		var other := n as Node2D
 		if global_position.distance_squared_to(other.global_position) > r2:
 			continue
-		var knock := (other.global_position - global_position).normalized()
-		if knock.length_squared() < 0.01:
-			knock = direction
-		other.take_damage(splash_dmg, knock)
+		var kdir := (other.global_position - global_position).normalized()
+		if kdir.length_squared() < 0.01:
+			kdir = direction
+		other.take_damage(splash_dmg, kdir)
 	for n in tree.get_nodes_in_group("breakables"):
 		if n == primary or not is_instance_valid(n):
 			continue
