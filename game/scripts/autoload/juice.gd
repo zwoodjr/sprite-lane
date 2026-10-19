@@ -20,6 +20,7 @@ var _trauma: float = 0.0
 var _shake_t: float = 0.0
 var _hitstop_left: float = 0.0
 var _spark_tex: Texture2D
+var _pixel_font: Font
 
 
 func _ready() -> void:
@@ -34,6 +35,8 @@ func _ready() -> void:
 		add_child(p)
 		_players.append(p)
 	_spark_tex = _make_spark_texture()
+	if ResourceLoader.exists("res://assets/fonts/PressStart2P.ttf"):
+		_pixel_font = load("res://assets/fonts/PressStart2P.ttf")
 
 
 ## --- Audio -----------------------------------------------------------------
@@ -158,6 +161,35 @@ func float_text(pos: Vector2, text: String, color: Color = Color.WHITE, size: in
 	tw.tween_property(l, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(l, "position:y", l.position.y - 38.0, 0.7).set_ease(Tween.EASE_OUT)
 	tw.tween_property(l, "modulate:a", 0.0, 0.3).set_delay(0.45)
+	tw.chain().tween_callback(l.queue_free)
+
+
+## Pixel-font damage number. Crits are amber and bigger.
+func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color = Color(1, 0.97, 0.9)) -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var l := Label.new()
+	l.text = str(maxi(1, int(round(amount))))
+	l.z_index = 50
+	if _pixel_font:
+		l.add_theme_font_override("font", _pixel_font)
+	var size := 15 if crit else 10
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", Color(1.0, 0.72, 0.2) if crit else color)
+	l.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02))
+	l.add_theme_constant_override("outline_size", 6 if crit else 4)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.size = Vector2(80, 24)
+	l.pivot_offset = Vector2(40, 12)
+	l.position = pos - Vector2(40, 12) + Vector2(randf_range(-12, 12), randf_range(-4, 4))
+	l.scale = Vector2(1.6, 1.6) if crit else Vector2(1.2, 1.2)
+	scene.add_child(l)
+	var tw := l.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "position:y", l.position.y - (34.0 if crit else 24.0), 0.6).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "modulate:a", 0.0, 0.25).set_delay(0.4)
 	tw.chain().tween_callback(l.queue_free)
 
 

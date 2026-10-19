@@ -291,6 +291,10 @@ func _do_find() -> void:
 			continue
 		p.global_position = p.global_position.lerp(_player.global_position, 0.55)
 		pulled += 1
+	for lt in get_tree().get_nodes_in_group("loot"):
+		if lt is Node2D and is_instance_valid(lt) and _player.global_position.distance_to((lt as Node2D).global_position) <= radius:
+			lt.call("magnetize")
+			pulled += 1
 	## Always a little scrap sniff.
 	var scrap := GameState.add_scrap(randi_range(1, 3))
 	Juice.float_text(_player.global_position + Vector2(0, -40), "+%d scrap" % scrap, UiTheme.AMBER, 14)
