@@ -429,7 +429,9 @@ func _buff_firerate() -> float:
 func _tick_buffs(delta: float) -> void:
 	var changed := false
 	for id in _buffs.keys():
-		_buffs[id]["time_left"] = float(_buffs[id]["time_left"]) - delta
+		if not (_buffs[id] is Dictionary):
+			_buffs[id] = {"time_left": float(_buffs[id]) if (_buffs[id] is float or _buffs[id] is int) else 0.0, "def": {"name": str(id).to_upper()}}
+		_buffs[id]["time_left"] = float(_buffs[id].get("time_left", 0.0)) - delta
 		if float(_buffs[id]["time_left"]) <= 0.0:
 			_buffs.erase(id)
 			changed = true

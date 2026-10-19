@@ -499,16 +499,20 @@ func _refresh_buffs(buffs: Dictionary) -> void:
 		_buff_row.add_child(chip)
 	var i := 0
 	for id in buffs.keys():
-		var entry: Dictionary = buffs[id]
-		var def: Dictionary = entry.get("def", {})
+		var raw = buffs[id]
+		var entry: Dictionary = raw if raw is Dictionary else {"time_left": float(raw) if (raw is float or raw is int) else 0.0, "def": {}}
+		var def_raw = entry.get("def", {})
+		var def: Dictionary = def_raw if def_raw is Dictionary else {}
 		var chip := _buff_row.get_child(i) as Label
 		chip.text = "%s %ds" % [str(def.get("name", id)), int(ceil(float(entry.get("time_left", 0))))]
-		chip.add_theme_color_override("font_color", def.get("color", UiTheme.AMBER))
+		var col_raw = def.get("color", UiTheme.AMBER)
+		var col: Color = col_raw if col_raw is Color else UiTheme.AMBER
+		chip.add_theme_color_override("font_color", col)
 		## Special ammo (Phase 4): bigger chip outlined in the ammo colour.
 		var is_ammo := str(id) == "ammo"
 		chip.text = chip.text.to_upper() if is_ammo else chip.text
 		chip.add_theme_font_size_override("font_size", 14 if is_ammo else 12)
-		chip.add_theme_stylebox_override("normal", UiTheme.box(Color(0.1, 0.08, 0.06, 0.9), def.get("color", UiTheme.AMBER) if is_ammo else UiTheme.AMBER, 8, 3 if is_ammo else 2, 6))
+		chip.add_theme_stylebox_override("normal", UiTheme.box(Color(0.1, 0.08, 0.06, 0.9), col if is_ammo else UiTheme.AMBER, 8, 3 if is_ammo else 2, 6))
 		i += 1
 
 ## ---------------------------------------------------------------------------
