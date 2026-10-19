@@ -21,7 +21,7 @@ func setup(player: Node2D, pads: Array, landmarks: Array) -> void:
 	_pads = pads
 	_landmarks = landmarks
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	clip_contents = true
+	clip_contents = false
 
 
 func set_pads(pads: Array) -> void:
@@ -45,11 +45,15 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var r := size
 	var center := r * 0.5
-	var map_r := mini(r.x, r.y) * 0.5 - 4.0
-	## Frame
-	draw_rect(Rect2(Vector2.ZERO, r), Color(0.08, 0.06, 0.04, 0.75), true)
-	draw_arc(center, map_r, 0, TAU, 48, Color(0.85, 0.65, 0.3, 0.8), 2.0, true)
-	draw_circle(center, map_r, Color(0.22, 0.16, 0.11, 0.55))
+	var side := minf(r.x, r.y)
+	## Painted brass bezel (192 px art: rim 82..95 of a 96 radius).
+	var bezel := UiTheme.tex("minimap_bezel")
+	var map_r := side * 0.5 * (80.0 / 96.0) if bezel else side * 0.5 - 4.0
+	if bezel:
+		draw_texture_rect(bezel, Rect2(center - Vector2(side, side) * 0.5, Vector2(side, side)), false)
+	else:
+		draw_circle(center, map_r, Color(0.22, 0.16, 0.11, 0.75))
+		draw_arc(center, map_r, 0, TAU, 48, Color(0.85, 0.65, 0.3, 0.8), 2.0, true)
 	if _player == null or not is_instance_valid(_player):
 		return
 	var origin := _player.global_position
@@ -58,7 +62,9 @@ func _draw() -> void:
 		var p: Vector2 = lm["position"]
 		var local := _world_to_map(p - origin, map_r)
 		if local.length() <= map_r:
-			draw_circle(center + local, 3.0, Color(0.75, 0.4, 0.25, 0.9))
+			var lp := center + local
+			draw_colored_polygon(PackedVector2Array([lp + Vector2(0, -4), lp + Vector2(4, 0), lp + Vector2(0, 4), lp + Vector2(-4, 0)]), Color(0.08, 0.05, 0.03, 0.9))
+			draw_colored_polygon(PackedVector2Array([lp + Vector2(0, -3), lp + Vector2(3, 0), lp + Vector2(0, 3), lp + Vector2(-3, 0)]), Color(0.8, 0.45, 0.28, 0.95))
 	## Extract pads
 	for pad in _pads:
 		if not is_instance_valid(pad):
@@ -69,24 +75,26 @@ func _draw() -> void:
 		var col := Color(1.0, 0.85, 0.3, 1.0) if _extract_open else Color(0.75, 0.65, 0.4, 1.0)
 		if bool(pad.get("last_chance")):
 			col = Color(1.0, 0.35, 0.3, 1.0)
-		draw_rect(Rect2(center + local2 - Vector2(4, 4), Vector2(8, 8)), col, true)
+		draw_circle(center + local2, 6.0, Color(0.06, 0.04, 0.03, 0.9))
+		draw_circle(center + local2, 4.5, col)
+		draw_circle(center + local2 + Vector2(-1.2, -1.2), 1.6, Color(1, 1, 0.9, 0.8))
 		if _ping_t > 0.0:
 			var ph := fmod(3.0 - _ping_t, 1.0)
 			draw_arc(center + local2, 4.0 + ph * 16.0, 0.0, TAU, 24, Color(col.r, col.g, col.b, 1.0 - ph), 2.0, true)
 	## Player
-	draw_circle(center, 4.5, Color(0.4, 0.9, 0.45, 1.0))
-	draw_arc(center, 4.5, 0, TAU, 16, Color(1, 1, 1, 0.7), 1.0, true)
-	## Label
-	## Status fits inside the box at any size (old "EXTRACT OPEN" ran off the edge).
-	draw_string(
-		ThemeDB.fallback_font,
-		Vector2(0, r.y - 5),
-		"OPEN" if _extract_open else "SEALED",
-		HORIZONTAL_ALIGNMENT_CENTER,
-		r.x,
-		10,
-		Color(1.0, 0.85, 0.35, 0.9) if _extract_open else Color(0.7, 0.65, 0.55, 0.8)
-	)
+	draw_circle(center, 6.0, Color(0.05, 0.04, 0.03, 0.9))
+	draw_circle(center, 4.5, UiTheme.TEAL)
+	draw_circle(center + Vector2(-1.2, -1.2), 1.6, Color(0.9, 1.0, 0.95, 0.9))
+	## Status plate on the lower rim (fits inside the box at any size).
+	var txt := "OPEN" if _extract_open else "SEALED"
+	var f: Font = UiTheme.font_button
+	var fs := 12
+	var tw := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pr := Rect2(Vector2(center.x - tw * 0.5 - 6, r.y - 17), Vector2(tw + 12, 15))
+	draw_rect(pr, Color(0.07, 0.05, 0.035, 0.92))
+	draw_rect(pr, Color(0.55, 0.4, 0.22, 0.9), false, 1.0)
+	draw_string(f, Vector2(pr.position.x + 6, r.y - 5), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+		Color(1.0, 0.85, 0.35) if _extract_open else Color(0.78, 0.72, 0.62))
 
 
 func _world_to_map(delta: Vector2, map_r: float) -> Vector2:

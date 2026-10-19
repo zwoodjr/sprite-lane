@@ -138,9 +138,16 @@ func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
 func _panel(alpha: float = 0.78) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sb := UiTheme.box(Color(0.1, 0.075, 0.055, alpha), Color(0.42, 0.31, 0.19, 0.9), 14, 2, 12)
+	## Slim riveted brass HUD plate (smoky see-through face).
+	var sb := UiTheme.plate("hud", 12.0, Color(1, 1, 1, clampf(alpha + 0.14, 0.0, 1.0)))
 	p.add_theme_stylebox_override("panel", sb)
 	return p
+
+## Small caps caption over a bar ("HEALTH", "XP · LV 3").
+func _caption(text: String) -> Label:
+	var l := _label(text, 13, UiTheme.TEXT_DIM)
+	l.add_theme_font_override("font", UiTheme.font_button)
+	return l
 
 func _label(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
 	var l := Label.new()
@@ -179,7 +186,7 @@ func _build() -> void:
 	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vit.add_child(vb)
-	vb.add_child(_label("HEALTH", 11, UiTheme.TEXT_DIM))
+	vb.add_child(_caption("HEALTH"))
 	var hp_row := Control.new()
 	hp_row.custom_minimum_size = Vector2(BAR_W, BAR_W / 10.0)
 	hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -193,7 +200,7 @@ func _build() -> void:
 	_hp_text.add_theme_constant_override("outline_size", 4)
 	_hp_text.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	hp_row.add_child(_hp_text)
-	_run_level_label = _label("XP · LV 1", 11, UiTheme.TEXT_DIM)
+	_run_level_label = _caption("XP · LV 1")
 	vb.add_child(_run_level_label)
 	var xp_row := Control.new()
 	xp_row.custom_minimum_size = Vector2(BAR_W, BAR_W / 10.0)
@@ -203,14 +210,16 @@ func _build() -> void:
 	_run_xp_bar.max_value = 1.0
 	_run_xp_bar.step = 0.0
 	xp_row.add_child(_run_xp_bar)
-	_ammo_label = _label("24 / 24", 13)
+	_ammo_label = _label("24 / 24", 15)
+	_ammo_label.add_theme_font_override("font", UiTheme.font_button)
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
 	_reload_bar.custom_minimum_size = Vector2(BAR_W, 5)
 	_reload_bar.show_percentage = false
 	_reload_bar.max_value = 1.0
 	_reload_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_reload_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.AMBER, Color(0, 0, 0, 0), 3, 0, 0))
+	_reload_bar.custom_minimum_size = Vector2(BAR_W, 8)
+	UiTheme.skin_bar(_reload_bar, UiTheme.AMBER)
 	_reload_bar.visible = false
 	vb.add_child(_reload_bar)
 	_buff_row = HBoxContainer.new()
@@ -230,12 +239,16 @@ func _build() -> void:
 	row.add_theme_constant_override("separation", 14)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(row)
-	_phase_label = _label("LOCKOUT", 18, UiTheme.AMBER)
+	_phase_label = _label("LOCKOUT", 20, UiTheme.AMBER)
+	_phase_label.add_theme_font_override("font", UiTheme.font_display)
 	row.add_child(_phase_label)
-	_timer_label = _label("1:30", 32)
+	_timer_label = _label("1:30", 36)
+	_timer_label.add_theme_font_override("font", UiTheme.font_display)
+	_timer_label.add_theme_constant_override("outline_size", 6)
 	row.add_child(_timer_label)
 	_phase_bar = ProgressBar.new()
-	_phase_bar.custom_minimum_size = Vector2(300, 5)
+	_phase_bar.custom_minimum_size = Vector2(300, 8)
+	UiTheme.skin_bar(_phase_bar, UiTheme.AMBER)
 	_phase_bar.show_percentage = false
 	_phase_bar.max_value = 1.0
 	_phase_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -252,18 +265,24 @@ func _build() -> void:
 	tv.add_theme_constant_override("separation", 0)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
-	_threat_label = _label("LOOT ×1.0", 20, UiTheme.AMBER)
+	_threat_label = _label("LOOT ×1.0", 24, UiTheme.AMBER)
+	_threat_label.add_theme_font_override("font", UiTheme.font_display)
+	_threat_label.add_theme_constant_override("outline_size", 6)
 	_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_label)
 	_threat_sub = _label("THREAT 0", 12, UiTheme.TEXT_DIM)
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_sub)
-	_counter_label = _label("", 13, UiTheme.AMBER)
+	_counter_label = _label("", 14, UiTheme.AMBER)
+	_counter_label.add_theme_font_override("font", UiTheme.font_button)
 	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_counter_label)
 
 	## Center: banner + toasts + extract prompt
-	_banner = _label("", 46, UiTheme.AMBER)
+	_banner = _label("", 52, UiTheme.AMBER)
+	_banner.add_theme_font_override("font", UiTheme.font_display)
+	_banner.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
+	_banner.add_theme_constant_override("shadow_offset_y", 4)
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.add_theme_constant_override("outline_size", 10)
 	_banner.modulate.a = 0.0
@@ -277,7 +296,9 @@ func _build() -> void:
 	_toast_box.alignment = BoxContainer.ALIGNMENT_BEGIN
 	_toast_box.add_theme_constant_override("separation", 4)
 	root.add_child(_toast_box)
-	_extract_prompt = _label("", 22, Color(0.5, 1.0, 0.65))
+	_extract_prompt = _label("", 26, Color(0.5, 1.0, 0.65))
+	_extract_prompt.add_theme_font_override("font", UiTheme.font_display)
+	_extract_prompt.add_theme_constant_override("outline_size", 6)
 	_extract_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_extract_prompt)
 	_hint_label = _label("", 13, Color(0.85, 0.78, 0.65, 0.8))
@@ -410,7 +431,9 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	if is_open:
 		var oc := UiTheme.DANGER if is_last else Color(0.55, 1.0, 0.6)
 		_phase_label.add_theme_color_override("font_color", oc)
-		_phase_bar.add_theme_stylebox_override("fill", UiTheme.box(oc, Color(0, 0, 0, 0), 3, 0, 0))
+		if _phase_bar.get_meta("fill_col", Color.BLACK) != oc:
+			_phase_bar.set_meta("fill_col", oc)
+			UiTheme.skin_bar(_phase_bar, oc)
 		if is_last:
 			_phase_hint.text = "LAST CHANCE — reach a red pad or the Dust storm takes you"
 		elif urgent:
@@ -419,7 +442,9 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 			_phase_hint.text = "Extract OPEN — hold a pad for 3s to leave at ×%.1f" % loot
 	else:
 		_phase_label.add_theme_color_override("font_color", UiTheme.AMBER)
-		_phase_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.AMBER, Color(0, 0, 0, 0), 3, 0, 0))
+		if _phase_bar.get_meta("fill_col", Color.BLACK) != UiTheme.AMBER:
+			_phase_bar.set_meta("fill_col", UiTheme.AMBER)
+			UiTheme.skin_bar(_phase_bar, UiTheme.AMBER)
 		var pid := str(phase.get("id", ""))
 		if pid == "lockout":
 			_phase_hint.text = "Survive & loot — the first extract opens at 0:00"
@@ -494,8 +519,8 @@ func _refresh_buffs(buffs: Dictionary) -> void:
 		c.queue_free()
 	while _buff_row.get_child_count() < want:
 		var chip := _label("", 12)
-		var sb := UiTheme.box(Color(0.1, 0.08, 0.06, 0.9), UiTheme.AMBER, 8, 2, 6)
-		chip.add_theme_stylebox_override("normal", sb)
+		chip.add_theme_stylebox_override("normal", UiTheme.plate("hud", 8.0))
+		chip.add_theme_font_override("font", UiTheme.font_button)
 		_buff_row.add_child(chip)
 	var i := 0
 	for id in buffs.keys():
@@ -512,7 +537,9 @@ func _refresh_buffs(buffs: Dictionary) -> void:
 		var is_ammo := str(id) == "ammo"
 		chip.text = chip.text.to_upper() if is_ammo else chip.text
 		chip.add_theme_font_size_override("font_size", 14 if is_ammo else 12)
-		chip.add_theme_stylebox_override("normal", UiTheme.box(Color(0.1, 0.08, 0.06, 0.9), col if is_ammo else UiTheme.AMBER, 8, 3 if is_ammo else 2, 6))
+		if chip.get_meta("chip_col", Color.BLACK) != col:
+			chip.set_meta("chip_col", col)
+			chip.add_theme_stylebox_override("normal", UiTheme.plate("hud", 8.0, Color.WHITE.lerp(col, 0.45) if is_ammo else Color.WHITE))
 		i += 1
 
 ## ---------------------------------------------------------------------------

@@ -21,15 +21,18 @@ func _ready() -> void:
 	_apply_margins()
 	get_viewport().size_changed.connect(_apply_margins)
 	build(content)
-	## Gentle entrance
+	## Entrance: fade + short rise.
 	content.modulate.a = 0.0
-	create_tween().tween_property(content, "modulate:a", 1.0, 0.25)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(content, "modulate:a", 1.0, 0.22)
+	frame.position.y += 18.0
+	tw.tween_property(frame, "position:y", frame.position.y - 18.0, 0.28).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 func _apply_margins() -> void:
 	var m := MobileLayout.control_safe_margin()
 	var vp := get_viewport_rect().size
-	frame.add_theme_constant_override("margin_left", int(m.position.x + 12))
-	frame.add_theme_constant_override("margin_right", int(vp.x - m.position.x - m.size.x + 12))
+	frame.add_theme_constant_override("margin_left", int(m.position.x + 4))
+	frame.add_theme_constant_override("margin_right", int(vp.x - m.position.x - m.size.x + 4))
 	frame.add_theme_constant_override("margin_top", int(m.position.y + 6))
 	frame.add_theme_constant_override("margin_bottom", int(vp.y - m.position.y - m.size.y + 6))
 
@@ -38,15 +41,16 @@ func build(_c: VBoxContainer) -> void:
 
 func header(title: String, back_cb: Callable = Callable()) -> HBoxContainer:
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 16)
+	h.add_theme_constant_override("separation", 14)
 	if back_cb.is_valid():
-		var b := UiTheme.big_button("‹", UiTheme.LINE, 56, 28)
-		b.custom_minimum_size = Vector2(64, 56)
+		var b := UiTheme.cap_button("back", 64)
 		b.pressed.connect(back_cb)
 		h.add_child(b)
 	var t := UiTheme.title_label(title, 38)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.clip_text = true
+	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	h.add_child(t)
 	return h
 
@@ -57,7 +61,17 @@ func spacer(expand: bool = true, h: float = 0.0) -> Control:
 	s.custom_minimum_size = Vector2(0, h)
 	return s
 
+## Riveted plate card. A non-default border picks the brighter brass plate,
+## a near-black bg the recessed inset.
 func card(border: Color = UiTheme.LINE, bg: Color = UiTheme.PANEL) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UiTheme.box(bg, border, 18, 2, 18))
+	var kind := "panel"
+	if border == UiTheme.AMBER:
+		kind = "panel_hi"
+	elif border != UiTheme.LINE:
+		kind = "panel_steel"
+	var tint := Color.WHITE
+	if bg.a < 0.9:
+		tint = Color(1, 1, 1, clampf(bg.a + 0.08, 0.6, 1.0))
+	p.add_theme_stylebox_override("panel", UiTheme.plate(kind, 20.0, tint))
 	return p

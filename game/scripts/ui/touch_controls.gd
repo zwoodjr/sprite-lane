@@ -253,15 +253,32 @@ func _ghost_pos() -> Vector2:
 
 func _paint_ghost(c: Control, center: Vector2, tint: Color, text: String) -> void:
 	var a := 0.12 + 0.05 * sin(_idle_t * 2.2)
-	c.draw_arc(center, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, a * 1.6), 2.0, true)
-	c.draw_circle(center, KNOB_RADIUS * 0.8, Color(tint.r, tint.g, tint.b, a))
-	var font := ThemeDB.fallback_font
-	var fs := 15
+	var base := UiTheme.tex("stick_base")
+	var knob := UiTheme.tex("stick_knob")
+	if base and knob:
+		c.draw_texture_rect(base, Rect2(center - Vector2.ONE * stick_radius, Vector2.ONE * stick_radius * 2.0), false, Color(1, 1, 1, a * 2.6))
+		var kr := KNOB_RADIUS * 0.9
+		c.draw_texture_rect(knob, Rect2(center - Vector2.ONE * kr, Vector2.ONE * kr * 2.0), false, Color(1, 1, 1, a * 2.6))
+	else:
+		c.draw_arc(center, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, a * 1.6), 2.0, true)
+		c.draw_circle(center, KNOB_RADIUS * 0.8, Color(tint.r, tint.g, tint.b, a))
+	var font: Font = UiTheme.font_button
+	var fs := 16
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	c.draw_string(font, center + Vector2(-w * 0.5, stick_radius + 22), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(tint.r, tint.g, tint.b, a * 3.0))
 
 func _paint_one(c: Control, origin: Vector2, knob: Vector2, tint: Color, alpha: float) -> void:
 	var k := origin + (knob - origin).limit_length(stick_radius)
+	var base_t := UiTheme.tex("stick_base")
+	var knob_t := UiTheme.tex("stick_knob")
+	if base_t and knob_t:
+		## Brass bezel ring + steel bottle-cap knob (painted kit art).
+		c.draw_texture_rect(base_t, Rect2(origin - Vector2.ONE * stick_radius, Vector2.ONE * stick_radius * 2.0), false, Color(1, 1, 1, alpha * 0.8))
+		c.draw_arc(origin, stick_radius * FULL_AT, 0.0, TAU, 48, Color(tint.r, tint.g, tint.b, alpha * 0.22), 1.5, true)
+		c.draw_circle(k + Vector2(0, 4), KNOB_RADIUS * 0.9, Color(0, 0, 0, 0.3 * alpha))
+		var kr := KNOB_RADIUS * 1.08
+		c.draw_texture_rect(knob_t, Rect2(k - Vector2.ONE * kr, Vector2.ONE * kr * 2.0), false, Color(1, 1, 1, alpha))
+		return
 	c.draw_circle(origin, stick_radius, Color(0.05, 0.03, 0.02, alpha * 0.22))
 	c.draw_arc(origin, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, alpha * 0.5), 3.0, true)
 	## Full-speed ring (60%) so the thumb learns how little travel it needs.

@@ -24,7 +24,7 @@ func _ready() -> void:
 
 func _make_row(row: Dictionary) -> Control:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.14, 0.1, 0.075, 0.9), Color(0.32, 0.24, 0.16), 12, 1, 12))
+	panel.add_theme_stylebox_override("panel", UiTheme.plate("inset", 14.0))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 16)
 	panel.add_child(h)
@@ -85,10 +85,7 @@ func _fmt(key: String, v: float) -> String:
 func _style_toggle(b: Button) -> void:
 	var on := b.button_pressed
 	b.text = "ON" if on else "OFF"
-	var col := UiTheme.TEAL if on else Color(0.45, 0.4, 0.35)
-	b.add_theme_stylebox_override("normal", UiTheme.box(col.darkened(0.5), col, 26, 2))
-	b.add_theme_stylebox_override("pressed", UiTheme.box(col.darkened(0.4), col, 26, 3))
-	b.add_theme_stylebox_override("hover", UiTheme.box(col.darkened(0.45), col.lightened(0.2), 26, 2))
-	b.add_theme_stylebox_override("hover_pressed", UiTheme.box(col.darkened(0.4), col.lightened(0.2), 26, 3))
-	b.add_theme_color_override("font_color", col.lightened(0.3))
-	b.add_theme_color_override("font_pressed_color", col.lightened(0.3))
+	UiTheme.skin_button(b, UiTheme.TEAL if on else UiTheme.LINE, 12.0)
+	var col := Color(0.85, 1.0, 0.92) if on else UiTheme.TEXT_DIM
+	for k in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, col)

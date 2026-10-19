@@ -10,7 +10,9 @@ var _arrow_tex: Texture2D
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_arrow_tex = load("res://assets/sprites/ui/extract_arrow.png")
+	_arrow_tex = UiTheme.tex("extract_arrow")
+	if _arrow_tex == null:
+		_arrow_tex = load("res://assets/sprites/ui/extract_arrow.png")
 
 
 func setup(player: Node2D, pads: Array) -> void:
@@ -57,8 +59,13 @@ func _draw() -> void:
 			col = Color(1.0, 0.4, 0.3, 0.95)
 		var ang: float = dir.angle() + PI * 0.5
 		if _arrow_tex:
-			draw_set_transform(edge, ang, Vector2(1.1, 1.1))
-			draw_texture(_arrow_tex, -_arrow_tex.get_size() * 0.5, col)
+			## Painted brass chevron (64 px art) — tinted only for sealed / last chance.
+			var k := 40.0 / float(_arrow_tex.get_width())
+			draw_set_transform(edge, ang, Vector2(k, k))
+			var tint := Color.WHITE if _extract_open else Color(0.75, 0.7, 0.62, 0.85)
+			if bool(pad.get("last_chance")):
+				tint = Color(1.0, 0.55, 0.45)
+			draw_texture(_arrow_tex, -_arrow_tex.get_size() * 0.5, tint)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
 			var tip: Vector2 = edge + dir * 12.0
@@ -70,7 +77,12 @@ func _draw() -> void:
 			label = "OPEN " + label
 		else:
 			label = "SOON " + label
-		draw_string(ThemeDB.fallback_font, edge + Vector2(-28, 28), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, col)
+		var f: Font = UiTheme.font_button
+		var fs := 14
+		var tw := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var lp := edge + Vector2(-tw * 0.5, 34)
+		draw_string_outline(f, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.06, 0.04, 0.03, 0.9))
+		draw_string(f, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
 func _edge_point(center: Vector2, dir: Vector2, vp: Vector2, margin: float) -> Vector2:

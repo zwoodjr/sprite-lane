@@ -54,10 +54,19 @@ func _set_content(c: Control) -> void:
 func _show_main() -> void:
 	_confirm_abandon = false
 	var center := CenterContainer.new()
+	var plate := PanelContainer.new()
+	plate.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi", 28.0))
+	center.add_child(plate)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
-	v.custom_minimum_size = Vector2(380, 0)
-	center.add_child(v)
+	v.custom_minimum_size = Vector2(420, 0)
+	plate.add_child(v)
+	plate.pivot_offset = Vector2(240, 240)
+	plate.scale = Vector2(0.92, 0.92)
+	plate.modulate.a = 0.0
+	var tw := plate.create_tween().set_parallel(true)
+	tw.tween_property(plate, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(plate, "modulate:a", 1.0, 0.12)
 	v.add_child(UiTheme.title_label("PAUSED", 48))
 	var info := UiTheme.body_label("%s · %s · Threat %d · Scrap %d" % [
 		GameState.get_character().get("display_name", ""),

@@ -33,7 +33,7 @@ func setup(hud: Node) -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.08, 0.06, 0.04, 0.9), UiTheme.AMBER, 16, 3, 16))
+	_panel.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi", 18.0, Color(1, 1, 1, 0.96)))
 	add_child(_panel)
 	var v := VBoxContainer.new()
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -50,7 +50,7 @@ func setup(hud: Node) -> void:
 	_bar.custom_minimum_size = Vector2(440, 6)
 	_bar.show_percentage = false
 	_bar.max_value = 1.0
-	_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.AMBER, Color(0, 0, 0, 0), 3, 0, 0))
+	UiTheme.skin_bar(_bar, UiTheme.AMBER)
 	v.add_child(_bar)
 	var p := get_tree().get_first_node_in_group("player")
 	if p and p.has_signal("dashed"):

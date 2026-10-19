@@ -14,6 +14,16 @@ func build(c: VBoxContainer) -> void:
 
 	var title := UiTheme.title_label("EXTRACTED" if won else "WIPED", 64, Color(0.55, 1.0, 0.6) if won else UiTheme.DANGER)
 	c.add_child(title)
+	title.pivot_offset = Vector2(360, 40)
+	title.scale = Vector2(1.25, 1.25)
+	title.create_tween().tween_property(title, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	## The hero: idling after a clean extract, down in the dust after a wipe.
+	var hid := GameState.selected_character_id
+	var hero := StripAnim.make("res://assets/sprites/characters/%s/%s_%s.png" % [hid, hid, "idle" if won else "death"], 170, 8.0 if won else 10.0)
+	hero.loop = won
+	hero.end_frame = 6
+	hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	c.add_child(hero)
 	var sub := UiTheme.body_label(
 		"Bank the scrap. Spend it in the Hangar. Run levels reset next deploy." if won
 		else "You kept %d%% of your bag. Hangar upgrades stay; run levels are gone." % int(round(float(GameState.get_mode().get("death_keep", 0.1)) * 100.0)),
@@ -108,26 +118,29 @@ func build(c: VBoxContainer) -> void:
 			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			ub.add_child(line)
 
-	c.add_child(spacer(false, 4))
+	c.add_child(spacer(true, 4))
+
+	## Actions sit at the bottom, under the thumb.
+	var upgrade := UiTheme.big_button("UPGRADE  ·  HANGAR", UiTheme.AMBER, 84, 30)
+	upgrade.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	upgrade.pressed.connect(GameState.go_hangar)
+	c.add_child(upgrade)
+	_pulse(upgrade)
 
 	_continue_row = HBoxContainer.new()
-	_continue_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_continue_row.add_theme_constant_override("separation", 12)
 	c.add_child(_continue_row)
 
-	var upgrade := UiTheme.big_button("UPGRADE  ·  Hangar", UiTheme.AMBER, 78, 24)
-	upgrade.custom_minimum_size.x = 300
-	upgrade.pressed.connect(GameState.go_hangar)
-	_continue_row.add_child(upgrade)
-	_pulse(upgrade)
-
-	var again := UiTheme.big_button("RUN AGAIN", UiTheme.TEAL, 78, 20)
-	again.custom_minimum_size.x = 200
+	var again := UiTheme.big_button("RUN AGAIN", UiTheme.TEAL, 68, 22)
+	again.custom_minimum_size.x = 0
+	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again.pressed.connect(GameState.go_match)
 	_continue_row.add_child(again)
 
-	var menu := UiTheme.big_button("MENU", UiTheme.LINE, 78, 18)
-	menu.custom_minimum_size.x = 140
+	var menu := UiTheme.big_button("MENU", UiTheme.LINE, 68, 22)
+	menu.custom_minimum_size.x = 0
+	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu.size_flags_stretch_ratio = 0.6
 	menu.pressed.connect(GameState.go_main_menu)
 	_continue_row.add_child(menu)
 
@@ -168,7 +181,8 @@ func _tile(parent: Control, k: String, v: String, col: Color) -> void:
 
 func _pulse(b: Control) -> void:
 	await get_tree().process_frame
-	b.pivot_offset = b.size * 0.5
+	if not is_instance_valid(b):
+		return
 	var tw := b.create_tween().set_loops()
-	tw.tween_property(b, "scale", Vector2(1.03, 1.03), 0.7).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(b, "scale", Vector2.ONE, 0.7).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(b, "self_modulate", Color(1.12, 1.08, 1.0), 0.7).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(b, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)

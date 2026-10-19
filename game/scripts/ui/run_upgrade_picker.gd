@@ -94,7 +94,7 @@ func _build() -> void:
 	center.add_child(v)
 
 	var head := PanelContainer.new()
-	head.add_theme_stylebox_override("panel", UiTheme.box(Color(0.1, 0.07, 0.05, 0.95), UiTheme.AMBER, 16, 2, 10))
+	head.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi", 14.0))
 	v.add_child(head)
 	var hv := VBoxContainer.new()
 	hv.add_theme_constant_override("separation", 0)
@@ -107,18 +107,23 @@ func _build() -> void:
 	_cards_box = VBoxContainer.new()
 	_cards_box.add_theme_constant_override("separation", 14)
 	v.add_child(_cards_box)
+	var k := 0
 	for u in _choices:
-		_cards_box.add_child(_card(u, w))
+		var cb := _card(u, w)
+		_cards_box.add_child(cb)
+		## Deal the cards in: staggered drop + fade.
+		cb.modulate.a = 0.0
+		var tw := cb.create_tween()
+		tw.tween_interval(0.06 * k)
+		tw.tween_property(cb, "modulate:a", 1.0, 0.16)
+		k += 1
 
 	_reroll_btn = Button.new()
 	_reroll_btn.focus_mode = Control.FOCUS_NONE
 	_reroll_btn.custom_minimum_size = Vector2(w * 0.6, 64)
 	_reroll_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_reroll_btn.add_theme_font_size_override("font_size", 22)
-	_reroll_btn.add_theme_stylebox_override("normal", UiTheme.box(UiTheme.PANEL, UiTheme.AMBER, 14, 3))
-	_reroll_btn.add_theme_stylebox_override("hover", UiTheme.box(UiTheme.PANEL_LIGHT, UiTheme.AMBER, 14, 3))
-	_reroll_btn.add_theme_stylebox_override("pressed", UiTheme.box(Color(0.35, 0.26, 0.14), UiTheme.AMBER, 14, 4))
-	_reroll_btn.add_theme_stylebox_override("disabled", UiTheme.box(Color(0.12, 0.1, 0.08, 0.9), UiTheme.LINE, 14, 2))
+	_reroll_btn.add_theme_font_size_override("font_size", 24)
+	UiTheme.skin_button(_reroll_btn, UiTheme.AMBER, 16.0)
 	_reroll_btn.pressed.connect(reroll)
 	v.add_child(_reroll_btn)
 	_refresh_reroll()
@@ -143,10 +148,12 @@ func _card(u: Dictionary, w: float) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(w, CARD_H)
-	var bg := Color(0.12, 0.09, 0.065, 0.98).lerp(col, 0.1)
-	b.add_theme_stylebox_override("normal", UiTheme.box(bg, col, 18, 4, 0))
-	b.add_theme_stylebox_override("hover", UiTheme.box(bg.lightened(0.08), col, 18, 4, 0))
-	b.add_theme_stylebox_override("pressed", UiTheme.box(Color(0.28, 0.2, 0.12, 0.98), col.lightened(0.3), 18, 6, 0))
+	## Riveted plate tinted by rarity; brighter while pressed.
+	var tint := Color.WHITE.lerp(col, 0.5)
+	b.add_theme_stylebox_override("normal", UiTheme.plate("panel_steel", 0.0, tint))
+	b.add_theme_stylebox_override("hover", UiTheme.plate("panel_steel", 0.0, tint.lightened(0.15)))
+	b.add_theme_stylebox_override("pressed", UiTheme.plate("panel_hi", 0.0, tint.lightened(0.2)))
+	b.add_theme_stylebox_override("hover_pressed", UiTheme.plate("panel_hi", 0.0, tint.lightened(0.2)))
 	b.pressed.connect(func() -> void: _try_pick(u))
 
 	var pad := MarginContainer.new()
@@ -173,7 +180,10 @@ func _card(u: Dictionary, w: float) -> Button:
 	top.add_child(_lbl(path, 15, UiTheme.AMBER if rank > 0 else UiTheme.TEXT_DIM))
 
 	## Name
-	vb.add_child(_lbl(str(u.get("name", "?")), 32, Color(1, 0.96, 0.88)))
+	var nm := _lbl(str(u.get("name", "?")), 34, Color(1, 0.96, 0.88))
+	nm.add_theme_font_override("font", UiTheme.font_display)
+	nm.add_theme_constant_override("outline_size", 7)
+	vb.add_child(nm)
 
 	## Tags
 	var tags := HBoxContainer.new()
@@ -232,9 +242,10 @@ func _lbl(text: String, size: int, color: Color) -> Label:
 
 func _chip(text: String, color: Color) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UiTheme.box(Color(0, 0, 0, 0.35), color, 8, 2, 4))
+	p.add_theme_stylebox_override("panel", UiTheme.plate("inset", 8.0))
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var l := _lbl(text.to_upper(), 13, color)
+	var l := _lbl(text.to_upper(), 14, color)
+	l.add_theme_font_override("font", UiTheme.font_button)
 	p.add_child(l)
 	return p
 
