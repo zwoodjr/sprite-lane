@@ -8,6 +8,12 @@ var _player: Node2D
 var _pads: Array = []
 var _landmarks: Array = []
 var _extract_open: bool = false
+var _ping_t: float = 0.0
+
+
+## New pads placed: rings pulse out from them for a few seconds.
+func ping() -> void:
+	_ping_t = 3.0
 
 
 func setup(player: Node2D, pads: Array, landmarks: Array) -> void:
@@ -31,7 +37,8 @@ func set_extract_open(is_open: bool) -> void:
 	queue_redraw()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_ping_t = maxf(0.0, _ping_t - delta)
 	queue_redraw()
 
 
@@ -59,8 +66,13 @@ func _draw() -> void:
 		var local2 := _world_to_map(pad.global_position - origin, map_r)
 		if local2.length() > map_r:
 			continue
-		var col := Color(1.0, 0.85, 0.3, 1.0) if _extract_open else Color(0.45, 0.42, 0.38, 1.0)
+		var col := Color(1.0, 0.85, 0.3, 1.0) if _extract_open else Color(0.75, 0.65, 0.4, 1.0)
+		if bool(pad.get("last_chance")):
+			col = Color(1.0, 0.35, 0.3, 1.0)
 		draw_rect(Rect2(center + local2 - Vector2(4, 4), Vector2(8, 8)), col, true)
+		if _ping_t > 0.0:
+			var ph := fmod(3.0 - _ping_t, 1.0)
+			draw_arc(center + local2, 4.0 + ph * 16.0, 0.0, TAU, 24, Color(col.r, col.g, col.b, 1.0 - ph), 2.0, true)
 	## Player
 	draw_circle(center, 4.5, Color(0.4, 0.9, 0.45, 1.0))
 	draw_arc(center, 4.5, 0, TAU, 16, Color(1, 1, 1, 0.7), 1.0, true)

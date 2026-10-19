@@ -52,7 +52,9 @@ func _draw() -> void:
 		if dir.length() < 0.01:
 			dir = Vector2.UP
 		var edge: Vector2 = _edge_point(center, dir, vp, margin)
-		var col: Color = Color(1.0, 0.85, 0.35, 0.95) if _extract_open else Color(0.55, 0.5, 0.45, 0.7)
+		var col: Color = Color(1.0, 0.85, 0.35, 0.95) if _extract_open else Color(0.8, 0.7, 0.45, 0.8)
+		if bool(pad.get("last_chance")):
+			col = Color(1.0, 0.4, 0.3, 0.95)
 		var ang: float = dir.angle() + PI * 0.5
 		if _arrow_tex:
 			draw_set_transform(edge, ang, Vector2(1.1, 1.1))
@@ -67,7 +69,7 @@ func _draw() -> void:
 		if _extract_open:
 			label = "OPEN " + label
 		else:
-			label = "SEALED " + label
+			label = "SOON " + label
 		draw_string(ThemeDB.fallback_font, edge + Vector2(-28, 28), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, col)
 
 

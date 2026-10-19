@@ -71,8 +71,8 @@ const ROTATING_HINTS := [
 	"Red ring on the ground = an attack is coming. Move or dash!",
 	"Your hero attacks the closest enemy in range — just steer.",
 	"Crates sometimes drop timed buffs. Shoot them open.",
-	"Skipping an extract window raises Threat: tougher enemies, bigger payout.",
-	"Standing on an open pad extracts you automatically.",
+	"Loot climbs ×0.1 every 30s you stay — and so does Threat.",
+	"Hold an open pad for 3s to extract. Getting hit resets it.",
 ]
 
 func _ready() -> void:
@@ -252,10 +252,10 @@ func _build() -> void:
 	tv.add_theme_constant_override("separation", 0)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
-	_threat_label = _label("THREAT 0", 18, UiTheme.TEXT)
+	_threat_label = _label("LOOT ×1.0", 20, UiTheme.AMBER)
 	_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_label)
-	_threat_sub = _label("payout ×1.00", 11, UiTheme.TEXT_DIM)
+	_threat_sub = _label("THREAT 0", 12, UiTheme.TEXT_DIM)
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_sub)
 	_counter_label = _label("", 13, UiTheme.AMBER)
@@ -386,9 +386,20 @@ func _process(delta: float) -> void:
 	if _player and is_instance_valid(_player) and _player.has_method("get_active_buffs"):
 		_refresh_buffs(_player.call("get_active_buffs"))
 
-func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, player: Node) -> void:
+func set_schedule(phases: Array) -> void:
 	if _extract_bar:
-		_extract_bar.call("set_state", phase, time_left)
+		_extract_bar.call("set_schedule", phases)
+
+func set_schedule_clock(elapsed: float) -> void:
+	if _extract_bar:
+		_extract_bar.call("set_clock", elapsed)
+
+## New pads were placed (10 s before a window): pulse the minimap.
+func ping_pads() -> void:
+	if _minimap and _minimap.has_method("ping"):
+		_minimap.call("ping")
+
+func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, player: Node) -> void:
 	_phase_label.text = str(phase.get("label", "")).to_upper()
 	_timer_label.text = _fmt_time(time_left)
 	var dur := float(phase.get("duration", 1.0))
@@ -397,24 +408,23 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 	var is_last := bool(phase.get("is_last", false))
 	var urgent := time_left <= 10.0
 	if is_open:
-		_phase_label.add_theme_color_override("font_color", Color(0.55, 1.0, 0.6))
-		_phase_bar.add_theme_stylebox_override("fill", UiTheme.box(Color(0.45, 0.95, 0.55), Color(0, 0, 0, 0), 3, 0, 0))
+		var oc := UiTheme.DANGER if is_last else Color(0.55, 1.0, 0.6)
+		_phase_label.add_theme_color_override("font_color", oc)
+		_phase_bar.add_theme_stylebox_override("fill", UiTheme.box(oc, Color(0, 0, 0, 0), 3, 0, 0))
 		if is_last:
-			_phase_hint.text = "LAST CHANCE — reach a gold pad or you're wiped"
+			_phase_hint.text = "LAST CHANCE — reach a red pad or the Dust storm takes you"
 		elif urgent:
-			_phase_hint.text = "Closing! Leave now, or stay for Threat +1 & bigger payout"
+			_phase_hint.text = "Closing! Leave now at ×%.1f, or stay for more loot" % loot
 		else:
-			_phase_hint.text = "Extract OPEN — stand on a gold pad to leave"
+			_phase_hint.text = "Extract OPEN — hold a pad for 3s to leave at ×%.1f" % loot
 	else:
 		_phase_label.add_theme_color_override("font_color", UiTheme.AMBER)
 		_phase_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.AMBER, Color(0, 0, 0, 0), 3, 0, 0))
 		var pid := str(phase.get("id", ""))
 		if pid == "lockout":
-			_phase_hint.text = "Survive & loot — extracts open when the timer hits 0"
-		elif pid == "final_seal":
-			_phase_hint.text = "Final seal — head toward a pad for the Last Extract"
+			_phase_hint.text = "Survive & loot — the first extract opens at 0:00"
 		else:
-			_phase_hint.text = "Sealed — next window opens when the timer hits 0"
+			_phase_hint.text = "Sealed — loot climbs while you stay. Next window at 0:00"
 	_timer_label.add_theme_color_override("font_color", UiTheme.DANGER if urgent and (is_open or is_last) else UiTheme.TEXT)
 	if urgent:
 		var p := 1.0 + 0.06 * absf(sin(_t * 6.0))
@@ -422,16 +432,15 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 		_timer_label.scale = Vector2(p, p)
 	else:
 		_timer_label.scale = Vector2.ONE
-	## Threat
-	var tlt := ModeDefs.tl_table(tl)
-	_threat_label.text = "THREAT %d" % tl
-	var tl_col: Color = [UiTheme.TEXT, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
+	## Loot multiplier (big) + Threat (rises with it)
+	_threat_label.text = "LOOT ×%.1f" % loot
+	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
 	_threat_label.add_theme_color_override("font_color", tl_col)
-	_threat_sub.text = "enemies +%d%% · payout ×%.2f" % [int((float(tlt["hp"]) - 1.0) * 100.0), float(tlt["payout"])]
+	_threat_sub.text = "THREAT %d · enemies +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
 	if tl != _last_tl:
 		_last_tl = tl
 		_pulse(_threat_panel)
-	_counter_label.text = "Scrap %d · Kills %d · Stay ×%.2f" % [GameState.scrap_found, GameState.kills, stay]
+	_counter_label.text = "Bag %d · Kills %d" % [GameState.bag_value(), GameState.kills]
 	var rp: Dictionary = GameState.run_bar_state()
 	_run_level_label.text = "XP · LV %d%s" % [
 		int(rp["level"]),

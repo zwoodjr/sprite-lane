@@ -16,7 +16,7 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(title)
 	var sub := UiTheme.body_label(
 		"Bank the scrap. Spend it in the Hangar. Run levels reset next deploy." if won
-		else "Permanent scrap & Hangar stay. Bag loot and run levels are gone.",
+		else "You kept %d%% of your bag. Hangar upgrades stay; run levels are gone." % int(round(float(GameState.get_mode().get("death_keep", 0.1)) * 100.0)),
 		17
 	)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -29,10 +29,11 @@ func build(c: VBoxContainer) -> void:
 	if won:
 		_tile(row, "SCRAP BANKED", "+%d" % GameState.result_scrap_banked, UiTheme.AMBER)
 	else:
-		_tile(row, "BAG SCRAP LOST", str(GameState.result_scrap_lost), UiTheme.RUST)
+		_tile(row, "KEPT", "+%d" % GameState.result_scrap_banked, UiTheme.AMBER)
+		_tile(row, "LOST", str(GameState.result_scrap_lost), UiTheme.RUST)
 	_tile(row, "RUN LEVEL", "Lv %d" % GameState.result_run_level_reached, UiTheme.TEAL)
 	_tile(row, "KILLS", str(GameState.kills), UiTheme.TEXT)
-	_tile(row, "THREAT", str(GameState.threat_level), UiTheme.RUST)
+	_tile(row, "LOOT", "×%.1f" % GameState.loot_mult, UiTheme.AMBER)
 
 	## Scrap total readout
 	var scrap_card := card(UiTheme.AMBER, Color(0.12, 0.09, 0.065, 0.92))

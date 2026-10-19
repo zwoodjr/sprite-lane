@@ -38,6 +38,7 @@ var _stand := false
 var _fps_min := 9999
 var _fps_sum := 0.0
 var _fps_n := 0
+var _leave_at := 1
 
 
 func _ready() -> void:
@@ -55,9 +56,15 @@ func _ready() -> void:
 	if a.size() > 5: _horde = int(a[5])
 	if a.size() > 6 and a[6] != "": _kinds = Array(a[6].split(","))
 	if a.size() > 7: _stand = a[7] == "stand"
+	## arg 8: fixed run seed · arg 9: leave at window N (stay-or-go, 1 = first).
+	var fixed_seed := int(a[8]) if a.size() > 8 else 0
+	if a.size() > 9: _leave_at = int(a[9])
 	_headless = DisplayServer.get_name() == "headless"
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()
+	if fixed_seed != 0:
+		GameState.run_seed = fixed_seed
+		seed(fixed_seed)
 	_m = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
 	get_tree().root.add_child.call_deferred(_m)
 	await get_tree().process_frame
@@ -163,12 +170,14 @@ func _drive(delta: float) -> void:
 	var rng: float = _p.call("get_trigger_range")
 	var melee: bool = _p.call("is_melee")
 	var low_hp: bool = float(_p.get("hp")) < float(_p.get("max_hp")) * 0.35
-	## Extract when open
-	if _m.call("is_extract_open"):
+	## Head for pads once they're pinged on the window we plan to leave on;
+	## extract when open.
+	var going: bool = int(GameState.extract_windows_seen) >= _leave_at - 1 and (_m.call("get_pads") as Array).size() > 0
+	if going:
 		var best: Node2D = null
 		var bd := INF
 		for pad in _m.call("get_pads"):
-			if is_instance_valid(pad) and pad.get("open"):
+			if is_instance_valid(pad):
 				var d: float = pad.global_position.distance_to(_p.global_position)
 				if d < bd: bd = d; best = pad
 		if best:
@@ -250,7 +259,9 @@ func _top_up_horde(delta: float) -> void:
 func _summary() -> void:
 	if _fps_n > 0:
 		print("FPS avg=%.0f min=%d horde=%d" % [_fps_sum / _fps_n, _fps_min, _horde])
-	print("SUMMARY char=%s pet=%s mode=%s t=%.0f hp_end=%.0f min_hp=%.0f kills=%d scrap=%d runlv=%d hits=%d abil=%d pet_far_s=%.0f reload_s=%.0f stuck_s=%.0f" % [
-		GameState.selected_character_id, GameState.selected_pet_id, GameState.selected_mode_id, _t,
-		_p.hp if is_instance_valid(_p) else -1.0, _min_hp, GameState.kills, GameState.get("scrap_found"), GameState.run_level,
-		_dmg_events, _abil_uses, _pet_far, _reload_s, _stuck_s])
+	var hp_end: float = float(_p.get("hp")) if is_instance_valid(_p) else -1.0
+	print("SUMMARY char=%s pet=%s mode=%s seed=%d t=%.0f result=%s payout=%d loot=%.1f hp_end=%.0f min_hp=%.0f kills=%d bag=%d runlv=%d hits=%d abil=%d reload_s=%.0f" % [
+		GameState.selected_character_id, GameState.selected_pet_id, GameState.selected_mode_id, GameState.run_seed, _t,
+		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
+		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
+		GameState.run_level, _dmg_events, _abil_uses, _reload_s])

@@ -16,7 +16,6 @@ var _phase_time_left: float = 0.0
 var _extract_open: bool = false
 var _current_window_was_open: bool = false
 var _spawn_accum: float = 0.0
-var _stay_accum: float = 0.0
 var _ended: bool = false
 var _mode: Dictionary = {}
 var _ping_done_for_window: bool = false
@@ -24,6 +23,12 @@ var _pads: Array = []
 var _match_time: float = 0.0
 var _radio_ping_at: float = -1.0
 var _radio_ping_done: bool = false
+## Stay-or-go bookkeeping
+var _elapsed_in_phases: float = 0.0 ## run clock along the phase schedule
+var _window_index: int = 0          ## how many windows have opened
+var _pads_pinged_for: int = -1      ## phase index whose pads are already placed
+var _storm_left: float = -1.0       ## >=0 while the Dust storm rolls in
+var _storm_overlay: ColorRect
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -37,14 +42,22 @@ func _ready() -> void:
 
 	## Endless wasteland chunks
 	wasteland.setup(GameState.run_seed, player)
-	_roll_extracts()
+	_clear_pads()
 
 	player.died.connect(_on_player_died)
+	## Extract channel (3 s) resets whenever the hero takes a hit.
+	if player.has_signal("hurt"):
+		player.hurt.connect(func(_a: float) -> void:
+			for pad in _pads:
+				if is_instance_valid(pad) and pad.has_method("reset_channel"):
+					pad.call("reset_channel")
+		)
 	player.health_changed.connect(hud.on_health_changed)
 	if player.has_signal("buffs_changed"):
 		player.buffs_changed.connect(hud.on_buffs_changed)
 	hud.setup(self)
 	hud.setup_nav(player, _pads, wasteland.get_landmarks())
+	hud.set_schedule(_phases)
 	## In-run level-up picker (pauses on level).
 	var picker := CanvasLayer.new()
 	picker.set_script(load("res://scripts/ui/run_upgrade_picker.gd"))
@@ -83,21 +96,64 @@ func _spawn_pet() -> void:
 	if ability != "":
 		hud.show_toast("%s ready — %s" % [pname, ability], UiTheme.AMBER)
 
-func _roll_extracts() -> void:
+func _clear_pads() -> void:
 	for c in pads_root.get_children():
 		c.queue_free()
+	## Keep the same Array object — HUD minimap / arrows hold a reference.
 	_pads.clear()
-	var rolled := ExtractScatter.roll_positions(GameState.run_seed, wasteland.get_landmarks(), 3)
-	for i in range(rolled.size()):
-		var info: Dictionary = rolled[i]
+
+## Two fresh pads per window, in new spots 500–900 px from the hero. Placed
+## (sealed + pinged on the minimap) PING_LEAD seconds before the window opens.
+func _place_window_pads(phase_index: int) -> void:
+	_clear_pads()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = GameState.run_seed * 7919 + phase_index * 104729 + 3
+	var is_last := bool(_phases[phase_index].get("is_last", false))
+	var used: Array[Vector2] = []
+	var base_ang := rng.randf() * TAU
+	for i in range(2):
+		var p := Vector2.ZERO
+		for attempt in range(8):
+			var ang := base_ang + PI * i + rng.randf_range(-0.9, 0.9)
+			p = player.global_position + Vector2(cos(ang), sin(ang)) * rng.randf_range(500.0, 900.0)
+			var ok := true
+			for u in used:
+				if u.distance_to(p) < 450.0:
+					ok = false
+			if ok:
+				break
+		used.append(p)
 		var pad: Area2D = ExtractPadScene.instantiate()
 		pads_root.add_child(pad)
-		pad.global_position = info["position"]
-		pad.pad_name = str(info["name"])
+		pad.global_position = p
+		pad.pad_name = ("Last Chance %d" if is_last else "Pad %d") % (i + 1)
+		if pad.has_method("set_last_chance"):
+			pad.call("set_last_chance", is_last)
 		if pad.has_signal("extract_requested"):
 			pad.extract_requested.connect(_on_extract_requested)
 		_pads.append(pad)
-	GameState.extract_pad_info = rolled
+	_pads_pinged_for = phase_index
+	GameState.extract_pad_info = []
+	for pad in _pads:
+		GameState.extract_pad_info.append({"name": pad.pad_name, "position": pad.global_position})
+	if hud.has_method("ping_pads"):
+		hud.call("ping_pads")
+
+## Which upcoming phase (if any) opens within the ping lead time.
+func _maybe_ping_next_window() -> void:
+	var nxt := _phase_index + 1
+	if _extract_open or nxt >= _phases.size() or _pads_pinged_for == nxt:
+		return
+	if not bool(_phases[nxt].get("extract_open", false)):
+		return
+	if _phase_time_left > ModeDefs.PING_LEAD * GameState.timer_scale():
+		return
+	_place_window_pads(nxt)
+	var last := bool(_phases[nxt].get("is_last", false))
+	hud.show_toast(
+		("LAST CHANCE opens in %ds — red pads marked" if last else "Extract opens in %ds — 2 pads marked on the map") % int(ceil(_phase_time_left / GameState.timer_scale())),
+		UiTheme.DANGER if last else Color(0.55, 1.0, 0.6))
+	Juice.sfx("ui_tap")
 
 func _process(delta: float) -> void:
 	if _ended:
@@ -106,18 +162,29 @@ func _process(delta: float) -> void:
 		## Banked elsewhere (e.g. Abandon from the pause menu) — stop the sim here.
 		_ended = true
 		return
-	_phase_time_left -= delta
 	_match_time += delta
-	_maybe_radio_stub()
 	_update_spawns(delta)
-	_update_stay_bonus(delta)
+	if _storm_left >= 0.0:
+		_tick_storm(delta)
+		return
+	_phase_time_left -= delta
+	_elapsed_in_phases += delta
+	_maybe_radio_stub()
+	## Loot multiplier climbs with run time; Threat follows it.
+	var before_tl := GameState.threat_level
+	GameState.set_loot_mult(ModeDefs.loot_mult_at(_mode, _match_time / GameState.timer_scale()))
+	if GameState.threat_level > before_tl:
+		Juice.sfx("threat_up")
+		hud.show_toast("Loot ×%.1f — THREAT %d: the dust gets meaner" % [GameState.loot_mult, GameState.threat_level], UiTheme.RUST)
+	_maybe_ping_next_window()
 	hud.update_match(
 		_phases[_phase_index],
 		_phase_time_left,
 		GameState.threat_level,
-		GameState.stay_bonus,
+		GameState.loot_mult,
 		player
 	)
+	hud.set_schedule_clock(_elapsed_in_phases)
 	hud.set_extract_open(_extract_open)
 	if _phase_time_left <= 0.0:
 		_advance_phase()
@@ -144,17 +211,22 @@ func _start_phase(index: int) -> void:
 	_current_window_was_open = _extract_open
 	_ping_done_for_window = false
 	GameState.last_phase_label = str(phase["label"])
+	if _extract_open and _pads_pinged_for != index:
+		_place_window_pads(index)
+	if not _extract_open:
+		_clear_pads()
 	_set_pads_open(_extract_open)
 	hud.set_extract_open(_extract_open)
 	if _extract_open:
+		_window_index += 1
 		GameState.extract_windows_seen += 1
 		_spawn_ambush()
 		Juice.sfx("extract_open")
 		Juice.haptic(40)
 		if bool(phase.get("is_last", false)):
-			hud.show_banner("LAST EXTRACT", "Get to a gold pad or lose your gear", UiTheme.DANGER)
+			hud.show_banner("LAST CHANCE", "Reach a red pad before the Dust storm hits", UiTheme.DANGER)
 		else:
-			hud.show_banner("EXTRACT OPEN", "Stand on a gold pad to leave — or stay for more", Color(0.55, 1.0, 0.6))
+			hud.show_banner("EXTRACT OPEN", "Hold a pad 3s to leave at ×%.1f — or stay for more" % GameState.loot_mult, Color(0.55, 1.0, 0.6))
 		if GameState.selected_character_id == CharacterDefs.ROOK_ID and not _ping_done_for_window:
 			_ping_done_for_window = true
 			var sg := GameState.add_scrap(2)
@@ -163,23 +235,48 @@ func _start_phase(index: int) -> void:
 			hud.tutorial.call("event", "extract_open")
 	elif index > 0:
 		Juice.sfx("seal")
-		hud.show_banner("SEALED", str(phase["label"]), UiTheme.AMBER)
+		hud.show_banner("SEALED", "Next window in %ds" % int(ceil(_phase_time_left / GameState.timer_scale())), UiTheme.AMBER)
 
 func _advance_phase() -> void:
-	if _current_window_was_open and not bool(_phases[_phase_index].get("is_last", false)):
+	var was_last := bool(_phases[_phase_index].get("is_last", false))
+	if _current_window_was_open and not was_last:
 		GameState.on_window_skipped()
-		Juice.sfx("threat_up")
-		Juice.shake(0.2)
-		var tl := ModeDefs.tl_table(GameState.threat_level)
-		hud.show_toast("Window skipped → THREAT %d: tougher enemies, payout ×%.2f" % [
-			GameState.threat_level, float(tl["payout"])], UiTheme.RUST)
-	if bool(_phases[_phase_index].get("is_last", false)):
-		_finish_wipe("Last Extract closed. You didn't make it out.")
-		return
-	if _phase_index + 1 >= _phases.size():
-		_finish_wipe("Match timer ended.")
+		Juice.shake(0.15)
+		hud.show_toast("You stayed — loot ×%.1f, Threat %d" % [GameState.loot_mult, GameState.threat_level], UiTheme.AMBER)
+	if was_last or _phase_index + 1 >= _phases.size():
+		_start_dust_storm()
 		return
 	_start_phase(_phase_index + 1)
+
+## Last chance closed: the Dust storm rolls in and ends the run as a death.
+func _start_dust_storm() -> void:
+	_extract_open = false
+	_clear_pads()
+	hud.set_extract_open(false)
+	_storm_left = ModeDefs.STORM_SECONDS
+	hud.show_banner("DUST STORM", "The last window closed", Color(0.85, 0.6, 0.35))
+	Juice.sfx("threat_up")
+	Juice.shake(0.5)
+	_storm_overlay = ColorRect.new()
+	_storm_overlay.color = Color(0.55, 0.38, 0.2, 0.0)
+	_storm_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_storm_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var layer := CanvasLayer.new()
+	layer.layer = 5
+	add_child(layer)
+	layer.add_child(_storm_overlay)
+
+func _tick_storm(delta: float) -> void:
+	_storm_left -= delta
+	if _storm_overlay:
+		_storm_overlay.color.a = clampf(1.0 - _storm_left / ModeDefs.STORM_SECONDS, 0.0, 0.92)
+	Juice.shake(0.05)
+	if _storm_left <= 0.0:
+		_storm_left = -1.0
+		_finish_wipe("The Dust storm swallowed you.")
+
+func is_storming() -> bool:
+	return _storm_left >= 0.0
 
 func _set_pads_open(is_open: bool) -> void:
 	for pad in _pads:
@@ -296,17 +393,6 @@ func _spawn_ambush() -> void:
 	for i in range(3 + GameState.threat_level):
 		_spawn_enemy()
 
-func _update_stay_bonus(delta: float) -> void:
-	if not _extract_open:
-		return
-	_stay_accum += delta
-	if _stay_accum >= 5.0:
-		_stay_accum = 0.0
-		var loot_w := 1.0 + float(GameState.get_character().get("loot_weight_bonus", 0.0))
-		GameState.stay_bonus += 0.05 * loot_w
-		GameState.add_run_xp(int(2 * loot_w))
-		GameState.add_scrap(1)
-
 func _on_extract_requested() -> void:
 	if _ended or not _extract_open:
 		return
@@ -314,7 +400,7 @@ func _on_extract_requested() -> void:
 	GameState.on_extract_success()
 	Juice.sfx("extract_win")
 	Juice.haptic(60)
-	hud.show_banner("EXTRACTED", "Payout %d scrap" % GameState.payout_this_run, Color(0.55, 1.0, 0.6))
+	hud.show_banner("EXTRACTED", "Payout %d scrap (×%.1f)" % [GameState.payout_this_run, GameState.loot_mult], Color(0.55, 1.0, 0.6))
 	if is_instance_valid(player):
 		Juice.burst(player.global_position, Color(1, 0.85, 0.4), 40, 260.0, 0.9, 1.4)
 		var tw := player.create_tween()

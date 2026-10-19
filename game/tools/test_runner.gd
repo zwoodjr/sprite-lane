@@ -45,7 +45,7 @@ func _run() -> void:
 	print("MENUS_OK")
 	## 3. Match with a bot, per character and mode
 	var chars: Array = ["ash_rook", "sister_cinder"]
-	var modes: Array = ["easy", "medium"]
+	var modes: Array = ["haze", "drift"]
 	for i in range(2):
 		GameState.selected_character_id = chars[i]
 		GameState.selected_mode_id = modes[i]
@@ -60,7 +60,7 @@ func _run() -> void:
 		var player: Node2D = match_scene.get_node("World/Player")
 		var hud: Node = match_scene.get_node("HUD")
 		var paused_once := false
-		while frames < 3600 and is_instance_valid(match_scene) and not bool(match_scene.get("_ended")):
+		while frames < 5000 and is_instance_valid(match_scene) and not bool(match_scene.get("_ended")):
 			var dt := get_process_delta_time()
 			t += dt
 			frames += 1

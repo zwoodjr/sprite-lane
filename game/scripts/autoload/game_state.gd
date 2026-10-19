@@ -61,7 +61,8 @@ var pet: Dictionary = {}
 var threat_level: int = 0
 var windows_skipped: int = 0
 var extract_windows_seen: int = 0
-var stay_bonus: float = 1.0
+## Stay-or-go loot multiplier (×1.0 +0.1 / 30 s, capped per tier). Pays on extract.
+var loot_mult: float = 1.0
 var scrap_found: int = 0
 var kills: int = 0
 var extracted: bool = false
@@ -171,7 +172,8 @@ func load_profile() -> void:
 	total_runs = int(d.get("total_runs", 0))
 	_sync_account_level()
 	var mode_id := str(d.get("selected_mode_id", selected_mode_id))
-	if mode_id in [ModeDefs.EASY_ID, ModeDefs.MEDIUM_ID]:
+	mode_id = ModeDefs.canonical_id(mode_id)
+	if ModeDefs.is_exposed(mode_id):
 		selected_mode_id = mode_id
 	var char_id := str(d.get("selected_character_id", selected_character_id))
 	if char_id == "rook_vex":
@@ -299,7 +301,7 @@ func begin_run() -> void:
 	threat_level = 0
 	windows_skipped = 0
 	extract_windows_seen = 0
-	stay_bonus = 1.0
+	loot_mult = 1.0
 	scrap_found = 0
 	kills = 0
 	extracted = false
@@ -339,7 +341,15 @@ func _clear_result_meta() -> void:
 
 func on_window_skipped() -> void:
 	windows_skipped += 1
-	threat_level += 1
+
+## Called every frame by the match: multiplier from run time, Threat follows it.
+func set_loot_mult(mult: float) -> void:
+	loot_mult = mult
+	threat_level = ModeDefs.threat_for_mult(mult)
+
+## What the bag is worth right now (before the multiplier).
+func bag_value() -> int:
+	return scrap_found * 2 + kills * 5
 
 ## Add bag scrap with meta magnet applied.
 func add_scrap(amount: int) -> int:
@@ -415,10 +425,10 @@ func on_extract_success() -> void:
 	wiped = false
 	_clear_result_meta()
 	var mode := get_mode()
-	var tl := ModeDefs.tl_table(threat_level)
-	var base := 100 + scrap_found * 2 + kills * 5
+	## Extract pays the full bag (plus a 100 scrap stipend) × loot multiplier.
+	var base := 100 + bag_value()
 	payout_this_run = int(
-		base * stay_bonus * float(tl["payout"]) * float(mode["payout_mult"]) * extract_payout_mult()
+		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult()
 	)
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
@@ -429,7 +439,7 @@ func on_extract_success() -> void:
 	result_account_xp_before = account_xp
 	result_account_level_before = account_level
 	account_xp_this_run = Progression.award_extract_account_xp(
-		kills, float(tl["payout"]), float(mode["payout_mult"])
+		kills, loot_mult, float(mode["payout_mult"])
 	)
 	account_xp += account_xp_this_run
 	var new_lv := Progression.account_level_from_xp(account_xp)
@@ -439,8 +449,8 @@ func on_extract_success() -> void:
 	successful_extracts += 1
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d (Hangar gates)" % account_level)
-	result_summary = "Extracted. +%d scrap banked · run Lv %d · TL %d" % [
-		payout_this_run, run_level, threat_level,
+	result_summary = "Extracted. +%d scrap banked (×%.1f loot) · run Lv %d · Threat %d" % [
+		payout_this_run, loot_mult, run_level, threat_level,
 	]
 	best_payout = maxi(best_payout, payout_this_run)
 	total_runs += 1
@@ -457,8 +467,11 @@ func on_wipe() -> void:
 	_clear_result_meta()
 	var mode := get_mode()
 	result_scrap_before = account_scrap
-	result_scrap_banked = 0
-	result_scrap_lost = scrap_found
+	## Death keeps a slice of the carried bag (Haze 10%, Drift 15%), no multiplier.
+	var keep := int(round(float(bag_value()) * float(mode.get("death_keep", 0.1))))
+	account_scrap += keep
+	result_scrap_banked = keep
+	result_scrap_lost = maxi(0, bag_value() - keep)
 	result_account_xp_before = account_xp
 	result_account_level_before = account_level
 	account_xp_this_run = Progression.award_wipe_account_xp(kills, float(mode["payout_mult"]))
@@ -467,7 +480,7 @@ func on_wipe() -> void:
 	result_levels_gained = maxi(0, new_lv - result_account_level_before)
 	_sync_account_level()
 	result_run_level_reached = run_level
-	payout_this_run = 0
+	payout_this_run = keep
 	result_lost_keys = PackedStringArray()
 	result_kept_keys = PackedStringArray()
 	for key in ["weapon", "armor", "pet"]:
@@ -477,8 +490,9 @@ func on_wipe() -> void:
 			result_lost_keys.append(key)
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d" % account_level)
-	result_summary = "Wiped. Kept scrap %d + Hangar. Lost bag scrap %d. Lost gear: %s" % [
-		account_scrap,
+	result_summary = "Wiped. Kept %d%% of the bag (+%d scrap). Lost %d. Lost gear: %s" % [
+		int(round(float(mode.get("death_keep", 0.1)) * 100.0)),
+		keep,
 		result_scrap_lost,
 		", ".join(result_lost_keys) if result_lost_keys.size() else "(nothing)",
 	]

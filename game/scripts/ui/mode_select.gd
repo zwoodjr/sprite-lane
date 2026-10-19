@@ -19,8 +19,13 @@ func build(c: VBoxContainer) -> void:
 	var lv := VBoxContainer.new()
 	lv.alignment = BoxContainer.ALIGNMENT_CENTER
 	locked.add_child(lv)
-	lv.add_child(UiTheme.title_label("HARD+", 28, Color(0.5, 0.42, 0.35)))
-	var ll := UiTheme.body_label("Coming soon.\nTougher enemies, fewer windows, bigger payouts.", 14, Color(0.55, 0.48, 0.4))
+	var tiers := ModeDefs.all_tiers()
+	var locked_names: Array[String] = []
+	for t in tiers:
+		if int(t["tier"]) > ModeDefs.EXPOSED_TIERS:
+			locked_names.append(str(t["display_name"]))
+	lv.add_child(UiTheme.title_label("%s+" % locked_names[0].to_upper() if locked_names.size() > 0 else "MORE", 28, Color(0.5, 0.42, 0.35)))
+	var ll := UiTheme.body_label("%d more tiers coming.\nShorter windows, meaner dust, bigger multipliers." % locked_names.size(), 14, Color(0.55, 0.48, 0.4))
 	ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lv.add_child(ll)
 	row.add_child(locked)
@@ -100,10 +105,10 @@ func _mode_card(mode: Dictionary, portrait: bool = false) -> Control:
 		if bool(p["extract_open"]):
 			windows += 1
 	var lines := [
-		"%d chances to extract" % windows,
+		"First extract at %d:%02d, then every %ds (open %ds)" % [int(mode["first_window"]) / 60, int(mode["first_window"]) % 60, int(mode["window_every"]), int(mode["window_open"])],
+		"Loot ×1.0 → ×%.1f the longer you stay · %d windows + a last chance" % [float(mode["loot_cap"]), windows - 1],
 		"Enemies at %d%% strength" % int(float(mode["enemy_hp"]) * 100.0),
-		"Payout ×%.2f" % float(mode["payout_mult"]),
-		"Wipe keeps banked scrap + Hangar · bag loot is at risk",
+		"Death keeps %d%% of your bag" % int(round(float(mode["death_keep"]) * 100.0)),
 	]
 	for line in lines:
 		var l := UiTheme.body_label("• " + line, 16)
