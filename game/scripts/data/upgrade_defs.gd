@@ -50,6 +50,15 @@ const AMMO_CRATE_SHARE := 0.3
 
 ## Supply Drop: the first crate comes early so the pick pays off right away.
 const SUPPLY_FIRST_DROP := 8.0
+const CRATE_PICK_R := 30.0
+const CRATE_LIFE := 30.0
+## Spore mine arming time / trigger distance; orbit blade hit cooldown / size.
+const MINE_ARM_TIME := 0.45
+const MINE_TRIGGER_R := 34.0
+const BLADE_HIT_CD := 0.45
+const BLADE_HIT_R := 14.0
+## Burn It Down can't re-trigger faster than this (lifesteal / puddle ticks).
+const BURN_IT_DOWN_CD := 1.5
 
 ## Status effects applied to enemies (shared by upgrades, ammo and abilities).
 const POISON_TICK := 0.5

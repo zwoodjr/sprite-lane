@@ -7,8 +7,6 @@ const DROP_TEX := "res://assets/sprites/pickups/supply_crate_drop.png"
 const CRATE_TEX := "res://assets/sprites/pickups/supply_crate.png"
 const FALL_TIME := 1.4
 const FALL_HEIGHT := 260.0
-const PICK_R := 30.0
-const LIFE := 30.0
 
 var _age: float = 0.0
 var _sprite: Sprite2D
@@ -49,12 +47,12 @@ func _physics_process(delta: float) -> void:
 		if k >= 1.0:
 			_land()
 		return
-	if _age > LIFE:
+	if _age > UpgradeDefs.CRATE_LIFE:
 		queue_free()
 		return
 	_sprite.position.y = -2.0 + sin(_age * 4.0) * 1.5
 	var p := get_tree().get_first_node_in_group("player") as Node2D
-	if p and p.global_position.distance_to(global_position) <= PICK_R + 14.0:
+	if p and p.global_position.distance_to(global_position) <= UpgradeDefs.CRATE_PICK_R + 14.0:
 		p.call("apply_powerup", RunFx.ammo_def(RunFx.random_ammo_id()))
 		queue_free()
 

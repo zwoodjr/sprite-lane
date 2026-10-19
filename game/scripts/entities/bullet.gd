@@ -109,7 +109,7 @@ func _ready() -> void:
 			else:
 				sprite.modulate = col * 1.5
 			sprite.scale = look.get("scale", Vector2.ONE)
-			if style != "rocket":
+			if style != "rocket" and style != "vial":
 				sprite.material = glow
 		else:
 			## Slightly larger enemy shots so they read against dust at survivor FOV.

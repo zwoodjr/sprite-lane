@@ -4,8 +4,6 @@ extends Node2D
 ## (each enemy at most once per HIT_CD per blade set).
 
 const TEX := "res://assets/sprites/fx/orbit_blade.png"
-const HIT_CD := 0.45
-const BLADE_R := 14.0
 const WORLD_SIZE := 22.0
 
 var player: Node2D
@@ -51,9 +49,9 @@ func _physics_process(delta: float) -> void:
 		b.rotation += delta * 14.0
 		if not _frames.is_empty():
 			b.texture = _frames[int(_t * 12.0) % _frames.size()]
-		for e in RunFx.enemies_in(get_tree(), global_position + p, BLADE_R):
+		for e in RunFx.enemies_in(get_tree(), global_position + p, UpgradeDefs.BLADE_HIT_R):
 			var id := (e as Node).get_instance_id()
-			if _t - float(_last_hit.get(id, -10.0)) < HIT_CD:
+			if _t - float(_last_hit.get(id, -10.0)) < UpgradeDefs.BLADE_HIT_CD:
 				continue
 			_last_hit[id] = _t
 			player.call("hit_enemy", e, dmg, ((e as Node2D).global_position - player.global_position).normalized(), 140.0, false, "blade")

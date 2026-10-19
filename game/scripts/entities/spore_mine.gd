@@ -5,8 +5,6 @@ extends Node2D
 ## poison and special ammo ride along).
 
 const TEX := "res://assets/sprites/fx/spore_mine.png"
-const ARM_TIME := 0.45
-const TRIGGER_R := 34.0
 const WORLD_SIZE := 22.0
 
 var player: Node2D
@@ -37,13 +35,13 @@ func _physics_process(delta: float) -> void:
 	if _age >= _life or player == null or not is_instance_valid(player):
 		queue_free()
 		return
-	if _age < ARM_TIME:
+	if _age < UpgradeDefs.MINE_ARM_TIME:
 		return
 	_sprite.modulate.a = 1.0
 	## Blink faster as it ages.
 	if not _frames.is_empty():
 		_sprite.texture = _frames[int(_age * (2.0 + _age * 0.3)) % 2]
-	if RunFx.nearest_enemy(get_tree(), global_position, TRIGGER_R + 14.0) != null:
+	if RunFx.nearest_enemy(get_tree(), global_position, UpgradeDefs.MINE_TRIGGER_R + 14.0) != null:
 		_burst()
 
 

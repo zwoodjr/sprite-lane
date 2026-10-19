@@ -16,8 +16,6 @@ const DroneScript := preload("res://scripts/entities/helm_drone.gd")
 const OrbitScript := preload("res://scripts/entities/orbit_blades.gd")
 const TONIC_TEX := "res://assets/sprites/fx/fx_iron_tonic.png"
 const OVERLOAD_TEX := "res://assets/sprites/fx/fx_overload_arc.png"
-## Burn It Down can't re-trigger faster than this (lifesteal / puddle ticks).
-const BURN_IT_DOWN_CD := 1.5
 ## --- Movement feel (tuned for thumbs) ---
 @export var base_speed: float = 235.0
 @export var accel: float = 2400.0       ## px/s² toward target velocity
@@ -1277,7 +1275,7 @@ func heal(amount: float) -> void:
 	## Burn It Down (Cinder): healing while hurt ignites everything nearby.
 	if GameState.run_rank("burn_it_down") > 0 and _burn_cd <= 0.0 \
 			and hp < max_hp * float(GameState.up("burn_it_down", "below", 0.7)):
-		_burn_cd = BURN_IT_DOWN_CD
+		_burn_cd = UpgradeDefs.BURN_IT_DOWN_CD
 		var r := float(GameState.up("burn_it_down", "radius", 120.0))
 		for e in RunFx.enemies_in(get_tree(), global_position, r):
 			e.call("apply_status", "burn", float(GameState.up("burn_it_down", "time", 3.0)), float(GameState.up("burn_it_down", "dps", 10.0)))
