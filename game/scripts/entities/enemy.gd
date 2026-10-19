@@ -315,6 +315,7 @@ func _style_bar() -> void:
 	hp_bar.visible = false  ## only shown once damaged
 
 func _process(delta: float) -> void:
+	_anim.set_motion(velocity, speed)
 	_anim.tick(delta)
 
 func _physics_process(delta: float) -> void:

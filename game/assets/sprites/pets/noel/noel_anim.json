@@ -1,0 +1,13 @@
+{
+ "fps": {
+  "idle": 12,
+  "walk": 20,
+  "sit": 12,
+  "sit_idle": 10,
+  "windup": 12,
+  "attack": 16,
+  "hit": 16,
+  "death": 12,
+  "rampage": 18
+ }
+}
