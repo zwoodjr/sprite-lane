@@ -20,6 +20,9 @@ func _ready() -> void:
 			var xy := s.split(",")
 			if xy.size() == 2:
 				_pts.append(Vector2(float(xy[0]), float(xy[1])))
+	## arg 4: tier / mode id (zone set), e.g. "blackout".
+	if a.size() > 4 and a[4] != "":
+		GameState.selected_mode_id = a[4]
 	if a.size() > 3 and a[3] == "shimmer":
 		GameState.settings["heat_shimmer"] = true
 	DirAccess.make_dir_recursive_absolute(_out)
