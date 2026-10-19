@@ -69,6 +69,8 @@ var field: GroundField
 var _mid_tex: Dictionary = {}
 var _atlas: Texture2D
 var _ground_tex: Dictionary = {}
+## Chunks waiting for their one-off floor bake (one per frame, nearest first).
+var _bake_queue: Array[WastelandChunk] = []
 
 
 func setup(p_seed: int, player: Node2D) -> void:
@@ -87,6 +89,11 @@ func setup(p_seed: int, player: Node2D) -> void:
 	_build_landmark_catalog()
 	landmarks_changed.emit(landmarks)
 	_sync_chunks(true)
+	## First frame: bake what the camera sees right away, the rest streams in.
+	_bake_queue.sort_custom(func(a: WastelandChunk, b: WastelandChunk) -> bool:
+		return a.position.distance_squared_to(_player.global_position) < b.position.distance_squared_to(_player.global_position))
+	for i in range(mini(9, _bake_queue.size())):
+		_bake_queue.pop_front().bake()
 
 
 func _load_textures() -> void:
@@ -141,6 +148,17 @@ func _process(_delta: float) -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
 	_sync_chunks(false)
+	_bake_next()
+
+
+## Streamed chunks sit 1-2 chunks outside the view, so baking one per frame
+## (nearest first) never shows a blank floor and avoids a 5-bake hitch.
+func _bake_next() -> void:
+	while not _bake_queue.is_empty():
+		var c: WastelandChunk = _bake_queue.pop_front()
+		if is_instance_valid(c) and not c.is_queued_for_deletion():
+			c.bake()
+			return
 
 
 func _chunk_coord(world: Vector2) -> Vector2i:
@@ -187,7 +205,7 @@ func _spawn_chunk(coord: Vector2i) -> Node2D:
 	var rect := Rect2(chunk.position, Vector2(CHUNK_SIZE, CHUNK_SIZE))
 	var segs := field.segments_in(rect)
 	var decals: Array = []
-	chunk.configure(coord, _ground_material(segs), _atlas, decals)
+	chunk.configure(coord, _ground_material(segs, chunk.position), _atlas, decals)
 	_chunks_root.add_child(chunk)
 	var taken: Array[Vector2] = [] ## world positions of mid props (spacing)
 	_populate_road(chunk, coord, segs, decals, taken)
@@ -195,10 +213,11 @@ func _spawn_chunk(coord: Vector2i) -> Node2D:
 	_populate_decals(chunk, coord, segs, decals)
 	_populate_props(chunk, coord, segs, taken)
 	_maybe_landmark_sprite(chunk, coord)
+	_bake_queue.append(chunk)
 	return chunk
 
 
-func _ground_material(segs: Array[Dictionary]) -> ShaderMaterial:
+func _ground_material(segs: Array[Dictionary], origin: Vector2) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
 	mat.shader = GroundShader
 	mat.set_shader_parameter("tex_earth", _ground_tex["earth"])
@@ -208,6 +227,7 @@ func _ground_material(segs: Array[Dictionary]) -> ShaderMaterial:
 	mat.set_shader_parameter("tex_river", _ground_tex["riverbed"])
 	mat.set_shader_parameter("tex_asphalt", _ground_tex["asphalt"])
 	mat.set_shader_parameter("seed_off", field.seed_off)
+	mat.set_shader_parameter("chunk_origin", origin)
 	mat.set_shader_parameter("road_half", GroundField.ROAD_HALF)
 	var sv := PackedVector4Array()
 	var so := PackedFloat32Array()

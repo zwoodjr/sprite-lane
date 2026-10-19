@@ -1,34 +1,56 @@
 class_name WastelandChunk
 extends Node2D
 
-## One 512 px chunk of floor. The ground itself is drawn by ground.gdshader in
-## world space (biomes, riverbeds, roads all continuous across borders); a child
-## layer draws the clustered small decals from one atlas (single batch).
+## One 512 px chunk of floor. The ground (biomes, riverbeds, roads — all in
+## world space so they run across borders) and the clustered decals are baked
+## ONCE into a SubViewport texture when the chunk streams in; every frame after
+## that the chunk is a single plain texture draw (as cheap as the old floor).
 
 const CHUNK_SIZE := 512
 
 var _coord: Vector2i
-var _decals: Node2D
+var _vp: SubViewport
 var _atlas: Texture2D
 ## [region: Rect2, pos: Vector2, rot: float, flip: bool, tint: Color]
 var _decal_list: Array = []
+var _decals: Node2D
 
 
 func configure(coord: Vector2i, mat: ShaderMaterial, atlas: Texture2D, decal_list: Array) -> void:
 	_coord = coord
-	material = mat
 	_atlas = atlas
 	_decal_list = decal_list
+	_vp = SubViewport.new()
+	_vp.name = "Bake"
+	_vp.size = Vector2i(CHUNK_SIZE, CHUNK_SIZE)
+	_vp.disable_3d = true
+	_vp.transparent_bg = false
+	_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	## Baked later via bake() — the world staggers bakes (one per frame).
+	_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	var ground := Node2D.new()
+	ground.material = mat
+	ground.draw.connect(func() -> void:
+		ground.draw_rect(Rect2(Vector2.ZERO, Vector2(CHUNK_SIZE, CHUNK_SIZE)), Color.WHITE))
+	_vp.add_child(ground)
 	_decals = Node2D.new()
-	_decals.name = "Decals"
-	_decals.z_index = 1
 	_decals.draw.connect(_draw_decals)
-	add_child(_decals)
+	_vp.add_child(_decals)
+	add_child(_vp)
 	queue_redraw()
 
 
+## Render the floor + decals into the chunk texture (once).
+func bake() -> void:
+	if _decals:
+		_decals.queue_redraw()
+	if _vp:
+		_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, Vector2(CHUNK_SIZE, CHUNK_SIZE)), Color(0.33, 0.26, 0.2))
+	if _vp:
+		draw_texture(_vp.get_texture(), Vector2.ZERO)
 
 
 func _draw_decals() -> void:
@@ -41,6 +63,10 @@ func _draw_decals() -> void:
 		var flip: bool = d[3]
 		var tint: Color = d[4]
 		var size := region.size
+		var r := maxf(size.x, size.y) * 0.5 if rot != 0.0 else 0.0
+		var half := Vector2(r, r) if rot != 0.0 else size * 0.5
+		if not Rect2(half, Vector2(CHUNK_SIZE, CHUNK_SIZE) - half * 2.0).has_point(pos):
+			continue ## would be clipped by the chunk edge
 		if flip:
 			size.x = -size.x
 		if rot != 0.0:

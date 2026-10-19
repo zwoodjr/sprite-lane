@@ -1,6 +1,7 @@
 shader_type canvas_item;
 
-// Wasteland floor, drawn per 512 px chunk in WORLD space so everything runs
+// Wasteland floor, baked once per 512 px chunk (SubViewport, see
+// WastelandChunk) in WORLD space so everything runs
 // continuously across chunk borders. Mirrors GroundField (CPU) exactly:
 //  - biome zones (cracked earth / sand drifts / darker scrub / rubble) picked
 //    per pixel from seeded value noise, with Bayer-dithered borders
@@ -17,6 +18,7 @@ uniform sampler2D tex_rubble : repeat_enable, filter_nearest;
 uniform sampler2D tex_river : repeat_enable, filter_nearest;
 uniform sampler2D tex_asphalt : repeat_enable, filter_nearest;
 uniform vec2 seed_off = vec2(0.0);
+uniform vec2 chunk_origin = vec2(0.0);
 uniform int road_count = 0;
 uniform vec4 road_seg[8];
 uniform float road_off[8];
@@ -55,7 +57,7 @@ vec4 tex_frame(sampler2D t, vec2 p, bool alt, float period) {
 }
 
 void vertex() {
-	world = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
+	world = chunk_origin + VERTEX;
 }
 
 void fragment() {
