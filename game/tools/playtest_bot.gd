@@ -60,8 +60,9 @@ var _camp_override := false
 var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 
 
-func _exit_tree() -> void:
+func _restore_profile() -> void:
 	if _camp_override:
+		_camp_override = false
 		GameState.camp = _keep_camp
 		if _keep_gear.size() == 3:
 			GameState.stash = _keep_gear[0]
@@ -182,6 +183,7 @@ func _process(delta: float) -> void:
 			print("EVENT scene_changed t=%.1f scene=%s" % [_t, get_tree().current_scene.name if get_tree().current_scene else "?"])
 			await get_tree().create_timer(1.0, true, false, true).timeout
 			await _snap("zz_end")
+			_restore_profile()
 			get_tree().quit()
 		return
 	if get_tree().paused:
@@ -228,6 +230,7 @@ func _process(delta: float) -> void:
 		print("EVENT timeout")
 		_ended = true
 		await _snap("zz_end")
+		_restore_profile()
 		get_tree().quit()
 
 

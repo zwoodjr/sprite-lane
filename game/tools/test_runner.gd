@@ -272,7 +272,9 @@ func _test_hangar() -> void:
 	GameState.camp["ammo_bench"] = 1
 	_check(RunFx.random_bench_ammo_id() in ["incendiary", "frost"], "bench 1 types")
 	GameState.camp.clear()
-	## The screen: tabs, buying, stash, popups.
+	## The screen: tabs, buying, stash, popups (no gear, so only camp bonuses count).
+	GameState.loadouts.clear()
+	GameState.stash.clear()
 	GameState.account_scrap = HangarDefs.full_max_cost()
 	GameState.selected_character_id = "ash_rook"
 	GameState.selected_pet_id = "noel"
