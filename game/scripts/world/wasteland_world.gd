@@ -53,8 +53,8 @@ func setup(p_seed: int, player: Node2D) -> void:
 
 func _load_textures() -> void:
 	_tile_tex.clear()
-	for i in range(6):
-		_tile_tex.append(load("res://assets/sprites/tiles/ground_%d.png" % i) as Texture2D)
+	## Quiet seamless ground (512 px = one chunk). Old speckled tiles retired.
+	_tile_tex.append(load("res://assets/sprites/tiles/ground_quiet_big.png") as Texture2D)
 	_decor.clear()
 	for n in [
 		"rock_small", "rock_small", "rock_large", "dead_bush", "dead_bush",

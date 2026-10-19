@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://4rttsa0furoh"
-path="res://.godot/imported/dust_3.png-075f9bef8ab51e50d48bc6d26993648a.ctex"
+uid="uid://b5c26gws4bnmw"
+path="res://.godot/imported/ground_quiet_big.png-e136c7020c2a654d0e3b77cac814dc05.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tiles/dust_3.png"
-dest_files=["res://.godot/imported/dust_3.png-075f9bef8ab51e50d48bc6d26993648a.ctex"]
+source_file="res://assets/sprites/tiles/ground_quiet_big.png"
+dest_files=["res://.godot/imported/ground_quiet_big.png-e136c7020c2a654d0e3b77cac814dc05.ctex"]
 
 [params]
 

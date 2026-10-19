@@ -1,13 +1,12 @@
 class_name WastelandChunk
 extends Node2D
 
-## Draws a dust tile grid for one chunk (batched _draw for mobile perf).
+## Draws the quiet ground texture for one 512 px chunk.
 
 var _tiles: Array[Texture2D] = []
 var _coord: Vector2i
 var _run_seed: int = 1
 var _noise: FastNoiseLite
-const TILE := 64
 const CHUNK_SIZE := 512
 
 
@@ -23,19 +22,13 @@ func _draw() -> void:
 	if _tiles.is_empty():
 		draw_rect(Rect2(Vector2.ZERO, Vector2(CHUNK_SIZE, CHUNK_SIZE)), Color(0.28, 0.20, 0.14))
 		return
-	var n := int(CHUNK_SIZE / TILE)
-	for x in range(n):
-		for y in range(n):
-			var h := ((_coord.x * 73856093) ^ (_coord.y * 19349663) ^ (x * 83492791) ^ (y * 5039) ^ _run_seed) & 0x7fffffff
-			## Mostly plain tiles; detail tiles sprinkled in.
-			var idx := 0 if (h % 100) < 55 else h % _tiles.size()
-			var tex := _tiles[idx]
-			## Large soft patches (darker hardpan / pale sand) break up the grid.
-			var tint := Color.WHITE
-			if _noise:
-				var wx := float(_coord.x * CHUNK_SIZE + x * TILE)
-				var wy := float(_coord.y * CHUNK_SIZE + y * TILE)
-				var nz := _noise.get_noise_2d(wx, wy)
-				var k := 1.0 + nz * 0.09
-				tint = Color(k, k * (1.0 - nz * 0.03), k * (1.0 - nz * 0.06))
-			draw_texture(tex, Vector2(x * TILE, y * TILE), tint)
+	## One seamless low-contrast 512 px texture per chunk (1:1 world scale) so
+	## heroes, mobs and pickups pop off the floor. A very gentle large-scale
+	## tint (from terrain noise) keeps it from reading as a repeating grid.
+	var tint := Color.WHITE
+	if _noise:
+		var c := Vector2(_coord.x * CHUNK_SIZE + CHUNK_SIZE * 0.5, _coord.y * CHUNK_SIZE + CHUNK_SIZE * 0.5)
+		var nz := _noise.get_noise_2d(c.x, c.y)
+		var k := 1.0 + nz * 0.04
+		tint = Color(k, k, k * (1.0 - nz * 0.02))
+	draw_texture(_tiles[0], Vector2.ZERO, tint)
