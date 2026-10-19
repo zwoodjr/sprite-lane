@@ -35,6 +35,8 @@ const HURT_IFRAMES := 0.5
 const TARGET_HYSTERESIS := 0.10
 ## Rough enemy body radius added to melee reach (centre-to-centre distances).
 const ENEMY_BODY_R := 16.0
+## Shove when hit (px/s impulse, decays fast).
+const KNOCK_TAKEN := 160.0
 
 var max_hp: float = 100.0
 var hp: float = 100.0
@@ -105,6 +107,25 @@ var _amove_hit: Array = []
 var _ram_hit: Array = []
 var _rush_active: bool = false
 
+## --- Phase B: gear sets + named Legendaries ---
+var _ability_charges: int = 1
+var _knock_v: Vector2 = Vector2.ZERO
+var _kills: int = 0             ## this run (Demolition Crew 6)
+var _dash_hit: Array = []       ## Demolition Crew 4: enemies hit this dash
+var _stand_fast_used: bool = false
+var _stand_fast_left: float = 0.0
+var _last_rites: bool = false
+var _static_t: float = 0.0
+var _volley_t: float = 0.0
+var _grave_stacks: int = 0
+var _swing_total: int = 0       ## Live Line cadence
+var _hit_total: int = 0         ## Censer cadence
+var _debt_target: Node2D = null ## Twin Debts
+var _bell_cd: float = 0.0       ## Bellwether
+var _mayday_left: float = 0.0
+var _mayday_cd: float = 0.0
+var _rubble_cd: float = 0.0     ## Last Shift
+
 @onready var body: Sprite2D = $Body
 @onready var gun: Node2D = $Gun
 @onready var label: Label = $NameLabel
@@ -143,6 +164,9 @@ func _apply_loadout() -> void:
 	_ability = GameState.hero_ability()
 	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
+	_ability_charges = int(_ability.get("charges", 1))
+	## Cathedral Vestments (3): Last Rites — first death revives at half health.
+	_last_rites = GameState.has_set("cathedral_vestments", 3)
 	var prefix := str(_char.get("anim", "res://assets/sprites/characters/ash_rook/ash_rook"))
 	_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y)
 	_wpn_art = UnitAnim.load_json(prefix + "_weapon.json")
@@ -179,7 +203,7 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 	move_mult = float(_char.get("move_speed_mult", 1.0)) \
 		* (1.0 + float(rm.get("move", 0.0))) \
 		* (1.0 + GameState.move_speed_bonus())
-	firerate_mult = 1.0 + float(rm.get("firerate", 0.0))
+	firerate_mult = (1.0 + float(rm.get("firerate", 0.0))) * (1.0 + GameState.gear_stat("firerate"))
 	if reset_ammo:
 		_ammo = _mag_size()
 
@@ -243,6 +267,8 @@ func get_drones() -> Array:
 ## Wingman ranks × DRONE-call overclock.
 func drone_rate_mult() -> float:
 	var m := 1.0 + float(GameState.up("wingman", "firerate", 0.0))
+	if GameState.has_set("flight_crew_gear", 2):
+		m *= float(GearDefs.SURVIVOR_SETS["flight_crew_gear"]["drone_rate"])
 	if _overclock_left > 0.0:
 		m *= float(_ability.get("overclock", 2.0))
 	return m
@@ -305,6 +331,12 @@ func _tick_timers(delta: float) -> void:
 	_vial_coat_left = maxf(0.0, _vial_coat_left - delta)
 	_burn_cd = maxf(0.0, _burn_cd - delta)
 	_backstab_text_cd = maxf(0.0, _backstab_text_cd - delta)
+	_stand_fast_left = maxf(0.0, _stand_fast_left - delta)
+	_mayday_left = maxf(0.0, _mayday_left - delta)
+	_mayday_cd = maxf(0.0, _mayday_cd - delta)
+	_bell_cd = maxf(0.0, _bell_cd - delta)
+	_rubble_cd = maxf(0.0, _rubble_cd - delta)
+	_knock_v = _knock_v.move_toward(Vector2.ZERO, 900.0 * delta)
 	if _ability_pending != "":
 		_ability_hit_left -= delta
 		if _ability_hit_left <= 0.0:
@@ -342,6 +374,7 @@ func _update_movement(delta: float) -> void:
 		velocity = _dash_dir * DASH_SPEED
 		move_and_slide()
 		_firewalk_step(global_position.distance_to(before))
+		_demolition_dash()
 		if _dash_left <= 0.0 and is_melee():
 			## Dash-cancel into swing: come out of a dash ready to hit.
 			_fire_cd = 0.0
@@ -354,7 +387,9 @@ func _update_movement(delta: float) -> void:
 	if dir.length() > 0.01 and velocity.length() > 10.0 and velocity.normalized().dot(dir.normalized()) < 0.2:
 		rate *= turn_boost
 	velocity = velocity.move_toward(target, rate * delta)
+	velocity += _knock_v
 	move_and_slide()
+	velocity -= _knock_v
 
 func _update_actions() -> void:
 	if Input.is_action_just_pressed("ability") or TouchInput.consume_ability():
@@ -369,6 +404,11 @@ func _update_regen(delta: float) -> void:
 		_oos_timer = 0.0
 	if _oos_timer > 1.5 and hp < max_hp:
 		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta)
+		health_changed.emit(hp, max_hp)
+	## Gear regen (Vials etc.) ticks always.
+	var rg := GameState.gear_stat("regen")
+	if rg > 0.0 and hp < max_hp and hp > 0.0:
+		hp = minf(max_hp, hp + rg * delta)
 		health_changed.emit(hp, max_hp)
 
 func _facing_dir() -> Vector2:
@@ -497,6 +537,8 @@ func _try_dash() -> void:
 		Juice.burst(global_position, Color(0.4, 0.5, 0.9, 0.7), 14, 120.0, 0.4, 1.4)
 	_trail_dist = 999.0
 	_firewalk_step(0.0)
+	_dash_hit.clear()
+	_gear_on_dash()
 	dashed.emit()
 
 func _spawn_afterimage() -> void:
@@ -551,7 +593,13 @@ func _try_ability() -> void:
 	if not _ability_cast(id):
 		Juice.sfx("empty", -6.0)
 		return
-	_ability_cd = _ability_cooldown()
+	## Foreman's Kit (3): Second Charge — Rush can be used twice per cooldown.
+	_ability_charges -= 1
+	if _ability_charges > 0:
+		_ability_cd = 0.5
+	else:
+		_ability_cd = _ability_cooldown()
+		_ability_charges = int(_ability.get("charges", 1))
 	_anim.play("ability")
 	## The effect lands on the ability strip's hit frame (deadline fallback).
 	_ability_pending = id
@@ -907,6 +955,8 @@ func _try_shoot() -> void:
 
 func _roll_damage(mult: float = 1.0) -> Array:
 	var dmg := float(_weapon.get("damage", 12)) * damage_mult * _buff_damage() * mult
+	if _grave_stacks > 0:
+		dmg *= 1.0 + float(GearDefs.LEGENDARIES["gravedigger"]["per_stack"]) * float(_grave_stacks)
 	var crit := false
 	if randf() < GameState.crit_chance():
 		crit = true
@@ -957,9 +1007,22 @@ func _fire_one_shot() -> void:
 	if every > 0 and _shot_count % every == 0:
 		count = int(GameState.up("split_shot", "count", 3))
 		fan = deg_to_rad(float(GameState.up("split_shot", "spread_deg", 12.0)))
+	## Weapon pattern: extra pellets per trigger (e.g. Flare Sidearm double tap).
+	var pellets := int(_weapon.get("pellets", 0))
+	if pellets > 0 and count < 1 + pellets:
+		count = 1 + pellets
+		fan = maxf(fan, deg_to_rad(6.0))
+	## Bell Ringer's Shroud (3): Ghost Round — every Nth shot passes through everything.
+	var ghost := false
+	if GameState.has_set("bell_ringers_shroud", 3):
+		ghost = _shot_count % int(GearDefs.SURVIVOR_SETS["bell_ringers_shroud"]["ghost_every"]) == 0
 	for i in range(count):
 		var off := 0.0 if count == 1 else lerpf(-fan, fan, float(i) / float(count - 1))
-		_spawn_bullet(origin, aim.rotated(off), float(roll[0]), bool(roll[1]))
+		var bl := _spawn_bullet(origin, aim.rotated(off), float(roll[0]), bool(roll[1]))
+		if ghost:
+			bl.set("pierce_left", 99)
+			bl.set("pierce_falloff", 1.0)
+			bl.modulate = Color(0.75, 0.9, 1.4, 0.8)
 	_flash_left = 0.05
 	_muzzle_flash.position = _flash_pos
 	_muzzle_flash.rotation = aim.angle()
@@ -1039,6 +1102,7 @@ func _melee_impact() -> void:
 	if first:
 		_spawn_smear(shape, m, _swing_dir)
 		_melee_upgrades_on_swing(hit, m)
+		_live_line_swing()
 	if hit.size() > 0:
 		## Melee survival kit: heal a slice of the damage dealt, brief guard.
 		var ls := float(m.get("lifesteal", 0.0))
@@ -1189,7 +1253,7 @@ func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: f
 	if lock != null:
 		bullet.set("homing_target", lock)
 		bullet.set("homing_turn", float(_weapon.get("homing_turn", 10.0)))
-	bullet.set("pierce_left", int(GameState.up("piercing", "pierce", 0)))
+	bullet.set("pierce_left", int(GameState.up("piercing", "pierce", 0)) + int(_weapon.get("pierce", 0)))
 	bullet.set("pierce_falloff", float(GameState.up("piercing", "falloff", 0.8)))
 	bullet.set("bounces_left", int(GameState.up("ricochet", "bounces", 0)))
 	bullet.set("bounce_mult", float(GameState.up("ricochet", "mult", 0.6)))
@@ -1230,6 +1294,15 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.sfx("hit", -2.0, 0.1)
 		return
 	var dmg := float(amount) * resist_mult
+	## Gear: armor resist; Plague Doctor (2) halves poison / Dust hazards.
+	dmg *= 1.0 - GameState.gear_stat("resist")
+	var hazard := attacker == null or not is_instance_valid(attacker) or not attacker.is_in_group("enemies")
+	if hazard and GameState.has_set("plague_doctor", 2):
+		dmg *= float(GearDefs.GENERAL_SETS["plague_doctor"]["hazard_resist"])
+	if _stand_fast_left > 0.0:
+		dmg *= float(GearDefs.SURVIVOR_SETS["quarry_plate"]["stand_mult"])
+	if _mayday_left > 0.0:
+		dmg *= float(GearDefs.LEGENDARIES["mayday"]["mult"])
 	## Unbreakable (Pebble): less damage below half HP.
 	if hp < max_hp * 0.5:
 		dmg *= 1.0 - float(GameState.up("unbreakable", "reduce", 0.0))
@@ -1243,6 +1316,14 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.float_text(global_position + Vector2(0, -42), "BLOCK", UiTheme.AMBER, 14)
 	hp -= dmg
 	_iframes = HURT_IFRAMES
+	## Gravedigger stacks fall off on a hit.
+	_grave_stacks = 0
+	## A little shove away from the attacker (Demolition Crew 2 halves it).
+	if not hazard and attacker is Node2D:
+		var kd := (global_position - (attacker as Node2D).global_position).normalized()
+		var kk := KNOCK_TAKEN * (float(GearDefs.GENERAL_SETS["demolition_crew"]["knock_taken"]) if GameState.has_set("demolition_crew", 2) else 1.0)
+		_knock_v = kd * kk
+	_gear_after_hurt()
 	if attacker != null and is_instance_valid(attacker) and attacker != self:
 		attacked.emit(attacker)
 	hurt.emit(dmg)
@@ -1253,6 +1334,14 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	if not (_anim.is_playing("dash") or _anim.is_playing("ability")):
 		_anim.play("hit")
 	Juice.damage_number(global_position + Vector2(0, -30), dmg, false, UiTheme.DANGER)
+	if hp <= 0.0 and _last_rites:
+		_last_rites = false
+		hp = max_hp * float(GearDefs.SURVIVOR_SETS["cathedral_vestments"]["revive_frac"])
+		_iframes = 1.5
+		Juice.float_text(global_position + Vector2(0, -50), "LAST RITES", Color(1.0, 0.95, 0.7), 24)
+		Juice.burst(global_position, Color(1.0, 0.95, 0.7), 30, 220.0, 0.8)
+		health_changed.emit(hp, max_hp)
+		return
 	if hp <= 0.0 and _last_stitch_available:
 		_last_stitch_available = false
 		hp = 1.0
@@ -1294,7 +1383,10 @@ func heal(amount: float) -> void:
 			e.call("apply_status", "burn", float(GameState.up("burn_it_down", "time", 3.0)), float(GameState.up("burn_it_down", "dps", 10.0)))
 		RunFx.ring(get_parent(), global_position + Vector2(0, 8), r, Color(1.0, 0.5, 0.2), 0.4, 6.0)
 		Juice.burst(global_position, Color(1.0, 0.5, 0.2), 20, r * 2.0, 0.4, 1.4)
-	hp = minf(max_hp, hp + amount)
+	var amt := amount
+	if GameState.has_set("plague_doctor", 4):
+		amt *= float(GearDefs.GENERAL_SETS["plague_doctor"]["heal_mult"])
+	hp = minf(max_hp, hp + amt)
 	health_changed.emit(hp, max_hp)
 
 func is_hidden() -> bool:
@@ -1310,10 +1402,16 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 	if bool(e.get("_dead")):
 		return
 	dmg *= _damage_vs(e as Node2D, src)
+	var is_crit := crit
+	if not is_crit and _forced_crit(e as Node2D, src):
+		dmg *= 1.5 + GameState.crit_damage_bonus()
+		is_crit = true
 	## Status first so Short Circuit / Marked already count on this hit.
 	_on_hit_effects(e as Node2D, dmg, src)
+	var at := (e as Node2D).global_position
 	if is_instance_valid(e):
-		e.call("take_damage", dmg, dir, knock, crit)
+		e.call("take_damage", dmg, dir, knock, is_crit)
+	_legendary_on_hit(at, src)
 
 ## Field Notes (per-kind kills) and Double Cross (hits from behind).
 func _damage_vs(e: Node2D, src: String) -> float:
@@ -1342,6 +1440,24 @@ func _on_hit_effects(e: Node2D, dmg: float, src: String) -> void:
 		e.call("apply_status", "mark", float(GameState.up("marked", "time", 3.0)), float(GameState.up("marked", "mult", 1.15)))
 	if _vial_coat_left > 0.0 and src in ["main", "chain"]:
 		e.call("apply_status", "poison", float(_ability.get("coat_poison_time", 3.0)), float(_ability.get("coat_dps", 6.0)))
+	## Weapon element / coating mods.
+	var coats: Variant = _weapon.get("coats", [])
+	if coats is Array:
+		for c in coats:
+			if not (c is Dictionary) or not is_instance_valid(e):
+				continue
+			var ce: Dictionary = GearDefs.COAT_EFFECT.get(str(c.get("coat", "")), {})
+			if ce.is_empty():
+				continue
+			var v := float(c.get("val", 0.0))
+			match str(c.get("coat", "")):
+				"poison", "fire":
+					e.call("apply_status", str(ce["status"]), float(ce["time"]), v)
+				"shock":
+					if randf() < v / 100.0:
+						e.call("apply_status", "stun", float(ce["time"]))
+				"frost":
+					e.call("apply_status", "slow", float(ce["time"]), clampf(1.0 - v / 100.0, 0.3, 1.0))
 	var ammo := special_ammo()
 	if ammo == "":
 		return
@@ -1363,6 +1479,7 @@ func _on_hit_effects(e: Node2D, dmg: float, src: String) -> void:
 ## Iron Tonic recharge, Rook's ram.
 func _update_run_upgrades(delta: float) -> void:
 	_update_rush_ram()
+	_update_gear(delta)
 	## Bell Tower: standing still charges stronger shots.
 	if GameState.run_rank("bell_tower") > 0:
 		if velocity.length() < 12.0:
@@ -1448,3 +1565,205 @@ func get_mag_size() -> int:
 
 func is_reloading() -> bool:
 	return _reload_left > 0.0
+
+## =============================================================================
+## Gear: general / survivor set bonuses and named Legendaries (Part 7)
+
+## Kill hook from enemy._die().
+func on_kill(e: Node) -> void:
+	if _dead:
+		return
+	_kills += 1
+	var pos: Vector2 = (e as Node2D).global_position if e is Node2D else global_position
+	var parent := get_parent()
+	var gs: Dictionary = GearDefs.GENERAL_SETS
+	var ss: Dictionary = GearDefs.SURVIVOR_SETS
+	var lg: Dictionary = GearDefs.LEGENDARIES
+	## Plague Doctor (6): kills may drop a small heal.
+	if GameState.has_set("plague_doctor", 6) and randf() < float(gs["plague_doctor"]["kill_heal_chance"]):
+		LootDrop.spawn_burst(parent, pos, "tonic", 1, float(gs["plague_doctor"]["kill_heal"]))
+	## Demolition Crew (6): every Nth kill sets off a blast around you.
+	if GameState.has_set("demolition_crew", 6) and _kills % int(gs["demolition_crew"]["blast_every"]) == 0:
+		RunFx.explosion(self, global_position, float(gs["demolition_crew"]["blast_radius"]),
+			float(gs["demolition_crew"]["blast_damage"]) * damage_mult, Color(1.0, 0.6, 0.25), "blast", 300.0)
+		Juice.shake(0.2)
+	## Surgeon's Coat (3): Autopsy — a heal vial or a short damage buff.
+	if GameState.has_set("surgeons_coat", 3) and randf() < float(ss["surgeons_coat"]["autopsy_chance"]):
+		if randf() < 0.5:
+			LootDrop.spawn_burst(parent, pos, "tonic", 1, float(ss["surgeons_coat"]["autopsy_heal"]))
+		else:
+			apply_powerup({"id": "damage", "name": "Autopsy Vial", "color": Color(1.0, 0.45, 0.6), "duration": float(ss["surgeons_coat"]["autopsy_buff"])})
+	match GameState.gear_legendary():
+		"gravedigger":
+			_grave_stacks = mini(_grave_stacks + 1, int(lg["gravedigger"]["max_stacks"]))
+		"bellwether":
+			if _bell_cd <= 0.0:
+				_bell_cd = float(lg["bellwether"]["cooldown"])
+				for n in get_tree().get_nodes_in_group("enemies"):
+					if n is Node2D and is_instance_valid(n) and is_on_screen(self, (n as Node2D).global_position) and n.has_method("apply_status"):
+						n.call("apply_status", "slow", float(lg["bellwether"]["slow_time"]), float(lg["bellwether"]["slow_mult"]))
+				RunFx.ring(parent, pos, 140.0, Color(1.0, 0.85, 0.4), 0.5, 4.0)
+				Juice.float_text(pos + Vector2(0, -40), "BELL", Color(1.0, 0.85, 0.4), 16)
+		"twin_debts":
+			_debt_target = RunFx.nearest_enemy(get_tree(), pos, float(lg["twin_debts"]["range"]), [e])
+			if _debt_target != null:
+				Juice.float_text(_debt_target.global_position + Vector2(0, -44), "DEBT", Color(0.8, 0.6, 1.0), 13)
+
+
+## Bonesaw (back / marked always crits) and Twin Debts (marked debtor crits).
+func _forced_crit(e: Node2D, src: String) -> bool:
+	if e == null or not is_instance_valid(e):
+		return false
+	match GameState.gear_legendary():
+		"bonesaw":
+			if src not in ["main", "chain", "ability"]:
+				return false
+			if e.has_method("has_status") and bool(e.call("has_status", "mark")):
+				return true
+			var facing := Vector2.LEFT if bool(e.get("_facing_left")) else Vector2.RIGHT
+			var to_me := (global_position - e.global_position).normalized()
+			var cone := deg_to_rad(float(GearDefs.LEGENDARIES["bonesaw"]["cone_deg"]))
+			return absf(facing.angle_to(to_me)) >= PI - cone * 0.5
+		"twin_debts":
+			if _debt_target != null and is_instance_valid(_debt_target) and e == _debt_target:
+				_debt_target = null
+				return true
+	return false
+
+
+## Last Shift (burning rubble) and Censer (healing smoke) after a hit.
+func _legendary_on_hit(at: Vector2, src: String) -> void:
+	if src != "main":
+		return
+	var lg: Dictionary = GearDefs.LEGENDARIES
+	match GameState.gear_legendary():
+		"last_shift":
+			if _rubble_cd <= 0.0:
+				_rubble_cd = 0.25
+				RunFx.ground(get_parent(), self, at, "burn", float(lg["last_shift"]["radius"]), float(lg["last_shift"]["time"]), float(lg["last_shift"]["dps"]))
+		"censer":
+			_hit_total += 1
+			if _hit_total % int(lg["censer"]["every"]) == 0:
+				RunFx.ground(get_parent(), self, at, "heal", float(lg["censer"]["radius"]), float(lg["censer"]["time"]), float(lg["censer"]["hps"]))
+
+
+## Live Line: every Nth punch arcs lightning to the nearest enemy.
+func _live_line_swing() -> void:
+	if GameState.gear_legendary() != "live_line":
+		return
+	_swing_total += 1
+	var ll: Dictionary = GearDefs.LEGENDARIES["live_line"]
+	if _swing_total % int(ll["every"]) != 0:
+		return
+	var t := RunFx.nearest_enemy(get_tree(), global_position, float(ll["range"]))
+	if t == null:
+		return
+	RunFx.zap(get_parent(), global_position + Vector2(0, -8), t.global_position, Color(0.55, 0.85, 1.0), 0.25, 3.5)
+	var roll := _roll_damage(float(ll["mult"]))
+	t.call("apply_status", "stun", float(ll["stun"]))
+	hit_enemy(t, float(roll[0]), (t.global_position - global_position).normalized(), 120.0, bool(roll[1]), "chain")
+
+
+## Quarry Plate (3) Stand Fast and Mayday after taking damage.
+func _gear_after_hurt() -> void:
+	if hp <= 0.0:
+		return
+	var qp: Dictionary = GearDefs.SURVIVOR_SETS["quarry_plate"]
+	if not _stand_fast_used and GameState.has_set("quarry_plate", 3) and hp < max_hp * float(qp["stand_below"]):
+		_stand_fast_used = true
+		_stand_fast_left = float(qp["stand_time"])
+		Juice.float_text(global_position + Vector2(0, -50), "STAND FAST", Color(0.95, 0.85, 0.6), 20)
+		RunFx.ring(get_parent(), global_position + Vector2(0, 8), 60.0, Color(0.95, 0.85, 0.6), 0.5, 5.0)
+	var md: Dictionary = GearDefs.LEGENDARIES["mayday"]
+	if GameState.gear_legendary() == "mayday" and _mayday_cd <= 0.0 and hp < max_hp * float(md["below"]):
+		_mayday_left = float(md["time"])
+		_mayday_cd = float(md["cooldown"])
+		Juice.float_text(global_position + Vector2(0, -50), "MAYDAY!", Color(0.5, 1.0, 0.85), 20)
+		for d in get_drones():
+			if is_instance_valid(d):
+				RunFx.zap(get_parent(), (d as Node2D).global_position, global_position, Color(0.5, 1.0, 0.85), 0.4, 3.0)
+
+
+## Night Runner (6) vanish and Smuggler's Wraps (3) Shadow Step decoy.
+func _gear_on_dash() -> void:
+	if GameState.has_set("night_runner", 6):
+		var nr: Dictionary = GearDefs.GENERAL_SETS["night_runner"]
+		for e in RunFx.enemies_in(get_tree(), global_position, float(nr["vanish_radius"])):
+			if e.has_method("distract"):
+				e.call("distract", float(nr["vanish_time"]))
+	if GameState.has_set("smugglers_wraps", 3):
+		var sw: Dictionary = GearDefs.SURVIVOR_SETS["smugglers_wraps"]
+		var at := global_position
+		var ghost := Sprite2D.new()
+		ghost.texture = body.texture
+		ghost.hframes = body.hframes
+		ghost.frame = body.frame
+		ghost.offset = body.offset
+		ghost.flip_h = body.flip_h
+		ghost.scale = body.scale
+		ghost.global_position = body.global_position
+		ghost.modulate = Color(0.55, 0.5, 0.9, 0.7)
+		get_parent().add_child(ghost)
+		var tw := ghost.create_tween()
+		tw.tween_interval(float(sw["decoy_time"]) * 0.8)
+		tw.tween_property(ghost, "modulate:a", 0.0, float(sw["decoy_time"]) * 0.2)
+		tw.tween_callback(ghost.queue_free)
+		for e in RunFx.enemies_in(get_tree(), at, float(sw["decoy_radius"])):
+			if e.has_method("lure"):
+				e.call("lure", at, float(sw["decoy_time"]))
+
+
+## Demolition Crew (4): the dash itself hits enemies.
+func _demolition_dash() -> void:
+	if not GameState.has_set("demolition_crew", 4):
+		return
+	var dc: Dictionary = GearDefs.GENERAL_SETS["demolition_crew"]
+	for e in RunFx.enemies_in(get_tree(), global_position, float(dc["dash_radius"])):
+		if e in _dash_hit:
+			continue
+		_dash_hit.append(e)
+		hit_enemy(e, float(dc["dash_damage"]) * damage_mult, _dash_dir, 260.0, false, "blast")
+
+
+## Per-frame gear upkeep: Lineman's Static Field, Flight Crew Air Support.
+func _update_gear(delta: float) -> void:
+	if GameState.has_set("linemans_rig", 3):
+		var lr: Dictionary = GearDefs.SURVIVOR_SETS["linemans_rig"]
+		_static_t += delta
+		if _static_t >= float(lr["static_every"]):
+			_static_t = 0.0
+			for e in RunFx.enemies_in(get_tree(), global_position, float(lr["static_radius"])):
+				RunFx.zap(get_parent(), global_position + Vector2(0, -6), (e as Node2D).global_position, Color(0.55, 0.85, 1.0), 0.12, 2.0)
+				e.call("apply_status", "stun", float(lr["static_stun"]))
+				hit_enemy(e, float(lr["static_damage"]) * damage_mult, ((e as Node2D).global_position - global_position).normalized(), 60.0, false, "blast")
+	if GameState.has_set("flight_crew_gear", 3):
+		var fc: Dictionary = GearDefs.SURVIVOR_SETS["flight_crew_gear"]
+		_volley_t += delta
+		if _volley_t >= float(fc["volley_every"]):
+			_volley_t = 0.0
+			_air_support(fc)
+
+
+func _air_support(fc: Dictionary) -> void:
+	var targets: Array = []
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if n is Node2D and is_instance_valid(n) and is_on_screen(self, (n as Node2D).global_position):
+			targets.append(n)
+	if targets.is_empty():
+		_volley_t = float(fc["volley_every"]) - 1.0
+		return
+	targets.sort_custom(func(a: Node2D, b: Node2D) -> bool:
+		return a.global_position.distance_squared_to(global_position) < b.global_position.distance_squared_to(global_position))
+	var from := global_position + Vector2(0, -30)
+	var ds := get_drones()
+	if not ds.is_empty() and is_instance_valid(ds[0]):
+		from = (ds[0] as Node2D).global_position
+	Juice.float_text(global_position + Vector2(0, -48), "AIR SUPPORT", Color(0.5, 1.0, 0.85), 15)
+	for i in range(int(fc["volley_count"])):
+		var t: Node2D = targets[i % targets.size()]
+		if not is_instance_valid(t):
+			continue
+		var at := t.global_position + Vector2(randf_range(-14, 14), randf_range(-14, 14))
+		RunFx.zap(get_parent(), from, at, Color(1.0, 0.7, 0.35), 0.3, 2.5)
+		RunFx.explosion(self, at, float(fc["volley_radius"]), float(fc["volley_damage"]) * damage_mult, Color(1.0, 0.6, 0.3), "blast", 140.0)
+	Juice.shake(0.15)

@@ -40,6 +40,8 @@ var _hit_anim_cd: float = 0.0
 var body_scale: float = 1.0
 ## 1 normal · 2 elite · 3 boss (off-screen arrow size, loot).
 var tier: int = 1
+## "" normal · "elite" · "boss" (set by the match's elite / boss schedule).
+var role: String = ""
 ## Mechanical mob (Short Circuit bonus when stunned).
 var machine: bool = false
 ## Status effects (Phase 4): id -> {time, value}. poison / burn (value = dps),
@@ -94,6 +96,15 @@ func _archetype() -> String:
 		return kind
 	return "raider"
 
+## Shadow Step decoy: walk to `pos` and ignore the hero for a while.
+var _lure_left: float = 0.0
+var _lure_pos: Vector2 = Vector2.ZERO
+
+func lure(pos: Vector2, seconds: float) -> void:
+	_lure_pos = pos
+	_lure_left = maxf(_lure_left, seconds)
+	_cancel_attack()
+
 func distract(seconds: float) -> void:
 	## Bentley bark — cancel wind-up / lunge and pause aggression briefly.
 	_distract_left = maxf(_distract_left, seconds)
@@ -121,6 +132,22 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	_strafe_sign = -1.0 if randf() < 0.5 else 1.0
 	if is_inside_tree():
 		_apply_look()
+
+## Promote to an elite / boss (EnemyDefs.ROLE_STATS): tougher, bigger arrow, rewards.
+func set_role(r: String) -> void:
+	var st: Dictionary = EnemyDefs.ROLE_STATS.get(r, {})
+	if st.is_empty():
+		return
+	role = r
+	tier = int(st.get("tier", tier))
+	max_hp *= float(st.get("hp", 1.0))
+	hp = max_hp
+	damage *= float(st.get("damage", 1.0))
+	speed *= float(st.get("speed", 1.0))
+	add_to_group("elites" if r == "elite" else "bosses")
+	if is_inside_tree() and hp_bar:
+		hp_bar.max_value = max_hp
+		hp_bar.value = hp
 
 func _ready() -> void:
 	add_to_group("enemies")
@@ -293,6 +320,15 @@ func _physics_process(delta: float) -> void:
 		if hidden and not has_status("stun") and _player:
 			drift = (global_position - _player.global_position).normalized().orthogonal() * speed * 0.3 * _strafe_sign
 		velocity = velocity.move_toward(drift, 900.0 * delta) + _knock
+		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
+		move_and_slide()
+		_update_anim(false)
+		return
+	if _lure_left > 0.0:
+		_lure_left -= delta
+		var to_lure := _lure_pos - global_position
+		var want := to_lure.normalized() * speed if to_lure.length() > 20.0 else Vector2.ZERO
+		velocity = velocity.move_toward(want, 900.0 * delta) + _knock
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 		move_and_slide()
 		_update_anim(false)
@@ -519,6 +555,17 @@ func _die() -> void:
 		var aid := RunFx.random_bench_ammo_id()
 		if aid != "":
 			RunFx.spawn_ammo_pickup(parent, global_position + Vector2(randf_range(-20, 20), 10), aid)
+	## Gear: elites / bosses pay out their rewards; everyone else rolls a small chance.
+	if role != "":
+		GearPickup.drop_role_reward(parent, global_position, role, kind)
+		if role == "boss":
+			GameState.on_boss_killed(kind)
+			Juice.float_text(global_position + Vector2(0, -60), "BOSS DOWN  +×%.1f LOOT" % GearDefs.BOSS_LOOT_BONUS, UiTheme.AMBER, 22)
+	else:
+		GearPickup.maybe_drop(parent, global_position, GearDefs.KILL_DROP_CHANCE)
+	var pl := get_tree().get_first_node_in_group("player")
+	if pl != null and pl.has_method("on_kill"):
+		pl.call("on_kill", self)
 	Juice.sfx("enemy_die", -2.0)
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
