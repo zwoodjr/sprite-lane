@@ -267,11 +267,12 @@ func _run() -> void:
 	for f in range(50):
 		await get_tree().process_frame
 	await _snap("09_extracting")
-	## Pause menu
-	m.get_node("HUD").call("_open_pause")
-	for f in range(10):
-		await get_tree().process_frame
-	await _snap("10_pause")
+	## Pause menu (the run may already have ended on the pad)
+	if is_instance_valid(m):
+		m.get_node("HUD").call("_open_pause")
+		for f in range(10):
+			await get_tree().process_frame
+		await _snap("10_pause")
 	get_tree().paused = false
 	if is_instance_valid(m):
 		m.queue_free()

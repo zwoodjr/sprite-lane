@@ -119,6 +119,10 @@ func _run() -> void:
 	await _test_full_sets()
 	var keep_q := [GameState.daily.duplicate(true), GameState.stories.duplicate(true), GameState.milestones.duplicate(true), GameState.kennel_bond.duplicate(true)]
 	await _test_quests_events()
+	var keep_best := GameState.best_tier_extracted
+	await _test_tiers()
+	GameState.best_tier_extracted = keep_best
+	GameState.selected_mode_id = "drift"
 	GameState.daily = keep_q[0]
 	GameState.stories = keep_q[1]
 	GameState.milestones = keep_q[2]
@@ -654,3 +658,85 @@ func _test_quests_events() -> void:
 	GameState.stash.clear()
 	GameState.camp = {}
 	print("QUESTS_EVENTS_OK")
+
+
+## 11) Tiers 1–10 (Part 5): table values, window rule, unlocks, tier select,
+## elites / bosses on schedule in a live (fast-timer) match.
+func _test_tiers() -> void:
+	var tiers := ModeDefs.all_tiers()
+	_check(tiers.size() == 10 and ModeDefs.all_modes().size() == 10, "10 tiers exposed")
+	var expect := [[0.85, 0.75, 0.10], [1.0, 1.0, 0.15], [1.15, 1.25, 0.20], [1.30, 1.5, 0.25], [1.50, 1.8, 0.30],
+		[1.70, 2.1, 0.35], [1.95, 2.5, 0.40], [2.20, 3.0, 0.45], [2.50, 3.5, 0.50], [3.00, 4.5, 0.55]]
+	for i in range(10):
+		var t: Dictionary = tiers[i]
+		var e: Array = expect[i]
+		_check(is_equal_approx(float(t["enemy_hp"]), float(e[0])) and is_equal_approx(float(t["payout_mult"]), float(e[1]))
+			and is_equal_approx(float(t["death_keep"]), float(e[2])), "tier %d table" % (i + 1))
+		if i >= 2:
+			var prev: Dictionary = tiers[i - 1]
+			_check(float(t["window_open"]) == float(prev["window_open"]) - 1.0 and float(t["window_every"]) > float(prev["window_every"]), "tier %d window rule" % (i + 1))
+	_check(float(tiers[0]["first_window"]) == 90.0 and float(tiers[1]["window_open"]) == 15.0, "haze/drift unchanged")
+	_check(ModeDefs.canonical_id("squall") == "smog" and ModeDefs.canonical_id("medium") == "drift", "old tier ids")
+	## Unlocks: extract on a tier opens the next one.
+	GameState.best_tier_extracted = 0
+	_check(GameState.highest_unlocked_tier() == 2 and not GameState.is_tier_unlocked(3), "start unlocks")
+	GameState.selected_mode_id = "drift"
+	GameState.begin_run()
+	GameState.on_extract_success()
+	_check(GameState.is_tier_unlocked(3) and not GameState.is_tier_unlocked(4), "drift extract opens smog")
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "selected_mode_id": "blight"})
+	_check(GameState.selected_mode_id != "blight" and GameState.best_tier_extracted == 0, "locked tier not selected from save")
+	## Tier select screen.
+	var ms: Node = (load("res://scenes/ui/mode_select.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(ms)
+	for k in range(3):
+		await get_tree().process_frame
+	_check(not bool(ms.call("select_tier", "dustfall")), "can't pick locked tier")
+	GameState.best_tier_extracted = 9
+	_check(bool(ms.call("select_tier", "dustfall")) and GameState.selected_mode_id == "dustfall", "pick unlocked tier")
+	ms.queue_free()
+	await get_tree().process_frame
+	## Elites from 3, bosses from 5, two elites from 8 (fast timers).
+	for tid in ["drift", "smog", "blackout"]:
+		GameState.selected_mode_id = tid
+		GameState.selected_character_id = "pebble"
+		GameState.fast_timers = true
+		GameState.tutorial_done = true
+		GameState.begin_run()
+		var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+		get_tree().root.add_child(m)
+		get_tree().current_scene = m
+		var player: Node2D = m.get_node("World/Player")
+		Engine.time_scale = 4.0
+		var elites := 0
+		var bosses := 0
+		var seen := {}
+		var f := 0
+		while f < 2400 and is_instance_valid(m) and not bool(m.get("_ended")):
+			f += 1
+			if is_instance_valid(player):
+				player.set("hp", player.get("max_hp"))
+			for e in get_tree().get_nodes_in_group("elites") + get_tree().get_nodes_in_group("bosses"):
+				var iid := e.get_instance_id()
+				if not seen.has(iid):
+					seen[iid] = true
+					if e.is_in_group("bosses"):
+						bosses += 1
+					else:
+						elites += 1
+			if float(m.get("_match_time")) > (ModeDefs.BOSS_FIRST + 5.0) * GameState.timer_scale():
+				break
+			await get_tree().physics_frame
+		var tier := int(GameState.get_mode()["tier"])
+		Engine.time_scale = 1.0
+		print("TIER_%s elites=%d bosses=%d t=%.1f" % [tid, elites, bosses, float(m.get("_match_time"))])
+		if tier < ModeDefs.ELITE_FROM_TIER:
+			_check(elites == 0 and bosses == 0, "%s no specials" % tid)
+		else:
+			_check(elites >= (2 if tier >= ModeDefs.DOUBLE_ELITE_FROM_TIER else 1), "%s elites %d" % [tid, elites])
+			_check((bosses >= 1) == (tier >= ModeDefs.BOSS_FROM_TIER), "%s bosses %d" % [tid, bosses])
+		m.queue_free()
+		for k in range(5):
+			await get_tree().process_frame
+	GameState.fast_timers = false
+	print("TIERS_OK")

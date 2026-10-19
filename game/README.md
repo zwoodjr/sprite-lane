@@ -46,3 +46,10 @@ Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill t
 - `tools/test_runner.tscn` — headless bot playtest: `godot --headless --path game res://tools/test_runner.tscn`
 - `tools/screenshot.tscn` — renders every screen to PNG (needs a display / xvfb)
 - `tools/gen_sfx.py`, `tools/gen_sprites.py` — regenerate original audio / Dust Apothecary chunky-pixel art (`gen_sprites_v2.py` wraps the same generator)
+
+## Meta progression (Phases A–D)
+- **Hangar** (`HangarDefs`): shared camp upgrades (Generator, Radio Tower, Scrap Press, Ammo Bench), a station per survivor, Kennel ranks per dog, Stash slots. The hangar picture builds out per rank (`tools/gen_hangar_art.py`). Old flat-Hangar spend is refunded once.
+- **Gear** (`GearDefs`): Common→Legendary, 6 armor + 3 accessories, 4 general and 8 survivor sets, per-survivor weapon variants with 2 mods, 8 named Legendaries. Found gear is kept only on extract; one insured item survives a death. Elites (tier 3+) and bosses (tier 5+) pay out per Part 3.
+- **Events + Logbook** (`EventDefs`, `QuestDefs`): 1–2 radio events per run, Ambush Bounty / Pet Bond on extract, daily quests, survivor stories ending in their Legendary, camp milestones that add hangar cosmetics.
+- **Tiers** (`ModeDefs.TIER_TABLE`): Haze→Dustfall; each unlocks after extracting on the one below.
+- Tests: `godot --headless --path game res://tools/test_runner.tscn` (restores your save afterwards). Bot: `tools/playtest_bot.tscn` (arg 13 `max` camp, arg 14 `kit` gear). Screens: `tools/screenshot.tscn -- OUT hangar|gear|events`.
