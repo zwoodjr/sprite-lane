@@ -102,8 +102,17 @@ def build(mid, spec, sheet):
             atk = json.load(f)
         with open(os.path.join(od, "%s_attack.json" % mid), "w") as f:
             json.dump(atk, f)
+    ## Carry the rig's own fps sidecar (organic pass: long idles / in-between gaits).
+    fps = dict(FPS)
+    sj = os.path.join(SRC, src, "%s_anim.json" % src)
+    side = {}
+    if os.path.exists(sj):
+        with open(sj) as f:
+            side = json.load(f)
+        fps.update(side.get("fps", {}))
+    side["fps"] = fps
     with open(os.path.join(od, "%s_anim.json" % mid), "w") as f:
-        json.dump({"fps": FPS}, f, indent=1)
+        json.dump(side, f, indent=1)
     portrait(mid, spec, sheet[-6][2][0])
 
 

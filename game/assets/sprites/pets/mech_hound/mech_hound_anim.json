@@ -1,7 +1,7 @@
 {
  "fps": {
-  "idle": 8,
-  "walk": 14,
+  "idle": 12,
+  "walk": 28,
   "windup": 10,
   "attack": 12,
   "hit": 12,
