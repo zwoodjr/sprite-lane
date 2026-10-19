@@ -408,6 +408,21 @@ func _test_gear() -> void:
 		_check(not GearDefs.fits(GearDefs.make_mod("scope", "rare"), "mod1", hero), "%s no scope" % hero)
 		_check(GearDefs.fits(GearDefs.make_mod("coat_fire", "rare"), "mod1", hero), "%s coating ok" % hero)
 	_check(not GearDefs.fits(GearDefs.make_mod("grip", "rare"), "mod1", "vesper_thorn"), "vesper no grip")
+	## Quick equip (stash popup / results): every rolled drop lands in a slot.
+	var qe_bad := 0
+	var qrng := RandomNumberGenerator.new()
+	qrng.seed = 77
+	for hero in CharacterDefs.PLAYABLE_IDS:
+		for i in range(12):
+			GameState.stash.clear()
+			GameState.loadouts.clear()
+			GameState.add_to_stash(GearDefs.roll_drop(1 + i % 10, hero, 0.2, qrng))
+			var quid := int(GameState.stash[0]["uid"])
+			if not GameState.quick_equip(quid, hero) or GameState.equipped_by(quid).is_empty():
+				qe_bad += 1
+	_check(qe_bad == 0, "quick equip bad=%d" % qe_bad)
+	GameState.stash.clear()
+	GameState.loadouts.clear()
 	_check(not GearDefs.fits(GearDefs.make_weapon("pebble", "rare", rng), "weapon", "ash_rook"), "weapon locked to hero")
 	## Weapon variants + mods.
 	var base := LoadoutStubs.weapon_for_character("vesper_thorn")
