@@ -55,6 +55,7 @@ var _going := false
 var _pad_dist := INF
 var _force_ammo := ""
 var _keep_camp: Dictionary = {}
+var _keep_gear: Array = []
 var _camp_override := false
 var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 
@@ -62,7 +63,31 @@ var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 func _exit_tree() -> void:
 	if _camp_override:
 		GameState.camp = _keep_camp
+		if _keep_gear.size() == 3:
+			GameState.stash = _keep_gear[0]
+			GameState.loadouts = _keep_gear[1]
+			GameState.insured = _keep_gear[2]
 		GameState.save_profile()
+
+
+func _give_kit(hero: String) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	GameState.camp["stash"] = 3
+	var items: Array = [[GearDefs.make_weapon(hero, "legendary", rng), "weapon"],
+		[GearDefs.make_mod("coat_fire", "epic"), "mod1"]]
+	var sid := GearDefs.survivor_set_for(hero)
+	var ss: Array = GearDefs.SURVIVOR_SETS[sid]["slots"]
+	for sl in ss:
+		items.append([GearDefs.make_gear(str(sl), "epic", rng, "survivor", hero), str(sl)])
+	for sl in GearDefs.ARMOR_SLOTS:
+		if not sl in ss:
+			var it := GearDefs.make_gear(str(sl), "epic", rng, "general", hero)
+			it["set"] = "demolition_crew"
+			items.append([it, str(sl)])
+	for pair in items:
+		GameState.add_to_stash(pair[0])
+		GameState.equip(hero, str(pair[1]), int(GameState.stash[GameState.stash.size() - 1]["uid"]))
 
 
 func _ready() -> void:
@@ -92,6 +117,13 @@ func _ready() -> void:
 		_camp_override = true
 		for id in HangarDefs.all_ids():
 			GameState.camp[id] = HangarDefs.max_rank(str(id))
+	## arg 14 "kit": a Legendary weapon, mods, survivor set + 3 general pieces (not saved).
+	if a.size() > 14 and a[14] == "kit":
+		if not _camp_override:
+			_keep_camp = GameState.camp.duplicate()
+		_camp_override = true
+		_keep_gear = [GameState.stash.duplicate(true), GameState.loadouts.duplicate(true), GameState.insured.duplicate(true)]
+		_give_kit(GameState.selected_character_id)
 	_headless = DisplayServer.get_name() == "headless"
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()
@@ -455,3 +487,4 @@ func _summary() -> void:
 		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
+	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])

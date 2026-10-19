@@ -69,7 +69,94 @@ func _hangar_shots() -> void:
 	get_tree().quit()
 
 
+## `-- OUTDIR gear`: gear screen, stash with items, a drop in a match, results.
+func _gear_shots() -> void:
+	var keep := [GameState.stash.duplicate(true), GameState.loadouts.duplicate(true), GameState.camp.duplicate(), GameState.materials.duplicate()]
+	var hero := "pebble"
+	GameState.selected_character_id = hero
+	GameState.camp["stash"] = 1
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var kit: Array = [[GearDefs.make_weapon(hero, "legendary", rng), "weapon"], [GearDefs.make_mod("edge", "epic"), "mod1"],
+		[GearDefs.make_mod("coat_shock", "rare"), "mod2"], [GearDefs.make_gear("charm", "rare", rng), "charm"]]
+	for sl in GearDefs.SURVIVOR_SETS["quarry_plate"]["slots"]:
+		kit.append([GearDefs.make_gear(str(sl), "epic", rng, "survivor", hero), str(sl)])
+	for sl in ["head", "hands"]:
+		var it := GearDefs.make_gear(sl, "legendary", rng, "general", hero)
+		it["set"] = "demolition_crew"
+		kit.append([it, sl])
+	for pair in kit:
+		GameState.add_to_stash(pair[0])
+		GameState.equip(hero, str(pair[1]), int(GameState.stash[GameState.stash.size() - 1]["uid"]))
+	for i in range(9):
+		GameState.add_to_stash(GearDefs.roll_drop(6, hero, 0.6, rng))
+	GameState.materials = {"dust_heart": 2, "salvage_core": 3}
+	var lo: Node = (load("res://scenes/ui/loadout.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lo)
+	get_tree().current_scene = lo
+	for i in range(30):
+		await get_tree().process_frame
+	await _snap("gear_summary")
+	lo.call("select_slot", "chest")
+	for i in range(10):
+		await get_tree().process_frame
+	await _snap("gear_pick_chest")
+	lo.queue_free()
+	var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(h)
+	get_tree().current_scene = h
+	h.call("show_tab", "stash")
+	for i in range(20):
+		await get_tree().process_frame
+	await _snap("gear_stash")
+	h.call("inspect_item", int(GameState.stash[0]["uid"]))
+	for i in range(10):
+		await get_tree().process_frame
+	await _snap("gear_inspect")
+	h.queue_free()
+	## A match with drops on the ground.
+	TouchInput.touch_primary = true
+	GameState.tutorial_done = true
+	GameState.selected_mode_id = "drift"
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	var player: Node2D = m.get_node("World/Player")
+	for i in range(40):
+		await get_tree().process_frame
+	var k := 0
+	for r in ["common", "rare", "epic", "legendary"]:
+		GearPickup.spawn(m.get_node("World"), player.global_position + Vector2(-150 + k * 100, -140), GearDefs.roll_drop(5, hero, 0.0, rng, "armor", r))
+		k += 1
+	GearPickup.spawn_material(m.get_node("World"), player.global_position + Vector2(0, 130), "dust_heart", 1)
+	m.call("spawn_special", "boss", "mutant_overlord")
+	for i in range(50):
+		await get_tree().process_frame
+	await _snap("gear_drops_match")
+	m.queue_free()
+	await get_tree().process_frame
+	GameState.extracted = true
+	GameState.wiped = false
+	GameState.result_found = []
+	for i in range(4):
+		GameState.result_found.append(GearDefs.roll_drop(5, hero, 0.5, rng))
+	GameState.payout_this_run = 512
+	await _show("res://scenes/ui/result_screen.tscn", "gear_result")
+	GameState.stash = keep[0]
+	GameState.loadouts = keep[1]
+	GameState.camp = keep[2]
+	GameState.materials = keep[3]
+	GameState.save_profile()
+	get_tree().quit()
+
+
 func _run() -> void:
+	if _char == "gear":
+		await _gear_shots()
+		return
 	if _char == "hangar":
 		await _hangar_shots()
 		return

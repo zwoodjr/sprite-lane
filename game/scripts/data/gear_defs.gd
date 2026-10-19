@@ -229,8 +229,8 @@ const ELEMENT_RARITY := "rare"
 
 ## ---------------------------------------------------------------- drops
 ## Kill / crate drop chance; scaled by Dust tier (1..10).
-const KILL_DROP_CHANCE := 0.012
-const CRATE_DROP_CHANCE := 0.04
+const KILL_DROP_CHANCE := 0.025
+const CRATE_DROP_CHANCE := 0.06
 const DROP_TIER_STEP := 0.15
 ## Rarity weights at tier 1 and the per-tier change.
 const RARITY_WEIGHT := {"common": 70.0, "rare": 24.0, "epic": 5.0, "legendary": 1.0}
