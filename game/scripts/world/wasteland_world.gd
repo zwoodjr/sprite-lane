@@ -100,7 +100,7 @@ func _load_textures() -> void:
 	for k in ["earth", "sand", "scrub", "rubble", "riverbed", "asphalt"]:
 		_ground_tex[k] = load("res://assets/sprites/tiles/ground_%s.png" % k) as Texture2D
 	for k in MID_PROPS.keys():
-		_mid_tex[k] = load("res://assets/sprites/props/%s.png" % k) as Texture2D
+		_mid_tex[k] = prop_tex(str(k))
 	_atlas = load("res://assets/sprites/decals/decal_atlas.png") as Texture2D
 	_decor.clear()
 	for n in [
@@ -108,16 +108,31 @@ func _load_textures() -> void:
 		"bones", "tire", "cactus", "sign_post", "scrap_pile",
 		"wall_ruin", "barrier_scrap", "ruin_pillar",
 	]:
-		_decor.append(load("res://assets/sprites/props/%s.png" % n) as Texture2D)
-	_prop_wreck = load("res://assets/sprites/props/wreck.png")
-	_prop_crate = load("res://assets/sprites/props/herb_crate.png")
-	_prop_tower = load("res://assets/sprites/props/signal_tower.png")
-	_prop_scrap = load("res://assets/sprites/props/scrap_pile.png")
-	_prop_drum = load("res://assets/sprites/props/scrap_drum.png")
-	_prop_chest = load("res://assets/sprites/props/apothecary_chest.png")
-	_prop_vial = load("res://assets/sprites/props/vial_crate.png")
-	_prop_wall = load("res://assets/sprites/props/wall_ruin.png")
-	_prop_pillar = load("res://assets/sprites/props/ruin_pillar.png")
+		_decor.append(prop_tex(n))
+	_prop_wreck = prop_tex("wreck")
+	_prop_crate = prop_tex("herb_crate")
+	_prop_tower = prop_tex("signal_tower")
+	_prop_scrap = prop_tex("scrap_pile")
+	_prop_drum = prop_tex("scrap_drum")
+	_prop_chest = prop_tex("apothecary_chest")
+	_prop_vial = prop_tex("vial_crate")
+	_prop_wall = prop_tex("wall_ruin")
+	_prop_pillar = prop_tex("ruin_pillar")
+
+
+## Painted 2x prop art (tools/paint_pass.py) when it exists, else the original.
+static func prop_tex(n: String) -> Texture2D:
+	var hd := "res://assets/sprites/props_hd/%s.png" % n
+	if ResourceLoader.exists(hd):
+		return load(hd) as Texture2D
+	return load("res://assets/sprites/props/%s.png" % n) as Texture2D
+
+
+## World scale for a prop texture: the 2x painted set draws at half size.
+static func prop_scale(tex: Texture2D) -> float:
+	if tex and tex.resource_path.contains("/props_hd/"):
+		return 0.5
+	return 1.0
 
 
 func _build_landmark_catalog() -> void:
@@ -343,6 +358,7 @@ func _place_mid(chunk: Node2D, kind: String, world_pos: Vector2, rng: RandomNumb
 	taken.append(world_pos)
 	var sp := Sprite2D.new()
 	sp.texture = _mid_tex[kind]
+	sp.scale = Vector2.ONE * prop_scale(sp.texture)
 	sp.position = (world_pos - chunk.position).floor()
 	sp.flip_h = rng.randf() < 0.5
 	sp.z_index = 1 if info.get("ground", false) else 2
@@ -402,6 +418,7 @@ func _populate_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], ta
 			continue
 		var sp := Sprite2D.new()
 		sp.texture = _decor[ph % _decor.size()]
+		sp.scale = Vector2.ONE * prop_scale(sp.texture)
 		sp.position = lp
 		sp.flip_h = ((ph >> 5) & 1) == 1
 		sp.centered = true
@@ -412,7 +429,7 @@ func _populate_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], ta
 		wr.texture = _prop_wreck
 		var wh := _hash2(coord.x, coord.y, 77)
 		wr.position = Vector2((wh >> 3) % (CHUNK_SIZE - 80) + 40, (wh >> 9) % (CHUNK_SIZE - 80) + 40)
-		wr.scale = Vector2(1.3, 1.3)
+		wr.scale = Vector2(1.3, 1.3) * prop_scale(wr.texture)
 		wr.z_index = 2
 		chunk.add_child(wr)
 	## Destructible crates — sparse (~⅕ prior density). Power-ups are rare finds.
@@ -454,7 +471,7 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 				sp.texture = _prop_wreck
 			sp.position = lp - chunk.position
 			sp.centered = true
-			sp.scale = Vector2(1.4, 1.4)
+			sp.scale = Vector2(1.4, 1.4) * prop_scale(sp.texture)
 			sp.z_index = 3
 			chunk.add_child(sp)
 			var label := Label.new()

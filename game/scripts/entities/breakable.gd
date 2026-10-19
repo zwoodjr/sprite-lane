@@ -25,6 +25,9 @@ func setup(kind_id: String, tex: Texture2D, p_hp: float = 24.0) -> void:
 		sprite = $Sprite
 	sprite.texture = tex
 	sprite.centered = true
+	## Painted 2x prop art draws at half size (same world footprint).
+	if tex and tex.resource_path.contains("/props_hd/"):
+		sprite.scale = Vector2(0.5, 0.5)
 
 
 func _ready() -> void:
