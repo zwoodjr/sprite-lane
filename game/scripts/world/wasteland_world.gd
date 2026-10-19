@@ -155,9 +155,10 @@ func _process(_delta: float) -> void:
 ## (nearest first) never shows a blank floor and avoids a 5-bake hitch.
 func _bake_next() -> void:
 	while not _bake_queue.is_empty():
-		var c: WastelandChunk = _bake_queue.pop_front()
-		if is_instance_valid(c) and not c.is_queued_for_deletion():
-			c.bake()
+		## Untyped: a queued chunk may already be freed (unloaded while waiting).
+		var c: Variant = _bake_queue.pop_front()
+		if is_instance_valid(c) and not (c as Node).is_queued_for_deletion():
+			(c as WastelandChunk).bake()
 			return
 
 
