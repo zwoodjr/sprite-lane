@@ -129,6 +129,7 @@ func _run() -> void:
 	await _test_tiers()
 	var keep_depth := [GameState.ingredients.duplicate(), GameState.tonics.duplicate(), GameState.tonic_loadout.duplicate()]
 	await _test_depth_e1()
+	await _test_depth_e2()
 	GameState.ingredients = keep_depth[0]
 	GameState.tonics = keep_depth[1]
 	GameState.tonic_loadout = keep_depth[2]
@@ -923,3 +924,174 @@ func _test_depth_e1() -> void:
 	GameState.selected_mode_id = "drift"
 	print("DEPTH_E1_OK")
 
+
+func _depth_match(mode: String, hero: String) -> Node:
+	GameState.camp.clear()
+	GameState.selected_mode_id = mode
+	GameState.selected_character_id = hero
+	GameState.fast_timers = true
+	GameState.tutorial_done = true
+	GameState.tonic_loadout = []
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(4):
+		await get_tree().physics_frame
+	## Clear the field so tests control who is around.
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await get_tree().physics_frame
+	return m
+
+
+func _end_depth_match(m: Node) -> void:
+	if is_instance_valid(m):
+		m.queue_free()
+	GameState.fast_timers = false
+	get_tree().paused = false
+	for k in range(3):
+		await get_tree().process_frame
+
+
+func _mob(m: Node, kind: String, at: Vector2) -> Node2D:
+	var e: CharacterBody2D = (load("res://scenes/entities/enemy.tscn") as PackedScene).instantiate()
+	e.setup(at, 1.0, 1.0, 1.0, kind)
+	m.get_node("World").add_child(e)
+	e.set("_spawn_in", 0.0)
+	return e
+
+
+## Depth E2: weaknesses, elite traits, infighting, raider crews.
+func _test_depth_e2() -> void:
+	_check(is_equal_approx(FactionDefs.weakness("plague", "fire"), 1.35) and FactionDefs.weakness("plague", "shock") == 1.0, "e2 weakness table")
+	_check(EnemyDefs.faction("scrap_hound") == "machine" and EnemyDefs.faction("rad_gator") == "plague" and EnemyDefs.faction("raider_grunt") == "raider", "e2 factions")
+	_check(FactionDefs.roll_traits("plague", 2).is_empty() and FactionDefs.roll_traits("plague", 4).size() == 1 and FactionDefs.roll_traits("machine", 8).size() == 2, "e2 trait counts")
+	_check(not ("raider_grunt" in EnemyDefs.ids_for_tier(2)), "e2 raiders crew-only")
+	var m: Node = await _depth_match("smog", "ash_rook")
+	var player: Node2D = m.get_node("World/Player")
+	var fac := {}
+	for i in range(2):
+		var el: Node = m.call("spawn_special", "elite")
+		fac[str(el.get("faction"))] = true
+		_check((el.get("traits") as Array).size() == 1, "e2 elite one trait")
+	_check(fac.has("plague") and fac.has("machine"), "e2 elites alternate sides")
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await get_tree().physics_frame
+	## Weakness through the hit pipeline (incendiary vs plague).
+	player.call("apply_powerup", RunFx.ammo_def("incendiary"))
+	_check(str(player.call("hit_element", "main")) == "fire", "e2 incendiary is fire")
+	var far := player.global_position + Vector2(300, 0)
+	var pm := _mob(m, "rad_gator", far)
+	var mm := _mob(m, "scrap_hound", far + Vector2(0, 200))
+	pm.set("max_hp", 1000.0); pm.set("hp", 1000.0)
+	mm.set("max_hp", 1000.0); mm.set("hp", 1000.0)
+	await get_tree().physics_frame
+	player.call("hit_enemy", pm, 100.0, Vector2.RIGHT, 0.0, false, "blast")
+	player.call("hit_enemy", mm, 100.0, Vector2.RIGHT, 0.0, false, "blast")
+	var lost_p := 1000.0 - float(pm.get("hp"))
+	var lost_m := 1000.0 - float(mm.get("hp"))
+	_check(lost_p > lost_m * 1.2, "e2 plague burns harder %.0f vs %.0f" % [lost_p, lost_m])
+	pm.queue_free()
+	mm.queue_free()
+	## Shielded: front hits blocked, back hits land.
+	var sh := _mob(m, "cyber_juggernaut", player.global_position + Vector2(500, 0))
+	sh.call("set_traits", ["shielded"])
+	sh.set("_facing_left", false)
+	sh.set("max_hp", 1000.0); sh.set("hp", 1000.0)
+	sh.call("take_damage", 100.0, Vector2.LEFT, 0.0)
+	var front := 1000.0 - float(sh.get("hp"))
+	sh.call("take_damage", 100.0, Vector2.RIGHT, 0.0)
+	var back := 1000.0 - float(sh.get("hp")) - front
+	_check(front < 40.0 and back > 90.0, "e2 shield front %.0f back %.0f" % [front, back])
+	## Overclocked: overheats and takes more.
+	sh.call("set_traits", ["overclocked"])
+	sh.set("_overheat_t", 0.0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(float(sh.get("_overheat_left")) > 0.0, "e2 overheat")
+	var h0 := float(sh.get("hp"))
+	sh.call("take_damage", 100.0, Vector2.ZERO, 0.0)
+	_check(h0 - float(sh.get("hp")) > 140.0, "e2 overheat takes more")
+	sh.queue_free()
+	## Self-repair heals when hurt; regrowing regenerates unless burning.
+	var sr := _mob(m, "fusion_golem", player.global_position + Vector2(-500, 0))
+	sr.call("set_traits", ["self_repair"])
+	sr.set("hp", float(sr.get("max_hp")) * 0.3)
+	for k in range(40):
+		await get_tree().physics_frame
+	_check(float(sr.get("hp")) > float(sr.get("max_hp")) * 0.35, "e2 self repair")
+	sr.queue_free()
+	var rg := _mob(m, "scav_bear", player.global_position + Vector2(0, 500))
+	rg.call("set_traits", ["regrowing"])
+	rg.set("hp", float(rg.get("max_hp")) * 0.5)
+	for k in range(30):
+		await get_tree().physics_frame
+	_check(float(rg.get("hp")) > float(rg.get("max_hp")) * 0.51, "e2 regrowing")
+	rg.call("apply_status", "burn", 5.0, 0.01)
+	var hb := float(rg.get("hp"))
+	for k in range(20):
+		await get_tree().physics_frame
+	_check(float(rg.get("hp")) <= hb, "e2 burning stops regrowth")
+	rg.queue_free()
+	## Bloated burst hurts the hero.
+	var bl := _mob(m, "toxic_scorp", player.global_position + Vector2(40, 0))
+	bl.call("set_traits", ["bloated"])
+	await get_tree().physics_frame
+	player.set("_iframes", 0.0)
+	var php := float(player.get("hp"))
+	bl.call("take_damage", 9999.0, Vector2.ZERO, 0.0)
+	_check(float(player.get("hp")) < php, "e2 bloated burst")
+	for k in range(5):
+		await get_tree().physics_frame
+	## Infighting: plague vs machine brawl when the hero is far away.
+	var a := _mob(m, "rad_gator", player.global_position + Vector2(700, 300))
+	var b := _mob(m, "scrap_hound", player.global_position + Vector2(760, 300))
+	for e in [a, b]:
+		e.set("max_hp", 500.0)
+		e.set("hp", 500.0)
+	for k in range(150):
+		player.set("hp", player.get("max_hp"))
+		await get_tree().physics_frame
+	_check((is_instance_valid(a) and float(a.get("hp")) < 500.0) or (is_instance_valid(b) and float(b.get("hp")) < 500.0), "e2 infighting")
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await _end_depth_match(m)
+	## Raider crew: loots a crate, hunts, drops its bag.
+	m = await _depth_match("blight", "pebble")
+	player = m.get_node("World/Player")
+	for c in get_tree().get_nodes_in_group("medicine_crates"):
+		c.queue_free()
+	await get_tree().physics_frame
+	var at := player.global_position + Vector2(900, 0)
+	var crew: Node = m.call("spawn_crew", at)
+	await get_tree().physics_frame
+	var members: Array = crew.get("members")
+	_check(members.size() == 1 + FactionDefs.crew_brutes(5) + FactionDefs.crew_grunts(5), "e2 crew size %d" % members.size())
+	_check(str(crew.get("carrier").get("kind")) == "raider_captain" and str(crew.get("carrier").get("role")) == "boss", "e2 captain carries")
+	var crate := HaulPickup.spawn(m.get_node("World"), at + Vector2(60, 0), "medicine", 1, false)
+	for k in range(240):
+		player.set("hp", player.get("max_hp"))
+		if int(crew.get("bag_medicine")) > 0:
+			break
+		await get_tree().physics_frame
+	_check(int(crew.get("bag_medicine")) == 1 and not is_instance_valid(crate), "e2 crew loots medicine")
+	_check(not bool(crew.call("is_hunting")), "e2 crew not hunting yet")
+	var cap: Node2D = crew.get("carrier")
+	cap.call("take_damage", 1.0, Vector2.ZERO, 0.0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(bool(crew.call("is_hunting")), "e2 crew hunts when hurt")
+	var cap_pos := cap.global_position
+	cap.call("take_damage", 999999.0, Vector2.ZERO, 0.0)
+	for k in range(4):
+		await get_tree().physics_frame
+	var bag_found := false
+	for h in get_tree().get_nodes_in_group("medicine_crates"):
+		if (h as Node2D).global_position.distance_to(cap_pos) < 80.0:
+			bag_found = true
+	_check(bag_found, "e2 bag drops with the medicine")
+	_check(crew.get("carrier") != null and crew.get("carrier") != cap, "e2 new carrier")
+	await _end_depth_match(m)
+	print("DEPTH_E2_OK")

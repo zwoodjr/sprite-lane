@@ -19,6 +19,8 @@ const RAIDER := "raider"
 ## the match spawns them on the tier's elite / boss schedule (ModeDefs).
 const ROLE_KINDS := {"cyber_juggernaut": "elite", "dread_naught": "boss", "mutant_overlord": "boss"}
 const ELITE_KINDS: Array = ["cyber_juggernaut"]
+## Raider crew members only come with a crew (scripts/match/raider_crew.gd).
+const CREW_KINDS: Array = ["raider_grunt", "raider_brute", "raider_captain"]
 const BOSS_KINDS: Array = ["dread_naught", "mutant_overlord"]
 ## Stat multipliers on top of the tier's enemy strength.
 const ROLE_STATS := {
@@ -59,6 +61,10 @@ static func all_kinds() -> Array[Dictionary]:
 		_k("void_spider", "Void-Spider", 3, "charger", 220.0, 145.0, 17.0, 1.5),
 		_k("wasteland_god_entity", "Wasteland God-Entity", 3, "brute", 360.0, 60.0, 20.0, 1.8),
 		_k("apocalypse_wraith", "Apocalypse Wraith", 3, "raider", 240.0, 120.0, 16.0, 1.55),
+		## --- Raiders (Depth Update E2): human scavenger crews from the war ---
+		_k("raider_grunt", "Raider", 2, "raider", 64.0, 125.0, 9.0, 1.0),
+		_k("raider_brute", "Raider Brute", 2, "brute", 170.0, 95.0, 13.0, 1.2),
+		_k("raider_captain", "Raider Captain", 3, "raider", 300.0, 105.0, 15.0, 1.4),
 	]
 
 
@@ -74,7 +80,7 @@ static func faction(id: String) -> String:
 static func ids_for_tier(tier: int) -> Array[String]:
 	var out: Array[String] = []
 	for k in all_kinds():
-		if int(k["tier"]) == tier and not ROLE_KINDS.has(str(k["id"])):
+		if int(k["tier"]) == tier and not ROLE_KINDS.has(str(k["id"])) and not (str(k["id"]) in CREW_KINDS):
 			out.append(str(k["id"]))
 	return out
 

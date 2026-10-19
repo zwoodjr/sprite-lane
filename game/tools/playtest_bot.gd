@@ -61,6 +61,8 @@ var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 ## Depth Update tallies (printed on the DEPTH line).
 var _max_exposure := 0.0
 var _max_pack := 0
+var _raiders_seen := {}
+var _elite_traits := {}
 
 
 func _restore_profile() -> void:
@@ -348,6 +350,11 @@ func _extra(delta: float) -> void:
 	_min_hp = min(_min_hp, _p.hp)
 	_max_exposure = maxf(_max_exposure, GameState.exposure)
 	_max_pack = maxi(_max_pack, GameState.pack_weight())
+	for rd in get_tree().get_nodes_in_group("raiders"):
+		_raiders_seen[rd.get_instance_id()] = true
+	for el in get_tree().get_nodes_in_group("elites"):
+		for t in el.get("traits"):
+			_elite_traits[str(t)] = true
 	if _p.get("_reload_left") > 0.0: _reload_s += delta
 	if TouchInput.move_vector.length() > 0.5 and _p.global_position.distance_to(_last_pos) < 0.3:
 		_stuck_s += delta
@@ -503,5 +510,5 @@ func _summary() -> void:
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])
-	print("DEPTH tonics=%s max_pack=%d max_exposure=%.0f pack_now=%s crates_left=%d" % [",".join(PackedStringArray(GameState.run_tonics)),
-		_max_pack, _max_exposure, str(GameState.run_pack), get_tree().get_nodes_in_group("medicine_crates").size()])
+	print("DEPTH tonics=%s max_pack=%d max_exposure=%.0f pack_now=%s raiders=%d traits=%s" % [",".join(PackedStringArray(GameState.run_tonics)),
+		_max_pack, _max_exposure, str(GameState.run_pack), _raiders_seen.size(), ",".join(PackedStringArray(_elite_traits.keys()))])

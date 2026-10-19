@@ -1439,6 +1439,12 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 	if bool(e.get("_dead")):
 		return
 	dmg *= _damage_vs(e as Node2D, src)
+	## Depth E2: plague burns, machines short out.
+	var weak := FactionDefs.weakness(str(e.get("faction")), hit_element(src))
+	if weak > 1.0:
+		dmg *= weak
+		if e.has_method("note_weak_hit"):
+			e.call("note_weak_hit")
 	var is_crit := crit
 	if not is_crit and _forced_crit(e as Node2D, src):
 		dmg *= 1.5 + GameState.crit_damage_bonus()
@@ -1449,6 +1455,29 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 	if is_instance_valid(e):
 		e.call("take_damage", dmg, dir, knock, is_crit)
 	_legendary_on_hit(at, src)
+
+## Element of a hit ("fire" / "shock" / ""): special ammo, weapon coatings,
+## Juno's electric ability + chains, explosions count as fire.
+func hit_element(src: String) -> String:
+	match special_ammo():
+		"incendiary", "explosive":
+			return "fire"
+		"shock":
+			return "shock"
+	if src in ["ability", "chain"] and GameState.selected_character_id == CharacterDefs.BOLT_JUNO_ID:
+		return "shock"
+	if src == "blast":
+		return "fire"
+	var coats: Variant = _weapon.get("coats", [])
+	if coats is Array:
+		for c in coats:
+			if c is Dictionary:
+				match str(c.get("coat", "")):
+					"fire":
+						return "fire"
+					"shock":
+						return "shock"
+	return ""
 
 ## Field Notes (per-kind kills) and Double Cross (hits from behind).
 func _damage_vs(e: Node2D, src: String) -> float:

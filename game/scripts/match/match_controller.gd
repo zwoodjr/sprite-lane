@@ -37,6 +37,9 @@ var events: Node
 var _pad_guards: int = 0
 ## Depth Update E1: medicine crates, plague fog, exposure.
 var plague: Node
+## E2: raider crews on the tier's schedule; elites alternate plague / machine.
+var _next_crew_at: float = INF
+var _elite_side: int = 0
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -99,6 +102,8 @@ func _ready() -> void:
 		_next_elite_at = ModeDefs.ELITE_FIRST * ts
 	if tier >= ModeDefs.BOSS_FROM_TIER:
 		_next_boss_at = ModeDefs.BOSS_FIRST * ts
+	if tier >= FactionDefs.CREW_FROM_TIER:
+		_next_crew_at = FactionDefs.CREW_FIRST * ts
 	## Cheap event stub: one radio toast mid-lockout (no quest log).
 	_radio_ping_done = false
 	_radio_ping_at = 18.0 * GameState.timer_scale()
@@ -352,6 +357,10 @@ func _tick_specials() -> void:
 	if _match_time >= _next_boss_at:
 		_next_boss_at += ModeDefs.BOSS_EVERY * ts
 		spawn_special("boss")
+	if _match_time >= _next_crew_at:
+		_next_crew_at += FactionDefs.CREW_EVERY * ts
+		if get_tree().get_nodes_in_group("raider_crews").size() < FactionDefs.CREW_MAX_ALIVE:
+			spawn_crew()
 
 ## Spawns an elite / boss just off screen (also used by events and tests).
 func spawn_special(role: String, kind: String = "") -> Node:
@@ -359,7 +368,11 @@ func spawn_special(role: String, kind: String = "") -> Node:
 		return null
 	var k := kind
 	if k == "":
-		var pool: Array = EnemyDefs.BOSS_KINDS if role == "boss" else EnemyDefs.ELITE_KINDS
+		var pool: Array = EnemyDefs.BOSS_KINDS
+		if role == "elite":
+			## Elites alternate sides so both factions' traits show up.
+			_elite_side += 1
+			pool = FactionDefs.ELITE_POOL["plague" if _elite_side % 2 == 0 else "machine"]
 		k = str(pool[randi() % pool.size()])
 	var ang := randf() * TAU
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
@@ -372,6 +385,11 @@ func spawn_special(role: String, kind: String = "") -> Node:
 	enemy.call("set_role", role)
 	world.add_child(enemy)
 	var nm := str(EnemyDefs.get_kind(k).get("display_name", k))
+	if role == "elite":
+		enemy.call("set_traits", FactionDefs.roll_traits(EnemyDefs.faction(k), int(_mode.get("tier", 1))))
+		var tn := str(enemy.call("trait_names"))
+		if tn != "":
+			nm = tn + " " + nm
 	if role == "boss":
 		hud.show_banner("BOSS", "%s is hunting you" % nm, UiTheme.DANGER)
 		Juice.sfx("threat_up")
@@ -379,6 +397,19 @@ func spawn_special(role: String, kind: String = "") -> Node:
 	else:
 		hud.show_toast("ELITE: %s inbound — it carries good gear" % nm, UiTheme.RUST)
 	return enemy
+
+## A rival raider crew (FactionDefs) — also used by contracts / tests.
+func spawn_crew(at: Vector2 = Vector2.INF) -> Node:
+	if not is_instance_valid(player):
+		return null
+	var c := Node.new()
+	c.name = "RaiderCrew"
+	c.set_script(load("res://scripts/match/raider_crew.gd"))
+	c.add_to_group("raider_crews")
+	add_child(c)
+	c.call("setup", self, player, world, hud)
+	c.call("spawn", int(_mode.get("tier", 1)), at)
+	return c
 
 func _spawn_enemy() -> void:
 	if not is_instance_valid(player):
@@ -454,7 +485,7 @@ func _cull_far_enemies() -> void:
 		if not (n is Node2D) or not is_instance_valid(n):
 			continue
 		var e := n as Node2D
-		if str(e.get("role")) != "":
+		if str(e.get("role")) != "" or e.get("crew") != null:
 			continue
 		if e.global_position.distance_to(player.global_position) > 1100.0:
 			e.queue_free()

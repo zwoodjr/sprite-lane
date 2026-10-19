@@ -123,3 +123,41 @@ func _shots_e1() -> void:
 		pm.call("close")
 	m.queue_free()
 	await _frames(3)
+
+
+func _mob(m: Node, kind: String, at: Vector2) -> Node2D:
+	var e: CharacterBody2D = (load("res://scenes/entities/enemy.tscn") as PackedScene).instantiate()
+	e.setup(at, 1.0, 0.2, 1.0, kind)
+	m.get_node("World").add_child(e)
+	return e
+
+
+## E2: trait elites (both sides), a raider crew, plague vs machine brawl.
+func _shots_e2() -> void:
+	GameState.best_tier_extracted = 9
+	GameState.camp = {}
+	var m := await _match("choke", "helm_wisp")
+	var player: Node2D = m.get_node("World/Player")
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await _frames(2)
+	var p := player.global_position
+	var e1 := _mob(m, "cyber_juggernaut", p + Vector2(150, -170))
+	e1.call("set_role", "elite")
+	e1.call("set_traits", ["shielded", "overclocked"])
+	var e2 := _mob(m, "scorpion_king", p + Vector2(-150, 170))
+	e2.call("set_role", "elite")
+	e2.call("set_traits", ["bloated", "sporing"])
+	e2.call("_spore_cloud", p + Vector2(-90, 230), 56.0, 30.0, 1.0)
+	await _frames(50)
+	await _snap("e2_elites")
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await _frames(2)
+	m.call("spawn_crew", p + Vector2(60, -260))
+	_mob(m, "rad_gator", p + Vector2(-60, 260))
+	_mob(m, "scrap_hound", p + Vector2(10, 270))
+	await _frames(45)
+	await _snap("e2_raider_crew")
+	m.queue_free()
+	await _frames(3)

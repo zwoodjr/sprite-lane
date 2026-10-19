@@ -10,6 +10,8 @@ const ART := {
 	"burn": {"path": "res://assets/sprites/fx/fx_firewalk.png", "n": 4, "fps": 10.0, "tint": Color(1, 1, 1, 0.95), "size_k": 1.6},
 	"heal": {"path": "res://assets/sprites/fx/fx_heal_puddle.png", "n": 2, "fps": 4.0, "tint": Color(1, 1, 1, 0.85), "size_k": 2.2},
 	"poison": {"path": "res://assets/sprites/fx/fx_heal_puddle.png", "n": 2, "fps": 4.0, "tint": Color(0.75, 1.3, 0.35, 0.8), "size_k": 2.2},
+	## Depth E2: enemy spore cloud (Sporing / Bloated elites) — hurts the hero.
+	"spore": {"path": "res://assets/sprites/depth/world/plague_fog.png", "n": 1, "fps": 1.0, "tint": Color(1.0, 1.0, 1.0, 0.95), "size_k": 2.3},
 }
 
 var mode: String = "burn"
@@ -37,6 +39,8 @@ func _ready() -> void:
 		var w := radius * float(art["size_k"])
 		_sprite.scale = Vector2.ONE * (w / float(_frames[0].get_width()))
 	_sprite.modulate = art["tint"]
+	if mode == "spore":
+		_sprite.scale.y *= 0.62
 	if mode == "burn":
 		_sprite.offset = Vector2(0, -float(_frames[0].get_height()) * 0.35) if not _frames.is_empty() else Vector2.ZERO
 	add_child(_sprite)
@@ -69,3 +73,9 @@ func _physics_process(delta: float) -> void:
 		"poison":
 			for e in RunFx.enemies_in(get_tree(), global_position, radius):
 				e.call("apply_status", "poison", 2.0, value)
+		"spore":
+			var p := get_tree().get_first_node_in_group("player") as Node2D
+			if p != null and p.global_position.distance_to(global_position) <= radius + 10.0:
+				if p.has_method("drain") and not bool(p.call("is_dashing")):
+					p.call("drain", value * TICK)
+				GameState.add_exposure(float(FactionDefs.TRAITS["sporing"]["exposure"]) * TICK)

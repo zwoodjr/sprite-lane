@@ -40,7 +40,7 @@ const CRATE_HERB_CHANCE := 0.3
 const MEDICINE_WEIGHT := 3
 ## Extract pays this much bag value per crate (× loot multiplier × tier payout),
 ## and the crate is banked as 1 medicine (top tonic recipes need it).
-const MEDICINE_SCRAP := 120
+const MEDICINE_SCRAP := 60
 ## Carrying any medicine slows you; each extra crate a bit more, capped.
 const CARRY_SLOW := 0.12
 const CARRY_SLOW_EXTRA := 0.03

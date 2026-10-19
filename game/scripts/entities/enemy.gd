@@ -46,6 +46,23 @@ var role: String = ""
 var machine: bool = false
 ## Depth Update: "plague" | "machine" | "raider" (EnemyDefs.faction).
 var faction: String = "plague"
+## E2: elite traits (FactionDefs.TRAITS), raider crew, infighting foe.
+var traits: Array = []
+var crew: Node = null
+var _foe: Node2D = null
+var _foe_check: float = 0.0
+var _infight_cd: float = 0.0
+var _weak_text_cd: float = 0.0
+var _spore_t: float = 0.0
+var _repair_uses: int = 0
+var _repair_left: float = 0.0
+var _overheat_t: float = 0.0
+var _overheat_left: float = 0.0
+var _shield: Polygon2D
+## Minimap marker colour when this mob carries a raider bag.
+var map_color: Color = Color(1.0, 0.6, 0.2)
+var _aura: Line2D
+var _tag: Label
 ## Status effects (Phase 4): id -> {time, value}. poison / burn (value = dps),
 ## stun, slow (value = speed multiplier), mark (value = damage-taken mult).
 var _status: Dictionary = {}
@@ -314,7 +331,16 @@ func _physics_process(delta: float) -> void:
 		return
 	if _rubble_left > 0.0:
 		_tick_rubble(delta)
+	_weak_text_cd = maxf(0.0, _weak_text_cd - delta)
+	_infight_cd = maxf(0.0, _infight_cd - delta)
+	if not traits.is_empty() and _tick_traits(delta):
+		return
 	_player = get_tree().get_first_node_in_group("player") as Node2D
+	if _tick_infight(delta):
+		return
+	if crew != null and is_instance_valid(crew) and not bool(crew.call("is_hunting")):
+		_follow_crew(delta)
+		return
 	## Stunned, or the hero vanished (Nyx's Back Way Out): no attacks, drift.
 	var hidden := _player != null and _player.has_method("is_hidden") and bool(_player.call("is_hidden"))
 	if has_status("stun") or hidden:
@@ -450,6 +476,8 @@ func _separation() -> Vector2:
 
 func _attack(dir: Vector2) -> void:
 	_fire_cd = float(_def["cooldown"]) * randf_range(0.85, 1.2)
+	if "overclocked" in traits:
+		_fire_cd *= float(FactionDefs.TRAITS["overclocked"]["cooldown"])
 	_atk_dir = dir
 	_face(dir.x)
 	if _archetype() == "charger":
@@ -516,6 +544,16 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 	if _dead:
 		return
 	amount *= damage_taken_mult()
+	## Shielded elites shrug off hits from the front.
+	if "shielded" in traits and from_dir.length() > 0.01:
+		var face := Vector2.LEFT if _facing_left else Vector2.RIGHT
+		var half := deg_to_rad(float(FactionDefs.TRAITS["shielded"]["arc_deg"])) * 0.5
+		if absf(face.angle_to(-from_dir.normalized())) < half:
+			amount *= 1.0 - float(FactionDefs.TRAITS["shielded"]["reduce"])
+			if _shield:
+				_shield.modulate.a = 1.0
+	if _overheat_left > 0.0:
+		amount *= float(FactionDefs.TRAITS["overclocked"]["overheat_taken"])
 	hp -= amount
 	if hp_bar:
 		hp_bar.visible = true
@@ -542,6 +580,14 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 func _die() -> void:
 	_dead = true
 	remove_from_group("enemies")
+	if "bloated" in traits:
+		_bloat_burst()
+	if crew != null and is_instance_valid(crew):
+		crew.call("on_member_died", self)
+	if _aura:
+		_aura.visible = false
+	if _tag:
+		_tag.visible = false
 	var range_v: Vector2i = _def.get("scrap", Vector2i(1, 3))
 	var scrap := int(round(float(randi_range(range_v.x, range_v.y)) * GameState.run_scrap_mult()))
 	GameState.kills += 1
@@ -655,7 +701,7 @@ func _tick_status(delta: float) -> void:
 		var dps := 0.0
 		var col := Color(0.6, 1.0, 0.45)
 		if has_status("burn"):
-			dps += status_value("burn")
+			dps += status_value("burn") * FactionDefs.weakness(faction, "fire")
 			col = Color(1.0, 0.6, 0.3)
 		if has_status("poison"):
 			dps += status_value("poison")
@@ -696,3 +742,223 @@ func _tick_rubble(delta: float) -> void:
 		Juice.shake(0.05)
 		if _dead:
 			return
+
+## =============================================================================
+## Depth Update E2: elite traits, infighting, raider crews
+
+## Give this elite its traits (FactionDefs.TRAITS): aura ring + a name tag.
+func set_traits(ids: Array) -> void:
+	traits = ids.duplicate()
+	if traits.is_empty():
+		return
+	_repair_uses = int(FactionDefs.TRAITS["self_repair"]["uses"])
+	_overheat_t = float(FactionDefs.TRAITS["overclocked"]["every"])
+	if "overclocked" in traits:
+		speed *= float(FactionDefs.TRAITS["overclocked"]["speed"])
+	var col: Color = FactionDefs.TRAITS[str(traits[0])]["color"]
+	_aura = Line2D.new()
+	var pts := PackedVector2Array()
+	for i in range(33):
+		var a := TAU * i / 32.0
+		pts.append(Vector2(cos(a) * 26.0, sin(a) * 10.0) * body_scale)
+	_aura.points = pts
+	_aura.width = 3.0
+	_aura.default_color = Color(col.r, col.g, col.b, 0.75)
+	_aura.position = Vector2(0, FEET_Y * body_scale - 2)
+	_aura.z_index = -1
+	add_child(_aura)
+	_tag = Label.new()
+	var names: PackedStringArray = []
+	for t in traits:
+		names.append(FactionDefs.trait_name(str(t)).to_upper())
+	_tag.text = " · ".join(names)
+	_tag.add_theme_font_size_override("font_size", 11)
+	_tag.add_theme_color_override("font_color", col)
+	_tag.add_theme_constant_override("outline_size", 4)
+	_tag.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tag.size = Vector2(160, 16)
+	_tag.position = Vector2(-80, FEET_Y * body_scale - MOB_FRAME_WORLD * body_scale * 0.92 - 18.0)
+	_tag.z_index = 4
+	add_child(_tag)
+	if "shielded" in traits:
+		_shield = Polygon2D.new()
+		var sp := PackedVector2Array()
+		var half := deg_to_rad(float(FactionDefs.TRAITS["shielded"]["arc_deg"])) * 0.5
+		for i in range(9):
+			var a2 := lerpf(-half, half, i / 8.0)
+			sp.append(Vector2(cos(a2), sin(a2) * 0.8) * 30.0 * body_scale)
+		for i in range(8, -1, -1):
+			var a3 := lerpf(-half, half, i / 8.0)
+			sp.append(Vector2(cos(a3), sin(a3) * 0.8) * 24.0 * body_scale)
+		_shield.polygon = sp
+		_shield.color = Color(0.45, 0.75, 1.0, 0.55)
+		var add := CanvasItemMaterial.new()
+		add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		_shield.material = add
+		_shield.position = Vector2(0, -8 * body_scale)
+		_shield.z_index = 3
+		_shield.modulate.a = 0.5
+		add_child(_shield)
+
+
+func trait_names() -> String:
+	var out: PackedStringArray = []
+	for t in traits:
+		out.append(FactionDefs.trait_name(str(t)))
+	return " ".join(out)
+
+
+## Per-frame trait upkeep. True = this frame is spent (repairing / venting).
+func _tick_traits(delta: float) -> bool:
+	if _shield:
+		_shield.scale.x = -1.0 if _facing_left else 1.0
+		_shield.modulate.a = move_toward(_shield.modulate.a, 0.5, delta * 2.0)
+	if "regrowing" in traits and not has_status("burn") and hp < max_hp:
+		hp = minf(max_hp, hp + max_hp * float(FactionDefs.TRAITS["regrowing"]["regen"]) * delta)
+		if hp_bar:
+			hp_bar.value = hp
+	if "sporing" in traits and velocity.length() > 20.0:
+		_spore_t -= delta
+		if _spore_t <= 0.0:
+			var sd: Dictionary = FactionDefs.TRAITS["sporing"]
+			_spore_t = float(sd["every"])
+			_spore_cloud(global_position + Vector2(0, FEET_Y * body_scale - 4), float(sd["radius"]), float(sd["time"]), float(sd["dps"]))
+	if "self_repair" in traits:
+		var rd: Dictionary = FactionDefs.TRAITS["self_repair"]
+		if _repair_left > 0.0:
+			if has_status("stun"):
+				_repair_left = 0.0
+				Juice.float_text(global_position + Vector2(0, -50), "REPAIR BROKEN", UiTheme.TEAL, 13)
+			else:
+				_repair_left -= delta
+				hp = minf(max_hp, hp + max_hp * float(rd["heal"]) / float(rd["time"]) * delta)
+				if hp_bar:
+					hp_bar.value = hp
+				if randf() < 0.3:
+					Juice.burst(global_position + Vector2(randf_range(-14, 14), -10), Color(0.55, 1.0, 0.75), 2, 60.0, 0.3)
+				velocity = Vector2.ZERO
+				_update_anim(false)
+				return true
+		elif _repair_uses > 0 and hp < max_hp * float(rd["below"]) and not has_status("stun"):
+			_repair_uses -= 1
+			_repair_left = float(rd["time"])
+			_cancel_attack()
+			Juice.float_text(global_position + Vector2(0, -50), "SELF-REPAIR", Color(0.55, 1.0, 0.75), 14)
+	if "overclocked" in traits:
+		var od: Dictionary = FactionDefs.TRAITS["overclocked"]
+		if _overheat_left > 0.0:
+			_overheat_left -= delta
+			if randf() < 0.25:
+				Juice.burst(global_position + Vector2(0, -20), Color(0.8, 0.8, 0.8, 0.7), 2, 50.0, 0.5, 1.4)
+			velocity = velocity.move_toward(Vector2.ZERO, 600.0 * delta)
+			move_and_slide()
+			_update_anim(false)
+			return true
+		_overheat_t -= delta
+		if _overheat_t <= 0.0:
+			_overheat_t = float(od["every"])
+			_overheat_left = float(od["overheat"])
+			_cancel_attack()
+			Juice.float_text(global_position + Vector2(0, -50), "OVERHEAT", Color(1.0, 0.55, 0.25), 14)
+	return false
+
+
+func _spore_cloud(at: Vector2, r: float, life: float, dps: float) -> void:
+	var g := Node2D.new()
+	g.set_script(load(RunFx.GROUND_FX))
+	g.set("mode", "spore")
+	g.set("radius", r)
+	g.set("life", life)
+	g.set("value", dps)
+	g.position = at
+	get_parent().add_child.call_deferred(g)
+
+
+## Bloated: bursts in a spray of plague when it dies.
+func _bloat_burst() -> void:
+	var bd: Dictionary = FactionDefs.TRAITS["bloated"]
+	var r := float(bd["radius"])
+	RunFx.ring(get_parent(), global_position + Vector2(0, 8), r, Color(0.75, 0.9, 0.35), 0.45, 6.0)
+	Juice.burst(global_position, Color(0.7, 0.85, 0.3), 30, r * 2.2, 0.6, 1.6)
+	Juice.shake(0.25)
+	var p := get_tree().get_first_node_in_group("player") as Node2D
+	if p != null and p.global_position.distance_to(global_position) <= r and p.has_method("take_damage"):
+		p.call("take_damage", float(bd["damage"]), self)
+		GameState.add_exposure(MedicineDefs.HIT_GAIN)
+	_spore_cloud(global_position, r * 0.6, float(bd["pool_time"]), float(bd["pool_dps"]))
+
+
+## Infighting: hostile factions brawl when they get close (not while the hero is on them).
+func _tick_infight(delta: float) -> bool:
+	_foe_check -= delta
+	if _foe_check <= 0.0:
+		_foe_check = FactionDefs.INFIGHT_CHECK * randf_range(0.8, 1.2)
+		var hero_close := _player != null and _player.global_position.distance_to(global_position) < FactionDefs.INFIGHT_IGNORE_HERO_WITHIN
+		if hero_close or _windup_left > 0.0 or _lunge_left > 0.0:
+			_foe = null
+		elif _foe == null or not is_instance_valid(_foe) or bool(_foe.get("_dead")) \
+				or _foe.global_position.distance_to(global_position) > FactionDefs.INFIGHT_LEASH:
+			_foe = _find_foe()
+	if _foe == null or not is_instance_valid(_foe) or bool(_foe.get("_dead")):
+		_foe = null
+		return false
+	var to := _foe.global_position - global_position
+	var d := to.length()
+	_face(to.x)
+	if d > FactionDefs.INFIGHT_HIT_RANGE * maxf(body_scale, 1.0):
+		velocity = velocity.move_toward(to / maxf(d, 0.01) * speed * _slow_mult(), 900.0 * delta) + _knock
+		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
+		move_and_slide()
+		_update_anim(false)
+		return true
+	velocity = velocity.move_toward(Vector2.ZERO, 900.0 * delta)
+	move_and_slide()
+	if _infight_cd <= 0.0 and not _anim.is_playing("attack"):
+		_infight_cd = FactionDefs.INFIGHT_COOLDOWN * randf_range(0.85, 1.2)
+		_anim.play("attack")
+		Juice.burst(_foe.global_position + Vector2(0, -10), Color(1.0, 0.8, 0.5), 6, 120.0, 0.25)
+		var foe := _foe
+		foe.call("take_damage", damage * FactionDefs.INFIGHT_DAMAGE, to / maxf(d, 0.01), FactionDefs.INFIGHT_KNOCK)
+		if is_instance_valid(foe) and not bool(foe.get("_dead")) and foe.get("_foe") == null:
+			foe.set("_foe", self)
+	else:
+		_update_anim(false)
+	return true
+
+
+func _find_foe() -> Node2D:
+	var best: Node2D = null
+	var bd := FactionDefs.INFIGHT_RANGE * maxf(body_scale, 1.0)
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if n == self or not is_instance_valid(n) or not (n is Node2D):
+			continue
+		if not FactionDefs.hostile(faction, str(n.get("faction"))):
+			continue
+		var d := (n as Node2D).global_position.distance_to(global_position)
+		if d < bd:
+			bd = d
+			best = n
+	return best
+
+
+## Raider crew on the move (looting a crate, regrouping): follow the crew's goal.
+func _follow_crew(delta: float) -> void:
+	var goal: Vector2 = crew.call("goal_for", self)
+	var to := goal - global_position
+	var want := Vector2.ZERO
+	if to.length() > 14.0:
+		want = to.normalized() * speed * FactionDefs.CREW_SPEED * _slow_mult()
+	want += _separation() * speed * 0.6
+	velocity = velocity.move_toward(want, 900.0 * delta) + _knock
+	_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
+	move_and_slide()
+	_update_anim(false)
+
+
+## Damage-number hint when a weakness lands.
+func note_weak_hit() -> void:
+	if _weak_text_cd > 0.0:
+		return
+	_weak_text_cd = FactionDefs.WEAK_TEXT_CD
+	Juice.float_text(global_position + Vector2(0, -46), "WEAK!", Color(1.0, 0.8, 0.35), 13)
