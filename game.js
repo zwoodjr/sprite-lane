@@ -1313,7 +1313,7 @@
 
   function unitStar(u) {
     if (!u) return 1;
-    return Math.max(1, Math.min(MAX_UNIT_STAR, u.star | 1));
+    return Math.max(1, Math.min(MAX_UNIT_STAR, (u.star | 0) || 1));
   }
 
   function starUpgradeCost(u) {
@@ -1327,6 +1327,7 @@
     if (!u) return false;
     const def = UNIT_MAP[u.type];
     if (!def) return false;
+    if (!def.damage) return false; // walls don't level
     if (def.next) return true;
     return unitStar(u) < MAX_UNIT_STAR;
   }
@@ -1713,7 +1714,7 @@
     const upCost = goldUpgradeCost(u);
     el.upgrade.disabled =
       !u ||
-      state.mode !== "build" ||
+      (state.mode !== "build" && state.mode !== "wave") ||
       !canGoldUpgrade(u) ||
       state.gold < upCost;
     if (el.upgrade) {
@@ -1912,7 +1913,7 @@
       const def = UNIT_MAP[state.selectedUnit.type];
       setHint(
         state.mode === "wave"
-          ? `Selected ${def.name} ★${unitStar(state.selectedUnit)}.`
+          ? `Selected ${def.name} ★${unitStar(state.selectedUnit)}. Upgrade with gold (sell after the wave).`
           : `Selected ${def.name} ★${unitStar(state.selectedUnit)}. Sell or upgrade with gold.`
       );
       updateHud();
@@ -1930,6 +1931,16 @@
       return;
     }
     const def = UNIT_MAP[id];
+    // Mid-wave: no building on the lane itself — re-routing live mobs made them
+    // teleport through walls. Off-lane tiles can't change the route.
+    if (
+      state.mode === "wave" &&
+      (state.map.tilePath || []).some((p) => p.x === tx && p.y === ty)
+    ) {
+      setHint("Can't block the lane mid-wave — build beside it, or wait for build phase.");
+      beep(120, 0.08, "sawtooth");
+      return;
+    }
     if (state.gold < unitCost(def)) {
       setHint("Not enough gold.");
       beep(120, 0.08, "sawtooth");
@@ -1956,8 +1967,8 @@
     };
     state.units.push(unit);
     state.selectedUnit = unit;
-    recomputePath();
-    if (state.mode === "wave") repathEnemies();
+    // Keep the live route fixed during a wave; build phase picks up changes.
+    if (state.mode !== "wave") recomputePath();
     beep(660, 0.05);
     setHint(
       state.mode === "wave"
@@ -1999,9 +2010,10 @@
 
   function upgradeSelected() {
     const u = state.selectedUnit;
-    if (!u || state.mode !== "build") return;
+    // Upgrades work mid-wave too; selling stays build-phase only.
+    if (!u || (state.mode !== "build" && state.mode !== "wave")) return;
     const cur = UNIT_MAP[u.type];
-    if (!cur) return;
+    if (!cur || !canGoldUpgrade(u)) return;
 
     // Prefer form evolve when available, then star levels with gold.
     if (cur.next) {
@@ -2016,7 +2028,7 @@
       u.type = next.id;
       u.spent += paid;
       u.star = unitStar(u);
-      recomputePath();
+      if (state.mode !== "wave") recomputePath();
       beep(880, 0.06);
       setHint(`Evolved to ${next.name} ★${unitStar(u)}. Keep upgrading with gold.`);
       updateHud();
@@ -2295,17 +2307,19 @@
 
     if (def.pulse || def.aoe) {
       const radius = unitAoe(def, unit) || unitRange(def, unit) * 0.7;
+      // Pulse units ring around themselves; AoE units blast where the target is.
+      const hit = def.pulse ? { x: cx, y: cy } : { x: target.x, y: target.y };
       state.fx.push({
-        x: cx,
-        y: cy,
+        x: hit.x,
+        y: hit.y,
         life: 18,
         maxLife: 18,
         ring: radius,
         color: def.color,
       });
       const splash = crit ? Math.floor(scaledDamage(def, unit) * 2) : scaledDamage(def, unit);
-      state.enemies.forEach((en) => {
-        if (dist({ x: cx, y: cy }, en) <= radius) {
+      state.enemies.slice().forEach((en) => {
+        if (dist(hit, en) <= radius) {
           damageEnemy(en, splash, def.slow);
         }
       });
@@ -2392,6 +2406,8 @@
           state.lives = 0;
           state.mode = "lose";
           settleRun(false);
+          updateHud();
+          return;
         }
       }
     }
@@ -2915,21 +2931,32 @@
       ctx.fillStyle = "rgba(10,8,6,0.72)";
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = state.mode === "win" ? "#e8c56a" : "#d64545";
-      ctx.font = "12px Press Start 2P, monospace";
+      ctx.font = '12px "Press Start 2P", monospace';
       const msg = state.mode === "win" ? "LANE HELD" : "LANE BROKEN";
       const m = ctx.measureText(msg);
       ctx.fillText(msg, (W - m.width) / 2, H / 2);
       ctx.fillStyle = "#e6dcc8";
-      ctx.font = "6px Press Start 2P, monospace";
-      const sub = "Reset · Unit panel for Spirit";
+      ctx.font = '6px "Press Start 2P", monospace';
+      const sub = "Reset · Shop for Spirit boosts";
       const m2 = ctx.measureText(sub);
       ctx.fillText(sub, (W - m2.width) / 2, H / 2 + 16);
     }
   }
 
-  function frame() {
-    state.tick++;
-    if (state.mode === "wave") updateWave();
+  // Fixed 60Hz sim so 120Hz screens (iPad Pro, ProMotion) don't run 2x fast.
+  const STEP_MS = 1000 / 60;
+  let simLast = 0;
+  let simAcc = 0;
+  function frame(now) {
+    if (typeof now !== "number") now = simLast + STEP_MS;
+    if (!simLast) simLast = now - STEP_MS;
+    simAcc = Math.min(simAcc + Math.max(0, now - simLast), STEP_MS * 5);
+    simLast = now;
+    while (simAcc >= STEP_MS - 0.01) {
+      simAcc -= STEP_MS;
+      state.tick++;
+      if (state.mode === "wave") updateWave();
+    }
     ctx.fillStyle = "#14100c";
     ctx.fillRect(0, 0, W, H);
     drawMap();
