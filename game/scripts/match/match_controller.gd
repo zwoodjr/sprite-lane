@@ -32,6 +32,9 @@ var _storm_overlay: ColorRect
 ## Elite / boss schedule (ModeDefs), in run seconds.
 var _next_elite_at: float = INF
 var _next_boss_at: float = INF
+## In-run events (Part 8) + Pad Heat guards for the next window.
+var events: Node
+var _pad_guards: int = 0
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -71,6 +74,11 @@ func _ready() -> void:
 	)
 
 	_spawn_pet()
+	events = Node.new()
+	events.name = "RunEvents"
+	events.set_script(load("res://scripts/match/run_events.gd"))
+	add_child(events)
+	events.call("setup", self, player, world, hud)
 	_phase_index = 0
 	_start_phase(0)
 	hud.show_banner("DROP IN", "%s · %s" % [
@@ -248,6 +256,7 @@ func _start_phase(index: int) -> void:
 		_window_index += 1
 		GameState.extract_windows_seen += 1
 		_spawn_ambush()
+		_spawn_pad_guards()
 		Juice.sfx("extract_open")
 		Juice.haptic(40)
 		if bool(phase.get("is_last", false)):
@@ -472,6 +481,46 @@ func _roll_enemy_kind() -> String:
 		pool = EnemyDefs.ids_for_tier(1)
 	return pool[randi() % pool.size()]
 
+## Pad Heat: the next window opens within `open_in` s, with guards on the pads.
+func heat_next_window(open_in: float, guards: int) -> void:
+	_pad_guards = guards
+	if not _extract_open:
+		_phase_time_left = minf(_phase_time_left, open_in * GameState.timer_scale())
+
+func _spawn_pad_guards() -> void:
+	if _pad_guards <= 0:
+		return
+	var n := _pad_guards
+	_pad_guards = 0
+	var tl := ModeDefs.tl_table(GameState.threat_level)
+	for pad in _pads:
+		if not is_instance_valid(pad):
+			continue
+		for i in range(n):
+			var a := TAU * float(i) / float(n)
+			var e: CharacterBody2D = EnemyScene.instantiate()
+			e.setup((pad as Node2D).global_position + Vector2(cos(a), sin(a)) * 70.0,
+				float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)), float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, _roll_enemy_kind())
+			world.add_child(e)
+
+## At-extract bonuses: Ambush Bounty (enemies on the pad) and Pet Bond.
+func _extract_bonuses() -> void:
+	if not is_instance_valid(player):
+		return
+	var ab: Dictionary = EventDefs.AMBUSH_BOUNTY
+	var near := RunFx.enemies_in(get_tree(), player.global_position, float(ab["radius"])).size()
+	if near > 0:
+		var bonus := mini(int(ab["cap"]), near * int(ab["per_enemy"]))
+		GameState.extract_bonus_scrap += bonus
+		GameState.extract_bonus_notes.append("Ambush Bounty: +%d scrap (%d on the pad)" % [bonus, near])
+	var pb: Dictionary = EventDefs.PET_BOND
+	for pet in get_tree().get_nodes_in_group("pets"):
+		if pet is Node2D and (pet as Node2D).global_position.distance_to(player.global_position) <= float(pb["radius"]):
+			GameState.add_bond(GameState.selected_pet_id, int(pb["xp"]))
+			GameState.extract_bonus_notes.append("Pet Bond: %s +%d bond (Lv %d)" % [
+				str(GameState.pet.get("name", "Pet")), int(pb["xp"]), GameState.bond_level(GameState.selected_pet_id)])
+			break
+
 func _spawn_ambush() -> void:
 	for i in range(3 + GameState.threat_level):
 		_spawn_enemy()
@@ -480,6 +529,7 @@ func _on_extract_requested() -> void:
 	if _ended or not _extract_open:
 		return
 	_ended = true
+	_extract_bonuses()
 	GameState.on_extract_success()
 	Juice.sfx("extract_win")
 	Juice.haptic(60)

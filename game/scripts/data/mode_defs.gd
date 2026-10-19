@@ -110,6 +110,14 @@ static func is_exposed(mode_id: String) -> bool:
 	return str(m["id"]) == canonical_id(mode_id) and int(m["tier"]) <= EXPOSED_TIERS
 
 
+## Tier dict by tier number (1..10).
+static func tier_mode(tier: int) -> Dictionary:
+	for t in _tiers():
+		if int(t["tier"]) == tier:
+			return _finish(t)
+	return _finish(_tiers()[0])
+
+
 static func get_mode(mode_id: String) -> Dictionary:
 	var id := canonical_id(mode_id)
 	for t in _tiers():
