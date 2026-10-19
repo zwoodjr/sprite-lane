@@ -6,13 +6,8 @@ extends VBoxContainer
 signal changed
 
 const ROWS := [
-	{"key": "twin_stick", "type": "toggle", "label": "Twin-stick aim", "desc": "Off (default): one move stick — run direction aims and auto-fires. On: classic left-move / right-aim sticks."},
-	{"key": "auto_fire", "type": "toggle", "label": "Auto-fire while moving", "desc": "Single-stick: shoot along your run direction. Off = hold FIRE to shoot."},
-	{"key": "aim_autofire", "type": "toggle", "label": "Aim stick fires", "desc": "Twin-stick only: push the right stick past the ring to shoot."},
-	{"key": "auto_aim", "type": "toggle", "label": "FIRE idle auto-aim", "desc": "Holding FIRE while standing still shoots the nearest enemy."},
-	{"key": "aim_assist", "type": "slider", "label": "Aim assist", "desc": "Twin-stick: how strongly stick aim bends toward enemies near your aim line.", "min": 0.0, "max": 1.0, "step": 0.1},
 	{"key": "stick_scale", "type": "slider", "label": "Stick size", "desc": "Bigger = finer control, more thumb travel.", "min": 0.75, "max": 1.4, "step": 0.05},
-	{"key": "left_handed", "type": "toggle", "label": "Left-handed layout", "desc": "Mirror action buttons (and swap stick halves in twin-stick mode)."},
+	{"key": "left_handed", "type": "toggle", "label": "Left-handed layout", "desc": "Stick on the right, DASH / ABILITY on the left."},
 	{"key": "show_hints", "type": "toggle", "label": "Show hints", "desc": "Ghost stick and rotating tips."},
 	{"key": "sfx", "type": "toggle", "label": "Sound effects", "desc": ""},
 	{"key": "haptics", "type": "toggle", "label": "Vibration", "desc": ""},

@@ -16,7 +16,9 @@ var held: bool = false
 var touch_index: int = -1
 var cooldown_ratio: float = 0.0  ## 0 = ready, 1 = just used
 var disabled: bool = false
-var highlight: bool = false       ## pulses (e.g. EXTRACT available)
+var highlight: bool = false       ## pulses
+## Bottle-cap art (HD pack). When set, drawn instead of the flat disc + label.
+var icon: Texture2D = null
 var _pulse_t: float = 0.0
 var _press_scale: float = 1.0
 
@@ -66,22 +68,24 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var c := size * 0.5
 	var r := radius
-	var a := 0.45 if disabled else (0.95 if held else 0.78)
-	var pulse := 0.0
-	if highlight:
-		pulse = 0.5 + 0.5 * sin(_pulse_t * 6.0)
-		draw_circle(c, r + 6.0 + pulse * 6.0, Color(tint.r, tint.g, tint.b, 0.25 * pulse))
-	## Body
-	draw_circle(c + Vector2(0, 4), r, Color(0, 0, 0, 0.35 * a))
-	var fill := tint.darkened(0.55 if not held else 0.3)
-	draw_circle(c, r, Color(fill.r, fill.g, fill.b, 0.82 * a))
-	draw_arc(c, r - 1.5, 0.0, TAU, 48, Color(tint.r, tint.g, tint.b, a), 3.0, true)
-	## Cooldown sweep
-	## Ratio can exceed 1 when a run upgrade shortens the cooldown mid-tick; a
-	## >360° fan self-intersects and spams "Invalid polygon data" — clamp it.
+	var a := 0.45 if disabled else (1.0 if held else 0.9)
 	var cdr := clampf(cooldown_ratio, 0.0, 1.0)
+	if highlight:
+		var pulse := 0.5 + 0.5 * sin(_pulse_t * 6.0)
+		draw_circle(c, r + 6.0 + pulse * 6.0, Color(tint.r, tint.g, tint.b, 0.25 * pulse))
+	draw_circle(c + Vector2(0, 4), r, Color(0, 0, 0, 0.3 * a))
+	if icon != null:
+		var d := r * 2.0
+		var mod := Color(1, 1, 1, a) if cdr <= 0.01 else Color(0.55, 0.55, 0.55, a)
+		draw_texture_rect(icon, Rect2(c - Vector2(r, r), Vector2(d, d)), false, mod)
+	else:
+		var fill := tint.darkened(0.55 if not held else 0.3)
+		draw_circle(c, r, Color(fill.r, fill.g, fill.b, 0.82 * a))
+		draw_arc(c, r - 1.5, 0.0, TAU, 48, Color(tint.r, tint.g, tint.b, a), 3.0, true)
+	## Cooldown: dark sweep + a bright ring that fills back up as it recharges.
+	## (Ratio is clamped: a >360° fan self-intersects → "Invalid polygon data".)
 	if cdr >= 0.995:
-		draw_circle(c, r - 3.0, Color(0, 0, 0, 0.55))
+		draw_circle(c, r - 3.0, Color(0, 0, 0, 0.45))
 	elif cdr > 0.02:
 		var pts := PackedVector2Array([c])
 		var start := -PI * 0.5
@@ -90,8 +94,13 @@ func _draw() -> void:
 		for i in range(steps + 1):
 			var ang := lerpf(start, end, float(i) / steps)
 			pts.append(c + Vector2(cos(ang), sin(ang)) * (r - 3.0))
-		draw_colored_polygon(pts, Color(0, 0, 0, 0.55))
-	## Text
+		draw_colored_polygon(pts, Color(0, 0, 0, 0.45))
+	if cdr > 0.02:
+		var ready_frac := 1.0 - cdr
+		draw_arc(c, r + 3.0, -PI * 0.5, -PI * 0.5 + TAU * ready_frac, 48, Color(tint.r, tint.g, tint.b, 0.95), 4.0, true)
+	if icon != null:
+		return
+	## Text (fallback when there's no art)
 	var font := ThemeDB.fallback_font
 	var fs := int(r * 0.36)
 	var tw := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x

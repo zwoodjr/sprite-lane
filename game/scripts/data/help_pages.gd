@@ -14,7 +14,7 @@ static func pages() -> Array[Dictionary]:
 		{
 			"title": "Moving & shooting",
 			"icon": "✥",
-			"body": "One stick (lower half of the screen): drag to MOVE. You aim and auto-fire in the direction you run.\n\nStop → keep your last facing. Hold FIRE while idle to shoot the nearest enemy.\n\nSettings can restore classic twin sticks (left move / right aim) if you want them.",
+			"body": "Drag anywhere on the left side of the screen to MOVE — the stick appears under your thumb.\n\nAttacks are automatic: your hero fires (or swings) at the closest enemy inside weapon range. Gunners reach far; melee heroes need to get close.\n\nRight thumb: DASH (big) and your hero ABILITY.",
 		},
 		{
 			"title": "Dash",

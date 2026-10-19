@@ -15,7 +15,7 @@ func setup(player: Node2D, pads: Array, landmarks: Array) -> void:
 	_pads = pads
 	_landmarks = landmarks
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(148, 148)
+	clip_contents = true
 
 
 func set_pads(pads: Array) -> void:
@@ -65,13 +65,13 @@ func _draw() -> void:
 	draw_circle(center, 4.5, Color(0.4, 0.9, 0.45, 1.0))
 	draw_arc(center, 4.5, 0, TAU, 16, Color(1, 1, 1, 0.7), 1.0, true)
 	## Label
-	draw_string(ThemeDB.fallback_font, Vector2(8, 14), "MAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.9, 0.8, 0.55, 0.85))
+	## Status fits inside the box at any size (old "EXTRACT OPEN" ran off the edge).
 	draw_string(
 		ThemeDB.fallback_font,
-		Vector2(8, r.y - 6),
-		"EXTRACT OPEN" if _extract_open else "SEALED",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
+		Vector2(0, r.y - 5),
+		"OPEN" if _extract_open else "SEALED",
+		HORIZONTAL_ALIGNMENT_CENTER,
+		r.x,
 		10,
 		Color(1.0, 0.85, 0.35, 0.9) if _extract_open else Color(0.7, 0.65, 0.55, 0.8)
 	)

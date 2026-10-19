@@ -12,6 +12,13 @@ const MinimapScript = preload("res://scripts/ui/minimap.gd")
 const ExtractArrowsScript = preload("res://scripts/ui/extract_arrows.gd")
 const PauseMenuScript = preload("res://scripts/ui/pause_menu.gd")
 const TutorialScript = preload("res://scripts/ui/tutorial_overlay.gd")
+const EnemyArrowsScript = preload("res://scripts/ui/enemy_arrows.gd")
+const ExtractBarScript = preload("res://scripts/ui/extract_bar.gd")
+## Top-left bar art (HD pack): frame 360×36, fills 348×24 inset 6 px.
+const BAR_FRAME := "res://assets/sprites/ui/hud_bar_frame.png"
+const BAR_HP := "res://assets/sprites/ui/hud_bar_fill_health.png"
+const BAR_XP := "res://assets/sprites/ui/hud_bar_fill_xp.png"
+const BAR_W := 216.0 ## on-screen width (art scaled 0.6)
 var root: Control
 var _match: Node = null
 var _player: Node = null
@@ -22,13 +29,11 @@ var _pause: CanvasLayer = null
 var tutorial: Control = null
 
 ## top-left
-var _name_label: Label
-var _hp_bar: ProgressBar
+var _hp_bar: TextureProgressBar
 var _hp_text: Label
 var _ammo_label: Label
 var _reload_bar: ProgressBar
 var _buff_row: HBoxContainer
-var _ability_label: Label
 ## top-center
 var _phase_card: PanelContainer
 var _phase_label: Label
@@ -41,7 +46,10 @@ var _threat_label: Label
 var _threat_sub: Label
 var _counter_label: Label
 var _run_level_label: Label
-var _run_xp_bar: ProgressBar
+var _run_xp_bar: TextureProgressBar
+var _enemy_arrows: Control = null
+var _extract_bar: Control = null
+var _hit_flash: TextureRect
 ## center
 var _banner: Label
 var _banner_sub: Label
@@ -60,8 +68,8 @@ var _hint_index: int = 0
 const ROTATING_HINTS := [
 	"Gold arrows on the screen edge point to extract pads.",
 	"DASH makes you briefly invincible — dash through red bullets.",
-	"Red wedge on an enemy = it's about to attack. Move or dash!",
-	"Standing still tightens your aim. Moving widens it.",
+	"Red ring on the ground = an attack is coming. Move or dash!",
+	"Your hero attacks the closest enemy in range — just steer.",
 	"Crates sometimes drop timed buffs. Shoot them open.",
 	"Skipping an extract window raises Threat: tougher enemies, bigger payout.",
 	"Standing on an open pad extracts you automatically.",
@@ -93,20 +101,25 @@ func setup(match_node: Node) -> void:
 
 func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
 	_player = player
-	var c: Dictionary = GameState.get_character()
-	_name_label.text = str(c.get("display_name", "Wanderer")).to_upper()
-	_name_label.add_theme_color_override("font_color", c.get("accent", UiTheme.AMBER))
-	var ab: Dictionary = c.get("ability", {})
-	_ability_label.text = ("%s — %s" % [ab.get("name", ""), ab.get("desc", "")]) if not ab.is_empty() else ""
+	_ammo_label.visible = not bool(player.call("is_melee"))
+	if player.has_signal("hurt"):
+		player.hurt.connect(func(_a: float) -> void: _flash_hit())
 	if player.has_signal("ammo_changed"):
 		player.ammo_changed.connect(func(_a: int, _m: int, _r: bool) -> void: _refresh_ammo())
 	if player.has_signal("ability_used"):
 		player.ability_used.connect(func(n: String) -> void: show_toast(n + "!", UiTheme.AMBER))
 	_minimap = Control.new()
 	_minimap.set_script(MinimapScript)
-	_minimap.custom_minimum_size = Vector2(110, 110)
 	root.add_child(_minimap)
 	_minimap.call("setup", player, pads, landmarks)
+	_enemy_arrows = Control.new()
+	_enemy_arrows.set_script(EnemyArrowsScript)
+	root.add_child(_enemy_arrows)
+	root.move_child(_enemy_arrows, 1)
+	_enemy_arrows.call("setup", player)
+	_extract_bar = Control.new()
+	_extract_bar.set_script(ExtractBarScript)
+	root.add_child(_extract_bar)
 	_arrows = Control.new()
 	_arrows.set_script(ExtractArrowsScript)
 	root.add_child(_arrows)
@@ -137,6 +150,17 @@ func _label(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
 	l.add_theme_color_override("font_color", color)
 	return l
 
+## Framed texture bar scaled to BAR_W (art is 360×36 with a 6 px inset fill).
+func _tex_bar(fill_path: String) -> TextureProgressBar:
+	var t := TextureProgressBar.new()
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.texture_under = load(BAR_FRAME)
+	t.texture_progress = load(fill_path)
+	t.texture_progress_offset = Vector2(6, 6)
+	t.step = 0.0
+	t.scale = Vector2.ONE * (BAR_W / 360.0)
+	return t
+
 func _build() -> void:
 	## Low-HP vignette (behind everything)
 	_vignette = TextureRect.new()
@@ -155,51 +179,44 @@ func _build() -> void:
 	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vit.add_child(vb)
-	_name_label = _label("WANDERER", 15, UiTheme.AMBER)
-	vb.add_child(_name_label)
+	vb.add_child(_label("HEALTH", 11, UiTheme.TEXT_DIM))
 	var hp_row := Control.new()
-	hp_row.custom_minimum_size = Vector2(200, 22)
+	hp_row.custom_minimum_size = Vector2(BAR_W, BAR_W / 10.0)
 	hp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(hp_row)
-	_hp_bar = ProgressBar.new()
-	_hp_bar.show_percentage = false
-	_hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hp_bar.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_hp_bar = _tex_bar(BAR_HP)
 	hp_row.add_child(_hp_bar)
-	_hp_text = _label("100 / 100", 14)
+	_hp_text = _label("100 / 100", 12)
 	_hp_text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hp_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hp_text.add_theme_constant_override("outline_size", 4)
+	_hp_text.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	hp_row.add_child(_hp_text)
-	_ammo_label = _label("24 / 24", 16)
+	_run_level_label = _label("XP · LV 1", 11, UiTheme.TEXT_DIM)
+	vb.add_child(_run_level_label)
+	var xp_row := Control.new()
+	xp_row.custom_minimum_size = Vector2(BAR_W, BAR_W / 10.0)
+	xp_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(xp_row)
+	_run_xp_bar = _tex_bar(BAR_XP)
+	_run_xp_bar.max_value = 1.0
+	_run_xp_bar.step = 0.0
+	xp_row.add_child(_run_xp_bar)
+	_ammo_label = _label("24 / 24", 13)
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
-	_reload_bar.custom_minimum_size = Vector2(200, 6)
+	_reload_bar.custom_minimum_size = Vector2(BAR_W, 5)
 	_reload_bar.show_percentage = false
 	_reload_bar.max_value = 1.0
 	_reload_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_reload_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.AMBER, Color(0, 0, 0, 0), 3, 0, 0))
 	_reload_bar.visible = false
 	vb.add_child(_reload_bar)
-	_ability_label = _label("", 11, UiTheme.TEXT_DIM)
-	_ability_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_ability_label.custom_minimum_size = Vector2(200, 0)
-	vb.add_child(_ability_label)
 	_buff_row = HBoxContainer.new()
 	_buff_row.add_theme_constant_override("separation", 6)
 	_buff_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_buff_row)
-	_run_level_label = _label("RUN Lv 1", 13, UiTheme.TEAL)
-	vb.add_child(_run_level_label)
-	_run_xp_bar = ProgressBar.new()
-	_run_xp_bar.custom_minimum_size = Vector2(200, 8)
-	_run_xp_bar.show_percentage = false
-	_run_xp_bar.max_value = 1.0
-	_run_xp_bar.value = 0.0
-	_run_xp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_run_xp_bar.add_theme_stylebox_override("fill", UiTheme.box(UiTheme.TEAL, Color(0, 0, 0, 0), 3, 0, 0))
-	_run_xp_bar.add_theme_stylebox_override("background", UiTheme.box(Color(0.08, 0.06, 0.05, 0.85), Color(0.3, 0.22, 0.15), 3, 1, 0))
-	vb.add_child(_run_xp_bar)
 
 	## Top-center: phase card
 	_phase_card = _panel(0.82)
@@ -225,6 +242,7 @@ func _build() -> void:
 	pc.add_child(_phase_bar)
 	_phase_hint = _label("", 13, UiTheme.TEXT_DIM)
 	_phase_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pc.add_child(_phase_hint)
 
 	## Top-right: threat + counters
@@ -265,6 +283,14 @@ func _build() -> void:
 	_hint_label = _label("", 13, Color(0.85, 0.78, 0.65, 0.8))
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_hint_label)
+	## Red screen-edge flash when the hero takes a hit.
+	_hit_flash = TextureRect.new()
+	_hit_flash.texture = _make_vignette()
+	_hit_flash.stretch_mode = TextureRect.STRETCH_SCALE
+	_hit_flash.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_hit_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hit_flash.modulate = Color(1.3, 1, 1, 0)
+	root.add_child(_hit_flash)
 
 func _layout() -> void:
 	if root == null:
@@ -275,38 +301,51 @@ func _layout() -> void:
 	root.size = vp
 	_vignette.position = Vector2.ZERO
 	_vignette.size = vp
+	_hit_flash.position = Vector2.ZERO
+	_hit_flash.size = vp
+	## Row 1: vitals (left) · threat (right, beside the pause cap in the corner).
 	var vit := root.get_node("Vitals") as Control
 	vit.position = m.position
-	_phase_card.size = Vector2.ZERO
-	_phase_card.reset_size()
-	var pcs := _phase_card.get_combined_minimum_size()
-	_phase_card.position = Vector2(vp.x * 0.5 - maxf(pcs.x, 340.0) * 0.5, m.position.y)
-	var phase_w := minf(vp.x - 48.0, 340.0)
-	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
-	## Right column: pause button sits at the very corner (touch layer), so
-	## the threat panel goes to its left and the minimap below.
+	vit.reset_size()
 	var right := m.position.x + m.size.x
-	_threat_panel.reset_size()
-	var tps := _threat_panel.get_combined_minimum_size()
-	var threat_w := minf(170.0, vp.x * 0.28)
+	var threat_w := minf(170.0, vp.x * 0.26)
 	_threat_panel.custom_minimum_size = Vector2(threat_w, 0)
-	_threat_panel.position = Vector2(right - maxf(tps.x, threat_w) - 74.0, m.position.y)
-	## Portrait: keep minimap compact so world art stays readable under HUD.
-	var map_s := 100.0 if vp.y > vp.x else 140.0
+	_threat_panel.reset_size()
+	_threat_panel.position = Vector2(right - _threat_panel.size.x - 58.0, m.position.y)
+	## Row 2: phase card centred below the taller of the two, so nothing overlaps.
+	var row2_y := m.position.y + maxf(vit.size.y, _threat_panel.size.y) + 8.0
+	var map_s := 96.0
+	var phase_w := minf(vp.x - 2.0 * (map_s + m.position.x + 12.0), 360.0)
+	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
+	_phase_hint.custom_minimum_size = Vector2(phase_w - 28.0, 0)
+	_phase_card.reset_size()
+	_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, row2_y)
 	if _minimap:
+		_minimap.custom_minimum_size = Vector2(map_s, map_s)
 		_minimap.size = Vector2(map_s, map_s)
-		_minimap.position = Vector2(right - map_s, m.position.y + 78.0)
+		_minimap.position = Vector2(right - map_s, row2_y)
+	if _extract_bar:
+		_extract_bar.position = Vector2(m.position.x, vp.y * 0.36)
+		_extract_bar.size = Vector2(22, vp.y * 0.28)
+	var below := row2_y + maxf(_phase_card.size.y, map_s) + 10.0
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)
 	_banner_sub.size = Vector2(vp.x, 30)
 	var toast_w := minf(520.0, vp.x - 40.0)
-	_toast_box.position = Vector2(vp.x * 0.5 - toast_w * 0.5, m.position.y + 104)
+	_toast_box.position = Vector2(vp.x * 0.5 - toast_w * 0.5, below)
 	_toast_box.size = Vector2(toast_w, 120)
 	_extract_prompt.position = Vector2(0, vp.y * 0.58)
 	_extract_prompt.size = Vector2(vp.x, 34)
 	_hint_label.position = Vector2(vp.x * 0.1, m.position.y + m.size.y - 22)
 	_hint_label.size = Vector2(vp.x * 0.8, 20)
+
+func _flash_hit() -> void:
+	if _hit_flash == null:
+		return
+	_hit_flash.modulate.a = 0.85
+	var tw := _hit_flash.create_tween()
+	tw.tween_property(_hit_flash, "modulate:a", 0.0, 0.35)
 
 func _open_pause() -> void:
 	if _pause == null or get_tree().paused:
@@ -348,6 +387,8 @@ func _process(delta: float) -> void:
 		_refresh_buffs(_player.call("get_active_buffs"))
 
 func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, player: Node) -> void:
+	if _extract_bar:
+		_extract_bar.call("set_state", phase, time_left)
 	_phase_label.text = str(phase.get("label", "")).to_upper()
 	_timer_label.text = _fmt_time(time_left)
 	var dur := float(phase.get("duration", 1.0))
@@ -392,7 +433,7 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 		_pulse(_threat_panel)
 	_counter_label.text = "Scrap %d · Kills %d · Stay ×%.2f" % [GameState.scrap_found, GameState.kills, stay]
 	var rp: Dictionary = GameState.run_bar_state()
-	_run_level_label.text = "RUN Lv %d%s" % [
+	_run_level_label.text = "XP · LV %d%s" % [
 		int(rp["level"]),
 		"  MAX" if bool(rp.get("capped", false)) else "",
 	]
@@ -403,16 +444,18 @@ func update_match(phase: Dictionary, time_left: float, tl: int, stay: float, pla
 func _refresh_ammo() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
-	if bool(_player.call("is_reloading")):
+	if bool(_player.call("is_reloading")) or bool(_player.call("is_melee")):
 		return
 	var a: int = _player.call("get_ammo")
 	var m: int = _player.call("get_mag_size")
-	_ammo_label.text = "AMMO  %d / %d" % [a, m]
+	_ammo_label.text = "AMMO %d / %d" % [a, m]
 	_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if a <= m / 5 else UiTheme.TEXT)
 
 func set_extract_open(is_open: bool) -> void:
 	if is_open != _extract_open:
 		_extract_open = is_open
+	if _extract_bar:
+		_extract_bar.call("set_open", is_open)
 	if _minimap and _minimap.has_method("set_extract_open"):
 		_minimap.set_extract_open(is_open)
 	if _arrows and _arrows.has_method("set_extract_open"):
@@ -429,12 +472,7 @@ func on_health_changed(current: float, maximum: float) -> void:
 	_hp_bar.value = current
 	_hp_ratio = current / maxf(maximum, 1.0)
 	_hp_text.text = "%d / %d" % [int(ceil(maxf(current, 0.0))), int(maximum)]
-	var col := UiTheme.TEAL
-	if _hp_ratio < 0.3:
-		col = UiTheme.DANGER
-	elif _hp_ratio < 0.6:
-		col = UiTheme.AMBER
-	_hp_bar.add_theme_stylebox_override("fill", UiTheme.box(col, Color(0, 0, 0, 0), 6, 0, 0))
+	_hp_bar.tint_progress = Color(1, 1, 1) if _hp_ratio >= 0.3 else Color(1.0, 0.6, 0.55)
 
 func on_buffs_changed(buffs: Dictionary) -> void:
 	_refresh_buffs(buffs)

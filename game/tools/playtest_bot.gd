@@ -125,9 +125,13 @@ func _process(delta: float) -> void:
 
 
 func _drive(delta: float) -> void:
+	## Combat is automatic (hero fires/swings at the closest enemy in range);
+	## the bot only steers the move stick and taps DASH / ABILITY.
 	var mv := Vector2.ZERO
-	TouchInput.fire_held = false
 	var e := _nearest("enemies")
+	var rng: float = _p.call("get_trigger_range")
+	var melee: bool = _p.call("is_melee")
+	var low_hp: bool = float(_p.get("hp")) < float(_p.get("max_hp")) * 0.35
 	## Extract when open
 	if _m.call("is_extract_open"):
 		var best: Node2D = null
@@ -139,27 +143,33 @@ func _drive(delta: float) -> void:
 		if best:
 			var to := best.global_position - _p.global_position
 			mv = to.normalized() if to.length() > 12.0 else Vector2.ZERO
-			if e and e.global_position.distance_to(_p.global_position) < 90.0:
+			if e and e.global_position.distance_to(_p.global_position) < 70.0:
 				TouchInput.pulse_dash()
 			TouchInput.move_vector = mv
-			if mv == Vector2.ZERO: TouchInput.fire_held = true
 			return
 	if e:
 		var to: Vector2 = e.global_position - _p.global_position
 		var d := to.length()
-		if d < 110.0:
-			## Too close: run away (fires backwards = away from enemy) and dash.
+		if melee and not low_hp:
+			## Close in and keep circling at swing distance.
+			if d > rng * 0.8:
+				mv = to.normalized().rotated(0.25 * sin(_t * 2.0))
+			else:
+				mv = to.normalized().rotated(PI * 0.5) * 0.5
+			if d < 140.0 and e.get("_windup_left") > 0.0:
+				mv = -to.normalized()
+				TouchInput.pulse_dash()
+		elif d < 110.0:
+			## Too close: run away and dash.
 			mv = -to.normalized().rotated(0.6)
 			TouchInput.pulse_dash()
-		elif d < 420.0:
-			## In range: run AT it to shoot (single-stick run = aim), strafe a bit.
-			mv = to.normalized().rotated(0.35 * sin(_t * 2.0))
-			if d < 200.0:
-				## Stand still and hold FIRE (idle auto-aim) instead of running into it.
-				mv = Vector2.ZERO
-				TouchInput.fire_held = true
+		elif d < rng * 0.6:
+			mv = -to.normalized().rotated(0.5 * sin(_t))
+		elif d < rng * 0.95:
+			## In range: strafe around it (auto-fire does the shooting).
+			mv = to.normalized().rotated(PI * 0.5 * (1.0 if sin(_t * 0.4) > 0.0 else -1.0)) * 0.8
 		else:
-			mv = _wander_dir(delta)
+			mv = to.normalized() if not low_hp else _wander_dir(delta)
 	else:
 		mv = _wander_dir(delta)
 	TouchInput.move_vector = mv

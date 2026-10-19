@@ -6,21 +6,24 @@ Solo top-down extraction shooter. **Portrait** (survivor FOV). PC keyboard/mouse
 
 | Input | Action |
 |-------|--------|
-| Thumb on lower half | MOVE (stick under thumb). **Aim + auto-fire follow run direction** |
-| FIRE (hold) | While idle: shoot nearest enemy |
-| DASH | Burst + brief invincibility (dash through bullets) |
-| Gold ability button | Character ability (Rook: RUSH, Cinder: HEAL) |
-| RIDE | Hop on/off mount |
-| II (top-right) | Pause · How to play · Settings · Abandon run |
-| Stand on an open gold pad | Extract (ring fills in 1.5s) |
+| Thumb anywhere on the left 60% | Floating MOVE stick (10% dead zone, full speed at 60% deflection, base follows your thumb) |
+| — | **Attacks are automatic**: the hero fires / swings at the closest on-screen enemy inside weapon range |
+| DASH (big cap) | Burst + brief invincibility (dash through bullets) |
+| Ability cap | Character ability, with cooldown ring |
+| Pause cap (top-right) | Pause · How to play · Settings · Abandon run |
+| Stand on an open gold pad | Extract |
 
-All buttons are true multi-touch. Settings: twin-stick (optional restore), auto-fire while moving, idle auto-aim, aim assist, stick size, left-handed, hints, sound, vibration, shake.
+Settings: stick size, left-handed (mirrors stick zone and buttons), hints, sound, vibration, shake.
 
-**PC:** WASD move (run = aim + auto-fire) · mouse aim/click while idle · Space or right-click dash · Q ability · F mount · R reload · E extract · Esc pause.
+**PC:** WASD move · Space dash · Q ability · R reload · Esc pause.
+
+## Combat
+
+Weapon data lives in `scripts/data/loadout_stubs.gd`: `trigger_range`, per-hero `muzzle` offset, `projectile` look, or a `melee` hitbox (Pebble maul arc, Nyx twin-blade slashes, Juno chain-gauntlet line). Helm's drones (1–4) each shoot the closest unclaimed enemy near them.
 
 ## Camera / FOV
 
-Portrait **720×1280**, orthographic camera zoom **1.12** so the player reads ~**1/13 of screen width** — matched to `docs/art-refs/fov-single-stick-ref.jpg` battlefield scale. Heroes are **96×96** anti-thumb chibi (multi-pass limbs, 2-dot faces, chunky hair) scaled in-match to a ~48px footprint; regenerate with `python3 tools/gen_sprites.py`.
+Portrait **720×1280**, camera zoom **1.35**, hero ~45% down the screen with a 15% look-ahead in the move direction. Enemies spawn just outside the view; red edge arrows point at off-screen mobs (bigger for elites/bosses).
 
 ## What's in
 

@@ -70,8 +70,6 @@ func _run() -> void:
 			if en.size() > 0 and is_instance_valid(player):
 				target = ((en[0] as Node2D).global_position - player.global_position).normalized()
 			TouchInput.set_move(target)
-			if bool(GameState.settings.get("twin_stick", false)):
-				TouchInput.set_aim(target * 0.9)
 			if frames % 120 == 0:
 				TouchInput.pulse_dash()
 			if frames % 400 == 0:

@@ -115,7 +115,7 @@ func _show_settings() -> void:
 	back.pressed.connect(_show_main)
 	head.add_child(back)
 	v.add_child(head)
-	v.add_child(UiTheme.body_label("Layout changes (twin-stick, stick size, left-handed) apply next run.", 13, UiTheme.TEXT_DIM))
+	v.add_child(UiTheme.body_label("Layout changes (stick size, left-handed) apply next run.", 13, UiTheme.TEXT_DIM))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

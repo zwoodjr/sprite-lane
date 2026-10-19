@@ -5,12 +5,12 @@ extends Control
 ## Marks GameState.tutorial_done when finished or when the run ends.
 
 const STEPS := [
-	{"id": "move", "text": "Drag on the lower half of the screen to MOVE. The stick appears under your thumb.", "target": "left"},
-	{"id": "shoot", "text": "Keep moving — you aim and shoot in the direction you run. Hold FIRE while standing still to hit the nearest enemy.", "target": "left"},
+	{"id": "move", "text": "Drag anywhere on the left side to MOVE. The stick appears under your thumb.", "target": "left"},
+	{"id": "shoot", "text": "Attacks are automatic: your hero hits the closest enemy in range. Just steer into range.", "target": "left"},
 	{"id": "dash", "text": "Tap DASH to dodge. You're invincible for a split second — dash through bullets!", "target": "dash"},
 	{"id": "fight", "text": "A red wedge means an enemy is about to attack. Take one down!", "target": ""},
 	{"id": "nav", "text": "Gold arrows at the screen edge point to extract pads. They open when the top timer hits 0.", "target": "timer"},
-	{"id": "wait_open", "text": "Survive and loot crates until the extract opens. Tap II any time for help.", "target": ""},
+	{"id": "wait_open", "text": "Survive and loot crates until the extract opens. Tap pause any time for help.", "target": ""},
 	{"id": "extract", "text": "EXTRACT OPEN! Walk onto a gold pad to leave — or stay longer to raise Threat for a bigger payout.", "target": ""},
 ]
 
@@ -96,8 +96,8 @@ func _process(delta: float) -> void:
 	_step_t += delta
 	var vp := get_viewport_rect().size
 	_panel.reset_size()
-	## Bottom-center, between the thumbs — never over the character.
-	_panel.position = Vector2(vp.x * 0.5 - _panel.size.x * 0.5, vp.y - _panel.size.y - 18.0)
+	## Above the thumb zone (stick + DASH/ABILITY caps), below the hero.
+	_panel.position = Vector2(vp.x * 0.5 - _panel.size.x * 0.5, vp.y * 0.70 - _panel.size.y)
 	var p := get_tree().get_first_node_in_group("player") as Node2D
 	var id := str(STEPS[_step]["id"])
 	match id:
@@ -105,8 +105,10 @@ func _process(delta: float) -> void:
 			if p:
 				_progress = clampf(p.global_position.distance_to(_start_pos) / 220.0, 0.0, 1.0)
 		"shoot":
-			if TouchInput.is_firing():
+			if p and bool(p.call("is_attacking")):
 				_progress += delta / 1.0
+			else:
+				_progress += delta / 8.0
 		"dash":
 			if _dashed:
 				_progress = 1.0

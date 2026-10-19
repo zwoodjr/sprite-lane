@@ -36,7 +36,7 @@ func _draw() -> void:
 		return
 	var vp := get_viewport_rect().size
 	var center := vp * 0.5
-	var margin := 56.0
+	var margin := 72.0 ## clears the extract bar on the left edge
 	for pad in _pads:
 		if not is_instance_valid(pad):
 			continue

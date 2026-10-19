@@ -1,26 +1,29 @@
 extends CanvasLayer
 
 ## Phone controls. All touches are routed here (true multi-touch):
-##   Default (single stick): one floating MOVE stick (bottom zone / under thumb).
-##     Run direction = aim + auto-fire. FIRE hold still works while idle.
-##   Optional twin_stick: left half MOVE, right half AIM (push past ~⅓ to fire).
-## Left-handed mode mirrors the button cluster (and stick halves in twin mode).
+##   - Floating MOVE stick: appears under the thumb anywhere in the left 60% of
+##     the screen (right 60% when left-handed), base follows the thumb past the
+##     rim, 10% dead zone, full speed at 60% deflection, fades on release.
+##   - Right thumb: big DASH + smaller ABILITY bottle caps with cooldown rings.
+##   - Pause cap in the top corner.
+## Attacks are automatic (closest enemy in weapon range), so there's no FIRE.
 
 const ActionButton = preload("res://scripts/ui/action_button.gd")
 
-const BASE_STICK_RADIUS := 96.0
-const KNOB_RADIUS := 40.0
-const MOVE_DEADZONE := 0.12 ## ignore micro-drifts; floating origin still snappy past this
-const AIM_DEADZONE := 0.14
-## Single-stick: ignore stick starts in the top HUD band (safe-area aware).
-const SINGLE_STICK_TOP_FRAC := 0.30
+const BASE_STICK_RADIUS := 84.0
+const KNOB_RADIUS := 34.0
+const DEADZONE := 0.10      ## fraction of the radius ignored
+const FULL_AT := 0.60       ## deflection that already gives full speed
+const STICK_ZONE_FRAC := 0.60
+## Ignore stick starts in the top HUD band.
+const TOP_BAND_FRAC := 0.16
+const FADE_TIME := 0.35
 
 @onready var root: Control = $Root
 @onready var stick_draw: Control = $Root/StickDraw
 
 var stick_radius: float = BASE_STICK_RADIUS
 
-var btn_fire: Control
 var btn_dash: Control
 var btn_ability: Control
 var btn_pause: Control
@@ -30,15 +33,9 @@ var _move_id: int = -1
 var _move_origin: Vector2 = Vector2.ZERO
 var _move_knob: Vector2 = Vector2.ZERO
 var _move_active: bool = false
-
-var _aim_id: int = -1
-var _aim_origin: Vector2 = Vector2.ZERO
-var _aim_knob: Vector2 = Vector2.ZERO
-var _aim_active: bool = false
-var _aim_vec: Vector2 = Vector2.ZERO
+var _fade: float = 0.0 ## 1 while held, decays after release
 
 var _left_handed: bool = false
-var _twin: bool = false
 var _idle_t: float = 0.0
 var _player: Node = null
 
@@ -52,16 +49,13 @@ func _ready() -> void:
 	stick_draw.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	stick_draw.set("host", self)
 	_left_handed = bool(GameState.settings.get("left_handed", false))
-	_twin = bool(GameState.settings.get("twin_stick", false))
 	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
 
-	btn_fire = _make_button("FIRE", "hold", 56.0, UiTheme.RUST)
-	btn_dash = _make_button("DASH", "", 46.0, UiTheme.TEAL)
-	btn_ability = _make_button("ABILITY", "", 46.0, UiTheme.AMBER)
-	btn_pause = _make_button("II", "", 30.0, Color(0.75, 0.68, 0.58))
+	btn_dash = _make_button("DASH", 62.0, UiTheme.TEAL, "res://assets/sprites/ui/btn_dash.png")
+	btn_ability = _make_button("ABILITY", 44.0, UiTheme.AMBER,
+		CharacterDefs.ability_icon_path(GameState.selected_character_id))
+	btn_pause = _make_button("II", 24.0, Color(0.75, 0.68, 0.58), "res://assets/sprites/ui/btn_pause.png")
 
-	btn_fire.pressed_down.connect(func() -> void: TouchInput.set_fire_held(true))
-	btn_fire.released.connect(func() -> void: TouchInput.set_fire_held(false))
 	btn_dash.pressed_down.connect(TouchInput.pulse_dash)
 	btn_ability.pressed_down.connect(TouchInput.pulse_ability)
 	btn_pause.pressed_down.connect(TouchInput.pulse_pause)
@@ -70,17 +64,18 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_layout)
 	TouchInput.sticks_cleared.connect(_reset_touches)
 	if not TouchInput.touch_primary:
-		## Desktop: keyboard + mouse. Keep pause visible, hide thumb controls.
-		for b in [btn_fire, btn_dash, btn_ability]:
+		## Desktop: keyboard. Keep pause visible, hide thumb controls.
+		for b in [btn_dash, btn_ability]:
 			b.visible = false
 
-func _make_button(text: String, sub: String, r: float, tint: Color) -> Control:
+func _make_button(text: String, r: float, tint: Color, icon_path: String = "") -> Control:
 	var b: Control = Control.new()
 	b.set_script(ActionButton)
 	b.set("label_text", text)
-	b.set("sub_text", sub)
 	b.set("radius", r)
 	b.set("tint", tint)
+	if icon_path != "" and ResourceLoader.exists(icon_path):
+		b.set("icon", load(icon_path))
 	root.add_child(b)
 	_buttons.append(b)
 	return b
@@ -100,12 +95,11 @@ func _layout() -> void:
 	root.offset_bottom = -(win.y - (m.position.y + m.size.y))
 	var w := m.size.x
 	var h := m.size.y
-	## Portrait-friendly cluster: bottom-right (mirrored when left-handed).
-	## FIRE stays available for idle hold; smaller so it doesn't crowd DASH/ABILITY.
-	_place(btn_fire, Vector2(w - 78, h - 210))
-	_place(btn_dash, Vector2(w - 92, h - 96))
-	_place(btn_ability, Vector2(w - 200, h - 78))
-	_place(btn_pause, Vector2(w - 34, 36), false)
+	## Bottom-right thumb cluster (mirrored when left-handed): big DASH in the
+	## corner, ABILITY up-and-left of it.
+	_place(btn_dash, Vector2(w - 78, h - 92))
+	_place(btn_ability, Vector2(w - 186, h - 150))
+	_place(btn_pause, Vector2(w - 26, 28), false)
 
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	var c := center
@@ -116,19 +110,17 @@ func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	b.pivot_offset = b.size * 0.5
 	b.position = c - b.size * 0.5
 
-## --- Input routing -------------------------------------------------------------
-
 func _reset_touches() -> void:
 	for b in _buttons:
 		if bool(b.get("held")):
 			b.call("release")
+	if _move_active:
+		_move_active = false
 	_move_id = -1
-	_move_active = false
-	_aim_id = -1
-	_aim_active = false
-	_aim_vec = Vector2.ZERO
 	if stick_draw:
 		stick_draw.queue_redraw()
+
+## --- Input routing -------------------------------------------------------------
 
 func _input(event: InputEvent) -> void:
 	if get_tree().paused:
@@ -164,73 +156,53 @@ func _begin_touch(index: int, pos: Vector2) -> bool:
 		return true
 	if not TouchInput.touch_primary:
 		return false  ## desktop mouse emulation: don't spawn sticks
-
-	if _twin:
-		return _begin_twin(index, pos)
-	return _begin_single(index, pos)
-
-func _begin_single(index: int, pos: Vector2) -> bool:
-	var vp := get_viewport().get_visible_rect().size
-	## Keep top HUD clear; stick lives in the lower play field (survivor-style).
-	if pos.y < vp.y * SINGLE_STICK_TOP_FRAC:
-		return false
-	if _move_id >= 0:
+	if not _in_stick_zone(pos) or _move_id >= 0:
 		return false
 	_move_id = index
 	_move_origin = pos
 	_move_knob = pos
 	_move_active = true
+	_fade = 1.0
 	TouchInput.set_move(Vector2.ZERO)
+	Juice.haptic(8)
 	stick_draw.queue_redraw()
 	return true
 
-func _begin_twin(index: int, pos: Vector2) -> bool:
-	var half := get_viewport().get_visible_rect().size.x * 0.5
-	var on_move_side := pos.x < half
+func _in_stick_zone(pos: Vector2) -> bool:
+	var vp := get_viewport().get_visible_rect().size
+	if pos.y < vp.y * TOP_BAND_FRAC:
+		return false
 	if _left_handed:
-		on_move_side = not on_move_side
-	if on_move_side:
-		if _move_id >= 0:
-			return false
-		_move_id = index
-		_move_origin = pos
-		_move_knob = pos
-		_move_active = true
-		TouchInput.set_move(Vector2.ZERO)
-	else:
-		if _aim_id >= 0:
-			return false
-		_aim_id = index
-		_aim_origin = pos
-		_aim_knob = pos
-		_aim_active = true
-		_aim_vec = Vector2.ZERO
-		TouchInput.set_aim(Vector2.ZERO)
-	stick_draw.queue_redraw()
-	return true
+		return pos.x > vp.x * (1.0 - STICK_ZONE_FRAC)
+	return pos.x < vp.x * STICK_ZONE_FRAC
 
 func _drag_touch(index: int, pos: Vector2) -> bool:
 	if index == _move_id:
-		_move_origin = _follow_origin(_move_origin, pos)
-		var v := _vector_from(_move_origin, pos, MOVE_DEADZONE)
-		_move_knob = _move_origin + (pos - _move_origin).limit_length(stick_radius)
-		TouchInput.set_move(v)
-		stick_draw.queue_redraw()
-		return true
-	if index == _aim_id:
-		_aim_origin = _follow_origin(_aim_origin, pos)
-		_aim_vec = _vector_from(_aim_origin, pos, AIM_DEADZONE)
-		_aim_knob = _aim_origin + (pos - _aim_origin).limit_length(stick_radius)
-		TouchInput.set_aim(_aim_vec)
+		## Base follows the thumb past the rim → never "run out" of stick.
+		var d := pos - _move_origin
+		if d.length() > stick_radius:
+			_move_origin = pos - d.normalized() * stick_radius
+		_move_knob = pos
+		TouchInput.set_move(stick_vector(_move_origin, pos, stick_radius))
 		stick_draw.queue_redraw()
 		return true
 	for b in _buttons:
 		if int(b.get("touch_index")) == index:
-			## Slide off a button → release it (except FIRE, which stays held).
-			if b != btn_fire and not b.call("hit", pos, 1.8):
+			## Slide off a button → release it.
+			if not b.call("hit", pos, 1.8):
 				b.call("release")
 			return true
 	return false
+
+## Pure mapping (also used by tests): 10% dead zone, full speed at 60%,
+## direction is exact (instant turns), magnitude linear in between.
+static func stick_vector(origin: Vector2, tip: Vector2, radius: float) -> Vector2:
+	var raw := (tip - origin) / maxf(radius, 1.0)
+	var mag := raw.length()
+	if mag < DEADZONE:
+		return Vector2.ZERO
+	var t := clampf((mag - DEADZONE) / (FULL_AT - DEADZONE), 0.0, 1.0)
+	return raw / mag * t
 
 func _end_touch(index: int) -> bool:
 	for b in _buttons:
@@ -243,37 +215,15 @@ func _end_touch(index: int) -> bool:
 		TouchInput.set_move(Vector2.ZERO)
 		stick_draw.queue_redraw()
 		return true
-	if index == _aim_id:
-		_aim_id = -1
-		_aim_active = false
-		_aim_vec = Vector2.ZERO
-		TouchInput.set_aim(Vector2.ZERO)
-		stick_draw.queue_redraw()
-		return true
 	return false
-
-## Dynamic stick: if the thumb drifts past the ring, the ring follows it,
-## so you never "run out" of stick and reversing direction is instant.
-func _follow_origin(origin: Vector2, tip: Vector2) -> Vector2:
-	var d := tip - origin
-	if d.length() > stick_radius:
-		return tip - d.normalized() * stick_radius
-	return origin
-
-func _vector_from(origin: Vector2, tip: Vector2, deadzone: float) -> Vector2:
-	var raw := (tip - origin) / stick_radius
-	var mag := raw.length()
-	if mag < deadzone:
-		return Vector2.ZERO
-	var t := clampf((mag - deadzone) / (1.0 - deadzone), 0.0, 1.0)
-	## Slight ease-out: small pushes still move you at a usable pace.
-	t = 1.0 - pow(1.0 - t, 1.6)
-	return raw.normalized() * t
 
 ## --- Per-frame state from the player (cooldowns, availability) -------------
 
 func _process(delta: float) -> void:
 	_idle_t += delta
+	if not _move_active and _fade > 0.0:
+		_fade = maxf(0.0, _fade - delta / FADE_TIME)
+		stick_draw.queue_redraw()
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player")
 	if _player:
@@ -281,50 +231,27 @@ func _process(delta: float) -> void:
 		btn_ability.set("cooldown_ratio", _player.call("get_ability_cooldown_ratio"))
 		btn_ability.set("label_text", str(_player.call("get_ability_short_name")))
 		btn_ability.set("disabled", not bool(_player.call("has_ability")))
-		if _twin:
-			btn_fire.set("sub_text", "auto-aim" if GameState.settings.get("auto_aim", true) else "")
-		else:
-			btn_fire.set("sub_text", "idle" if GameState.settings.get("auto_fire", true) else "hold")
-	if not _move_active and not _aim_active:
+	if not _move_active and GameState.settings.get("show_hints", true):
 		stick_draw.queue_redraw()
 
 ## Called from StickDraw._draw().
 func paint_sticks(c: Control) -> void:
 	var o := c.get_global_transform_with_canvas().origin
-	var move_tint := Color(0.85, 0.92, 0.75)
-	var aim_tint := Color(0.98, 0.58, 0.36)
-	if _move_active:
-		_paint_one(c, _move_origin - o, _move_knob - o, move_tint, 0.95)
+	var tint := Color(0.92, 0.88, 0.78)
+	if _fade > 0.0:
+		_paint_one(c, _move_origin - o, _move_knob - o, tint, _fade)
 	elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
-		var ghost := "MOVE · AIM" if not _twin else "MOVE"
-		_paint_ghost(c, _ghost_pos(true) - o, move_tint, ghost)
-	if _twin:
-		if _aim_active:
-			var firing := TouchInput.aim_stick_firing
-			_paint_one(c, _aim_origin - o, _aim_knob - o, aim_tint, 0.95)
-			if GameState.settings.get("aim_autofire", true):
-				var ring_r := stick_radius * TouchInput.AIM_FIRE_THRESHOLD
-				c.draw_arc(_aim_origin - o, ring_r, 0.0, TAU, 40, Color(1, 0.4, 0.2, 0.9 if firing else 0.35), 2.0, true)
-		elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
-			_paint_ghost(c, _ghost_pos(false) - o, aim_tint, "AIM + SHOOT" if GameState.settings.get("aim_autofire", true) else "AIM")
+		_paint_ghost(c, _ghost_pos() - o, tint, "MOVE")
 
-func _ghost_pos(move_side: bool) -> Vector2:
-	var vp := c_vp()
-	if not _twin:
-		## Single stick: bottom-center, like the survivor ref.
-		return Vector2(vp.x * 0.5, vp.y * 0.78)
-	var left := Vector2(vp.x * 0.22, vp.y * 0.72)
-	var right := Vector2(vp.x * 0.72, vp.y * 0.72)
+func _ghost_pos() -> Vector2:
+	var vp := get_viewport().get_visible_rect().size
+	var p := Vector2(vp.x * 0.26, vp.y * 0.80)
 	if _left_handed:
-		left.x = vp.x - left.x
-		right.x = vp.x - right.x
-	return left if move_side else right
-
-func c_vp() -> Vector2:
-	return get_viewport().get_visible_rect().size
+		p.x = vp.x - p.x
+	return p
 
 func _paint_ghost(c: Control, center: Vector2, tint: Color, text: String) -> void:
-	var a := 0.16 + 0.06 * sin(_idle_t * 2.2)
+	var a := 0.12 + 0.05 * sin(_idle_t * 2.2)
 	c.draw_arc(center, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, a * 1.6), 2.0, true)
 	c.draw_circle(center, KNOB_RADIUS * 0.8, Color(tint.r, tint.g, tint.b, a))
 	var font := ThemeDB.fallback_font
@@ -333,9 +260,11 @@ func _paint_ghost(c: Control, center: Vector2, tint: Color, text: String) -> voi
 	c.draw_string(font, center + Vector2(-w * 0.5, stick_radius + 22), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(tint.r, tint.g, tint.b, a * 3.0))
 
 func _paint_one(c: Control, origin: Vector2, knob: Vector2, tint: Color, alpha: float) -> void:
-	c.draw_circle(origin, stick_radius, Color(tint.r, tint.g, tint.b, alpha * 0.16))
-	c.draw_arc(origin, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, alpha * 0.55), 3.0, true)
-	c.draw_line(origin, knob, Color(tint.r, tint.g, tint.b, alpha * 0.35), 6.0, true)
-	c.draw_circle(knob + Vector2(0, 3), KNOB_RADIUS, Color(0, 0, 0, 0.25))
-	c.draw_circle(knob, KNOB_RADIUS, Color(tint.r, tint.g, tint.b, alpha * 0.9))
-	c.draw_arc(knob, KNOB_RADIUS, 0.0, TAU, 32, Color(1, 1, 1, alpha * 0.55), 2.0, true)
+	var k := origin + (knob - origin).limit_length(stick_radius)
+	c.draw_circle(origin, stick_radius, Color(0.05, 0.03, 0.02, alpha * 0.22))
+	c.draw_arc(origin, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, alpha * 0.5), 3.0, true)
+	## Full-speed ring (60%) so the thumb learns how little travel it needs.
+	c.draw_arc(origin, stick_radius * FULL_AT, 0.0, TAU, 48, Color(tint.r, tint.g, tint.b, alpha * 0.18), 1.5, true)
+	c.draw_circle(k + Vector2(0, 3), KNOB_RADIUS, Color(0, 0, 0, 0.25 * alpha))
+	c.draw_circle(k, KNOB_RADIUS, Color(tint.r, tint.g, tint.b, alpha * 0.85))
+	c.draw_arc(k, KNOB_RADIUS, 0.0, TAU, 32, Color(1, 1, 1, alpha * 0.55), 2.0, true)

@@ -158,15 +158,15 @@ func _refresh() -> void:
 		ch.queue_free()
 	var w: Dictionary = LoadoutStubs.weapon_for_character(str(c["id"]))
 	_stat_bar("Speed", float(c["move_speed_mult"]), 0.85, 1.15)
-	_stat_bar("Shot dmg", float(w.get("damage", 12)), 6.0, 50.0)
-	_stat_bar("Fire rate", float(w.get("fire_rate", 8.0)), 1.0, 14.0)
-	_stat_bar("Mag", float(w.get("mag_size", 24)), 3.0, 40.0)
+	_stat_bar("Damage", float(w.get("damage", 12)), 6.0, 50.0)
+	_stat_bar("Attack rate", float(w.get("fire_rate", 8.0)), 1.0, 14.0)
+	_stat_bar("Range", float(w.get("trigger_range", 300.0)), 50.0, 480.0)
 	_stat_bar("Health", 100.0 + float(c["max_hp_bonus"]), 90.0, 130.0)
 	var pet := PetDefs.get_pet(GameState.selected_pet_id)
-	_loadout.text = "Loadout: %s (%s · %d rnd · %.1f/s) · %s · Pet: %s" % [
+	_loadout.text = "Loadout: %s (%s · %s · %.1f/s) · %s · Pet: %s" % [
 		w["name"],
 		w.get("category", "Gun"),
-		int(w.get("mag_size", 0)),
+		"melee" if w.has("melee") else "%d rnd" % int(w.get("mag_size", 0)),
 		float(w.get("fire_rate", 0.0)),
 		LoadoutStubs.default_armor()["set_name"],
 		pet["name"],

@@ -5,12 +5,17 @@ extends Node
 ## Captures each menu plus a few moments of a live match.
 
 var _out: String = "/tmp/shots"
+var _char: String = "sister_cinder"
+var _match_only: bool = false
 
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		_out = args[0]
+	if args.size() > 1:
+		_char = args[1]
+		_match_only = true
 	DirAccess.make_dir_recursive_absolute(_out)
 	_run.call_deferred()
 
@@ -34,15 +39,16 @@ func _show(path: String, name: String, frames: int = 30) -> void:
 
 
 func _run() -> void:
-	GameState.tutorial_done = false
-	await _show("res://scenes/ui/main_menu.tscn", "01_main_menu")
-	await _show("res://scenes/ui/mode_select.tscn", "02_mode_select")
-	await _show("res://scenes/ui/character_select.tscn", "03_character_select")
-	await _show("res://scenes/ui/how_to_play.tscn", "04_how_to_play")
-	await _show("res://scenes/ui/settings_menu.tscn", "05_settings")
+	GameState.tutorial_done = _match_only
+	GameState.selected_character_id = _char
+	if not _match_only:
+		await _show("res://scenes/ui/main_menu.tscn", "01_main_menu")
+		await _show("res://scenes/ui/mode_select.tscn", "02_mode_select")
+		await _show("res://scenes/ui/character_select.tscn", "03_character_select")
+		await _show("res://scenes/ui/how_to_play.tscn", "04_how_to_play")
+		await _show("res://scenes/ui/settings_menu.tscn", "05_settings")
 	## Match
 	TouchInput.touch_primary = true
-	GameState.selected_character_id = "sister_cinder"
 	GameState.fast_timers = true
 	GameState.begin_run()
 	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
@@ -59,18 +65,34 @@ func _run() -> void:
 	## Simulate single move stick (run = aim); twin optional
 	var vp := get_viewport().get_visible_rect().size
 	if tc:
-		tc.call("_begin_touch", 0, Vector2(vp.x * 0.5, vp.y * 0.78))
-		tc.call("_drag_touch", 0, Vector2(vp.x * 0.5 + 60, vp.y * 0.78 - 40))
-		if bool(GameState.settings.get("twin_stick", false)):
-			tc.call("_begin_touch", 1, Vector2(vp.x * 0.72, vp.y * 0.72))
-			tc.call("_drag_touch", 1, Vector2(vp.x * 0.72 + 70, vp.y * 0.72 - 10))
-	for f in range(240):
+		tc.call("_begin_touch", 0, Vector2(vp.x * 0.3, vp.y * 0.78))
+		tc.call("_drag_touch", 0, Vector2(vp.x * 0.3 + 40, vp.y * 0.78 - 30))
+	for f in range(420):
 		var en := get_tree().get_nodes_in_group("enemies")
-		if en.size() > 0 and tc:
-			var d := ((en[0] as Node2D).global_position - player.global_position).normalized()
-			tc.call("_drag_touch", 0, Vector2(vp.x * 0.5, vp.y * 0.78) + d * 70.0)
+		if en.size() > 0 and tc and is_instance_valid(player):
+			var to := (en[0] as Node2D).global_position - player.global_position
+			var d := to.normalized()
+			## Close in to ~70% of weapon range, then circle.
+			if to.length() < float(player.call("get_trigger_range")) * 0.7:
+				d = d.rotated(PI * 0.5)
+			tc.call("_drag_touch", 0, Vector2(vp.x * 0.3, vp.y * 0.78) + d * 60.0)
+		if f == 300:
+			await _snap("07a_match_combat")
 		await get_tree().process_frame
 	await _snap("07_match_combat")
+	## Close-quarters check: drop a small pack right next to the hero.
+	var es: PackedScene = load("res://scenes/entities/enemy.tscn")
+	for k in range(5):
+		var e: Node = es.instantiate()
+		var ang := TAU * k / 5.0
+		e.call("setup", player.global_position + Vector2(cos(ang), sin(ang)) * (80.0 + 40.0 * k), 3.0, 0.2, 1.0, ["rad_gator", "scrap_hound", "muck_golem", "toxic_scorp", "scav_bear"][k])
+		m.get_node("World").add_child(e)
+	tc.call("_end_touch", 0)
+	for f in range(36):
+		await get_tree().process_frame
+		if f == 12 or f == 24:
+			await _snap("07b_close_%d" % f)
+	await _snap("07c_close")
 	## Hurt the player to show low-HP vignette and jump to an open window
 	player.call("take_damage", 80.0)
 	while not bool(m.call("is_extract_open")):
@@ -89,7 +111,8 @@ func _run() -> void:
 		await get_tree().process_frame
 	await _snap("10_pause")
 	get_tree().paused = false
-	m.queue_free()
+	if is_instance_valid(m):
+		m.queue_free()
 	GameState.extracted = true
 	GameState.payout_this_run = 342
 	GameState.result_summary = "Extracted. Payout 342 Scrap · XP 120 · TL 1"
