@@ -269,6 +269,8 @@ func _start_phase(index: int) -> void:
 		GameState.extract_windows_seen += 1
 		_spawn_ambush()
 		_spawn_pad_guards()
+		if plague:
+			plague.call("on_window_open", _window_index)
 		Juice.sfx("extract_open")
 		Juice.haptic(40)
 		if bool(phase.get("is_last", false)):

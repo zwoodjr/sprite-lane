@@ -27,6 +27,7 @@ func open() -> void:
 		return
 	get_tree().paused = true
 	TouchInput.clear_sticks()
+	_dim.color = Color(0.04, 0.03, 0.02, 0.78)
 	visible = true
 	_show_main()
 
@@ -102,42 +103,43 @@ func _show_main() -> void:
 	v.add_child(quit)
 	_set_content(center)
 
-## Backpack: what you carry home. Drop things to make room for better loot.
+## Backpack: what you carry home. Medicine fills the pack; ingredients ride
+## in a weightless pouch. A centred painted plate over a darker backdrop.
 func show_pack() -> void:
+	_dim.color = Color(0.03, 0.02, 0.015, 0.92)
+	var center := CenterContainer.new()
+	var plate := PanelContainer.new()
+	plate.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi", 24.0))
+	var vp := get_viewport().get_visible_rect().size
+	plate.custom_minimum_size = Vector2(minf(600.0, vp.x - 60.0), 0)
+	center.add_child(plate)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	var head := HBoxContainer.new()
-	var t := UiTheme.title_label("BACKPACK", 34)
-	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	head.add_child(t)
-	var done := UiTheme.big_button("DONE", UiTheme.TEAL, 52, 20)
-	done.pressed.connect(_show_main)
-	head.add_child(done)
-	v.add_child(head)
+	plate.add_child(v)
+	v.add_child(UiTheme.title_label("BACKPACK", 40))
 	var slow := 1.0 - GameState.carry_speed_mult()
-	v.add_child(UiTheme.body_label("%d / %d carried. Medicine weighs %d%s. Everything here is lost if you go down." % [
+	var info := UiTheme.body_label("%d / %d carried. Medicine weighs %d%s. Everything here is lost if you go down." % [
 		GameState.pack_weight(), GameState.pack_capacity(), MedicineDefs.MEDICINE_WEIGHT,
-		(" and slows you %d%%" % int(round(slow * 100.0))) if slow > 0.0 else ""], 15, UiTheme.TEXT_DIM))
+		(" and slows you %d%%" % int(round(slow * 100.0))) if slow > 0.0 else ""], 15, UiTheme.TEXT_DIM)
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(info)
 	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, minf(420.0, vp.y * 0.42))
 	v.add_child(scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 8)
 	scroll.add_child(list)
-	if GameState.run_pack.is_empty():
-		list.add_child(UiTheme.body_label("Empty. Ingredients drop from kills; medicine crates are marked on the map.", 16))
+	list.add_child(UiTheme.body_label("PACK", 16, UiTheme.AMBER))
+	var heavy := 0
 	for id in GameState.run_pack.keys():
+		if MedicineDefs.is_pouch(str(id)):
+			continue
+		heavy += 1
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		var ic := TextureRect.new()
-		ic.custom_minimum_size = Vector2(48, 48)
-		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ic.texture = load(MedicineDefs.icon_path(str(id)))
-		row.add_child(ic)
+		row.add_child(_pack_icon(str(id), 48))
 		var l := UiTheme.body_label("%s ×%d  (weight %d each)" % [MedicineDefs.item_name(str(id)), int(GameState.run_pack[id]), MedicineDefs.weight(str(id))], 17)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(l)
@@ -146,7 +148,36 @@ func show_pack() -> void:
 		drop.pressed.connect(drop_item.bind(str(id)))
 		row.add_child(drop)
 		list.add_child(row)
-	_set_content(v)
+	if heavy == 0:
+		list.add_child(UiTheme.body_label("Empty. Medicine crates are marked on the map — a new one each extract window.", 15))
+	list.add_child(UiTheme.body_label("INGREDIENT POUCH  ·  weightless", 16, UiTheme.AMBER))
+	var pouch := GameState.pouch()
+	if pouch.is_empty():
+		list.add_child(UiTheme.body_label("Nothing yet. Kills and crates drop ingredients for Cinder's tonics.", 15))
+	else:
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 16)
+		list.add_child(flow)
+		for id in pouch.keys():
+			var h := HBoxContainer.new()
+			h.add_child(_pack_icon(str(id), 40))
+			h.add_child(UiTheme.body_label("%s ×%d" % [MedicineDefs.item_name(str(id)), int(pouch[id])], 16, UiTheme.TEXT, false))
+			flow.add_child(h)
+	var done := UiTheme.big_button("DONE", UiTheme.TEAL, 60, 22)
+	done.pressed.connect(func() -> void:
+		_dim.color = Color(0.04, 0.03, 0.02, 0.78)
+		_show_main())
+	v.add_child(done)
+	_set_content(center)
+
+
+func _pack_icon(id: String, px: float) -> TextureRect:
+	var ic := TextureRect.new()
+	ic.custom_minimum_size = Vector2(px, px)
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.texture = load(MedicineDefs.icon_path(id))
+	return ic
 
 ## Drop one of an item on the ground at the hero's feet (pick it up again later).
 func drop_item(id: String) -> void:

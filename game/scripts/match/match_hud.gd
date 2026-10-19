@@ -63,6 +63,8 @@ var _pack_label: Label
 var _med_icon: TextureRect
 var _med_label: Label
 var _tonic_row: HBoxContainer
+var _pouch_row: HBoxContainer
+var _pouch_labels: Dictionary = {}
 var _expo_box: VBoxContainer
 var _expo_label: Label
 var _expo_bar: ProgressBar
@@ -393,6 +395,21 @@ func _build_depth(vb: VBoxContainer) -> void:
 	_tonic_row.add_theme_constant_override("separation", 2)
 	_tonic_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pack_row.add_child(_tonic_row)
+	## Weightless ingredient pouch: icon + count per ingredient (hidden until found).
+	_pouch_row = HBoxContainer.new()
+	_pouch_row.add_theme_constant_override("separation", 3)
+	_pouch_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pouch_row.visible = false
+	vb.add_child(_pouch_row)
+	for id in MedicineDefs.INGREDIENT_IDS:
+		var ic := _icon(MedicineDefs.icon_path(str(id)), 18)
+		ic.visible = false
+		_pouch_row.add_child(ic)
+		var l := _label("", 13, UiTheme.TEXT)
+		l.add_theme_font_override("font", UiTheme.font_button)
+		l.visible = false
+		_pouch_row.add_child(l)
+		_pouch_labels[id] = [ic, l]
 	_expo_box = VBoxContainer.new()
 	_expo_box.add_theme_constant_override("separation", 2)
 	_expo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -433,6 +450,14 @@ func set_pack(weight: int, cap: int, medicine: int) -> void:
 		_pack_label.add_theme_color_override("font_color", UiTheme.RUST if weight >= cap else UiTheme.TEXT)
 	_med_icon.visible = medicine > 0
 	_med_label.text = "×%d" % medicine if medicine > 0 else ""
+	var pouch := GameState.pouch()
+	_pouch_row.visible = not pouch.is_empty()
+	for id in _pouch_labels.keys():
+		var n := int(pouch.get(id, 0))
+		var pair: Array = _pouch_labels[id]
+		(pair[0] as Control).visible = n > 0
+		(pair[1] as Label).visible = n > 0
+		(pair[1] as Label).text = "%d" % n
 
 func set_tonics(ids: Array) -> void:
 	if _tonic_row == null:

@@ -61,6 +61,8 @@ var _start_hp := 1.0 ## arg 12: start at this HP fraction (showcase heals)
 ## Depth Update tallies (printed on the DEPTH line).
 var _max_exposure := 0.0
 var _max_pack := 0
+var _full_at := -1.0
+var _full_window := -1
 var _raiders_seen := {}
 var _elite_traits := {}
 
@@ -350,6 +352,9 @@ func _extra(delta: float) -> void:
 	_min_hp = min(_min_hp, _p.hp)
 	_max_exposure = maxf(_max_exposure, GameState.exposure)
 	_max_pack = maxi(_max_pack, GameState.pack_weight())
+	if _full_at < 0.0 and GameState.pack_weight() >= GameState.pack_capacity():
+		_full_at = _t
+		_full_window = int(GameState.extract_windows_seen)
 	for rd in get_tree().get_nodes_in_group("raiders"):
 		_raiders_seen[rd.get_instance_id()] = true
 	for el in get_tree().get_nodes_in_group("elites"):
@@ -515,5 +520,6 @@ func _summary() -> void:
 		if _picks.any(func(p: String) -> bool: return p.begins_with(str(c["id"]))):
 			evos.append(str(c["id"]))
 	print("EVOS %s" % ",".join(evos))
+	print("PACK full_at=%.0f full_window=%d max=%d/%d pouch=%s" % [_full_at, _full_window, _max_pack, GameState.pack_capacity(), str(GameState.pouch())])
 	print("DEPTH tonics=%s max_pack=%d max_exposure=%.0f pack_now=%s raiders=%d traits=%s" % [",".join(PackedStringArray(GameState.run_tonics)),
 		_max_pack, _max_exposure, str(GameState.run_pack), _raiders_seen.size(), ",".join(PackedStringArray(_elite_traits.keys()))])

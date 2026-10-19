@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b0awqcr70c528"
-path="res://.godot/imported/wall_ruin.png-ce43072a6cff3897b6485aca2984cb1b.ctex"
+path="res://.godot/imported/wall_ruin.png-12dd52a075065b57e8563d441a42298f.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/sprites/props/wall_ruin.png"
-dest_files=["res://.godot/imported/wall_ruin.png-ce43072a6cff3897b6485aca2984cb1b.ctex"]
+dest_files=["res://.godot/imported/wall_ruin.png-12dd52a075065b57e8563d441a42298f.ctex"]
 
 [params]
 

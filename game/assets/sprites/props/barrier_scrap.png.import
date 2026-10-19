@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b0awqcr70c528"
-path="res://.godot/imported/barrier_scrap.png-ce43072a6cff3897b6485aca2984cb1b.ctex"
+path="res://.godot/imported/barrier_scrap.png-c0d4a68fcb5d3a3d430e733f179725d7.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/sprites/props/barrier_scrap.png"
-dest_files=["res://.godot/imported/barrier_scrap.png-ce43072a6cff3897b6485aca2984cb1b.ctex"]
+dest_files=["res://.godot/imported/barrier_scrap.png-c0d4a68fcb5d3a3d430e733f179725d7.ctex"]
 
 [params]
 

@@ -14,13 +14,13 @@ const ICON_DIR := "res://assets/sprites/depth/icons/"
 ## --- Ingredients --------------------------------------------------------------
 const INGREDIENT_IDS: Array = ["herb", "plague_gland", "dust_shard", "machine_oil"]
 const INGREDIENTS := {
-	"herb": {"name": "Ashroot", "icon": "herb", "weight": 1, "color": Color(0.55, 0.85, 0.45),
+	"herb": {"name": "Ashroot", "icon": "herb", "weight": 0, "color": Color(0.55, 0.85, 0.45),
 		"desc": "A bitter root that still grows in the cracks."},
-	"plague_gland": {"name": "Plague Gland", "icon": "plague_gland", "weight": 1, "color": Color(0.85, 0.55, 0.75),
+	"plague_gland": {"name": "Plague Gland", "icon": "plague_gland", "weight": 0, "color": Color(0.85, 0.55, 0.75),
 		"desc": "Cut from plague-twisted things. Cinder knows what to do with it."},
-	"dust_shard": {"name": "Dust Shard", "icon": "dust_shard", "weight": 1, "color": Color(1.0, 0.75, 0.35),
+	"dust_shard": {"name": "Dust Shard", "icon": "dust_shard", "weight": 0, "color": Color(1.0, 0.75, 0.35),
 		"desc": "Hard amber Dust. Elites and bosses carry the most."},
-	"machine_oil": {"name": "Machine Oil", "icon": "machine_oil", "weight": 1, "color": Color(0.7, 0.75, 0.85),
+	"machine_oil": {"name": "Machine Oil", "icon": "machine_oil", "weight": 0, "color": Color(0.7, 0.75, 0.85),
 		"desc": "Black oil drained from war machines."},
 	"medicine": {"name": "Medicine", "icon": "medicine", "weight": 3, "color": Color(1.0, 0.45, 0.4),
 		"desc": "Real medicine. The most valuable thing left."},
@@ -48,16 +48,22 @@ const CARRY_SLOW_CAP := 0.18
 ## The plague smells it: faster spawns, plague mobs move faster toward you.
 const SMELL_SPAWN_MULT := 0.8
 const SMELL_PLAGUE_SPEED := 1.15
-## Crates placed per run by tier (index tier-1), at this distance from the drop-in.
-const CRATES_BY_TIER: Array = [2, 2, 3, 3, 3, 4, 4, 4, 5, 5]
-const CRATE_DIST_MIN := 480.0
+## Ingredients ride in a weightless pouch (weight 0); only medicine fills the backpack.
+## Medicine turns up over the run: a few crates at the drop-in, then one more is
+## marked each time an extract window opens, up to the tier's total.
+const CRATES_AT_START: Array = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3]
+const CRATES_PER_WINDOW := 1
+const CRATES_BY_TIER: Array = [3, 4, 4, 5, 5, 6, 6, 7, 7, 8]
+const WINDOW_CRATE_DIST := Vector2(520.0, 1000.0)
+const CRATE_DIST_MIN := 650.0
 const CRATE_DIST_MAX := 1500.0
 const CRATE_PICK_R := 36.0
 const ELITE_MEDICINE_CHANCE := 0.35
 const BOSS_MEDICINE := 1
 
 ## --- Backpack -------------------------------------------------------------------
-const PACK_BASE := 8
+## Three crates fill the base pack (≈ the 2nd–3rd window on Drift); each rank fits one more.
+const PACK_BASE := 9
 const PACK_PER_RANK := 3
 const PACK_PRICES: Array = [200, 450, 800]
 
@@ -131,7 +137,7 @@ static func item_name(id: String) -> String:
 
 
 static func weight(id: String) -> int:
-	return int((INGREDIENTS.get(id, {}) as Dictionary).get("weight", 1))
+	return int((INGREDIENTS.get(id, {}) as Dictionary).get("weight", 0))
 
 
 static func pack_capacity(rank: int) -> int:
@@ -148,6 +154,15 @@ static func brew_yield(cinder_rank: int) -> int:
 
 static func crates_for_tier(tier: int) -> int:
 	return int(CRATES_BY_TIER[clampi(tier, 1, CRATES_BY_TIER.size()) - 1])
+
+
+static func crates_at_start(tier: int) -> int:
+	return int(CRATES_AT_START[clampi(tier, 1, CRATES_AT_START.size()) - 1])
+
+
+## Pouch items (weightless ingredients).
+static func is_pouch(id: String) -> bool:
+	return weight(id) == 0
 
 
 ## Speed multiplier while carrying `n` medicine crates.

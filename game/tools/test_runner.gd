@@ -831,25 +831,26 @@ func _test_depth_e1() -> void:
 	## Backpack + medicine.
 	GameState.camp.clear()
 	GameState.begin_run()
-	_check(GameState.pack_capacity() == 8, "e1 pack 8")
-	_check(GameState.add_to_pack("medicine") and GameState.add_to_pack("medicine") and GameState.add_to_pack("herb", 2), "e1 pack fill")
-	_check(not GameState.add_to_pack("herb") and GameState.pack_weight() == 8, "e1 pack full")
-	_check(is_equal_approx(GameState.carry_speed_mult(), 1.0 - 0.15) and GameState.smells_medicine(), "e1 carry slow")
+	_check(GameState.pack_capacity() == 9, "e1 pack 9")
+	_check(GameState.add_to_pack("medicine") and GameState.add_to_pack("medicine") and GameState.add_to_pack("medicine"), "e1 pack fill")
+	_check(not GameState.add_to_pack("medicine") and GameState.pack_weight() == 9, "e1 pack full")
+	_check(GameState.add_to_pack("herb", 2) and GameState.pack_weight() == 9 and GameState.pouch() == {"herb": 2}, "e1 pouch is weightless")
+	_check(is_equal_approx(GameState.carry_speed_mult(), 1.0 - 0.18) and GameState.smells_medicine(), "e1 carry slow")
 	var bag := GameState.bag_value()
-	_check(bag == 2 * MedicineDefs.MEDICINE_SCRAP, "e1 medicine in bag")
+	_check(bag == 3 * MedicineDefs.MEDICINE_SCRAP, "e1 medicine in bag")
 	GameState.run_tonics = ["saints"]
 	_check(GameState.carry_speed_mult() == 1.0 and not GameState.smells_medicine(), "e1 saints carry free")
 	GameState.run_tonics = []
 	GameState.camp["backpack"] = 3
-	_check(GameState.pack_capacity() == 17 and GameState.add_to_pack("dust_shard"), "e1 pack upgrade")
+	_check(GameState.pack_capacity() == 18 and GameState.add_to_pack("medicine"), "e1 pack upgrade")
 	GameState.ingredients = {}
 	GameState.on_extract_success()
-	_check(GameState.ingredient_count("medicine") == 2 and GameState.ingredient_count("herb") == 2 and GameState.run_pack.is_empty(), "e1 pack banked")
+	_check(GameState.ingredient_count("medicine") == 4 and GameState.ingredient_count("herb") == 2 and GameState.run_pack.is_empty(), "e1 pack banked")
 	_check(GameState.payout_this_run >= int((100 + bag) * float(GameState.get_mode()["payout_mult"])), "e1 medicine pays")
 	GameState.begin_run()
 	GameState.add_to_pack("medicine")
 	GameState.on_wipe()
-	_check(GameState.ingredient_count("medicine") == 2 and GameState.run_pack.is_empty(), "e1 pack lost on death")
+	_check(GameState.ingredient_count("medicine") == 4 and GameState.run_pack.is_empty(), "e1 pack lost on death")
 	## A short Blight match: crates placed, fog builds exposure, stages bite.
 	GameState.camp.clear()
 	GameState.selected_mode_id = "blight"
@@ -864,8 +865,12 @@ func _test_depth_e1() -> void:
 	for k in range(4):
 		await get_tree().physics_frame
 	var player: Node2D = m.get_node("World/Player")
-	_check(get_tree().get_nodes_in_group("medicine_crates").size() == MedicineDefs.crates_for_tier(5), "e1 crates placed")
-	var ps: Node = m.get_node("PlagueSystem")
+	var ps0: Node = m.get_node("PlagueSystem")
+	_check(get_tree().get_nodes_in_group("medicine_crates").size() == MedicineDefs.crates_at_start(5), "e1 crates placed")
+	ps0.call("on_window_open", 1)
+	await get_tree().physics_frame
+	_check(get_tree().get_nodes_in_group("medicine_crates").size() == MedicineDefs.crates_at_start(5) + 1, "e1 window adds a crate")
+	var ps: Node = ps0
 	ps.call("spawn_zone", player.global_position, 150.0)
 	for k in range(40):
 		player.set("hp", player.get("max_hp"))
@@ -888,7 +893,7 @@ func _test_depth_e1() -> void:
 	HaulPickup.drop_kill(m.get_node("World"), player.global_position + Vector2(70, 0), EnemyDefs.MACHINE, "boss")
 	for k in range(60):
 		await get_tree().physics_frame
-	_check(GameState.pack_count("dust_shard") >= 1 or GameState.pack_weight() >= GameState.pack_capacity() - 1, "e1 kill drops picked up")
+	_check(GameState.pack_count("dust_shard") >= 1, "e1 kill drops picked up")
 	var hud: Node = m.get_node("HUD")
 	hud.call("_open_pause")
 	await get_tree().process_frame

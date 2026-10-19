@@ -16,6 +16,7 @@ var _zone_t: float = 0.0
 var _stage: int = -1
 var _active: bool = false
 var _rng := RandomNumberGenerator.new()
+var _crates_placed: int = 0
 
 
 func setup(match_node: Node, player: Node2D, world: Node2D, hud: Node) -> void:
@@ -37,7 +38,8 @@ func setup(match_node: Node, player: Node2D, world: Node2D, hud: Node) -> void:
 func _place_crates() -> void:
 	if not is_instance_valid(_player):
 		return
-	var n := MedicineDefs.crates_for_tier(int(GameState.get_mode().get("tier", 1)))
+	var n := MedicineDefs.crates_at_start(int(GameState.get_mode().get("tier", 1)))
+	_crates_placed = n
 	var base := _rng.randf() * TAU
 	for i in range(n):
 		var p := Vector2.ZERO
@@ -48,6 +50,23 @@ func _place_crates() -> void:
 				break
 		HaulPickup.spawn(_world, p, "medicine", 1, false)
 	_place_lore_page()
+
+
+## Each extract window: Helm marks one more medicine crate (up to the tier's total).
+func on_window_open(_index: int) -> void:
+	if not is_instance_valid(_player) or _crates_placed >= MedicineDefs.crates_for_tier(int(GameState.get_mode().get("tier", 1))):
+		return
+	for i in range(MedicineDefs.CRATES_PER_WINDOW):
+		var p := _player.global_position
+		for attempt in range(10):
+			var ang := _rng.randf() * TAU
+			p = _player.global_position + Vector2(cos(ang), sin(ang)) * _rng.randf_range(MedicineDefs.WINDOW_CRATE_DIST.x, MedicineDefs.WINDOW_CRATE_DIST.y)
+			if bool(_match.call("_spot_free", p, 40.0)):
+				break
+		HaulPickup.spawn(_world, p, "medicine", 1, false)
+		_crates_placed += 1
+	if _hud and _hud.has_method("show_toast"):
+		_hud.call("show_toast", "Helm: another medicine crate out there — marked on your map", Color(1.0, 0.55, 0.5))
 
 
 ## Depth E3: sometimes a hidden lore page lies out in the Dust.

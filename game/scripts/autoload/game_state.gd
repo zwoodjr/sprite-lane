@@ -818,6 +818,14 @@ func pack_weight() -> int:
 func pack_has_room(id: String, n: int = 1) -> bool:
 	return pack_weight() + MedicineDefs.weight(id) * n <= pack_capacity()
 
+## Weightless ingredient pouch counts (id -> n) carried this run.
+func pouch() -> Dictionary:
+	var out := {}
+	for k in run_pack.keys():
+		if MedicineDefs.is_pouch(str(k)):
+			out[str(k)] = int(run_pack[k])
+	return out
+
 func pack_count(id: String) -> int:
 	return int(run_pack.get(id, 0))
 
