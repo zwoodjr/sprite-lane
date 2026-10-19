@@ -153,7 +153,48 @@ func _gear_shots() -> void:
 	get_tree().quit()
 
 
+## `-- OUTDIR events`: logbook tabs + radio events in a match.
+func _event_shots() -> void:
+	var keep := [GameState.stories.duplicate(true), GameState.daily.duplicate(true)]
+	GameState.stories = {"ash_rook": {"step": 2, "have": 9}, "pebble": {"step": 1, "have": 30}}
+	GameState.daily = {}
+	var qs := GameState.daily_quests()
+	qs[0]["have"] = qs[0]["need"]
+	var lb: Node = (load("res://scenes/ui/logbook.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lb)
+	get_tree().current_scene = lb
+	for t in ["daily", "stories", "milestones"]:
+		lb.call("show_tab", t)
+		for i in range(20):
+			await get_tree().process_frame
+		await _snap("logbook_%s" % t)
+	lb.queue_free()
+	TouchInput.touch_primary = true
+	GameState.tutorial_done = true
+	GameState.selected_character_id = "sister_cinder"
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for i in range(30):
+		await get_tree().process_frame
+	var ev: Node = m.get_node("RunEvents")
+	for id in ["scrap_spike", "dust_surge", "supply_crash"]:
+		ev.call("start_event", id)
+		for i in range(70):
+			await get_tree().process_frame
+		await _snap("event_%s" % id)
+	m.queue_free()
+	GameState.stories = keep[0]
+	GameState.daily = keep[1]
+	GameState.save_profile()
+	get_tree().quit()
+
+
 func _run() -> void:
+	if _char == "events":
+		await _event_shots()
+		return
 	if _char == "gear":
 		await _gear_shots()
 		return

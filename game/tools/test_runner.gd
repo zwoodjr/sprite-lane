@@ -15,6 +15,8 @@ const MENUS := [
 	"res://scenes/ui/settings_menu.tscn",
 	"res://scenes/ui/result_screen.tscn",
 	"res://scenes/ui/hangar.tscn",
+	"res://scenes/ui/loadout.tscn",
+	"res://scenes/ui/logbook.tscn",
 ]
 
 var _bad: int = 0
@@ -25,6 +27,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	## Tests buy, equip and bank freely — put the player's save back afterwards.
+	var save_backup := FileAccess.get_file_as_string(GameState.SAVE_PATH) if FileAccess.file_exists(GameState.SAVE_PATH) else ""
 	## 1. Load everything
 	for path in _walk("res://scripts") + _walk("res://scenes"):
 		if not (path.ends_with(".gd") or path.ends_with(".tscn")):
@@ -113,6 +117,12 @@ func _run() -> void:
 	await _test_upgrades()
 	await _test_gear_screens()
 	await _test_full_sets()
+	var keep_q := [GameState.daily.duplicate(true), GameState.stories.duplicate(true), GameState.milestones.duplicate(true), GameState.kennel_bond.duplicate(true)]
+	await _test_quests_events()
+	GameState.daily = keep_q[0]
+	GameState.stories = keep_q[1]
+	GameState.milestones = keep_q[2]
+	GameState.kennel_bond = keep_q[3]
 	GameState.loadouts = keep_lo
 	GameState.insured = keep_ins
 	GameState.materials = keep_mats
@@ -122,6 +132,15 @@ func _run() -> void:
 	GameState.account_scrap = keep_scrap
 	GameState.save_profile()
 	Engine.time_scale = 1.0
+	for n in get_tree().root.get_children():
+		if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
+			n.queue_free()
+	await get_tree().process_frame
+	if save_backup != "":
+		var f := FileAccess.open(GameState.SAVE_PATH, FileAccess.WRITE)
+		if f:
+			f.store_string(save_backup)
+			f.close()
 	print("TEST_PASS" if _bad == 0 else "TEST_FAIL bad=%d" % _bad)
 	get_tree().quit(0 if _bad == 0 else 1)
 
@@ -275,6 +294,7 @@ func _test_hangar() -> void:
 	## The screen: tabs, buying, stash, popups (no gear, so only camp bonuses count).
 	GameState.loadouts.clear()
 	GameState.stash.clear()
+	GameState._compute_gear()
 	GameState.account_scrap = HangarDefs.full_max_cost()
 	GameState.selected_character_id = "ash_rook"
 	GameState.selected_pet_id = "noel"
@@ -525,3 +545,112 @@ func _test_full_sets() -> void:
 	GameState.stash.clear()
 	GameState.loadouts.clear()
 	print("SETS_OK")
+
+
+## 10) Logbook (daily, stories, milestones, bond) and every in-run event live.
+func _test_quests_events() -> void:
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.camp = {}
+	GameState.daily = {}
+	var qs := GameState.daily_quests()
+	var types := {}
+	for q in qs:
+		types[str(q["type"])] = true
+	_check(qs.size() == 3 and types.size() == 3, "daily 3 distinct")
+	_check(str(QuestDefs.roll_daily("2026-01-01", 2)[0]["label"]) == str(QuestDefs.roll_daily("2026-01-01", 2)[0]["label"]), "daily deterministic")
+	GameState.daily = {"date": GameState.today(), "quests": [
+		{"type": "kills", "need": 2, "have": 0, "reward": 50, "claimed": false, "label": "k"},
+		{"type": "kills_kind", "kind": "rad_gator", "need": 1, "have": 0, "reward": 10, "claimed": false, "label": "kk"},
+		{"type": "extract_mult", "mult": 2.0, "need": 1, "have": 0, "reward": 10, "claimed": false, "label": "em"}]}
+	GameState.quest_event("kills", 1, {"kind": "rad_gator"})
+	GameState.quest_event("kills", 1, {"kind": "scrap_hound"})
+	GameState.quest_event("extract", 1, {"tier": 2, "mult": 1.4})
+	var dq := GameState.daily_quests()
+	_check(int(dq[0]["have"]) == 2 and int(dq[1]["have"]) == 1 and int(dq[2]["have"]) == 0, "daily progress")
+	var s0 := GameState.account_scrap
+	_check(GameState.claim_daily(0) == 50 and GameState.account_scrap == s0 + 50 and GameState.claim_daily(0) == 0, "daily claim once")
+	## Story: five chapters, the last pays the named Legendary.
+	GameState.selected_character_id = "ash_rook"
+	GameState.stories = {}
+	GameState.quest_event("extract", 1, {"tier": 1, "mult": 1.0})
+	GameState.quest_event("kills", 80, {"kind": "x"})
+	GameState.quest_event("ability", 25)
+	GameState.quest_event("event", 2)
+	_check(int(GameState.story_state("ash_rook")["step"]) == 4, "story step 4 (%d)" % int(GameState.story_state("ash_rook")["step"]))
+	GameState.quest_event("extract", 1, {"tier": 1, "mult": 2.5})
+	var leg := false
+	for it in GameState.stash:
+		if str(it.get("legendary", "")) == "last_shift":
+			leg = true
+	_check(leg and int(GameState.story_state("ash_rook")["step"]) == 5, "story legendary")
+	_check(int(GameState.story_state("pebble")["step"]) == 0, "story per survivor")
+	## Milestones + cosmetics; Pet Bond.
+	GameState.milestones = {}
+	GameState.camp["generator"] = 5
+	var ms := GameState.check_milestones()
+	_check(GameState.has_cosmetic("banner") and GameState.has_cosmetic("case") and ms.size() >= 2, "milestones")
+	GameState.kennel_bond = {}
+	GameState.selected_pet_id = "noel"
+	GameState.add_bond("noel", EventDefs.BOND_XP_PER_LEVEL * 2)
+	_check(GameState.bond_level("noel") == 2 and is_equal_approx(GameState.pet_power_mult(), 1.0 + 2.0 * EventDefs.BOND_DAMAGE_PER_LEVEL), "pet bond")
+	## Every event in a live match.
+	GameState.selected_mode_id = "drift"
+	GameState.fast_timers = false
+	GameState.tutorial_done = true
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	var player: Node2D = m.get_node("World/Player")
+	var ev: Node = m.get_node("RunEvents")
+	await get_tree().process_frame
+	for id in EventDefs.IN_RUN.keys():
+		ev.call("start_event", str(id))
+		_check(str(ev.call("active_event")) == str(id), "event %s starts" % id)
+		for f in range(40):
+			await get_tree().physics_frame
+		match str(id):
+			"scrap_spike":
+				player.global_position = ev.get("_target_pos")
+				await get_tree().physics_frame
+				await get_tree().physics_frame
+				_check(GameState.event_scrap_mult == 2.0, "spike doubles")
+			"dust_surge":
+				_check(GameState.event_enemy_damage > 1.0, "surge hits harder")
+			"pad_heat":
+				_check(float(m.get("_phase_time_left")) <= float(EventDefs.IN_RUN["pad_heat"]["open_in"]) + 0.01, "pad heat early")
+			"supply_crash":
+				player.global_position = ev.get("_target_pos")
+			"elite_hunt":
+				var tgt: Node = ev.get("_target_node")
+				if tgt != null and is_instance_valid(tgt):
+					tgt.call("take_damage", 999999.0, Vector2.RIGHT)
+		for f in range(30):
+			await get_tree().physics_frame
+		print("EVENT_%s active=%s done=%d" % [id, ev.call("active_event"), GameState.events_done_run])
+	_check(GameState.events_done_run >= 2, "events completed %d" % GameState.events_done_run)
+	## At-extract bonuses.
+	var es: PackedScene = load("res://scenes/entities/enemy.tscn")
+	for k in range(3):
+		var e: CharacterBody2D = es.instantiate()
+		e.call("setup", player.global_position + Vector2(60 + k * 20, 0), 50.0, 0.0, 0.0, "muck_golem")
+		player.get_parent().add_child(e)
+	await get_tree().physics_frame
+	GameState.extract_bonus_scrap = 0
+	m.call("_extract_bonuses")
+	_check(GameState.extract_bonus_scrap > 0, "ambush bounty")
+	m.queue_free()
+	for k in range(5):
+		await get_tree().process_frame
+	## Logbook screen.
+	var lb: Node = (load("res://scenes/ui/logbook.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lb)
+	for t in ["daily", "stories", "milestones"]:
+		lb.call("show_tab", t)
+		await get_tree().process_frame
+	lb.queue_free()
+	await get_tree().process_frame
+	GameState.stash.clear()
+	GameState.camp = {}
+	print("QUESTS_EVENTS_OK")
