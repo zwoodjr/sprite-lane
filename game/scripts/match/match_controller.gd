@@ -40,6 +40,8 @@ var plague: Node
 ## E2: raider crews on the tier's schedule; elites alternate plague / machine.
 var _next_crew_at: float = INF
 var _elite_side: int = 0
+## E4: Helm's radio jobs, cameos, stakes, Dust Warden.
+var jobs: Node
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
@@ -89,6 +91,11 @@ func _ready() -> void:
 	plague.set_script(load("res://scripts/match/plague_system.gd"))
 	add_child(plague)
 	plague.call("setup", self, player, world, hud)
+	jobs = Node.new()
+	jobs.name = "RadioJobs"
+	jobs.set_script(load("res://scripts/match/radio_jobs.gd"))
+	add_child(jobs)
+	jobs.call("setup", self, player, world, hud, events)
 	_phase_index = 0
 	_start_phase(0)
 	hud.show_banner("DROP IN", "%s · %s" % [
@@ -271,12 +278,20 @@ func _start_phase(index: int) -> void:
 		_spawn_pad_guards()
 		if plague:
 			plague.call("on_window_open", _window_index)
+		var stake := ""
+		if jobs:
+			jobs.call("on_window_open", _window_index, _pads)
+			if bool(phase.get("is_last", false)):
+				jobs.call("spawn_warden", _pads)
+			else:
+				stake = str(jobs.call("roll_stake", _window_index))
 		Juice.sfx("extract_open")
 		Juice.haptic(40)
 		if bool(phase.get("is_last", false)):
 			hud.show_banner("LAST CHANCE", "Reach a red pad before the Dust storm hits", UiTheme.DANGER)
 		else:
-			hud.show_banner("EXTRACT OPEN", "Hold a pad 3s to leave at ×%.1f — or stay for more" % GameState.loot_mult, Color(0.55, 1.0, 0.6))
+			var stay_txt := "or stay for more" if stake == "" else "or stay — next: %s" % str(RadioDefs.STAKES[stake]["label"])
+			hud.show_banner("EXTRACT OPEN", "Hold a pad 3s to leave at ×%.1f — %s" % [GameState.loot_mult, stay_txt], Color(0.55, 1.0, 0.6))
 		if GameState.selected_character_id == CharacterDefs.ROOK_ID and not _ping_done_for_window:
 			_ping_done_for_window = true
 			var sg := GameState.add_scrap(2)
@@ -291,6 +306,9 @@ func _advance_phase() -> void:
 	var was_last := bool(_phases[_phase_index].get("is_last", false))
 	if _current_window_was_open and not was_last:
 		GameState.on_window_skipped()
+		if jobs:
+			jobs.call("on_window_close")
+			jobs.call("apply_stake")
 		Juice.shake(0.15)
 		hud.show_toast("You stayed — loot ×%.1f, Threat %d" % [GameState.loot_mult, GameState.threat_level], UiTheme.AMBER)
 	if was_last or _phase_index + 1 >= _phases.size():
@@ -399,6 +417,24 @@ func spawn_special(role: String, kind: String = "") -> Node:
 	else:
 		hud.show_toast("ELITE: %s inbound — it carries good gear" % nm, UiTheme.RUST)
 	return enemy
+
+## An elite / boss of a given kind at a given spot (Dust Warden on the pads).
+func spawn_at(role: String, kind: String, at: Vector2) -> Node:
+	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	enemy.setup(at, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)), float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, kind)
+	enemy.call("set_role", role)
+	world.add_child(enemy)
+	return enemy
+
+## A regular spawn that ignores the soft cap (stay-or-go swarm stake).
+func _spawn_enemy_force() -> void:
+	var ang := randf() * TAU
+	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
+	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)), float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, _roll_enemy_kind())
+	world.add_child(enemy)
 
 ## A rival raider crew (FactionDefs) — also used by contracts / tests.
 func spawn_crew(at: Vector2 = Vector2.INF) -> Node:
@@ -571,6 +607,8 @@ func _on_extract_requested() -> void:
 	if _ended or not _extract_open:
 		return
 	_ended = true
+	if jobs:
+		jobs.call("on_extract")
 	_extract_bonuses()
 	GameState.on_extract_success()
 	Juice.sfx("extract_win")

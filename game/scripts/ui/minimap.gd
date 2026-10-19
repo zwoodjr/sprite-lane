@@ -72,7 +72,7 @@ func _draw() -> void:
 		var lm2 := _world_to_map((mk as Node2D).global_position - origin, map_r)
 		if lm2.length() >= map_r - 0.5:
 			continue
-		var mc: Color = mk.get("map_color") if mk.get("map_color") is Color else Color(1, 0.4, 0.35)
+		var mc: Color = mk.get("map_color") if mk.get("map_color") is Color else (mk.get_meta("map_color") if mk.has_meta("map_color") else Color(1, 0.4, 0.35))
 		var mp := center + lm2
 		draw_rect(Rect2(mp - Vector2(4, 1.8), Vector2(8, 3.6)), Color(0.06, 0.04, 0.03, 0.9))
 		draw_rect(Rect2(mp - Vector2(1.8, 4), Vector2(3.6, 8)), Color(0.06, 0.04, 0.03, 0.9))

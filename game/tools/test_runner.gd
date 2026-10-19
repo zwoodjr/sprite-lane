@@ -134,6 +134,9 @@ func _run() -> void:
 	await _test_depth_e3()
 	GameState.bestiary = keep_notes[0]
 	GameState.lore_pages = keep_notes[1]
+	var keep_st := GameState.stories.duplicate(true)
+	await _test_depth_e4()
+	GameState.stories = keep_st
 	GameState.ingredients = keep_depth[0]
 	GameState.tonics = keep_depth[1]
 	GameState.tonic_loadout = keep_depth[2]
@@ -1225,3 +1228,137 @@ func _test_depth_e3() -> void:
 	_check(GameState.lore_pages.has("p_dust"), "e3 page picked up in a run")
 	await _end_depth_match(m)
 	print("DEPTH_E3_OK")
+
+
+## Depth E4: radio contracts, camp cameos, black market, stakes, Dust Warden.
+func _test_depth_e4() -> void:
+	for h in CharacterDefs.PLAYABLE_IDS:
+		for id in RadioDefs.jobs_for("contract", h) + RadioDefs.jobs_for("service", h):
+			_check(str(RadioDefs.job(str(id))["giver"]) != h, "e4 no self-cameo %s" % h)
+	var m: Node = await _depth_match("blight", "ash_rook")
+	var player: Node2D = m.get_node("World/Player")
+	var jobs: Node = m.get_node("RadioJobs")
+	## Keep the hero up through the whole section (elites, bursts, waves).
+	player.set("max_hp", 99999.0)
+	player.set("hp", 99999.0)
+	var q: Array = jobs.call("queued_ids")
+	_check(q.size() >= 2 and not ("vault" in q), "e4 jobs scheduled %s" % str(q))
+	GameState.stories = {}
+	var s0 := GameState.extract_bonus_scrap
+	## Bounty: kill the marked elite.
+	var st: Dictionary = jobs.call("start", "bounty")
+	var el: Node = st["node"]
+	el.call("take_damage", 9e9, Vector2.ZERO, 0.0)
+	await get_tree().process_frame
+	_check(bool(jobs.call("is_done", "bounty")) and GameState.extract_bonus_scrap > s0, "e4 bounty")
+	_check(int(GameState.story_state("quill_marrow")["have"]) > 0 or int(GameState.story_state("quill_marrow")["step"]) > 0, "e4 cameo moves quill's story")
+	## Medicine cache: walk up to it.
+	jobs.call("start", "medicine_cache", player.global_position + Vector2(30, 0))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(bool(jobs.call("is_done", "medicine_cache")), "e4 cache")
+	## Relay: hold near Juno.
+	st = jobs.call("start", "defend_relay", player.global_position)
+	st["hold"] = float(RadioDefs.job("defend_relay")["hold"]) - 0.05
+	var t_end := Time.get_ticks_msec() + 1500
+	while Time.get_ticks_msec() < t_end and not bool(jobs.call("is_done", "defend_relay")):
+		player.global_position = st["pos"]
+		await get_tree().process_frame
+	_check(bool(jobs.call("is_done", "defend_relay")), "e4 relay")
+	## Rescue: Pebble follows, delivered at extract.
+	st = jobs.call("start", "rescue", player.global_position + Vector2(40, 0))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(str(st["phase"]) == "escort", "e4 pebble follows")
+	## Black box: hold still by the wreck (clear the field so nothing interrupts).
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	player.set("_iframes", 99.0)
+	await get_tree().process_frame
+	st = jobs.call("start", "black_box", player.global_position)
+	var t_bb := Time.get_ticks_msec() + 2000
+	while Time.get_ticks_msec() < t_bb and str(st["phase"]) != "carry":
+		st["channel"] = maxf(float(st["channel"]), float(RadioDefs.job("black_box")["channel"]) - 0.05)
+		player.global_position = st["pos"]
+		await get_tree().process_frame
+	_check(str(st["phase"]) == "carry", "e4 black box carried")
+	jobs.call("on_extract")
+	_check(bool(jobs.call("is_done", "rescue")) and bool(jobs.call("is_done", "black_box")), "e4 delivered at extract")
+	## Field tent: heal + cleanse.
+	player.set("hp", 10.0)
+	GameState.exposure = 60.0
+	jobs.call("start", "field_tent", player.global_position)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(float(player.get("hp")) > 50.0 and GameState.exposure < 1.0, "e4 field tent")
+	player.set("hp", 99999.0)
+	## Overwatch snipes; vault opens.
+	var tgt := _mob(m, "scav_bear", player.global_position + Vector2(200, 0))
+	tgt.set("max_hp", 5000.0)
+	tgt.set("hp", 5000.0)
+	st = jobs.call("start", "overwatch", player.global_position + Vector2(-120, 0))
+	st["fire_t"] = 0.0
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(float(tgt.get("hp")) < 5000.0, "e4 overwatch snipe")
+	tgt.queue_free()
+	var g0 := get_tree().get_nodes_in_group("gear_drops").size()
+	st = jobs.call("start", "vault", player.global_position)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	st["fuse"] = 0.01
+	for k in range(4):
+		await get_tree().process_frame
+	_check(bool(jobs.call("is_done", "vault")) and get_tree().get_nodes_in_group("gear_drops").size() > g0, "e4 vault loot")
+	## Black market: buy, Pack Lock keeps the pack on a death.
+	GameState.scrap_found = 200
+	var mk := CanvasLayer.new()
+	mk.set_script(load("res://scripts/ui/black_market.gd"))
+	add_child(mk)
+	mk.call("open", jobs)
+	_check(bool(mk.call("buy", "lock")) and GameState.run_pack_locked and GameState.scrap_found == 155, "e4 market buy")
+	_check(not bool(mk.call("buy", "lock")), "e4 lock once")
+	var rr := GameState.run_rerolls_left
+	mk.call("buy", "reroll")
+	_check(GameState.run_rerolls_left == rr + 1, "e4 market reroll")
+	mk.call("close")
+	await get_tree().process_frame
+	## Stakes from window 2.
+	_check(str(jobs.call("roll_stake", 1)) == "", "e4 no stake on window 1")
+	var sk := str(jobs.call("roll_stake", 2))
+	_check(RadioDefs.STAKES.has(sk), "e4 stake rolled")
+	jobs.set("_stake", "elite_pair")
+	var e0 := get_tree().get_nodes_in_group("elites").size()
+	jobs.call("apply_stake")
+	await get_tree().process_frame
+	_check(get_tree().get_nodes_in_group("elites").size() >= e0 + 2, "e4 elite pair stake")
+	## Dust Warden: boss at tier 5+, pulses.
+	var w: Node = jobs.call("spawn_warden", [])
+	_check(w != null and str(w.get("kind")) == "dust_warden" and str(w.get("role")) == "boss", "e4 warden boss")
+	w.global_position = player.global_position + Vector2(60, 0)
+	w.set("_spawn_in", 0.0)
+	w.set("_pulse_t", 0.0)
+	player.set("_iframes", 0.0)
+	var hp1 := 5000.0
+	player.set("hp", hp1)
+	var until := Time.get_ticks_msec() + int((RadioDefs.WARDEN_PULSE_WINDUP + 0.6) * 1000.0)
+	while Time.get_ticks_msec() < until:
+		player.set("_iframes", 0.0)
+		await get_tree().process_frame
+	_check(float(player.get("hp")) < hp1, "e4 warden pulse")
+	## Contract rewards ride home on extract; Pack Lock on a wipe.
+	GameState.add_to_pack("medicine")
+	GameState.on_wipe()
+	_check(GameState.ingredient_count("medicine") >= 1, "e4 pack lock on wipe")
+	await _end_depth_match(m)
+	GameState.begin_run()
+	GameState.add_job_reward(50, {"herb": 2})
+	var h0 := GameState.ingredient_count("herb")
+	GameState.on_extract_success()
+	_check(GameState.ingredient_count("herb") == h0 + 2, "e4 rewards banked on extract")
+	## Tier 3: the Warden is an elite.
+	m = await _depth_match("smog", "pebble")
+	var w2: Node = m.get_node("RadioJobs").call("spawn_warden", [])
+	_check(w2 != null and str(w2.get("role")) == "elite", "e4 warden elite below tier 5")
+	await _end_depth_match(m)
+	print("DEPTH_E4_OK")

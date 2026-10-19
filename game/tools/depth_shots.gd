@@ -198,3 +198,48 @@ func _shots_e3() -> void:
 	await _snap("e3_field_notes")
 	lb.queue_free()
 	await _frames(3)
+
+
+## E4: camp cameos out in the Dust, Nyx's market, the Dust Warden, stakes.
+func _shots_e4() -> void:
+	GameState.best_tier_extracted = 9
+	GameState.camp = {}
+	var m := await _match("blight", "pebble")
+	var player: Node2D = m.get_node("World/Player")
+	player.set("max_hp", 9999.0)
+	player.set("hp", 9999.0)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	var jobs: Node = m.get_node("RadioJobs")
+	var p := player.global_position
+	jobs.call("start", "field_tent", p + Vector2(-170, -230))
+	jobs.call("start", "overwatch", p + Vector2(170, -250))
+	jobs.call("start", "defend_relay", p + Vector2(-160, 230))
+	jobs.call("start", "vault", p + Vector2(170, 250))
+	jobs.set("_stake", "raider_crew")
+	await _frames(40)
+	await _snap("e4_cameos")
+	for id in ["field_tent", "overwatch", "defend_relay", "vault"]:
+		var s: Dictionary = (jobs.get("active") as Dictionary).get(id, {})
+		if s.get("npc") is Node:
+			(s["npc"] as Node).queue_free()
+		if s.get("node") is Node:
+			(s["node"] as Node).queue_free()
+	(jobs.get("active") as Dictionary).clear()
+	jobs.call("start", "black_market", p + Vector2(110, -40))
+	jobs.call("start", "black_box", p + Vector2(-180, 200))
+	await _frames(20)
+	GameState.scrap_found = 120
+	jobs.call("_open_market")
+	await _frames(12)
+	await _snap("e4_black_market")
+	for n in get_tree().root.find_children("*", "CanvasLayer", true, false):
+		if n.has_method("buy"):
+			n.call("close")
+	await _frames(4)
+	var w: Node = jobs.call("spawn_warden", [])
+	w.global_position = p + Vector2(0, -220)
+	await _frames(60)
+	await _snap("e4_dust_warden")
+	m.queue_free()
+	await _frames(3)

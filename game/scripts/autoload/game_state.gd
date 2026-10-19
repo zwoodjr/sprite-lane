@@ -91,6 +91,12 @@ var exposure: float = 0.0
 ## --- Depth E3: Quill's Field Notes (kills per kind, kept) + found lore pages ---
 var bestiary: Dictionary = {}
 var lore_pages: Dictionary = {}
+## --- Depth E4: radio jobs (in-run) ---
+## Nyx's Pack Lock: the pack survives a death this run.
+var run_pack_locked: bool = false
+## Contract rewards waiting for extract: ingredients -> count.
+var run_job_rewards: Dictionary = {}
+var jobs_done_run: int = 0
 
 
 ## Player settings + onboarding flags (persisted to user://).
@@ -798,9 +804,20 @@ func _lose_run_loot() -> void:
 		loadout_of(hero).erase(sl)
 	run_loot = []
 	run_materials = {}
+	if run_pack_locked and not run_pack.is_empty():
+		## Nyx's Pack Lock: the pack makes it home anyway.
+		result_unlocks_pending.append("Pack Lock held — your pack made it home")
+		_bank_pack_into_pending()
+		return
 	var lost_med := medicine_carried()
 	if lost_med > 0:
 		result_unlocks_pending.append("Lost %d medicine in the dust" % lost_med)
+	run_pack = {}
+
+func _bank_pack_into_pending() -> void:
+	for k in run_pack.keys():
+		ingredients[str(k)] = int(ingredients.get(str(k), 0)) + int(run_pack[k])
+		result_unlocks_pending.append("+%d %s" % [int(run_pack[k]), MedicineDefs.item_name(str(k))])
 	run_pack = {}
 
 ## =============================================================================
@@ -861,6 +878,10 @@ func smells_medicine() -> bool:
 
 ## Extract: the pack goes home (medicine also pays through bag_value()).
 func _bank_pack() -> void:
+	## Contract rewards ride home with the pack.
+	for k in run_job_rewards.keys():
+		run_pack[k] = int(run_pack.get(k, 0)) + int(run_job_rewards[k])
+	run_job_rewards = {}
 	for k in run_pack.keys():
 		var id := str(k)
 		var n := int(run_pack[k])
@@ -1201,6 +1222,9 @@ func begin_run() -> void:
 	extract_bonus_notes = PackedStringArray()
 	run_pack = {}
 	exposure = 0.0
+	run_pack_locked = false
+	run_job_rewards = {}
+	jobs_done_run = 0
 	_drink_tonics()
 	## Reset in-run track completely.
 	run_xp = 0
@@ -1335,6 +1359,27 @@ func _reset_run_cards() -> void:
 	run_luck = 1.0
 	run_kind_kills.clear()
 	run_ammo_seen.clear()
+
+## A camp survivor's cameo was helped: their story moves on (a share of the chapter).
+func cameo_help(hero: String) -> void:
+	if not QuestDefs.STORIES.has(hero):
+		return
+	var st := story_state(hero)
+	var step := int(st["step"])
+	if step >= QuestDefs.STORY_STEPS.size():
+		return
+	var need := int(QuestDefs.STORY_STEPS[step]["need"])
+	st["have"] = int(st["have"]) + maxi(1, int(ceil(float(need) * RadioDefs.CAMEO_STORY_SHARE)))
+	result_unlocks_pending.append("%s's story moves on" % str(CharacterDefs.get_character(hero).get("display_name", hero)))
+	if int(st["have"]) >= need:
+		_complete_story_step(hero)
+
+func add_job_reward(scrap: int, items: Dictionary) -> void:
+	extract_bonus_scrap += scrap
+	for k in items.keys():
+		run_job_rewards[str(k)] = int(run_job_rewards.get(str(k), 0)) + int(items[k])
+	jobs_done_run += 1
+	quest_event("event")
 
 func bestiary_kills(kind: String) -> int:
 	return int(bestiary.get(kind, 0))

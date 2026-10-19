@@ -80,6 +80,8 @@ var _expo_box: VBoxContainer
 var _expo_label: Label
 var _expo_bar: ProgressBar
 var _expo_col: Color = Color(0.55, 0.85, 0.35)
+## E4: radio jobs / stay stakes under the phase card.
+var _jobs_label: Label
 
 var _hp_ratio: float = 1.0
 var _last_tl: int = 0
@@ -312,6 +314,11 @@ func _build() -> void:
 	_phase_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_phase_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pc.add_child(_phase_hint)
+	_jobs_label = _label("", 11, RadioDefs.MAP_COLOR)
+	_jobs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_jobs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_jobs_label.visible = false
+	pc.add_child(_jobs_label)
 
 	## Top-right: threat + counters
 	_threat_panel = _panel(PANEL_ALPHA)
@@ -401,6 +408,8 @@ func _layout() -> void:
 	var phase_w := clampf(vp.x - 2.0 * maxf(left_w, map_s + 8.0) - 2.0 * m.position.x, 180.0, 340.0)
 	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
 	_phase_hint.custom_minimum_size = Vector2(phase_w - 20.0, 0)
+	if _jobs_label:
+		_jobs_label.custom_minimum_size = Vector2(phase_w - 20.0, 0)
 	_phase_bar.custom_minimum_size = Vector2(phase_w - 24.0, 4)
 	_phase_card.reset_size()
 	_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y)
@@ -485,6 +494,15 @@ func _icon(path: String, px: float) -> TextureRect:
 	if ResourceLoader.exists(path):
 		t.texture = load(path)
 	return t
+
+func set_jobs(lines: PackedStringArray) -> void:
+	if _jobs_label == null:
+		return
+	var txt := "\n".join(lines)
+	if _jobs_label.text != txt:
+		_jobs_label.text = txt
+		_jobs_label.visible = txt != ""
+		_phase_card.reset_size()
 
 func set_pack(weight: int, cap: int, medicine: int) -> void:
 	if _pack_label == null:

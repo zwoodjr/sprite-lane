@@ -336,6 +336,8 @@ func _physics_process(delta: float) -> void:
 	_infight_cd = maxf(0.0, _infight_cd - delta)
 	if not traits.is_empty() and _tick_traits(delta):
 		return
+	if kind == RadioDefs.WARDEN_KIND and role == "boss" and _tick_warden(delta):
+		return
 	_player = get_tree().get_first_node_in_group("player") as Node2D
 	if _tick_infight(delta):
 		return
@@ -983,3 +985,37 @@ func _evo_on_death() -> void:
 		Juice.float_text(global_position + Vector2(0, -40), "KNELL", Color(1.0, 0.6, 0.9), 15)
 	if GameState.has_evo("fortune") and randf() < float(GameState.up("fortune", "ammo_chance", 0.0)):
 		RunFx.spawn_ammo_pickup(get_parent(), global_position + Vector2(10, 10), RunFx.random_ammo_id())
+
+
+## Dust Warden (boss variant): every few seconds it vents a Dust pulse around
+## itself — red ring telegraph, then damage + plague exposure.
+var _pulse_t: float = RadioDefs.WARDEN_PULSE_EVERY
+var _pulse_wind: float = 0.0
+
+func _tick_warden(delta: float) -> bool:
+	if _pulse_wind > 0.0:
+		_pulse_wind -= delta
+		var k := 1.0 - _pulse_wind / RadioDefs.WARDEN_PULSE_WINDUP
+		_show_telegraph(global_position + Vector2(0, 10), RadioDefs.WARDEN_PULSE_RADIUS, k)
+		velocity = velocity.move_toward(Vector2.ZERO, 900.0 * delta)
+		move_and_slide()
+		if _pulse_wind <= 0.0:
+			if _tele:
+				_tele.visible = false
+			RunFx.ring(get_parent(), global_position + Vector2(0, 10), RadioDefs.WARDEN_PULSE_RADIUS, Color(0.6, 0.9, 0.35), 0.5, 7.0)
+			Juice.burst(global_position, Color(0.75, 0.6, 0.3), 30, RadioDefs.WARDEN_PULSE_RADIUS * 2.0, 0.6, 1.8)
+			Juice.shake(0.35)
+			var p := get_tree().get_first_node_in_group("player") as Node2D
+			if p != null and p.global_position.distance_to(global_position) <= RadioDefs.WARDEN_PULSE_RADIUS and p.has_method("take_damage"):
+				p.call("take_damage", RadioDefs.WARDEN_PULSE_DAMAGE * float(GameState.get_mode().get("enemy_damage", 1.0)), self)
+				GameState.add_exposure(MedicineDefs.HIT_GAIN * 2.0)
+		return true
+	_pulse_t -= delta
+	if _pulse_t <= 0.0 and _windup_left <= 0.0 and _lunge_left <= 0.0:
+		_pulse_t = RadioDefs.WARDEN_PULSE_EVERY
+		_pulse_wind = RadioDefs.WARDEN_PULSE_WINDUP
+		_cancel_attack()
+		if _anim.has_state("roar"):
+			_anim.play("roar")
+		return true
+	return false

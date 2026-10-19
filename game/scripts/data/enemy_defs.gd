@@ -17,7 +17,7 @@ const RAIDER := "raider"
 
 ## Elite / boss roles (Part 3). These kinds never come from the random pools;
 ## the match spawns them on the tier's elite / boss schedule (ModeDefs).
-const ROLE_KINDS := {"cyber_juggernaut": "elite", "dread_naught": "boss", "mutant_overlord": "boss"}
+const ROLE_KINDS := {"cyber_juggernaut": "elite", "dread_naught": "boss", "mutant_overlord": "boss", "dust_warden": "boss"}
 const ELITE_KINDS: Array = ["cyber_juggernaut"]
 ## Raider crew members only come with a crew (scripts/match/raider_crew.gd).
 const CREW_KINDS: Array = ["raider_grunt", "raider_brute", "raider_captain"]
@@ -65,6 +65,8 @@ static func all_kinds() -> Array[Dictionary]:
 		_k("raider_grunt", "Raider", 2, "raider", 64.0, 125.0, 9.0, 1.0),
 		_k("raider_brute", "Raider Brute", 2, "brute", 170.0, 95.0, 13.0, 1.2),
 		_k("raider_captain", "Raider Captain", 3, "raider", 300.0, 105.0, 15.0, 1.4),
+		## --- Dust Warden (E4): guards the pads at the last window ---
+		_k("dust_warden", "Dust Warden", 3, "brute", 300.0, 72.0, 17.0, 1.7),
 	]
 
 

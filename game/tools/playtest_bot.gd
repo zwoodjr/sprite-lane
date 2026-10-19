@@ -520,6 +520,6 @@ func _summary() -> void:
 		if _picks.any(func(p: String) -> bool: return p.begins_with(str(c["id"]))):
 			evos.append(str(c["id"]))
 	print("EVOS %s" % ",".join(evos))
-	print("PACK full_at=%.0f full_window=%d max=%d/%d pouch=%s" % [_full_at, _full_window, _max_pack, GameState.pack_capacity(), str(GameState.pouch())])
+	print("PACK full_at=%.0f full_window=%d max=%d/%d pouch=%s jobs_done=%d" % [_full_at, _full_window, _max_pack, GameState.pack_capacity(), str(GameState.pouch()), GameState.jobs_done_run])
 	print("DEPTH tonics=%s max_pack=%d max_exposure=%.0f pack_now=%s raiders=%d traits=%s" % [",".join(PackedStringArray(GameState.run_tonics)),
 		_max_pack, _max_exposure, str(GameState.run_pack), _raiders_seen.size(), ",".join(PackedStringArray(_elite_traits.keys()))])

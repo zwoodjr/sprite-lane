@@ -349,11 +349,179 @@ def lore_page():
     ink(L, [(6.6, 4.8), (4.6, 8.6), (5.2, 12.4)], 0.16, C(170, 40, 36), 0.8)
     return save_icon(cv, "lore_page")
 
+# ================================================================== E4 cameo props (world, 40 x 40 units)
+WOOD = C(132, 92, 58)
+WOOD_D = C(96, 66, 44)
+OD = C(96, 104, 66)
+STEEL3 = C(124, 130, 134)
+CANV = C(178, 162, 128)
+RED3 = C(160, 52, 44)
+
+
+def save_world(cv, name, px=192):
+    im = cv.save(os.path.join(WORLD, name + ".png"), px)
+    _made.append(im.resize((96, 96), Image.LANCZOS))
+    return im
+
+
+def post(L, x, y0, y1, w=0.9, col=WOOD):
+    cel(L, [("rect", x - w, y0, x + w, y1)], col, form="cylv", ol=1.8, bevel=0.5)
+
+
+def field_tent():
+    cv = Canvas(40, 40)
+    L = cv.L
+    shadow(L, 20, 35.5, 17, 2.4)
+    # back flap (darker), front canvas faces, open entrance
+    cel(L, [("poly", [(6, 34), (20, 9), (34, 34)])], CANV * 0.8, n=(0.3, -0.3, 0.9), ol=2.2, bevel=0.8, wear=0.2)
+    cel(L, [("poly", [(4, 35), (20, 9), (13, 35)])], CANV, n=(-0.7, -0.3, 0.7), ol=2.2, bevel=0.6, wear=0.3)
+    cel(L, [("poly", [(27, 35), (20, 9), (36, 35)])], CANV * 0.92, n=(0.6, -0.2, 0.8), ol=2.2, bevel=0.6, wear=0.3)
+    cel(L, [("poly", [(13, 35), (20, 14), (27, 35)])], C(40, 30, 26), n=(0, 0, 1), ol=1.2, bevel=0)
+    # red cross banner on the flap + guy ropes and pegs
+    cel(L, [("rect", 6.6, 22, 11.4, 27)], CREAM, n=(-0.4, -0.2, 0.9), ol=1.2, bevel=0.2)
+    fill(L, [("rect", 8.4, 22.6, 9.6, 26.4), ("rect", 7.2, 23.9, 10.8, 25.1)], RED3)
+    for (a, b) in (((20, 9), (2, 37)), ((20, 9), (38, 37))):
+        ink(L, [a, b], 0.16, C(200, 186, 150), 0.7)
+    post(L, 20, 6.5, 10.5, 0.5)
+    # crates of tonics outside
+    box(L, 29, 31, 34.6, 35.4, 2.4, WOOD, top=WOOD * 1.1, wear=0.3)
+    for k, col in enumerate((C(120, 190, 96), C(214, 64, 72), C(220, 196, 70))):
+        cel(L, [("rect", 29.7 + k * 1.6, 28.6, 30.8 + k * 1.6, 31)], col, form="cylv", ol=1.0, bevel=0.3, gloss=0.5)
+    # lantern glow
+    glow(L, 16, 30, 6, AMBER, 0.35)
+    return save_world(cv, "field_tent")
+
+
+def relay():
+    cv = Canvas(40, 40)
+    L = cv.L
+    shadow(L, 20, 36, 12, 2.0)
+    # tripod mast
+    for (a, b) in (((20, 6), (12, 36)), ((20, 6), (28, 36)), ((20, 6), (21, 35))):
+        ink(L, [a, b], 0.9, C(40, 40, 44), 1.0)
+        ink(L, [a, b], 0.45, STEEL3, 1.0)
+    for y in (16, 24, 30):
+        k = (y - 6) / 30.0
+        ink(L, [(20 - 8 * k, y), (20 + 8 * k, y)], 0.35, STEEL3 * 0.8, 1.0)
+    # dish + antenna
+    cel(L, [("ell", 14.5, 11.5, 4.8, 5.6)], CREAM, n=(-0.6, -0.2, 0.8), ol=1.8, bevel=0.6, metal=0.3)
+    cel(L, [("ell", 14.0, 11.5, 3.0, 3.8)], CREAM * 0.8, n=(0.4, 0.1, 0.9), ol=0.8, bevel=0)
+    ink(L, [(20, 6), (20, 1.5)], 0.35, STEEL3, 1.0)
+    cel(L, [("ell", 20, 1.6, 0.9, 0.9)], C(255, 90, 60), form="sphere", ol=0.8, bevel=0.3, rim=0)
+    glow(L, 20, 1.6, 2.5, C(255, 120, 80), 0.5)
+    # transmitter box with dials, cables
+    box(L, 22, 27, 33, 35.5, 3.6, OD, top=OD * 1.12, wear=0.35, rust=0.2)
+    for k in range(3):
+        cel(L, [("ell", 24.2 + k * 2.8, 30.8, 0.9, 0.9)], C(232, 220, 190), form="sphere", ol=0.8, bevel=0.3)
+    fill(L, [("rect", 23.2, 33.0, 31.2, 33.6)], C(120, 220, 140), 0.9)
+    ink(L, [(22, 33), (17, 35), (12, 34.5)], 0.35, C(30, 30, 32), 1.0)
+    return save_world(cv, "relay")
+
+
+def watch_tower():
+    cv = Canvas(40, 40)
+    L = cv.L
+    shadow(L, 20, 37, 13, 2.0)
+    for x0, x1 in ((10, 14), (30, 26)):
+        ink(L, [(x0, 37), (x1, 14)], 1.1, WOOD_D * 0.6, 1.0)
+        ink(L, [(x0, 37), (x1, 14)], 0.7, WOOD, 1.0)
+    for y in (22, 30):
+        k = (y - 14) / 23.0
+        ink(L, [(14 - 4 * k, y), (26 + 4 * k, y)], 0.45, WOOD, 1.0)
+        ink(L, [(14 - 4 * k, y), (26 + 4 * k, y + 4)], 0.3, WOOD_D, 0.9)
+    # platform + railing + sandbags
+    box(L, 9, 12, 31, 15, 2.6, WOOD, top=WOOD * 1.12, wear=0.3)
+    for x in range(11, 31, 4):
+        cel(L, [("ell", x, 11.2, 2.0, 1.1)], CANV * 0.9, form="sphere", ol=1.2, bevel=0.5)
+    # tarp roof on poles
+    post(L, 10.5, 3, 12)
+    post(L, 29.5, 3, 12)
+    cel(L, [("poly", [(6, 5.5), (34, 5.5), (32, 2.2), (8, 2.2)])], C(110, 96, 70), n=(0, -0.7, 0.7), ol=1.8, bevel=0.4, wear=0.3)
+    for x in (12, 18, 24, 30):
+        ink(L, [(x, 2.6), (x - 0.6, 5.2)], 0.18, C(70, 60, 44), 0.7)
+    # bell hanging (Vesper's bell tower nod)
+    cel(L, [("poly", [(19, 8), (21, 8), (22.4, 11), (17.6, 11)])], BRASS, form="cylv", ol=1.2, bevel=0.4, metal=0.8)
+    return save_world(cv, "watch_tower", 224)
+
+
+def vault():
+    cv = Canvas(40, 40)
+    L = cv.L
+    shadow(L, 20, 35.5, 17, 2.4)
+    # bunker half buried: concrete block, round vault door
+    box(L, 4, 14, 32, 35, 5.0, C(126, 122, 112), top=C(144, 138, 126), wear=0.4, rust=0.15)
+    cel(L, [("ell", 18, 24.5, 8.2, 8.2)], STEEL3, form="sphere", ol=2.2, bevel=1.2, metal=0.7, rust=0.25)
+    cel(L, [("ell", 18, 24.5, 6.2, 6.2)], STEEL3 * 0.85, n=(0, 0, 1), ol=1.2, bevel=0.4, metal=0.5)
+    for k in range(6):
+        a = k / 6 * math.pi * 2
+        ink(L, [(18 + math.cos(a) * 1.6, 24.5 + math.sin(a) * 1.6), (18 + math.cos(a) * 5.4, 24.5 + math.sin(a) * 5.4)], 0.5, C(60, 62, 66), 0.9)
+    cel(L, [("ell", 18, 24.5, 1.6, 1.6)], BRASS, form="sphere", ol=1.0, bevel=0.4, metal=0.9)
+    # hazard stripes + rubble
+    for k in range(6):
+        x = 5 + k * 4.4
+        fill(L, [("poly", [(x, 33.4), (x + 2, 33.4), (x + 3.4, 31.6), (x + 1.4, 31.6)])], YEL, 0.9)
+    for (x, y, r) in ((3, 35, 1.6), (34, 34.6, 2.0), (31, 36, 1.2)):
+        cel(L, [("ell", x, y, r, r * 0.7)], C(120, 112, 100), form="sphere", ol=1.2, bevel=0.6)
+    return save_world(cv, "vault")
+
+
+def market_stall():
+    cv = Canvas(40, 40)
+    L = cv.L
+    shadow(L, 20, 36, 16, 2.2)
+    post(L, 7, 8, 35)
+    post(L, 33, 8, 35)
+    # striped awning
+    for k in range(7):
+        x0 = 4 + k * 4.6
+        col = C(110, 60, 120) if k % 2 == 0 else C(214, 202, 174)
+        cel(L, [("poly", [(x0, 6), (x0 + 4.6, 6), (x0 + 5.2, 12.5), (x0 + 0.6, 12.5)])], col, n=(0, -0.6, 0.8), ol=1.4, bevel=0.3)
+    for k in range(8):
+        cel(L, [("ell", 4.6 + k * 4.6, 12.8, 2.3, 1.5)], C(110, 60, 120) if k % 2 == 0 else C(214, 202, 174),
+            form="sphere", ol=1.2, bevel=0.4)
+    # counter with goods: bottles, ammo can, medkit
+    box(L, 6, 25, 34, 35, 3.0, WOOD_D, top=WOOD, wear=0.3)
+    for k, col in enumerate((C(214, 64, 72), C(110, 190, 120), C(70, 150, 230), C(220, 196, 70))):
+        cel(L, [("rect", 9 + k * 2.4, 20.5, 10.6 + k * 2.4, 24.6)], col, form="cylv", ol=1.0, bevel=0.3, gloss=0.6)
+    box(L, 21, 21, 26, 24.8, 1.6, OD, wear=0.3)
+    box(L, 27.5, 21, 32, 24.8, 1.6, CREAM, wear=0.2)
+    fill(L, [("rect", 29.3, 21.6, 30.2, 24.2), ("rect", 28.3, 22.5, 31.2, 23.3)], RED3)
+    # hanging lantern
+    ink(L, [(20, 12), (20, 16)], 0.2, C(40, 36, 30), 1.0)
+    glow(L, 20, 17, 4, AMBER, 0.45)
+    cel(L, [("ell", 20, 17, 1.2, 1.5)], C(255, 210, 130), form="sphere", ol=1.0, bevel=0.3, rim=0)
+    return save_world(cv, "market_stall")
+
+
+def plane_wreck():
+    cv = Canvas(40, 40)
+    L = cv.L
+    shadow(L, 21, 34, 18, 3.0)
+    # crumpled fuselage tail section, olive with roundel, broken prop + wing
+    cel(L, [("poly", [(4, 30), (6, 22), (26, 18), (36, 12), (38, 14), (34, 26), (24, 32), (8, 33)])], OD,
+        form="cylh", ol=2.4, bevel=1.2, rust=0.3, wear=0.4)
+    cel(L, [("poly", [(30, 15), (35, 4), (38, 4), (37, 15)])], OD * 0.92, n=(0.3, -0.3, 0.9), ol=2.0, bevel=0.6, rust=0.2)
+    cel(L, [("ell", 18, 25, 3, 3)], CREAM, n=(0, 0, 1), ol=1.2, bevel=0.2)
+    cel(L, [("ell", 18, 25, 1.6, 1.6)], RED3, n=(0, 0, 1), ol=0.8, bevel=0)
+    cel(L, [("poly", [(10, 30), (2, 36), (14, 37), (20, 31)])], OD * 0.85, n=(0, -0.8, 0.6), ol=2.0, bevel=0.5, rust=0.3)
+    # torn, jagged front edge (the nose is gone), a bent prop blade in the dirt
+    fill(L, [("poly", [(3, 21), (8, 21.6), (6.4, 24), (8.6, 26.4), (5.6, 28.4), (7.4, 31), (3, 33)])], C(0, 0, 0), 0.0)
+    cel(L, [("poly", [(4.6, 21.4), (8.4, 21.8), (6.6, 24.2), (8.8, 26.4), (6.0, 28.6), (7.6, 31.2), (4.2, 31.6)])],
+        C(40, 40, 38), n=(0.4, 0, 0.9), ol=1.4, bevel=0.2)
+    cel(L, [("poly", [(26, 35.4), (34, 33.8), (36, 34.6), (27, 36.6)])], STEEL3 * 0.8, n=(0, -0.6, 0.8), ol=1.4, bevel=0.3, metal=0.5)
+    # smoke wisp + black box glint (orange)
+    soft(L, [("ell", 9, 9, 3.5, 6)], C(120, 112, 104), 0.45, blur=5)
+    box(L, 22, 27.5, 26, 30.5, 1.4, C(230, 120, 40), wear=0.2)
+    glow(L, 24, 29, 4, C(255, 150, 60), 0.4)
+    soft(L, [("ell", 12, 14, 4, 5)], C(150, 140, 130), 0.35, blur=6)
+    return save_world(cv, "plane_wreck", 224)
+
 
 GROUPS = {
     "e1": [herb, plague_gland, dust_shard, machine_oil, medicine, lambda: medicine(False), backpack, exposure,
            *[(lambda t=t: tonic(t)) for t in TONIC_LOOK], plague_fog],
     "e3": [lore_page],
+    "e4": [field_tent, relay, watch_tower, vault, market_stall, plane_wreck],
 }
 
 
