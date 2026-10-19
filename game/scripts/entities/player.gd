@@ -951,6 +951,23 @@ func _pick_target(range_px: float) -> Node2D:
 				return cur
 	return best
 
+func _pick_breakable(range_px: float) -> Node2D:
+	var best: Node2D = null
+	var best_d := INF
+	for n in get_tree().get_nodes_in_group("breakables"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var b := n as Node2D
+		var d := _reach_dist(b, global_position)
+		if d > range_px or not is_on_screen(self, b.global_position):
+			continue
+		if "_ping_left" in b and float(b.get("_ping_left")) > 0.0:
+			d *= 0.5
+		if d < best_d:
+			best = b
+			best_d = d
+	return best
+
 func _update_combat(_delta: float) -> void:
 	if _dash_left > 0.0 or _amove_left > 0.0:
 		return
@@ -959,6 +976,10 @@ func _update_combat(_delta: float) -> void:
 	## Re-evaluate the target every frame (cheap: ≤ ~14 mobs) — every shot uses the
 	## closest one in range.
 	_target = _pick_target(get_trigger_range())
+	if _target == null:
+		## No enemies in range: break the nearest on-screen crate/wreck
+		## (glowing pinged ones first) so lootables actually open.
+		_target = _pick_breakable(get_trigger_range())
 	if _target == null:
 		## Nothing in range: top the mag up so the next fight starts loaded.
 		if not is_melee() and _reload_left <= 0.0 and _ammo < _mag_size():
