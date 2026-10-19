@@ -112,7 +112,7 @@ func _ready() -> void:
 	if _def.is_empty():
 		_def = KINDS.get("rad_gator", {})
 	if body and body.texture == null:
-		body.texture = load(str(_def.get("sprite", "res://assets/sprites/enemies/rad_gator.png")))
+		body.texture = load(str(_def.get("sprite", "res://assets/sprites/enemies/rad_gator/rad_gator_idle.png")))
 	## Wind-up warning: a pulsing red wedge toward the player.
 	_warn = Polygon2D.new()
 	_warn.polygon = PackedVector2Array([Vector2(16, -10), Vector2(70, 0), Vector2(16, 10)])
