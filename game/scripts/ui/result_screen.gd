@@ -81,16 +81,27 @@ func build(c: VBoxContainer) -> void:
 			", ".join(GameState.result_lost_keys) if GameState.result_lost_keys.size() else "(none)",
 		]
 		note = "KEPT: %s\nLOST: %s" % [kept, lost]
+	## Everything below the scrap card scrolls, so long unlock lists can never
+	## push the action buttons off-screen.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.scroll_deadzone = 18
+	c.add_child(scroll)
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 8)
+	scroll.add_child(mid)
 	var nl := UiTheme.body_label(note, 14, UiTheme.TEXT_DIM)
 	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	c.add_child(nl)
+	mid.add_child(nl)
 
 	## Gear: what reached the stash (extract) or was lost (death).
 	var gear_list: Array = GameState.result_found if won else GameState.result_lost_items
 	if not gear_list.is_empty():
 		var gb := VBoxContainer.new()
 		gb.add_theme_constant_override("separation", 1)
-		c.add_child(gb)
+		mid.add_child(gb)
 		var head := UiTheme.body_label("GEAR TO STASH" if won else "GEAR LOST", 15, UiTheme.AMBER if won else UiTheme.RUST, false)
 		head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		gb.add_child(head)
@@ -107,18 +118,17 @@ func build(c: VBoxContainer) -> void:
 	if won and GameState.result_salvaged > 0:
 		var sl := UiTheme.body_label("Stash full — extras salvaged for %d scrap" % GameState.result_salvaged, 13, UiTheme.TEXT_DIM)
 		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		c.add_child(sl)
+		mid.add_child(sl)
 
 	if GameState.result_unlocks.size() > 0:
 		var ub := VBoxContainer.new()
 		ub.add_theme_constant_override("separation", 2)
-		c.add_child(ub)
+		mid.add_child(ub)
 		for u in GameState.result_unlocks:
 			var line := UiTheme.body_label("★  " + str(u), 15, UiTheme.TEAL)
 			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			ub.add_child(line)
 
-	c.add_child(spacer(true, 4))
 
 	## Actions sit at the bottom, under the thumb.
 	var upgrade := UiTheme.big_button("UPGRADE  ·  HANGAR", UiTheme.AMBER, 84, 30)
