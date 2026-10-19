@@ -1,5 +1,5 @@
 /* Spirit Lane — cache shell for offline replay after first online visit. */
-const CACHE = "spirit-lane-v27";
+const CACHE = "spirit-lane-v28";
 const ASSETS = [
   "./",
   "./index.html",
