@@ -3,32 +3,30 @@ extends "res://scripts/ui/menu_base.gd"
 var _cards: Dictionary = {}
 var _fast: Button
 
+var _detail: VBoxContainer
+var _list: VBoxContainer
+var _scroll: ScrollContainer
+
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
-	c.add_child(header("CHOOSE A RUN", GameState.go_main_menu))
-	c.add_child(UiTheme.body_label("Pick how long and how dangerous. Longer runs pay more per extract and give more chances to get greedy.", 15 if portrait else 16, UiTheme.TEXT_DIM))
-	var row: BoxContainer = VBoxContainer.new() if portrait else HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14 if portrait else 20)
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	c.add_child(row)
+	c.add_theme_constant_override("separation", 10)
+	c.add_child(header("CHOOSE THE DUST", GameState.go_main_menu))
+	c.add_child(UiTheme.body_label("Ten tiers, named for how thick the Dust is. Extract on a tier to unlock the next.", 15 if portrait else 16, UiTheme.TEXT_DIM))
+	if not GameState.is_tier_unlocked(int(GameState.get_mode()["tier"])):
+		GameState.selected_mode_id = ModeDefs.HAZE_ID
+	_detail = VBoxContainer.new()
+	c.add_child(_detail)
+	_scroll = ScrollContainer.new()
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.scroll_deadzone = 18
+	c.add_child(_scroll)
+	_list = VBoxContainer.new()
+	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_list.add_theme_constant_override("separation", 6)
+	_scroll.add_child(_list)
 	for mode in ModeDefs.all_modes():
-		row.add_child(_mode_card(mode, portrait))
-	## Locked tiers preview (designed, not built yet)
-	var locked := card(Color(0.3, 0.25, 0.2), Color(0.1, 0.08, 0.06, 0.7))
-	locked.custom_minimum_size = Vector2(0 if portrait else 190, 120 if portrait else 0)
-	var lv := VBoxContainer.new()
-	lv.alignment = BoxContainer.ALIGNMENT_CENTER
-	locked.add_child(lv)
-	var tiers := ModeDefs.all_tiers()
-	var locked_names: Array[String] = []
-	for t in tiers:
-		if int(t["tier"]) > ModeDefs.EXPOSED_TIERS:
-			locked_names.append(str(t["display_name"]))
-	lv.add_child(UiTheme.title_label("%s+" % locked_names[0].to_upper() if locked_names.size() > 0 else "MORE", 28, Color(0.5, 0.42, 0.35)))
-	var ll := UiTheme.body_label("%d more tiers coming.\nShorter windows, meaner dust, bigger multipliers." % locked_names.size(), 14, Color(0.55, 0.48, 0.4))
-	ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lv.add_child(ll)
-	row.add_child(locked)
+		_list.add_child(_tier_row(mode))
 
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 14)
@@ -55,70 +53,105 @@ func build(c: VBoxContainer) -> void:
 	next.pressed.connect(GameState.go_character_select)
 	bottom.add_child(next)
 	_refresh()
+	## Bring the selected tier into view.
+	await get_tree().process_frame
+	var b: Variant = _cards.get(GameState.selected_mode_id, {}).get("button", null)
+	if b is Control and is_instance_valid(b):
+		_scroll.ensure_control_visible(b)
 
-func _mode_card(mode: Dictionary, portrait: bool = false) -> Control:
+
+func select_tier(id: String) -> bool:
+	var m := ModeDefs.get_mode(id)
+	if not GameState.is_tier_unlocked(int(m["tier"])):
+		Juice.sfx("empty", -6.0)
+		return false
+	GameState.selected_mode_id = str(m["id"])
+	GameState.save_profile()
+	Juice.sfx("ui_tap")
+	_refresh()
+	return true
+
+
+## One compact row per tier; locked tiers say what opens them.
+func _tier_row(mode: Dictionary) -> Control:
 	var id := str(mode["id"])
+	var tier := int(mode["tier"])
+	var unlocked := GameState.is_tier_unlocked(tier)
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	if portrait:
-		b.custom_minimum_size = Vector2(0, 200)
-	b.pressed.connect(func() -> void:
-		GameState.selected_mode_id = id
-		GameState.save_profile()
-		Juice.sfx("ui_tap")
-		_refresh()
-	)
+	b.custom_minimum_size = Vector2(0, 78)
+	b.mouse_force_pass_scroll_events = true
+	b.pressed.connect(func() -> void: select_tier(id))
+	var h := HBoxContainer.new()
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 14)
+	h.add_theme_constant_override("separation", 12)
+	b.add_child(h)
+	var num := UiTheme.title_label("%d" % tier, 30, UiTheme.AMBER if unlocked else Color(0.45, 0.38, 0.3))
+	num.custom_minimum_size.x = 44
+	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(num)
 	var v := VBoxContainer.new()
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 18)
-	v.add_theme_constant_override("separation", 6)
-	b.add_child(v)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 0)
+	h.add_child(v)
+	var nm := UiTheme.body_label(str(mode["display_name"]).to_upper(), 22, UiTheme.TEXT if unlocked else Color(0.5, 0.44, 0.38), false)
+	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(nm)
+	var sub := "Enemies %d%% · pays ×%.2f · death keeps %d%%" % [int(round(float(mode["enemy_hp"]) * 100.0)), float(mode["payout_mult"]), int(round(float(mode["death_keep"]) * 100.0))]
+	if not unlocked:
+		sub = "Locked — extract on %s to open" % str(ModeDefs.tier_mode(tier - 1)["display_name"])
+	var sl := UiTheme.body_label(sub, 14, UiTheme.TEXT_DIM, false)
+	sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(sl)
+	var tags := PackedStringArray()
+	if tier >= ModeDefs.ELITE_FROM_TIER:
+		tags.append("ELITES x2" if tier >= ModeDefs.DOUBLE_ELITE_FROM_TIER else "ELITES")
+	if tier >= ModeDefs.BOSS_FROM_TIER:
+		tags.append("BOSSES")
+	if tier <= GameState.best_tier_extracted:
+		tags.append("CLEARED")
+	var tg := UiTheme.body_label(" · ".join(tags), 13, UiTheme.RUST if unlocked else Color(0.45, 0.38, 0.3), false)
+	tg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(tg)
+	_cards[id] = {"button": b, "unlocked": unlocked}
+	return b
+
+
+## Detail card for the selected tier: timeline + the numbers that matter.
+func _build_detail(mode: Dictionary) -> void:
+	for ch in _detail.get_children():
+		_detail.remove_child(ch)
+		ch.free()
+	var p := card(UiTheme.AMBER, Color(0.2, 0.14, 0.09, 0.95))
+	_detail.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	p.add_child(v)
 	var top := HBoxContainer.new()
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(top)
-	var name := UiTheme.title_label(str(mode["display_name"]).to_upper(), 40)
-	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(name)
-	var mins := UiTheme.body_label("~%d min" % int(mode["target_minutes"]), 22, UiTheme.TEXT, false)
-	mins.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(mins)
-	## Phase timeline
+	var name_l := UiTheme.title_label("%s · TIER %d" % [str(mode["display_name"]).to_upper(), int(mode["tier"])], 30)
+	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(name_l)
+	top.add_child(UiTheme.body_label("~%d min" % int(mode["target_minutes"]), 20, UiTheme.TEXT, false))
+	v.add_child(UiTheme.body_label(str(mode.get("blurb", "")), 14, UiTheme.TEXT_DIM))
 	var tl := Control.new()
-	tl.custom_minimum_size = Vector2(0, 26)
-	tl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tl.custom_minimum_size = Vector2(0, 24)
 	tl.draw.connect(_draw_timeline.bind(tl, mode))
 	v.add_child(tl)
-	var legend := HBoxContainer.new()
-	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	legend.add_theme_constant_override("separation", 14)
-	for item in [["■ sealed", Color(0.55, 0.4, 0.25)], ["■ extract open", Color(0.45, 0.95, 0.55)], ["■ last chance", Color(0.95, 0.4, 0.3)]]:
-		var ll := UiTheme.body_label(str(item[0]), 13, item[1], false)
-		ll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		legend.add_child(ll)
-	v.add_child(legend)
 	var windows := 0
-	for p in mode["phases"]:
-		if bool(p["extract_open"]):
+	for ph in mode["phases"]:
+		if bool(ph["extract_open"]):
 			windows += 1
-	var lines := [
-		"First extract at %d:%02d, then every %ds (open %ds)" % [int(mode["first_window"]) / 60, int(mode["first_window"]) % 60, int(mode["window_every"]), int(mode["window_open"])],
-		"Loot ×1.0 → ×%.1f the longer you stay · %d windows + a last chance" % [float(mode["loot_cap"]), windows - 1],
-		"Enemies at %d%% strength" % int(float(mode["enemy_hp"]) * 100.0),
-		"Death keeps %d%% of your bag" % int(round(float(mode["death_keep"]) * 100.0)),
-	]
-	for line in lines:
-		var l := UiTheme.body_label("• " + line, 16)
-		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(l)
-	var tick := UiTheme.body_label("", 18, UiTheme.TEAL)
-	tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(tick)
-	_cards[id] = {"button": b, "tick": tick}
-	return b
+	for line in [
+		"First extract %d:%02d, then every %ds (open %ds) · %d windows + last chance" % [int(mode["first_window"]) / 60, int(mode["first_window"]) % 60, int(mode["window_every"]), int(mode["window_open"]), windows - 1],
+		"Loot ×1.0 → ×%.1f · payout ×%.2f · death keeps %d%%" % [float(mode["loot_cap"]), float(mode["payout_mult"]), int(round(float(mode["death_keep"]) * 100.0))],
+	]:
+		v.add_child(UiTheme.body_label("• " + line, 15))
+
 
 func _draw_timeline(c: Control, mode: Dictionary) -> void:
 	var total := 0.0
@@ -138,9 +171,10 @@ func _refresh() -> void:
 	for id in _cards.keys():
 		var on: bool = id == GameState.selected_mode_id
 		var b: Button = _cards[id]["button"]
-		var col := UiTheme.AMBER if on else UiTheme.LINE
-		var bg := Color(0.24, 0.17, 0.1, 0.95) if on else Color(0.14, 0.1, 0.075, 0.9)
-		for s in ["normal", "hover", "pressed", "hover_pressed"]:
-			b.add_theme_stylebox_override(s, UiTheme.box(bg, col, 20, 4 if on else 2, 18))
-		(_cards[id]["tick"] as Label).text = "✓ SELECTED" if on else ""
+		var unlocked: bool = _cards[id]["unlocked"]
+		var col := UiTheme.AMBER if on else (UiTheme.LINE if unlocked else Color(0.3, 0.25, 0.2))
+		var bg := Color(0.24, 0.17, 0.1, 0.95) if on else (Color(0.14, 0.1, 0.075, 0.9) if unlocked else Color(0.09, 0.07, 0.05, 0.8))
+		for st in ["normal", "hover", "pressed", "hover_pressed"]:
+			b.add_theme_stylebox_override(st, UiTheme.box(bg, col, 16, 4 if on else 2, 12))
+	_build_detail(GameState.get_mode())
 	_fast.text = "Dev: quick-test timers %s" % ("ON (12%)" if GameState.fast_timers else "OFF")
