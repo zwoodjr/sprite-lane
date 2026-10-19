@@ -140,7 +140,7 @@ func _apply_loadout() -> void:
 	_char = GameState.get_character()
 	_weapon = GameState.weapon
 	_armor = GameState.armor
-	_ability = _char.get("ability", {})
+	_ability = GameState.hero_ability()
 	_refresh_run_stats(true)
 	_last_stitch_available = bool(_char.get("has_last_stitch", false))
 	var prefix := str(_char.get("anim", "res://assets/sprites/characters/ash_rook/ash_rook"))

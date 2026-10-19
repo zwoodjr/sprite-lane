@@ -514,8 +514,11 @@ func _die() -> void:
 	if randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)
 	## Rare special-ammo can (more likely from elites / bosses).
-	if randf() < float(UpgradeDefs.AMMO_DROP_CHANCE[clampi(tier, 1, 3) - 1]):
-		RunFx.spawn_ammo_pickup(parent, global_position + Vector2(randf_range(-20, 20), 10))
+	## Gated behind the Hangar's Ammo Bench (rank = types, odds).
+	if GameState.ammo_pickups_enabled() and randf() < float(UpgradeDefs.AMMO_DROP_CHANCE[clampi(tier, 1, 3) - 1]) * GameState.ammo_odds_mult():
+		var aid := RunFx.random_bench_ammo_id()
+		if aid != "":
+			RunFx.spawn_ammo_pickup(parent, global_position + Vector2(randf_range(-20, 20), 10), aid)
 	Juice.sfx("enemy_die", -2.0)
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)

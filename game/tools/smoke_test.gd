@@ -28,10 +28,8 @@ func _init() -> void:
 	for p in PetDefs.all_pets():
 		assert(UnitAnim.load_states(str(p["anim"])).has("walk"))
 	assert(Progression.run_xp_to_next(1) == 30)
-	assert(Progression.hangar_catalog().size() >= 16)
-	assert(Progression.hangar_catalog_visible().size() >= 15)
-	assert(not Progression.LOADOUT_UI_SHIPPED) ## insurance CTA hidden until loadout UI
-	assert(Progression.meta_bonus({"crit_chance": 2}, "crit_chance") > 0.0)
+	assert(HangarDefs.all_ids().size() == 16)
+	assert(HangarDefs.cost("generator", 0) == 100)
 	assert(Progression.roll_run_choices(2).size() == 2)
 	assert(Progression.account_level_from_xp(0) == 1)
 	assert(EventDefs.catalog().size() >= 4)
@@ -68,6 +66,6 @@ func _init() -> void:
 	## for full project boot. This script only validates data stubs.
 	print("SMOKE_OK phases_easy=%d phases_medium=%d hangar=%d pets=%d" % [
 		easy["phases"].size(), med["phases"].size(),
-		Progression.hangar_catalog().size(), PetDefs.all_pets().size(),
+		HangarDefs.all_ids().size(), PetDefs.all_pets().size(),
 	])
 	quit(0)

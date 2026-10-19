@@ -163,7 +163,7 @@ func _maybe_ping_next_window() -> void:
 		return
 	if not bool(_phases[nxt].get("extract_open", false)):
 		return
-	if _phase_time_left > ModeDefs.PING_LEAD * GameState.timer_scale():
+	if _phase_time_left > GameState.pad_ping_lead() * GameState.timer_scale():
 		return
 	_place_window_pads(nxt)
 	var last := bool(_phases[nxt].get("is_last", false))

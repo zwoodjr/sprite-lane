@@ -91,8 +91,9 @@ func build(c: VBoxContainer) -> void:
 	_stat(pv, "Best payout", "%d scrap" % GameState.best_payout)
 
 	var ranks: PackedStringArray = PackedStringArray()
-	for id in GameState.meta_upgrades.keys():
-		ranks.append("%s %d" % [str(id).replace("_", " "), int(GameState.meta_upgrades[id])])
+	for id in GameState.camp.keys():
+		if int(GameState.camp[id]) > 0 and HangarDefs.layer_of(str(id)) == "shared":
+			ranks.append("%s %d" % [HangarDefs.display_name(str(id)), int(GameState.camp[id])])
 	if ranks.size() > 0:
 		pv.add_child(UiTheme.body_label("Hangar: " + ", ".join(ranks), 12, UiTheme.TEAL))
 	else:

@@ -30,14 +30,24 @@ var insured_slots: Array[String] = []
 var account_scrap: int = 0
 var account_xp: int = 0
 var account_level: int = 1
-var meta_upgrades: Dictionary = {} ## id -> rank
+var meta_upgrades: Dictionary = {} ## v3 flat Hangar (retired; refunded on load)
+## Hangar v4: HangarDefs id -> rank (shared / stations / kennel / stash).
+var camp: Dictionary = {}
+## Shared lockbox of extracted gear (Phase B items). Capacity: stash_capacity().
+var stash: Array = []
+## First boss kills: boss kind -> true. Trophies show over the hangar door.
+var trophies: Dictionary = {}
+## One-time v3 → v4 Hangar migration done (old spend refunded as scrap).
+var migrated_hangar_v4: bool = false
+## Shown once on the Hangar screen (e.g. the refund note). Not saved.
+var hangar_notice: String = ""
 var garage_tokens: int = 0
 var successful_extracts: int = 0
 
 
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
 var settings: Dictionary = {
 	"sfx": true,
 	"haptics": true,
@@ -123,6 +133,10 @@ func save_profile() -> void:
 		"account_xp": account_xp,
 		"account_level": account_level,
 		"meta_upgrades": meta_upgrades,
+		"camp": camp,
+		"stash": stash,
+		"trophies": trophies,
+		"migrated_hangar_v4": migrated_hangar_v4,
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
 		"best_payout": best_payout,
@@ -139,15 +153,20 @@ func save_profile() -> void:
 
 func load_profile() -> void:
 	if not FileAccess.file_exists(SAVE_PATH):
+		migrated_hangar_v4 = true
 		_sync_account_level()
 		return
 	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if f == null:
 		return
 	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
-	var d: Dictionary = parsed
+	apply_save(parsed)
+
+## Loads a parsed save dictionary (any version — missing keys get safe defaults).
+func apply_save(d: Dictionary) -> void:
 	var saved_settings: Variant = d.get("settings", {})
 	if typeof(saved_settings) == TYPE_DICTIONARY:
 		for k in (saved_settings as Dictionary).keys():
@@ -166,6 +185,22 @@ func load_profile() -> void:
 	var mu: Variant = d.get("meta_upgrades", {})
 	if typeof(mu) == TYPE_DICTIONARY:
 		meta_upgrades = (mu as Dictionary).duplicate()
+	var cp: Variant = d.get("camp", {})
+	camp = {}
+	if typeof(cp) == TYPE_DICTIONARY:
+		for k in (cp as Dictionary).keys():
+			var id := str(k)
+			if HangarDefs.layer_of(id) != "":
+				camp[id] = clampi(int((cp as Dictionary)[k]), 0, HangarDefs.max_rank(id))
+	var st: Variant = d.get("stash", [])
+	stash = []
+	if typeof(st) == TYPE_ARRAY:
+		for it in (st as Array):
+			if typeof(it) == TYPE_DICTIONARY:
+				stash.append(it)
+	migrated_hangar_v4 = bool(d.get("migrated_hangar_v4", false))
+	var tr: Variant = d.get("trophies", {})
+	trophies = (tr as Dictionary).duplicate() if typeof(tr) == TYPE_DICTIONARY else {}
 	garage_tokens = int(d.get("garage_tokens", 0))
 	successful_extracts = int(d.get("successful_extracts", 0))
 	best_payout = int(d.get("best_payout", 0))
@@ -183,6 +218,19 @@ func load_profile() -> void:
 	var pet_id := str(d.get("selected_pet_id", selected_pet_id))
 	if PetDefs.is_equipable(pet_id):
 		selected_pet_id = pet_id
+	_migrate_hangar_v4()
+
+## v3 flat %-stat Hangar → v4 camp: refund every scrap spent on the old list once.
+func _migrate_hangar_v4() -> void:
+	if migrated_hangar_v4:
+		return
+	migrated_hangar_v4 = true
+	var refund := HangarDefs.legacy_refund(meta_upgrades)
+	meta_upgrades.clear()
+	if refund > 0:
+		account_scrap += refund
+		hangar_notice = "The Hangar was rebuilt. Your old upgrades were refunded: +%d scrap." % refund
+	save_profile()
 
 func _sync_account_level() -> void:
 	account_level = Progression.account_level_from_xp(account_xp)
@@ -194,68 +242,122 @@ func run_bar_state() -> Dictionary:
 	return Progression.run_progress(run_xp, run_level)
 
 func meta_rank(id: String) -> int:
-	return int(meta_upgrades.get(id, 0))
+	return camp_rank(id)
 
-func scrap_find_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "scrap_find")
+## --- Hangar (camp) ranks: HangarDefs ids -> rank -------------------------
+func camp_rank(id: String) -> int:
+	return int(camp.get(id, 0))
 
+func station_rank(hero_id: String = "") -> int:
+	return camp_rank(HangarDefs.station_id(hero_id if hero_id != "" else selected_character_id))
+
+func kennel_rank(pet_id: String = "") -> int:
+	return camp_rank(HangarDefs.kennel_id(pet_id if pet_id != "" else selected_pet_id))
+
+func has_trophy(boss: String) -> bool:
+	return bool(trophies.get(boss, false))
+
+func stash_capacity() -> int:
+	return HangarDefs.stash_slots(camp_rank("stash"))
+
+## Next-rank price for a Hangar id (-1 = maxed / unknown).
+func camp_cost(id: String) -> int:
+	return HangarDefs.cost(id, camp_rank(id))
+
+func try_buy_camp(id: String) -> bool:
+	if HangarDefs.layer_of(id) == "":
+		return false
+	var c := camp_cost(id)
+	if c < 0 or account_scrap < c:
+		return false
+	account_scrap -= c
+	camp[id] = camp_rank(id) + 1
+	save_profile()
+	meta_changed.emit()
+	return true
+
+## Old name kept for scripts / tests that still call it.
+func try_buy_hangar(entry_id: String) -> bool:
+	return try_buy_camp(entry_id)
+
+## Generator: +HP for all.
 func starting_hp_bonus() -> float:
-	return Progression.meta_bonus(meta_upgrades, "max_hp")
+	return float(HangarDefs.shared_val("generator", "hp", camp_rank("generator"), 0))
 
+## Scrap Press: more scrap per run.
+func scrap_find_mult() -> float:
+	return 1.0 + float(HangarDefs.shared_val("scrap_press", "scrap", camp_rank("scrap_press"), 0.0))
+
+## Radio Tower: seconds earlier the next pads are revealed.
+func pad_reveal_bonus() -> float:
+	return float(HangarDefs.shared_val("radio_tower", "reveal", camp_rank("radio_tower"), 0.0))
+
+func pad_ping_lead() -> float:
+	return ModeDefs.PING_LEAD + pad_reveal_bonus()
+
+## Ammo Bench: rank 1 lets special-ammo pickups drop for everyone.
+func ammo_pickups_enabled() -> bool:
+	return camp_rank("ammo_bench") >= 1
+
+func ammo_pickup_types() -> Array:
+	return HangarDefs.shared_val("ammo_bench", "types", camp_rank("ammo_bench"), [])
+
+func ammo_duration_bonus() -> float:
+	return float(HangarDefs.shared_val("ammo_bench", "duration", camp_rank("ammo_bench"), 0.0))
+
+func ammo_odds_mult() -> float:
+	return float(HangarDefs.shared_val("ammo_bench", "odds", camp_rank("ammo_bench"), 0.0))
+
+## Survivor station: weapon damage for the selected hero.
 func starting_damage_bonus() -> float:
-	return Progression.meta_bonus(meta_upgrades, "damage")
+	return HangarDefs.station_weapon_damage(station_rank())
 
+## Ability dict for the selected hero with its station applied.
+func hero_ability() -> Dictionary:
+	return HangarDefs.apply_station_ability(selected_character_id, get_character().get("ability", {}), station_rank())
+
+## Retired v3 flat stats — neutral now (gear in Phase B feeds some of these).
 func insurance_bonus_slots() -> int:
-	return int(Progression.meta_bonus(meta_upgrades, "insurance"))
+	return 0
 
 func dash_cooldown_mult() -> float:
-	## Hangar Loose Boots — floor so dash never becomes free spam.
-	return maxf(0.55, 1.0 - Progression.meta_bonus(meta_upgrades, "dash_cd"))
+	return 1.0
 
 func extract_payout_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "extract_payout")
+	return 1.0
 
-## Dust Lungs — stamina stub: stretches dash i-frames until a real stamina bar exists.
 func endurance_iframe_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "endurance")
+	return 1.0
 
 func crit_chance() -> float:
-	## Soft cap so meta never guarantees crits.
-	return clampf(Progression.meta_bonus(meta_upgrades, "crit_chance"), 0.0, 0.35)
+	return 0.0
 
 func crit_damage_bonus() -> float:
-	## Added on top of base crit multiplier (1.5).
-	return Progression.meta_bonus(meta_upgrades, "crit_damage")
+	return 0.0
 
 func aoe_damage_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "aoe_damage")
+	return 1.0
 
 func dodge_chance() -> float:
-	return clampf(Progression.meta_bonus(meta_upgrades, "dodge"), 0.0, 0.20)
+	return 0.0
 
 func block_chance() -> float:
-	## Half strength without Bastion / block_affinity characters.
-	var raw := Progression.meta_bonus(meta_upgrades, "block")
-	var affinity := bool(get_character().get("block_affinity", false))
-	var scale := 1.0 if affinity else 0.5
-	return clampf(raw * scale, 0.0, 0.25)
+	return 0.0
 
 func move_speed_bonus() -> float:
-	## Modest — TL and enemies still catch up.
-	return clampf(Progression.meta_bonus(meta_upgrades, "move_speed"), 0.0, 0.15)
+	return 0.0
 
 func pickup_radius_bonus() -> float:
-	return Progression.meta_bonus(meta_upgrades, "pickup_radius")
+	return 0.0
 
 func pet_power_mult() -> float:
-	return 1.0 + Progression.meta_bonus(meta_upgrades, "pet_power")
+	return 1.0
 
 func loot_quality_bonus() -> float:
-	## Added to crate power-up chance; still capped in breakable.
-	return Progression.meta_bonus(meta_upgrades, "loot_quality")
+	return 0.0
 
 func extract_grace_sec() -> float:
-	return Progression.meta_bonus(meta_upgrades, "extract_grace")
+	return 0.0
 
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
@@ -268,6 +370,10 @@ func reset_profile() -> void:
 	account_xp = 0
 	account_level = 1
 	meta_upgrades.clear()
+	camp.clear()
+	stash.clear()
+	trophies.clear()
+	migrated_hangar_v4 = true
 	garage_tokens = 0
 	successful_extracts = 0
 	best_payout = 0
@@ -284,8 +390,9 @@ func get_character() -> Dictionary:
 func reset_loadout_to_defaults() -> void:
 	armor = LoadoutStubs.default_armor()
 	## Kit follows the selected hero — never the old shared Scrap SMG.
-	weapon = LoadoutStubs.weapon_for_character(selected_character_id)
-	pet = LoadoutStubs.default_pet(selected_pet_id)
+	weapon = HangarDefs.apply_station_weapon(selected_character_id,
+		LoadoutStubs.weapon_for_character(selected_character_id), station_rank())
+	pet = HangarDefs.apply_kennel(LoadoutStubs.default_pet(selected_pet_id), kennel_rank())
 	insured_slots.clear()
 	var slots: int = int(get_mode().get("insurance_slots", 2)) + insurance_bonus_slots()
 	slots = mini(slots, 3)
@@ -434,31 +541,6 @@ func _reset_run_cards() -> void:
 	run_luck_charges = 0
 	run_luck = 1.0
 	run_kind_kills.clear()
-
-func try_buy_hangar(entry_id: String) -> bool:
-	var entry: Dictionary = {}
-	for e in Progression.hangar_catalog():
-		if str(e["id"]) == entry_id:
-			entry = e
-			break
-	if entry.is_empty():
-		return false
-	## Insurance slots stay data-ready but unpurchasable until Loadout UI ships.
-	if bool(entry.get("requires_loadout_ui", false)) and not Progression.LOADOUT_UI_SHIPPED:
-		return false
-	var rank := meta_rank(entry_id)
-	if rank >= int(entry.get("max_rank", 1)):
-		return false
-	if account_level < int(entry.get("min_account_level", 1)):
-		return false
-	var cost := Progression.hangar_cost(entry, rank)
-	if account_scrap < cost:
-		return false
-	account_scrap -= cost
-	meta_upgrades[entry_id] = rank + 1
-	save_profile()
-	meta_changed.emit()
-	return true
 
 func on_extract_success() -> void:
 	if run_finished:

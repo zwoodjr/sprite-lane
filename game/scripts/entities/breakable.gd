@@ -77,8 +77,9 @@ static func _spawn_pickup(parent: Node, pos: Vector2) -> void:
 	parent.add_child(pickup)
 	pickup.global_position = pos
 	## Some crate buffs are special-ammo cans instead (Phase 4).
-	if randf() < UpgradeDefs.AMMO_CRATE_SHARE:
-		pickup.call("setup", RunFx.ammo_def(RunFx.random_ammo_id()))
+	var aid := RunFx.random_bench_ammo_id()
+	if aid != "" and randf() < UpgradeDefs.AMMO_CRATE_SHARE * GameState.ammo_odds_mult():
+		pickup.call("setup", RunFx.ammo_def(aid))
 	else:
 		pickup.call("setup", PowerupDefs.random_powerup())
 

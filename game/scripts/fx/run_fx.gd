@@ -185,6 +185,14 @@ static func random_ammo_id() -> String:
 	return str(keys[randi() % keys.size()])
 
 
+## Ammo Bench pickups: only the types the bench rank allows ("" = none).
+static func random_bench_ammo_id() -> String:
+	var types: Array = GameState.ammo_pickup_types() if GameState else []
+	if types.is_empty():
+		return ""
+	return str(types[randi() % types.size()])
+
+
 static func ammo_def(ammo_id: String) -> Dictionary:
 	var a: Dictionary = UpgradeDefs.AMMO.get(ammo_id, UpgradeDefs.AMMO["incendiary"])
 	return {
@@ -193,7 +201,7 @@ static func ammo_def(ammo_id: String) -> Dictionary:
 		"color": a["color"],
 		"sprite": a["pickup"],
 		"sprite_world": 30.0,
-		"duration": UpgradeDefs.AMMO_DURATION,
+		"duration": UpgradeDefs.AMMO_DURATION + (GameState.ammo_duration_bonus() if GameState else 0.0),
 	}
 
 
