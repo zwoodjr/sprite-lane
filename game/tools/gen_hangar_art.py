@@ -632,245 +632,613 @@ def backdrop():
     return L
 
 
+# =========================================================== anime cel painter (props, v3)
+# Props are drawn like the hero art: confident shapes, a crisp coloured ink line
+# (heavier on the shadow side), 3 hard-edged tones (cool shadow / local / warm
+# light) with a soft gradient on top, a warm rim along edges that face the door,
+# and hard specular streaks on metal and glass. No dither, no grain.
+# Key light = the dusk doorway (back wall, centre); a cool fill comes from the camera.
+SHADOW_TINT = C(52, 60, 104)
+INK3 = C(22, 16, 24)
+SPEC = C(255, 242, 214)
+RIMC = C(255, 196, 128)
+DOOR_LIGHT = (120.0, 66.0)
+
+
+def _key(cx, cy):
+    lx = float(np.clip((DOOR_LIGHT[0] - cx) / 55.0, -1, 1)) * 0.85
+    ly = float(np.clip((DOOR_LIGHT[1] - cy) / 45.0, -1, 1)) * 0.85
+    if abs(lx) < 0.25 and ly > -0.3:
+        ly = -0.5
+    v = np.array([lx, ly, -0.30], F)
+    return v / np.linalg.norm(v)
+
+
+FILL = np.array([0.0, -0.25, 0.97], F)
+HALF_F = (FILL + np.array([0, 0, 1], F))
+HALF_F = HALF_F / np.linalg.norm(HALF_F)
+
+
+def tone_set(base):
+    b = np.asarray(base, F)
+    return dict(
+        deep=np.clip(b * 0.34 + SHADOW_TINT * 0.16, 0, 1),
+        shadow=np.clip(b * 0.58 + SHADOW_TINT * 0.17, 0, 1),
+        mid=b,
+        light=np.clip(b * 1.12 + C(34, 22, 6), 0, 1),
+        line=np.clip(b * 0.24 + INK3 * 0.72, 0, 1),
+    )
+
+
+def cel(L, prims, base, form="flat", n=None, ol=2.6, bevel=2.2, metal=0.0, gloss=0.0, rim=1.0,
+        t1=0.40, t2=0.72, grad=0.14, rust=0.0, wear=0.0, alpha=1.0, shade=0.0, pad=10,
+        line=None, flip=False, key=None, spec_t=0.965, deep=True):
+    """One cel-shaded part. form: flat | cylv | cylh | sphere | dome; n=(nx,ny,nz) for a planar facet."""
+    m = shape(prims, pad)
+    a = m.a
+    h, w = a.shape
+    if h < 3 or w < 3:
+        return m
+    inside = a > 0.5
+    if not inside.any():
+        return m
+    ys, xs = np.nonzero(inside)
+    bx0, bx1, by0, by1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+    cx, cy = (m.x0 + (bx0 + bx1) / 2) / S, (m.y0 + (by0 + by1) / 2) / S
+    K = _key(cx, cy) if key is None else np.asarray(key, F) / np.linalg.norm(key)
+    T = tone_set(base)
+    ink = T["line"] if line is None else np.asarray(line, F)
+    u = ((np.arange(w, dtype=F) + 0.5 - bx0) / max(1, bx1 - bx0))[None, :] * np.ones((h, 1), F)
+    v = ((np.arange(h, dtype=F) + 0.5 - by0) / max(1, by1 - by0))[:, None] * np.ones((1, w), F)
+    if flip:
+        u = 1 - u
+    nx = np.zeros((h, w), F)
+    ny = np.zeros((h, w), F)
+    if n is not None:
+        nn = np.asarray(n, F) / np.linalg.norm(n)
+        nx += nn[0]
+        ny += nn[1]
+    elif form == "cylv":
+        nx = (u - 0.5) * 1.9
+        ny += -0.12
+    elif form == "cylh":
+        ny = (v - 0.5) * 1.9
+    elif form == "sphere":
+        nx = (u - 0.5) * 1.9
+        ny = (v - 0.5) * 1.9
+    elif form == "dome":
+        nx = (u - 0.5) * 1.6
+        ny = (v - 0.5) * 1.0 - 0.45
+    # rounded edges: bend the normal outward near the silhouette
+    din = ndi.distance_transform_edt(inside).astype(F)
+    if bevel > 0:
+        g = ndi.gaussian_filter(np.minimum(din, bevel * 2.5), 1.2)
+        gy, gx = np.gradient(g)
+        gl = np.sqrt(gx * gx + gy * gy) + 1e-5
+        ox, oy = -gx / gl, -gy / gl
+        wgt = np.clip(1 - din / bevel, 0, 1) ** 1.3
+        nx = nx * (1 - wgt) + ox * wgt * 0.95
+        ny = ny * (1 - wgt) + oy * wgt * 0.95
+    else:
+        ox = oy = np.zeros((h, w), F)
+    r2 = np.clip(nx * nx + ny * ny, 0, 0.97)
+    nz = np.sqrt(1 - r2)
+    ln = np.sqrt(nx * nx + ny * ny + nz * nz)
+    nx, ny, nz = nx / ln, ny / ln, nz / ln
+    key_l = np.clip(nx * K[0] + ny * K[1] + nz * K[2], 0, 1)
+    fill_l = np.clip(nx * FILL[0] + ny * FILL[1] + nz * FILL[2], 0, 1)
+    lam = key_l * 1.0 + fill_l * 0.55 + shade
+    s1 = smooth(t1 - 0.012, t1 + 0.012, lam)
+    s2 = smooth(t2 - 0.012, t2 + 0.012, lam)
+    col = T["shadow"][None, None] + (T["mid"] - T["shadow"])[None, None] * s1[..., None]
+    col = col + (T["light"][None, None] - col) * s2[..., None]
+    if deep:
+        sd = smooth(0.17, 0.15, lam)
+        col = col + (T["deep"][None, None] - col) * sd[..., None] * 0.8
+    # rust: clean hard-edged patches, cel-toned
+    if rust > 0:
+        nz_ = fbm(h, w, 14, nseed(), 3) + 0.12 * (din < 5)
+        th = 1 - rust * 0.45
+        rm = smooth(th - 0.006, th + 0.006, nz_) * inside
+        RT = tone_set(RUST)
+        rc = RT["shadow"][None, None] + (RT["mid"] - RT["shadow"])[None, None] * s1[..., None]
+        rc = rc + (RT["light"][None, None] - rc) * s2[..., None] * 0.7
+        col = col * (1 - rm[..., None]) + rc * rm[..., None]
+    if wear > 0:
+        nw = vnoise(h, w, 3, nseed())
+        chip = ((din < 3.5) & (din > 0.8) & (nw > 1 - wear * 0.6)).astype(F)
+        chip = ndi.gaussian_filter(chip, 0.5) > 0.5
+        col[chip] = np.clip(col[chip] * 0.55 + C(186, 180, 168) * 0.45, 0, 1)
+    # hard specular (key half-vector, plus the camera fill for metal)
+    if metal > 0 and n is None:
+        Hk = K + np.array([0, 0, 1], F)
+        Hk = Hk / np.linalg.norm(Hk)
+        sk = nx * Hk[0] + ny * Hk[1] + nz * Hk[2]
+        sf = nx * HALF_F[0] + ny * HALF_F[1] + nz * HALF_F[2]
+        sp = np.maximum(smooth(spec_t - 0.004, spec_t + 0.004, sk), smooth(0.994, 0.997, sf) * 0.7)
+        col = col + (SPEC[None, None] - col) * (sp * metal)[..., None]
+    if gloss > 0:  # glossy planar: two diagonal streaks (glass / enamel)
+        d = u * 0.75 + v * 0.55
+        st = (np.abs(d - 0.32) < 0.07) | (np.abs(d - 0.50) < 0.025)
+        st = st & (din > 2.5)
+        col = col + (SPEC[None, None] - col) * (st * gloss)[..., None]
+    # soft gradient on top of the cel tones (top-lit warm -> cool bottom)
+    gv = 1 + grad * (0.45 - v)
+    col = col * gv[..., None]
+    # warm rim on edges facing the door
+    if rim > 0:
+        facing = ox * K[0] + oy * K[1]
+        rm_ = ((din > 0.4) & (din < 2.2) & (facing > 0.45)).astype(F) * inside
+        col = col + (np.clip(RIMC * 0.5 + T["light"] * 0.6, 0, 1)[None, None] - col) * (rm_ * 0.75 * rim)[..., None]
+    # ink: heavier on the side away from the key light
+    if ol > 0:
+        dout = ndi.distance_transform_edt(~inside)
+        ring = np.clip(ol + 0.5 - dout, 0, 1)
+        sx, sy = int(round(-K[0] * ol * 0.6)), int(round(-K[1] * ol * 0.6))
+        sh = np.roll(np.roll(inside, sy, 0), sx, 1)
+        dout2 = ndi.distance_transform_edt(~sh)
+        ring = np.maximum(ring, np.clip(ol * 0.8 + 0.5 - dout2, 0, 1))
+        L.blend(np.maximum(ring, a) * alpha, m.x0, m.y0, ink)
+    L.blend(a * alpha, m.x0, m.y0, np.clip(col, 0, 1))
+    return m
+
+
+def ink(L, pts, w=0.28, col=INK3, alpha=0.9):
+    m = shape([("line", pts, w)], pad=4)
+    L.blend(m.a * alpha, m.x0, m.y0, np.asarray(col, F))
+
+
+def hline(L, pts, w=0.22, col=SPEC, alpha=0.8):
+    ink(L, pts, w, col, alpha)
+
+
+def fill(L, prims, col, alpha=1.0):
+    m = shape(prims, pad=4)
+    L.blend(m.a * alpha, m.x0, m.y0, np.asarray(col, F))
+
+
+def cshadow(L, cx, cy, rx, ry, a=0.55):
+    """Cool soft contact shadow + a tighter core."""
+    soft(L, [("ell", cx, cy, rx, ry)], C(14, 14, 28), a * 0.7, blur=ry * S * 0.7 + 2)
+    soft(L, [("ell", cx, cy - ry * 0.1, rx * 0.82, ry * 0.45)], C(10, 8, 18), a * 0.6, blur=2.0)
+
+
+def glow2(L, cx, cy, r, col, strength=0.5):
+    pad = int(r * S * 1.6)
+    x0, y0 = int(cx * S) - pad, int(cy * S) - pad
+    yy, xx = np.mgrid[0:2 * pad, 0:2 * pad].astype(F)
+    d = np.sqrt((xx - pad) ** 2 + (yy - pad) ** 2) / (r * S)
+    L.blend(strength * np.exp(-d * d * 2.2), x0, y0, np.asarray(col, F))
+
+
+def _side(cx):
+    """Which side face the camera sees (+1 = right side, -1 = left side)."""
+    return 1.0 if cx < VPX else -1.0
+
+
+def box3(L, x0, y0, x1, y1, d, base, top=None, side=None, ol=2.6, **kw):
+    """A box seen from the hangar camera: front face + top + the side facing the centre."""
+    cx = (x0 + x1) / 2
+    sg = _side(cx)
+    k = min(1.0, abs(cx - VPX) / 45.0) * 0.55 + 0.12
+    dx = d * k * sg
+    dy = d * 0.42
+    topf = [("poly", [(x0, y0), (x1, y0), (x1 + dx, y0 - dy), (x0 + dx, y0 - dy)])]
+    if sg > 0:
+        sidef = [("poly", [(x1, y0), (x1 + dx, y0 - dy), (x1 + dx, y1 - dy), (x1, y1)])]
+    else:
+        sidef = [("poly", [(x0, y0), (x0 + dx, y0 - dy), (x0 + dx, y1 - dy), (x0, y1)])]
+    front = [("rect", x0, y0, x1, y1)]
+    # one heavy silhouette line, then faces with thin seams
+    un = shape(front + topf + sidef, pad=10)
+    inside = un.a > 0.5
+    dout = ndi.distance_transform_edt(~inside)
+    T = tone_set(base)
+    L.blend(np.maximum(np.clip(ol + 0.5 - dout, 0, 1), un.a), un.x0, un.y0, T["line"])
+    kw2 = dict(kw)
+    kw2.setdefault("bevel", 1.2)
+    cel(L, topf, top if top is not None else base, n=(0, -0.92, 0.38), ol=0.9, **kw2)
+    cel(L, sidef, side if side is not None else base, n=(sg * 0.95, 0, 0.3), ol=0.9, **kw2)
+    cel(L, front, base, n=(0, -0.05, 1), ol=0.9, **kw2)
+    return dict(dx=dx, dy=dy, sg=sg)
+
+
+def drum(L, cx, y0, y1, rx, base, ry=None, top=None, ol=2.6, open_top=False, **kw):
+    """Upright cylinder: body + elliptical top."""
+    ry = rx * 0.32 if ry is None else ry
+    un = shape([("rect", cx - rx, y0, cx + rx, y1), ("ell", cx, y0, rx, ry), ("ell", cx, y1, rx, ry)], pad=10)
+    inside = un.a > 0.5
+    dout = ndi.distance_transform_edt(~inside)
+    T = tone_set(base)
+    L.blend(np.maximum(np.clip(ol + 0.5 - dout, 0, 1), un.a), un.x0, un.y0, T["line"])
+    cel(L, [("rect", cx - rx, y0, cx + rx, y1), ("ell", cx, y1, rx, ry)], base, form="cylv", ol=0.0, **kw)
+    if open_top:
+        cel(L, [("ell", cx, y0, rx, ry)], base, n=(0, -0.9, 0.4), ol=0.9, bevel=0.8)
+        cel(L, [("ell", cx, y0 + ry * 0.12, rx * 0.86, ry * 0.76)], base * 0.45, n=(0, 0.3, 1), ol=0.6,
+            bevel=0, rim=0)
+    else:
+        cel(L, [("ell", cx, y0, rx, ry)], top if top is not None else base, n=(0, -0.9, 0.4), ol=0.9,
+            bevel=0.9, **{k: v for k, v in kw.items() if k in ("metal", "rust", "wear")})
+
+
+def bulb(L, x, y, r, col=BULB, glow_r=None, strength=0.42):
+    glow2(L, x, y, glow_r or r * 4.0, AMBER, strength)
+    cel(L, [("ell", x, y, r, r * 1.2)], col, form="sphere", ol=1.2, bevel=1.0, rim=0, t1=0.0, t2=0.3,
+        line=C(120, 70, 30))
+    fill(L, [("ell", x - r * 0.3, y - r * 0.4, r * 0.28, r * 0.32)], C(255, 255, 240), 0.95)
+
+
+def bolts(L, pts, col=STEEL_L, r=0.38):
+    for (x, y) in pts:
+        cel(L, [("ell", x, y, r, r)], col, form="sphere", ol=0.9, bevel=0.6, metal=0.7, rim=0, pad=4)
+
+
+def wood_grain(L, x0, y0, x1, y1, col, n=3, horiz=True, seed=0, alpha=0.5):
+    r = np.random.default_rng(seed + nseed())
+    for i in range(n):
+        if horiz:
+            y = y0 + (y1 - y0) * (i + 0.5 + r.uniform(-0.2, 0.2)) / n
+            xa = x0 + r.uniform(0.05, 0.3) * (x1 - x0)
+            xb = x1 - r.uniform(0.05, 0.3) * (x1 - x0)
+            ink(L, [(xa, y), ((xa + xb) / 2, y + r.uniform(-0.25, 0.25)), (xb, y)], 0.16, col, alpha)
+        else:
+            x = x0 + (x1 - x0) * (i + 0.5 + r.uniform(-0.2, 0.2)) / n
+            ya = y0 + r.uniform(0.05, 0.25) * (y1 - y0)
+            yb = y1 - r.uniform(0.05, 0.25) * (y1 - y0)
+            ink(L, [(x, ya), (x + r.uniform(-0.2, 0.2), (ya + yb) / 2), (x, yb)], 0.16, col, alpha)
+
+
+def vents(L, x0, y0, x1, y1, n, base):
+    """Pressed louvre slots: dark slot + lit lower lip."""
+    T = tone_set(base)
+    for k in range(n):
+        y = y0 + (y1 - y0) * (k + 0.5) / n
+        fill(L, [("rect", x0, y - 0.45, x1, y + 0.15)], T["line"], 0.9)
+        fill(L, [("rect", x0, y + 0.15, x1, y + 0.45)], T["light"], 0.85)
+
+
+def gauge(L, x, y, r, face=BONE, needle=-0.6):
+    cel(L, [("ell", x, y, r + 0.45, r + 0.45)], STEEL_L, form="sphere", ol=1.4, bevel=1.0, metal=0.8)
+    cel(L, [("ell", x, y, r, r)], face, n=(0, 0, 1), ol=0.8, bevel=0, rim=0)
+    for k in range(5):
+        a = math.pi * (0.85 + k * 0.325)
+        ink(L, [(x + math.cos(a) * r * 0.62, y + math.sin(a) * r * 0.62),
+                (x + math.cos(a) * r * 0.85, y + math.sin(a) * r * 0.85)], 0.14, INK3, 0.8)
+    ink(L, [(x, y), (x + math.cos(math.pi * 1.5 + needle) * r * 0.75, y + math.sin(math.pi * 1.5 + needle) * r * 0.75)],
+        0.2, C(170, 40, 30), 1.0)
+    fill(L, [("poly", [(x - r * 0.7, y - r * 0.2), (x - r * 0.2, y - r * 0.75), (x - r * 0.05, y - r * 0.6),
+                       (x - r * 0.55, y - r * 0.05)])], SPEC, 0.55)
+
+
+# =========================================================== palette v3 (cleaner, still dusty)
+OD = C(96, 104, 66)        # olive drab
+OD_D = C(70, 76, 52)
+GUN = C(70, 76, 84)        # gunmetal
+STEEL3 = C(124, 130, 134)
+CHROME = C(178, 184, 188)
+OXRED = C(140, 68, 50)     # oxide-red machine paint
+YEL = C(206, 164, 64)      # safety yellow, faded
+TEAL3 = C(64, 104, 108)
+WOOD3 = C(132, 92, 58)
+WOOD3_D = C(96, 66, 44)
+PLY = C(176, 140, 96)
+CANV3 = C(178, 162, 128)
+CREAM = C(214, 202, 174)
+RED3 = C(160, 52, 44)
+TONIC3 = C(120, 190, 96)
+RUBBER = C(46, 44, 48)
+LEATH3 = C(110, 72, 46)
+
+
 # =========================================================== shared camp
 def generator(stage):
     L = Layer()
-    if stage == 1:  # olive diesel generator on skids, front-left
-        shadow(L, 25, 141, 23, 3.4, 0.55)
-        P(L, [("rect", 5, 136.5, 44, 140.5)], WOOD_D, form="cylh", ol=1.6, bevel=2, rust=0.0, grit=0.12)
-        P(L, [("poly", [(7, 113), (36, 113), (38, 115), (38, 137), (7, 137)])], OLIVE, ol=2.0, bevel=4, rust=0.35,
-          streaks=1.2, wear=0.25)
-        # louvres
-        for k in range(5):
-            P(L, [("rect", 10, 117 + k * 3.2, 23, 118.5 + k * 3.2)], OLIVE_D, ol=0.6, bevel=1.2, form="cylh")
-        # control panel + amber gauge
-        P(L, [("rect", 26, 117, 35.5, 129)], STEEL_D, ol=1.2, bevel=2, rust=0.2, wear=0.2)
-        P(L, [("ell", 30.7, 121.6, 2.4, 2.4)], BONE, form="sphere", ol=0.9, bevel=1.5)
-        P(L, [("line", [(30.7, 121.6), (32.2, 120.4)], 0.35)], CLOTH_R, form="flat", ol=0, bevel=1)
-        glow(L, 29, 126, 2.6, AMBER, 0.5)
-        P(L, [("ell", 29, 126, 0.9, 0.9)], BULB, ol=0.6, form="sphere", bevel=1)
-        P(L, [("ell", 33, 126, 0.7, 0.7)], C(150, 60, 40), ol=0.5, form="sphere", bevel=1)
-        # fuel tank on top + exhaust stack with smoke
-        P(L, [("rect", 9, 108.5, 31, 113.5)], OLIVE_D, form="cylh", ol=1.6, bevel=3, rust=0.3)
-        P(L, [("rect", 11.5, 99, 14.5, 109)], STEEL_D, form="cylv", ol=1.4, bevel=2, rust=0.6)
-        P(L, [("rect", 10.8, 98, 15.2, 100)], STEEL, form="cylv", ol=1.2, bevel=1.5, rust=0.4)
-        soft(L, [("ell", 14, 94, 2.6, 2.4), ("ell", 16.5, 88.5, 3.6, 3.0), ("ell", 20, 82, 4.6, 3.4)], C(120, 108, 98), 0.32, 5)
-        # jerrycan
-        shadow(L, 43, 141.5, 4, 1.2, 0.5)
-        P(L, [("poly", [(39, 131), (45, 131), (46, 132), (46, 141), (39, 141)])], CLOTH_R * 0.9, ol=1.5, bevel=2.5,
-          rust=0.3, wear=0.3)
-        P(L, [("rect", 40.5, 129.5, 44, 131.2)], STEEL_D, ol=1.0, bevel=1)
-        rivets(L, [(9, 115), (34.5, 115), (9, 135), (34.5, 135)])
-        # cable snaking to the wall
-        cable(L, [(36, 133), (44, 128), (50, 118), (44, 104), (36, 96), (32, 92)], 0.9, CHARC, 1.0)
+    if stage == 1:  # diesel genset on a steel skid, front-left
+        cshadow(L, 22, 140.5, 21, 2.6, 0.6)
+        # skid rails
+        box3(L, 4.5, 136, 39.5, 140, 3, GUN, metal=0.5, rust=0.25)
+        # main enclosure
+        g = box3(L, 6, 112, 36, 136, 8, OD, top=OD * 1.02, rust=0.18, wear=0.4)
+        vents(L, 8.5, 115, 21, 131, 7, OD)
+        ink(L, [(22.5, 113), (22.5, 135)], 0.25, tone_set(OD)["line"], 0.9)
+        # control panel inset
+        cel(L, [("rect", 24.5, 115.5, 34, 128.5)], GUN, n=(0, 0, 1), ol=1.6, bevel=1.0, gloss=0.25)
+        gauge(L, 27.4, 119.4, 1.9)
+        gauge(L, 31.6, 119.4, 1.9, needle=0.5)
+        for k, c in enumerate((C(232, 170, 70), C(110, 190, 120), C(60, 60, 64))):
+            x = 26.6 + k * 2.5
+            if k < 2:
+                glow2(L, x, 124.4, 1.8, c, 0.45)
+            cel(L, [("ell", x, 124.4, 0.75, 0.75)], c, form="sphere", ol=0.8, bevel=0.5, metal=0.8, rim=0, pad=4)
+        cel(L, [("ell", 31.5, 127.0, 1.0, 1.0)], RED3, form="sphere", ol=1.0, bevel=0.6, metal=0.6, pad=4)
+        bolts(L, [(25.2, 116.2), (33.3, 116.2), (25.2, 127.8), (33.3, 127.8)], STEEL3, 0.28)
+        # door handle + stencil
+        cel(L, [("rect", 21.2, 122, 22.0, 126.5)], STEEL3, form="cylv", ol=1.0, metal=0.9, bevel=0.6)
+        fill(L, [("rect", 9, 132.2, 19.5, 133.4)], CREAM * 0.8, 0.55)
+        # fuel tank saddle on top
+        tx0, tx1, ty = 9 + g["dx"] * 0.3, 30 + g["dx"] * 0.3, 108.6
+        cel(L, [("rect", tx0, ty - 2.4, tx1, ty + 2.4), ("ell", tx0, ty, 1.3, 2.4), ("ell", tx1, ty, 1.3, 2.4)], OD_D,
+            form="cylh", ol=2.2, metal=0.35, rust=0.2)
+        cel(L, [("ell", tx1 - 3, ty - 2.3, 1.2, 0.5)], STEEL3, n=(0, -1, 0.3), ol=1.0, metal=0.8, bevel=0.5)
+        for xs in (tx0 + 3, tx1 - 6):
+            cel(L, [("rect", xs, ty - 2.6, xs + 1.0, ty + 2.6)], GUN, form="cylh", ol=0.9, metal=0.6, bevel=0.5)
+        # exhaust: pipe + muffler + rain cap
+        cel(L, [("rect", 32.2, 101.5, 34.0, 110.2)], GUN, form="cylv", ol=1.8, metal=0.8, rust=0.45)
+        cel(L, [("rect", 31.2, 104.5, 35.0, 108.0)], GUN * 0.9, form="cylv", ol=1.6, metal=0.8, rust=0.5)
+        cel(L, [("poly", [(31.4, 101.8), (34.9, 100.6), (35.2, 101.3), (31.6, 102.6)])], STEEL3, ol=1.0, metal=0.9,
+            bevel=0.5)
+        soft(L, [("ell", 34.5, 97.5, 1.8, 1.6), ("ell", 36.5, 93.5, 2.6, 2.0)], C(150, 138, 128), 0.22, 6)
+        # power cable snaking off to the wall
+        cel(L, [("line", sag(37, 131, 46, 137, 2.0, 10) + [(50, 134), (52, 126)], 0.75)], RUBBER, form="cylh",
+            ol=1.0, bevel=1, rim=0.6)
     elif stage == 3:  # string lights draped between the ribs
-        strands = [((4, 46), (64, 30), 6), ((64, 30), (120, 26), 5), ((120, 26), (176, 30), 5),
-                   ((176, 30), (236, 46), 6), ((30, 18), (100, 10), 5), ((140, 10), (210, 18), 5)]
+        strands = [((6, 46), (62, 31), 6), ((62, 31), (120, 27), 5), ((120, 27), (178, 31), 5),
+                   ((178, 31), (234, 46), 6), ((32, 18), (100, 11), 5), ((140, 11), (208, 18), 5)]
         for (a, b, dip) in strands:
-            pts = sag(a[0], a[1], b[0], b[1], dip, 18)
-            cable(L, pts, 0.45, CHARC, 0.5)
-            for t in np.linspace(0.06, 0.94, 7):
+            pts = sag(a[0], a[1], b[0], b[1], dip, 24)
+            ink(L, pts, 0.42, C(30, 24, 26), 1.0)
+            for t in np.linspace(0.07, 0.93, 7):
                 i = t * (len(pts) - 1)
                 q0, q1 = pts[int(i)], pts[min(len(pts) - 1, int(i) + 1)]
                 fr = i - int(i)
-                x, y = q0[0] + (q1[0] - q0[0]) * fr, q0[1] + (q1[1] - q0[1]) * fr + 1.0
-                glow(L, x, y, 3.2, AMBER, 0.32)
-                P(L, [("ell", x, y, 0.75, 0.95)], BULB, form="sphere", ol=0.6, bevel=1.0, grit=0.02, warm=1)
-        # warm pools of light under the strands
-        soft(L, [("ell", 60, 96, 40, 3)], C(255, 190, 110), 0.12, 6)
-        soft(L, [("ell", 180, 96, 40, 3)], C(255, 190, 110), 0.12, 6)
-    elif stage == 5:  # caged floodlights hung off the ribs
-        for fx, fy in ((62, 22), (178, 22)):
-            cable(L, [(fx, 8), (fx, fy - 2)], 0.5, CHARC, 0.6)
-            soft(L, [("poly", [(fx - 3, fy + 2), (fx + 3, fy + 2), (fx + 20, 100), (fx - 18, 100)])],
-                 C(255, 212, 150), 0.16, 6)
-            soft(L, [("ell", fx + 1, 101, 22, 3.5)], C(255, 200, 130), 0.20, 5)
-            P(L, [("poly", [(fx - 4, fy - 2), (fx + 4, fy - 2), (fx + 5, fy + 2), (fx - 5, fy + 2)])], STEEL_D,
-              ol=1.4, bevel=2, rust=0.3, form="cylh")
-            glow(L, fx, fy + 2.5, 5, BULB, 0.55)
-            P(L, [("ell", fx, fy + 2.3, 3.6, 1.1)], BULB, form="flat", ol=0.8, bevel=1, warm=1)
-            for k in (-2.4, 0, 2.4):
-                P(L, [("line", [(fx + k, fy + 1.4), (fx + k, fy + 3)], 0.3)], CHARC, form="flat", ol=0)
+                x, y = q0[0] + (q1[0] - q0[0]) * fr, q0[1] + (q1[1] - q0[1]) * fr
+                cel(L, [("rect", x - 0.38, y, x + 0.38, y + 0.9)], GUN, form="cylv", ol=0.8, bevel=0.4, metal=0.5, rim=0,
+                    pad=4)
+                bulb(L, x, y + 1.9, 0.72, BULB, 3.0, 0.30)
+        soft(L, [("ell", 60, 96, 40, 3)], C(255, 190, 110), 0.10, 6)
+        soft(L, [("ell", 180, 96, 40, 3)], C(255, 190, 110), 0.10, 6)
+    elif stage == 5:  # caged industrial floodlights hung off the ribs
+        for fx, fy in ((84, 22), (178, 22)):
+            ink(L, [(fx - 3, 6), (fx, fy - 4.5)], 0.25, C(40, 36, 40), 1.0)
+            ink(L, [(fx + 3, 6), (fx, fy - 4.5)], 0.25, C(40, 36, 40), 1.0)
+            soft(L, [("poly", [(fx - 4, fy + 2), (fx + 4, fy + 2), (fx + 21, 100), (fx - 19, 100)])],
+                 C(255, 214, 156), 0.13, 7)
+            soft(L, [("ell", fx + 1, 101, 22, 3.5)], C(255, 200, 130), 0.16, 5)
+            cel(L, [("poly", [(fx - 1.6, fy - 5), (fx + 1.6, fy - 5), (fx + 2, fy - 2.6), (fx - 2, fy - 2.6)])], GUN,
+                ol=1.4, metal=0.7, bevel=0.6)
+            cel(L, [("poly", [(fx - 3.4, fy - 2.8), (fx + 3.4, fy - 2.8), (fx + 5.6, fy + 1.6), (fx - 5.6, fy + 1.6)])],
+                YEL * 0.85, form="cylv", ol=2.0, metal=0.5, bevel=1.4, wear=0.4)
+            glow2(L, fx, fy + 2.4, 6, BULB, 0.55)
+            cel(L, [("ell", fx, fy + 1.8, 5.4, 1.4)], C(255, 236, 190), n=(0, 0.9, 0.4), ol=1.2, bevel=0, rim=0,
+                line=C(150, 110, 60))
+            for k in (-3.4, -1.1, 1.1, 3.4):
+                ink(L, [(fx + k * 0.9, fy + 0.6), (fx + k, fy + 3.0)], 0.22, C(40, 36, 40), 1.0)
+            ink(L, [(fx - 4.6, fy + 2.2), (fx + 4.6, fy + 2.2)], 0.22, C(40, 36, 40), 1.0)
     return L
+
+
+MAST_X = 236.0
 
 
 def radio_tower(stage):
     L = Layer()
     if stage == 1:  # radio desk, front-right
-        shadow(L, 221, 141, 17, 3, 0.5)
-        P(L, [("rect", 205, 119, 237, 122.5)], WOOD, form="cylh", ol=1.6, bevel=2.5, grit=0.12,
-          tex=lambda h, w: 0.08 * np.sin(np.arange(h, dtype=F)[:, None] * 1.3 + np.arange(w)[None, :] * 0.03))
-        for lx in (207, 234):
-            P(L, [("rect", lx, 122.5, lx + 2.4, 140.5)], WOOD_D, form="cylv", ol=1.4, bevel=1.5)
-        P(L, [("rect", 207, 131, 236, 132.5)], WOOD_D, form="cylh", ol=1.0, bevel=1)
-        # the set: dented steel case, amber dial, speaker grille, knobs
-        P(L, [("poly", [(210, 107), (229, 107), (230, 108), (230, 119), (210, 119)])], STEEL, ol=1.8, bevel=3,
-          rust=0.3, wear=0.3, streaks=0.6)
-        glow(L, 216, 112, 4, AMBER, 0.35)
-        P(L, [("rect", 212, 109.5, 220.5, 114.2)], C(210, 150, 70), ol=0.9, bevel=1.5, form="flat", warm=1)
-        for k in range(6):
-            P(L, [("line", [(213 + k * 1.4, 110.5), (213 + k * 1.4, 113.2)], 0.25)], CHARC, form="flat", ol=0)
-        P(L, [("line", [(216.8, 114), (218.3, 110)], 0.35)], CLOTH_R, form="flat", ol=0)
-        P(L, [("rect", 222, 109.5, 228.5, 117)], CHARC, ol=0.8, bevel=1, form="flat",
-          tex=lambda h, w: 0.25 * ((np.arange(h)[:, None] // 3 + np.arange(w)[None, :] // 3) % 2))
-        for kx in (213, 216.5, 220):
-            P(L, [("ell", kx, 116.5, 1.0, 1.0)], C(170, 160, 140), form="sphere", ol=0.6, bevel=1)
-        # mic + headset + coiled cord, a mug
-        P(L, [("line", [(232, 119), (233, 113)], 0.5)], STEEL_D, form="flat", ol=0.6)
-        P(L, [("ell", 233.2, 112, 1.4, 1.9)], CHARC, form="sphere", ol=0.8, bevel=1.2)
-        cable(L, [(229.5, 116), (231.5, 118.8), (233, 117.5), (234.5, 119)], 0.35, CHARC, 0.4)
-        P(L, [("rect", 206.5, 115, 209.2, 119)], BONE * 0.85, form="cylv", ol=1.0, bevel=1.2, rust=0.2)
+        cshadow(L, 221, 140.8, 17, 2.4, 0.55)
+        # desk: top slab in 3/4, two legs + rail
+        for lx in (207.5, 233.0):
+            cel(L, [("rect", lx, 121, lx + 2.0, 140.5)], WOOD3_D, form="cylv", ol=1.8, bevel=0.8)
+        cel(L, [("rect", 208, 131, 234.5, 132.6)], WOOD3_D, form="cylh", ol=1.2, bevel=0.6)
+        box3(L, 205.5, 118.5, 237, 121.5, 6, WOOD3, top=PLY)
+        wood_grain(L, 207, 115, 236, 118, WOOD3_D, 2)
+        # the set: steel case with rounded corners in 3/4
+        box3(L, 210.5, 106.5, 229.5, 118, 5, GUN, top=GUN * 1.05, metal=0.3, wear=0.35)
+        cel(L, [("rect", 212, 108.2, 221, 113.4)], C(230, 168, 80), n=(0, 0, 1), ol=1.2, bevel=0, rim=0, gloss=0.5)
+        glow2(L, 216.5, 110.8, 4, AMBER, 0.32)
+        for k in range(7):
+            ink(L, [(213 + k * 1.2, 109.4), (213 + k * 1.2, 110.4 + (k % 2) * 0.6)], 0.13, C(80, 40, 20), 0.9)
+        ink(L, [(217.6, 113.2), (218.6, 108.6)], 0.2, RED3, 1.0)
+        # speaker grille (round holes)
+        cel(L, [("ell", 225.3, 111.6, 3.0, 3.0)], C(54, 56, 62), n=(0, 0, 1), ol=1.2, bevel=0.5, rim=0)
+        for ix in range(-2, 3):
+            for iy in range(-2, 3):
+                if ix * ix + iy * iy <= 5:
+                    fill(L, [("ell", 225.3 + ix * 1.05, 111.6 + iy * 1.05, 0.3, 0.3)], C(18, 16, 20), 1.0)
+        for kx in (213.4, 216.8, 220.2):
+            cel(L, [("ell", kx, 116.0, 1.05, 1.05)], C(210, 200, 182), form="sphere", ol=1.0, bevel=0.6, metal=0.7)
+            ink(L, [(kx, 116.0), (kx + 0.5, 115.3)], 0.14, INK3, 0.9)
+        # mic on a stand + coiled cord
+        cel(L, [("ell", 232.6, 118.1, 2.1, 0.6)], GUN, n=(0, -0.8, 0.6), ol=1.2, metal=0.6)
+        cel(L, [("line", [(232.6, 118), (232.9, 112.5)], 0.4)], CHROME, form="cylv", ol=0.9, metal=1, bevel=0.4)
+        cel(L, [("rect", 231.6, 108.8, 234.2, 112.8), ("ell", 232.9, 108.8, 1.3, 0.8), ("ell", 232.9, 112.8, 1.3, 0.8)],
+            CHROME * 0.8, form="cylv", ol=1.3, metal=1.0, bevel=0.6)
+        for k in range(4):
+            ink(L, [(231.8, 109.4 + k * 0.85), (234.0, 109.4 + k * 0.85)], 0.12, INK3, 0.8)
+        ink(L, [(229.6, 115.5), (230.6, 117.4), (231.4, 116.2), (232.2, 118.0)], 0.22, RUBBER, 1)
+        # headphones resting on the desk
+        cel(L, [("line", sag(207.6, 117.6, 213.0, 117.6, -2.4, 10), 0.45)], GUN, form="flat", ol=1.0, metal=0.5)
+        for hx in (207.6, 213.0):
+            cel(L, [("ell", hx, 117.8, 1.2, 0.9)], RUBBER, form="sphere", ol=1.0, bevel=0.6, metal=0.4)
         # whip antenna
-        P(L, [("line", [(228.5, 107.5), (231.5, 95)], 0.45)], STEEL_L, form="flat", ol=0.6)
-        cable(L, [(210, 118), (205, 126), (206, 140), (212, 143)], 0.5, CHARC, 0.6)
-    elif stage == 3:  # lattice mast up through the roof
-        x0, x1 = 226.5, 233.5
-        for xa, xb in ((x0, x0 + 2.0), (x1, x1 - 2.0)):
-            P(L, [("line", [(xa, 106), (xb, -2)], 0.9)], STEEL_D, form="flat", ol=1.0, bevel=1.5, rust=0.35)
-        y = 104.0
+        cel(L, [("line", [(228.6, 106.6), (230.5, 96)], 0.35)], CHROME, form="flat", ol=0.8, metal=1, bevel=0.3)
+        cel(L, [("ell", 230.55, 95.8, 0.4, 0.4)], CHROME, form="sphere", ol=0.6, metal=1, bevel=0.3)
+    elif stage == 3:  # lattice mast at the far right, up through the roof
+        x0, x1 = MAST_X - 2.6, MAST_X + 2.6
+        for xa in (x0, x1):
+            cel(L, [("line", [(xa, 121), (xa + (MAST_X - xa) * 0.3, -2)], 0.55)], GUN, form="cylv", ol=1.4, metal=0.7,
+                bevel=0.5, rust=0.2)
+        y = 118.0
         k = 0
         while y > 0:
-            ln = x0 + 2.0 * (1 - y / 106)
-            rn = x1 - 2.0 * (1 - y / 106)
-            P(L, [("line", [(ln, y), (rn, y - 3.8 if k % 2 == 0 else y)], 0.4),
-                  ("line", [(ln, y - 3.8), (rn, y)], 0.4), ("line", [(ln, y), (rn, y)], 0.45)],
-              STEEL, form="flat", ol=0.6, bevel=1, rust=0.4)
-            y -= 7.6
+            sh = 1 - y / 121.0
+            ln = x0 + 2.6 * 0.3 * sh
+            rn = x1 - 2.6 * 0.3 * sh
+            ink(L, [(ln, y), (rn, y - 5.2)] if k % 2 == 0 else [(rn, y), (ln, y - 5.2)], 0.24, C(40, 42, 48), 1)
+            ink(L, [(ln, y), (rn, y)], 0.3, C(40, 42, 48), 1)
+            hline(L, [(ln + 0.2, y - 0.25), (rn - 0.2, y - 0.25)], 0.1, C(190, 180, 160), 0.6)
+            y -= 5.2
             k += 1
-        # guy wire + a feeder cable down to the radio
-        P(L, [("line", [(229, 30), (196, 92)], 0.18)], C(120, 110, 100), form="flat", ol=0)
-        cable(L, [(226.8, 104), (224, 108.5)], 0.5, CHARC, 0.6)
-        rivets(L, [(227, 100), (233, 100)])
-    elif stage == 5:  # dish + blinking red beacon
-        P(L, [("line", [(222, 22), (229.5, 18)], 0.7)], STEEL_D, form="flat", ol=0.8)
-        # dish seen three-quarter: rim ellipse, dark bowl interior, lit lip, feed horn on struts
-        P(L, [("ell", 218.5, 21, 3.4, 6.6)], STEEL_L, form="sphere", ol=1.5, bevel=2.2, rust=0.3, wear=0.3)
-        P(L, [("ell", 218.0, 21.2, 2.4, 5.4)], STEEL_D, form="sphere", ol=0, bevel=2.0, lit=-0.6)
-        P(L, [("line", [(217, 15.6), (213, 21), (217, 26.4)], 0.25)], STEEL, form="flat", ol=0.3)
-        P(L, [("rect", 212, 20.2, 214, 21.8)], STEEL_D, ol=0.7, bevel=0.8)
-        P(L, [("rect", 220.5, 19.5, 223, 22.5)], STEEL_D, ol=0.8, bevel=1)
-        glow(L, 230.5, 2.5, 4.5, C(230, 70, 50), 0.5)
-        P(L, [("ell", 230.5, 2.6, 1.3, 1.3)], C(232, 96, 70), form="sphere", ol=0.8, bevel=1, warm=1)
-        P(L, [("rect", 229, 3.8, 232, 5.4)], STEEL_D, ol=0.8, bevel=1)
+        # feeder cable down to the radio
+        cel(L, [("line", [(MAST_X - 2, 112), (231, 114), (229.5, 117)], 0.45)], RUBBER, form="flat", ol=0.8, bevel=0.5)
+        # guy wire off toward the roof
+        ink(L, [(MAST_X - 1.5, 40), (206, 4)], 0.12, C(120, 112, 104), 0.7)
+    elif stage == 5:  # dish on the mast + blinking red beacon
+        dx, dy = MAST_X - 9.5, 34.0
+        cel(L, [("line", [(dx + 2.5, dy), (MAST_X - 1, dy - 1.5)], 0.6)], GUN, form="cylh", ol=1.2, metal=0.7)
+        # parabolic dish, three-quarter: lit outside rim + shaded bowl + feed horn on struts
+        cel(L, [("ell", dx, dy, 3.8, 7.4)], CREAM * 0.92, form="sphere", ol=2.2, bevel=1.6, metal=0.3, wear=0.3)
+        cel(L, [("ell", dx - 0.6, dy, 2.8, 6.2)], CREAM * 0.62, form="sphere", flip=True, ol=0, bevel=0, rim=0)
+        for (sy_) in (-5.2, 5.2):
+            ink(L, [(dx - 0.6, dy + sy_), (dx - 5.2, dy)], 0.22, C(50, 50, 56), 1)
+        cel(L, [("rect", dx - 6.4, dy - 0.9, dx - 4.6, dy + 0.9)], GUN, form="cylh", ol=1.1, metal=0.8, bevel=0.4)
+        ink(L, [(dx + 2.6, dy - 4), (dx + 3.4, dy + 1)], 0.16, SPEC, 0.6)
+        by = 2.8
+        cel(L, [("rect", MAST_X - 1.4, by + 1.2, MAST_X + 1.4, by + 3.0)], GUN, ol=1.2, metal=0.6)
+        glow2(L, MAST_X, by, 5, C(240, 70, 50), 0.55)
+        cel(L, [("ell", MAST_X, by, 1.4, 1.4)], C(236, 92, 70), form="dome", ol=1.2, bevel=0.6, metal=0.8, rim=0)
     return L
 
 
 def scrap_press(stage):
     L = Layer()
-    if stage == 1:  # junk pile
-        shadow(L, 86, 145.5, 16, 2.8, 0.55)
-        r = np.random.default_rng(3)
-        pieces = []
-        for i in range(22):
-            x = r.uniform(72, 98)
-            y = r.uniform(130, 144)
-            pieces.append((y, x, i))
-        P(L, [("poly", [(70, 146), (76, 134), (84, 128), (92, 131), (99, 140), (101, 146)])], C(64, 54, 46), ol=1.5,
-          bevel=4, rust=0.4, grit=0.18, form="box")
-        for (y, x, i) in sorted(pieces):
-            kind = i % 5
-            col = [STEEL, RUST, STEEL_D, OXID, BRASS][i % 5]
-            if kind == 0:  # bent sheet
-                P(L, [("poly", [(x - 3, y + 1), (x, y - 2), (x + 3.5, y - 1), (x + 2, y + 1.5)])], col, ol=1.0,
-                  bevel=1.5, rust=0.4)
-            elif kind == 1:  # pipe
-                P(L, [("line", [(x - 3, y + 1), (x + 3, y - 1)], 1.3)], col, form="flat", ol=1.0, bevel=1.5, rust=0.5)
-            elif kind == 2:  # gear
-                P(L, [("ell", x, y, 2.2, 1.6), ("-ell", x, y, 0.8, 0.6)], col, form="sphere", ol=1.0, bevel=1.5,
-                  rust=0.3)
-            elif kind == 3:  # can
-                P(L, [("rect", x - 1.2, y - 2.2, x + 1.2, y + 1)], col, form="cylv", ol=0.9, bevel=1.2, rust=0.4)
-            else:  # spring / brass fitting
-                P(L, [("ell", x, y, 1.3, 1.0)], col, form="sphere", ol=0.8, bevel=1.2)
-        # old tyre leaning on the pile
-        P(L, [("ell", 77, 139, 4.6, 5.4), ("-ell", 77, 139, 2.0, 2.6)], CHARC, form="sphere", ol=1.5, bevel=2.5,
-          grit=0.14)
-    elif stage == 3:  # the hydraulic press
-        shadow(L, 61, 137, 15, 2.6, 0.55)
-        P(L, [("rect", 47, 130, 75, 136.5)], STEEL_D, form="cylh", ol=1.8, bevel=2.5, rust=0.4)
-        for cx in (49.5, 69.5):
-            P(L, [("rect", cx, 97, cx + 4, 131)], C(116, 60, 40), form="cylv", ol=1.8, bevel=2.5, rust=0.45,
-              streaks=1.2, wear=0.25)
-        P(L, [("rect", 46, 93, 76.5, 99)], C(116, 60, 40), form="cylh", ol=1.8, bevel=3, rust=0.45, streaks=1.0,
-          wear=0.2)
-        stm = shape([("rect", 47, 96.5, 75.5, 98.5)])
-        stripes(L, stm, C(186, 140, 60), 1.4, 1.0, 0.65)
-        P(L, [("rect", 59, 99, 63, 107)], STEEL_L, form="cylv", ol=1.4, bevel=1.5, grit=0.04)
-        P(L, [("rect", 54, 107, 68, 113)], STEEL, form="cylh", ol=1.6, bevel=2, rust=0.3, wear=0.3)
-        # half-crushed car door under the ram
-        P(L, [("poly", [(54, 125), (68, 125), (69, 130), (53, 130)])], OXID, ol=1.2, bevel=1.5, rust=0.6)
-        P(L, [("rect", 52, 123.5, 70, 125.2)], STEEL_D, ol=0.8, bevel=1)
-        # hydraulic lines + control box with a red lever
-        cable(L, [(73.5, 100), (79, 104), (78, 118), (74, 122)], 0.6, CHARC, 0.7)
-        P(L, [("rect", 76, 114, 82, 122)], OLIVE_D, ol=1.4, bevel=1.5, rust=0.3, wear=0.3)
-        P(L, [("line", [(79, 114), (80.5, 109.5)], 0.5)], STEEL, form="flat", ol=0.6)
-        P(L, [("ell", 80.6, 109.3, 0.9, 0.9)], CLOTH_R, form="sphere", ol=0.6, bevel=1)
-        rivets(L, [(48, 95.5), (74.5, 95.5), (51.5, 128), (71.5, 128)])
-    elif stage == 5:  # crushed cubes on a pallet
-        shadow(L, 94, 147.5, 11, 2.2, 0.55)
-        P(L, [("rect", 84, 144, 104, 147)], WOOD, form="cylh", ol=1.4, bevel=1.5, grit=0.12)
-        for (x, y, c) in ((86, 137.5, OXID), (95, 137.5, RUST_L), (90.5, 130.5, STEEL)):
-            P(L, [("rect", x, y, x + 8, y + 6.5)], c, ol=1.6, bevel=2.5, rust=0.45, grit=0.16, wear=0.3,
-              tex=lambda h, w: 0.18 * (vnoise(h, w, 4, nseed()) - 0.5) + 0.06 * np.sin(np.arange(h, dtype=F)[:, None] * 1.4))
+    if stage == 1:  # salvage pile: tyre, sheet metal, pipe, hubcap, gears
+        cshadow(L, 87, 145, 13.5, 2.4, 0.6)
+        cel(L, [("poly", [(74.5, 146.2), (78, 138.5), (84, 133.5), (91, 134.5), (97, 139.5), (100, 146.2)])],
+            C(84, 74, 66), n=(0, -0.5, 0.9), ol=2.2, bevel=2.5, rust=0.45)
+        # corrugated sheet leaning
+        cel(L, [("poly", [(84, 146), (86.5, 132), (95.5, 134.5), (93.5, 146.2)])], STEEL3, n=(0.4, -0.2, 0.9),
+            ol=2.0, bevel=1, metal=0.4, rust=0.4)
+        for k in range(4):
+            xa = 86.5 + k * 2.25
+            ink(L, [(xa, 133 + k * 0.6), (xa - 1.6, 146)], 0.2, tone_set(STEEL3)["line"], 0.7)
+        # pipe
+        cel(L, [("line", [(76, 140.5), (91, 137.5)], 1.3)], OXRED * 0.8, form="cylh", ol=1.6, metal=0.5, rust=0.4)
+        cel(L, [("ell", 91, 137.5, 0.6, 1.3)], C(30, 24, 22), n=(1, 0, 0.3), ol=0.8, bevel=0)
+        # gear
+        gx, gy, gr = 81, 143.5, 2.6
+        teeth = []
+        for i in range(24):
+            a = i / 24 * 2 * math.pi
+            rr = gr if (i // 2) % 2 == 0 else gr * 0.8
+            teeth.append((gx + math.cos(a) * rr, gy + math.sin(a) * rr * 0.75))
+        cel(L, [("poly", teeth), ("-ell", gx, gy, 0.8, 0.6)], STEEL3, n=(0, -0.4, 0.9), ol=1.6, metal=0.6, rust=0.3)
+        # tyre leaning on the pile
+        cel(L, [("ell", 96.5, 140.4, 3.6, 5.2), ("-ell", 96.8, 140.4, 1.6, 2.6)], RUBBER, form="sphere", ol=2.0,
+            bevel=2.4, metal=0.25)
+        for k in range(6):
+            a = -1.2 + k * 0.45
+            ink(L, [(96.5 + math.cos(a) * 3.0, 140.4 + math.sin(a) * 4.4),
+                    (96.5 + math.cos(a) * 3.5, 140.4 + math.sin(a) * 5.0)], 0.16, C(20, 18, 22), 0.9)
+        # hubcap
+        cel(L, [("ell", 89, 143.8, 2.4, 1.2)], CHROME, form="sphere", ol=1.4, metal=1.0, bevel=0.8)
+    elif stage == 3:  # H-frame hydraulic press
+        cshadow(L, 61, 137.6, 15, 2.2, 0.6)
+        box3(L, 46.5, 131.5, 75.5, 137, 4, GUN, metal=0.4, rust=0.25)
+        for cx in (49.0, 70.0):
+            box3(L, cx, 103, cx + 4.2, 131.5, 2.4, OXRED, wear=0.45, rust=0.15)
+        box3(L, 45.5, 99.5, 77.5, 105.5, 3.5, OXRED, wear=0.4, rust=0.15)
+        st = shape([("rect", 46, 103.0, 77, 104.8)])
+        fill(L, [("rect", 46, 103.0, 77, 104.8)], YEL, 0.95)
+        stripes(L, st, C(40, 34, 30), 1.2, 1.0, 0.85)
+        # hydraulic cylinder + chrome ram
+        cel(L, [("rect", 57.8, 105.5, 64.2, 111)], GUN, form="cylv", ol=2.0, metal=0.8)
+        cel(L, [("rect", 59.6, 111, 62.4, 117.5)], CHROME, form="cylv", ol=1.6, metal=1.0)
+        box3(L, 53, 117.5, 69, 121.5, 2.5, STEEL3, metal=0.6, wear=0.3)
+        # crushed car door on the bed
+        cel(L, [("poly", [(53.5, 131.5), (54.5, 127.5), (60, 128.6), (66, 126.8), (69, 128.2), (68.5, 131.5)])], TEAL3,
+            n=(0, -0.6, 0.8), ol=1.8, metal=0.4, rust=0.4)
+        ink(L, [(56, 129.6), (60, 130.4), (65, 128.6)], 0.2, tone_set(TEAL3)["line"], 0.9)
+        # hoses + control box with a red lever
+        cel(L, [("line", [(64.2, 107), (68, 109), (71, 108)], 0.55)], RUBBER, form="flat", ol=1.0, bevel=0.5)
+        cel(L, [("line", [(77.3, 110), (80.5, 112), (80.4, 116)], 0.55)], RUBBER, form="flat", ol=1.0, bevel=0.5)
+        box3(L, 77, 116, 83, 123.5, 2, OD_D, wear=0.4)
+        cel(L, [("line", [(80, 116), (81.5, 111.8)], 0.4)], CHROME, form="flat", ol=0.9, metal=1, bevel=0.3)
+        cel(L, [("ell", 81.6, 111.6, 0.85, 0.85)], RED3, form="sphere", ol=0.9, metal=0.7, bevel=0.5)
+        bolts(L, [(47.6, 101.4), (75.4, 101.4), (51.1, 129), (72.1, 129)], STEEL3, 0.33)
+        # stencil plate
+        fill(L, [("rect", 49.6, 107.5, 52.6, 108.6)], CREAM, 0.6)
+    elif stage == 5:  # baled cubes on a pallet in front of the press
+        cshadow(L, 60.5, 147.2, 11, 1.8, 0.6)
+        box3(L, 50, 144.2, 71, 147.2, 2.2, WOOD3, top=PLY)
+        for x in (52, 59.5, 67):
+            fill(L, [("rect", x, 145.0, x + 2, 146.6)], C(36, 28, 24), 0.9)
+        for (x, y, c) in ((51, 138.3, TEAL3 * 0.9), (60, 138.6, OXRED * 0.85), (55.6, 132.6, C(100, 104, 108))):
+            box3(L, x, y, x + 8.4, y + 6, 3.6, c, metal=0.35, rust=0.35, wear=0.5)
+            for k in range(3):
+                fill(L, [("poly", [(x + 1 + k * 2.6, y + 0.6), (x + 2.2 + k * 2.6, y + 0.6), (x + 1.6 + k * 2.6, y + 5.4),
+                                   (x + 0.8 + k * 2.6, y + 5.4)])], tone_set(c)["shadow"], 0.55)
+            ink(L, [(x + 0.6, y + 1.6), (x + 3, y + 2.6), (x + 5.4, y + 1.4), (x + 7.8, y + 2.4)], 0.18,
+                tone_set(c)["line"], 0.9)
+            ink(L, [(x + 0.6, y + 4.0), (x + 3.4, y + 4.8), (x + 7.6, y + 3.8)], 0.18, tone_set(c)["line"], 0.9)
     return L
 
 
 def ammo_bench(stage):
     L = Layer()
-    wood_tex = lambda h, w: 0.09 * np.sin(np.arange(h, dtype=F)[:, None] * 1.1 + vnoise(h, w, 9, nseed()) * 4)
-    if stage == 1:  # heavy workbench with a vice + reloading press
-        shadow(L, 178, 141, 22, 3, 0.55)
-        for lx in (156.5, 198):
-            P(L, [("rect", lx, 94.5, lx + 1.6, 113)], WOOD_D, form="cylv", ol=1.0, bevel=1)
-        P(L, [("rect", 157, 95.5, 199.5, 104.5)], C(120, 98, 70), ol=1.4, bevel=1.6, grit=0.08, rust=0.2,
-          tex=lambda h, w: -0.15 * (((np.arange(h)[:, None] % 9) < 2) & ((np.arange(w)[None, :] % 9) < 2)))
-        P(L, [("rect", 155.5, 104.5, 201, 106.3)], WOOD_D, form="cylh", ol=1.2, bevel=1.2)
-        P(L, [("rect", 156, 113, 200, 117)], WOOD, form="cylh", ol=1.8, bevel=2.5, tex=wood_tex, grit=0.1, wear=0.3)
-        for lx in (158, 196):
-            P(L, [("rect", lx, 117, lx + 2.6, 140.5)], WOOD_D, form="cylv", ol=1.5, bevel=1.5, tex=wood_tex)
-        P(L, [("rect", 159, 129, 197, 131)], WOOD_D, form="cylh", ol=1.0, bevel=1.2)
+    if stage == 1:  # heavy workbench with pegboard, vice, reloading press, lamp
+        cshadow(L, 178, 140.8, 23, 2.6, 0.55)
+        # pegboard back panel
+        cel(L, [("rect", 158.5, 94.8, 198.5, 109.5)], PLY * 0.86, n=(0, 0, 1), ol=2.0, bevel=0.8)
+        for ix in range(20):
+            for iy in range(7):
+                fill(L, [("ell", 160 + ix * 1.95, 96.4 + iy * 1.95, 0.22, 0.22)], C(70, 48, 32), 0.75)
+        for lx in (156.5, 198.5):
+            cel(L, [("rect", lx, 94.5, lx + 1.8, 113.5)], WOOD3_D, form="cylv", ol=1.4, bevel=0.6)
+        # legs + stretcher
+        for lx in (158, 195.5):
+            cel(L, [("rect", lx, 116, lx + 2.6, 140.5)], WOOD3_D, form="cylv", ol=1.8, bevel=0.8)
+        cel(L, [("rect", 159, 130.5, 197, 132.2)], WOOD3_D, form="cylh", ol=1.2, bevel=0.6)
+        # top slab
+        box3(L, 155.5, 113.2, 201, 117, 5, WOOD3, top=PLY)
+        wood_grain(L, 157, 109.5, 200, 112.8, WOOD3_D, 2)
+        wood_grain(L, 157, 113.8, 200, 116.4, WOOD3_D, 2)
         # vice
-        P(L, [("rect", 160, 108, 166, 113)], C(54, 74, 78), ol=1.4, bevel=2, rust=0.35, wear=0.3)
-        P(L, [("line", [(158, 111.5), (168, 111.5)], 0.5)], STEEL_L, form="flat", ol=0.6)
-        # reloading press
-        P(L, [("rect", 175, 101, 178, 113)], CLOTH_R * 0.85, form="cylv", ol=1.3, bevel=1.5, rust=0.3, wear=0.3)
-        P(L, [("line", [(178, 104), (184, 100)], 0.5)], STEEL_L, form="flat", ol=0.6)
-        P(L, [("ell", 184.2, 99.8, 0.9, 0.9)], CHARC, form="sphere", ol=0.6, bevel=1)
-        # brass casings + a tray
-        P(L, [("rect", 186, 111, 196, 113)], STEEL_D, ol=1.0, bevel=1)
+        box3(L, 160.5, 108.6, 166, 113.2, 2, TEAL3, metal=0.5, wear=0.5)
+        cel(L, [("rect", 159.6, 107.2, 167, 108.8)], GUN, form="cylh", ol=1.2, metal=0.7)
+        cel(L, [("line", [(158.3, 111.4), (168.2, 111.4)], 0.42)], CHROME, form="cylh", ol=0.9, metal=1.0, bevel=0.3)
+        # reloading press (O-frame) with handle
+        cel(L, [("rect", 175, 106, 178.4, 113.2)], OXRED, form="cylv", ol=1.6, metal=0.6, wear=0.3)
+        cel(L, [("ell", 176.7, 105.5, 2.4, 1.6), ("-ell", 176.7, 105.5, 1.0, 0.7)], OXRED, form="sphere", ol=1.5,
+            metal=0.6)
+        cel(L, [("line", [(178, 104.6), (183.5, 101.2)], 0.38)], CHROME, form="flat", ol=0.9, metal=1, bevel=0.3)
+        cel(L, [("ell", 183.8, 101.0, 0.9, 0.9)], RUBBER, form="sphere", ol=0.9, metal=0.6, bevel=0.5)
+        # casings tray
+        box3(L, 185.5, 111.6, 195.5, 113.2, 2.4, GUN, metal=0.4)
         for k in range(6):
-            P(L, [("rect", 186.6 + k * 1.55, 108.4, 187.6 + k * 1.55, 111.2)], BRASS, form="cylv", ol=0.5, bevel=1,
-              grit=0.03, warm=1)
-        P(L, [("rect", 168, 110.5, 172, 113)], BONE * 0.8, form="cylv", ol=0.8, bevel=1)
-        # a desk lamp pooling amber light on the work
-        P(L, [("line", [(197, 113), (198.5, 104), (194, 100.5)], 0.45)], STEEL_D, form="flat", ol=0.6)
-        P(L, [("poly", [(191, 100), (195.5, 98.5), (196.5, 101.5), (192.5, 102.5)])], OLIVE_D, ol=0.9, bevel=1)
-        soft(L, [("poly", [(192, 102), (196, 101), (192, 113), (180, 113)])], BULB, 0.22, 3)
-        glow(L, 193.5, 102, 2.5, AMBER, 0.45)
-    elif stage == 3:  # ammo crates stacked by the bench
-        shadow(L, 166, 141, 12, 2.2, 0.5)
-        for (x, y, w, h, c) in ((157, 131, 15, 9.5, OLIVE), (172.5, 133, 12, 7.5, OLIVE_D), (159, 122, 11, 9, OLIVE_D)):
-            P(L, [("rect", x, y, x + w, y + h)], c, ol=1.6, bevel=2.5, rust=0.25, wear=0.3, grit=0.12)
-            P(L, [("rect", x + 0.6, y + h * 0.45, x + w - 0.6, y + h * 0.6)], c * 0.75, ol=0, bevel=1, form="flat")
-            P(L, [("rect", x + w * 0.35, y + 1.2, x + w * 0.65, y + 2.4)], C(186, 160, 100) * 0.9, ol=0,
-              bevel=1, form="flat")
-            rivets(L, [(x + 1, y + 1), (x + w - 1, y + 1)], STEEL)
+            x = 186.4 + k * 1.5
+            cel(L, [("rect", x, 108.6, x + 1.0, 111.4), ("ell", x + 0.5, 108.6, 0.5, 0.3)], BRASS * 1.1, form="cylv",
+                ol=0.8, metal=1.0, bevel=0.3, pad=4)
+        # desk lamp pooling light on the work
+        cel(L, [("line", [(197.6, 113), (199, 105.2), (194.8, 101.8)], 0.38)], GUN, form="flat", ol=0.9, metal=0.6)
+        soft(L, [("poly", [(191.5, 102.6), (196, 101.4), (193, 113), (181, 113)])], BULB, 0.18, 3)
+        cel(L, [("poly", [(190.6, 101.4), (195.2, 99.6), (196.6, 102.4), (192.2, 103.6)])], OD, ol=1.4, metal=0.6,
+            bevel=0.8)
+        glow2(L, 193.6, 103.2, 2.5, AMBER, 0.45)
+    elif stage == 3:  # ammo crates stacked under the bench
+        cshadow(L, 177, 141, 13, 2.0, 0.5)
+        for (x, y, w, h, c) in ((161.5, 133, 14, 7.5, OD), (176.5, 134.5, 12, 6, OD_D), (163, 125.6, 11, 6.6, OD_D)):
+            box3(L, x, y, x + w, y + h, 3.2, c, wear=0.4, rust=0.1)
+            fill(L, [("rect", x + 0.3, y + h * 0.42, x + w - 0.3, y + h * 0.56)], tone_set(c)["shadow"], 0.85)
+            fill(L, [("rect", x + w * 0.22, y + 1.0, x + w * 0.62, y + 2.0)], C(214, 196, 140), 0.55)
+            for hx in (x + 0.8, x + w - 1.6):
+                cel(L, [("rect", hx, y + 0.6, hx + 0.8, y + h - 0.6)], GUN, form="cylv", ol=0.8, metal=0.7, bevel=0.3,
+                    pad=4)
         # a belt of rounds draped over the top crate
-        cable(L, sag(160, 122.3, 168, 122.3, 1.6, 8), 0.8, BRASS, 0.7)
-    elif stage == 5:  # pegboard of tools + shelf of special-ammo cans
-        cans = [C(140, 64, 44), C(96, 128, 136), C(198, 150, 70), C(170, 176, 160)]
-        for x, c in zip((157.6, 162.8, 168.0, 185.8), cans):
-            P(L, [("rect", x, 99.6, x + 4.4, 104.5)], c, form="cylv", ol=1.1, bevel=1.4, rust=0.25, wear=0.3)
-            P(L, [("rect", x + 0.3, 101.4, x + 4.1, 102.6)], c * 0.6, ol=0, form="flat")
-        # tools on pegs: wrench + hammer
-        P(L, [("line", [(158.5, 96.6), (165, 98.2)], 0.6)], STEEL, form="flat", ol=0.7)
-        P(L, [("line", [(166.5, 96.8), (172.5, 96.8)], 0.6)], WOOD, form="flat", ol=0.7)
-        P(L, [("rect", 172, 95.8, 173.6, 98.4)], STEEL_D, ol=0.7, bevel=0.8)
-        # a belt-fed drum of special rounds by the bench leg
-        shadow(L, 193, 141, 4, 1.2, 0.5)
-        P(L, [("rect", 188.5, 133, 196.5, 140.5)], C(96, 128, 136), form="cylv", ol=1.4, bevel=1.8, rust=0.3, wear=0.3)
-        P(L, [("rect", 188.5, 135.5, 196.5, 137)], CHARC, ol=0, form="flat")
-        cable(L, sag(196, 134, 199.5, 140, -1, 6), 0.8, BRASS, 0.7)
+        pts = sag(163.5, 125.2, 172.5, 125.2, 1.6, 10)
+        for (x, y) in pts[1:-1]:
+            cel(L, [("rect", x - 0.32, y - 1.3, x + 0.32, y + 0.2), ("ell", x, y - 1.3, 0.32, 0.2)], BRASS * 1.1,
+                form="cylv", ol=0.7, metal=1.0, bevel=0.2, pad=4)
+        ink(L, pts, 0.28, C(50, 44, 40), 1)
+    elif stage == 5:  # tools on the pegboard + special-ammo cans + a drum
+        # wrench
+        cel(L, [("line", [(160.5, 97.6), (167.4, 100.6)], 0.55)], CHROME, form="cylh", ol=1.1, metal=1.0, bevel=0.3)
+        cel(L, [("ell", 160.2, 97.4, 1.1, 1.1), ("-poly", [(159.0, 96.4), (160.3, 97.2), (159.6, 96.0)])], CHROME,
+            form="sphere", ol=1.1, metal=1.0, bevel=0.4)
+        # hammer
+        cel(L, [("line", [(169.8, 96.6), (169.8, 103.0)], 0.6)], WOOD3, form="cylv", ol=1.1, bevel=0.3)
+        cel(L, [("rect", 168, 95.6, 171.8, 97.4)], GUN, form="cylh", ol=1.1, metal=0.9, bevel=0.3)
+        # cans on a shelf
+        cel(L, [("rect", 172.5, 104.4, 197, 105.6)], WOOD3_D, form="cylh", ol=1.2, bevel=0.5)
+        cans = [C(146, 70, 54), C(84, 120, 132), C(184, 148, 76), C(150, 154, 154)]
+        for x, c in zip((173.5, 179.4, 185.3, 191.2), cans):
+            drum(L, x + 2.2, 100.0, 104.3, 2.2, c, ry=0.55, ol=1.6, metal=0.6, wear=0.3)
+            fill(L, [("rect", x + 0.2, 101.6, x + 4.2, 102.6)], tone_set(c)["deep"], 0.8)
+        # drum of special rounds by the leg
+        cshadow(L, 192.5, 141, 4.6, 1.0, 0.5)
+        drum(L, 192.5, 133.5, 140.4, 4.0, C(90, 140, 160), ry=1.2, metal=0.5, wear=0.3)
+        fill(L, [("rect", 188.5, 136.0, 196.5, 137.2)], C(30, 30, 36), 0.85)
+        pts = sag(195.5, 134.5, 199.5, 140.4, -1, 6)
+        for (x, y) in pts:
+            cel(L, [("ell", x, y, 0.42, 0.42)], BRASS, form="sphere", ol=0.6, metal=1, bevel=0.2, pad=4)
     return L
 
 
@@ -879,254 +1247,369 @@ HEROES = ["ash_rook", "vesper_thorn", "pebble", "bolt_juno", "sister_cinder", "q
           "helm_wisp"]
 BOOTH = {"ash_rook": 14, "vesper_thorn": 35, "pebble": 56, "bolt_juno": 78,
          "sister_cinder": 162, "quill_marrow": 184, "nyx_caldera": 205, "helm_wisp": 226}
+HERO_ACCENT = {"ash_rook": C(150, 60, 48), "vesper_thorn": C(80, 112, 70), "pebble": C(120, 112, 100),
+               "bolt_juno": C(70, 110, 130), "sister_cinder": C(140, 56, 52), "quill_marrow": C(140, 112, 70),
+               "nyx_caldera": C(76, 64, 96), "helm_wisp": C(96, 108, 76)}
 BY = 93.0
 
 
+def wall_shadow(L, cx, top=0.0, bottom=BY + 0.2, strength=0.38):
+    """Soft drop shadow of a layer cast on the back wall, away from the door light."""
+    sg = 1.0 if cx < VPX else -1.0
+    dx, dy = int(-sg * 0.9 * S), int(0.9 * S)
+    sh = np.roll(np.roll(L.a, dy, 0), dx, 1)
+    sh = ndi.gaussian_filter(sh, 2.5) * strength
+    rows = np.zeros((H, 1), F)
+    rows[int(top * S):int(bottom * S)] = 1
+    sh = sh * rows
+    N = Layer()
+    N.blend(sh, 0, 0, C(10, 8, 20) + np.zeros((H, W, 3), F))
+    N.blend(L.a, 0, 0, L.rgb)
+    return N
+
+
 def station(hero, stage):
+    return wall_shadow(_station(hero, stage), BOOTH[hero])
+
+
+def _station(hero, stage):
+    """Each corner is a tidy zone on the back wall: a rug on the floor (r1), a floor piece (r1),
+    a wall piece (r3) and a centre-piece (r5), all inside m +/- 9."""
     L = Layer()
     m = BOOTH[hero]
-    wt = lambda h, w: 0.08 * np.sin(np.arange(h, dtype=F)[:, None] * 1.2 + vnoise(h, w, 9, nseed()) * 3)
+    acc = HERO_ACCENT[hero]
 
-    def crate(x0, x1, top, col=WOOD):
-        shadow(L, (x0 + x1) / 2, BY + 0.5, (x1 - x0) * 0.6, 1.4, 0.5)
-        P(L, [("rect", x0, top, x1, BY)], col, ol=1.5, bevel=2, tex=wt, grit=0.1, wear=0.3)
-        P(L, [("line", [(x0 + 0.5, top + 0.8), (x1 - 0.5, BY - 0.8)], 0.5)], col * 0.75, form="flat", ol=0)
+    def rug():
+        cel(L, [("poly", [(m - 9.0, BY + 1.8), (m + 9.0, BY + 1.8), (m + 8.0, BY - 0.4), (m - 8.0, BY - 0.4)])],
+            acc * 0.62, n=(0, -0.9, 0.45), ol=0.9, bevel=0, rim=0, alpha=0.75, grad=0)
+        ink(L, [(m - 8.4, BY + 1.1), (m + 8.4, BY + 1.1)], 0.12, CREAM * 0.7, 0.35)
 
-    def table(x0, x1, top, col=WOOD):
-        shadow(L, (x0 + x1) / 2, BY + 0.5, (x1 - x0) * 0.6, 1.4, 0.5)
-        P(L, [("rect", x0, top, x1, top + 2.2)], col, form="cylh", ol=1.5, bevel=1.5, tex=wt, wear=0.3)
-        for lx in (x0 + 0.8, x1 - 2.2):
-            P(L, [("rect", lx, top + 2.2, lx + 1.4, BY)], col * 0.75, form="cylv", ol=1.1, bevel=1)
+    def table(x0, x1, top, col=WOOD3):
+        cshadow(L, (x0 + x1) / 2, BY + 0.4, (x1 - x0) * 0.55, 1.0, 0.45)
+        for lx in (x0 + 0.8, x1 - 2.0):
+            cel(L, [("rect", lx, top + 1.6, lx + 1.2, BY)], col * 0.8, form="cylv", ol=1.4, bevel=0.5)
+        box3(L, x0, top, x1, top + 1.8, 2.6, col, top=col * 1.08 + 0.03)
+
+    def shelf(x0, x1, y):
+        cel(L, [("rect", x0, y, x1, y + 1.2)], WOOD3_D, form="cylh", ol=1.3, bevel=0.5)
+        for bx in (x0 + 1.2, x1 - 2.0):
+            cel(L, [("poly", [(bx, y + 1.2), (bx + 0.8, y + 1.2), (bx + 0.8, y + 3.2)])], GUN, ol=0.9, metal=0.6,
+                bevel=0.2, pad=4)
 
     if hero == "ash_rook":
-        if stage == 1:  # A-frame weapon rack holding her launcher
-            P(L, [("line", [(m - 8, BY), (m - 6, BY - 24)], 1.0), ("line", [(m + 8, BY), (m + 6, BY - 24)], 1.0),
-                  ("line", [(m - 7, BY - 12), (m + 7, BY - 12)], 0.9), ("line", [(m - 6.5, BY - 21), (m + 6.5, BY - 21)], 0.9)],
-              WOOD_D, form="flat", ol=1.2, bevel=1.2, tex=wt)
-            P(L, [("rect", m - 9, BY - 17, m + 8, BY - 13.4)], OLIVE_D, form="cylh", ol=1.5, bevel=1.8, rust=0.3,
-              wear=0.35)
-            P(L, [("rect", m + 8, BY - 17.6, m + 10, BY - 12.8)], STEEL_D, form="cylh", ol=1.2, bevel=1)
-            P(L, [("rect", m - 2, BY - 13.4, m, BY - 10.5)], CHARC, ol=0.8, bevel=1)
-            P(L, [("rect", m - 5, BY - 19.4, m - 1, BY - 17)], STEEL, ol=0.8, bevel=1)
-        elif stage == 3:  # open crate of rockets
-            crate(m - 8, m + 4, BY - 6.5, OLIVE_D)
+        if stage == 1:  # A-frame rack holding her launcher (left half of the corner)
+            rug()
+            r0 = m - 3.5
+            for (a, b) in (((r0 - 5.5, BY), (r0 - 4.0, BY - 21)), ((r0 + 5.5, BY), (r0 + 4.0, BY - 21))):
+                cel(L, [("line", [a, b], 0.85)], WOOD3_D, form="cylv", ol=1.3, bevel=0.5)
+            for y in (BY - 8.5, BY - 18):
+                cel(L, [("line", [(r0 - 5.2, y), (r0 + 5.2, y)], 0.75)], WOOD3_D, form="cylh", ol=1.2, bevel=0.4)
+            cel(L, [("rect", r0 - 6.5, BY - 15.6, r0 + 7.5, BY - 12.0), ("ell", r0 - 6.5, BY - 13.8, 0.7, 1.8)], OD,
+                form="cylh", ol=1.8, metal=0.35, wear=0.4)
+            cel(L, [("rect", r0 + 7.2, BY - 16.2, r0 + 9.4, BY - 11.4)], GUN, form="cylh", ol=1.4, metal=0.8)
+            cel(L, [("ell", r0 + 9.4, BY - 13.8, 0.6, 2.2)], C(24, 20, 20), n=(1, 0, 0.4), ol=0.8, bevel=0)
+            cel(L, [("rect", r0 - 0.6, BY - 12.0, r0 + 1.2, BY - 9.2)], RUBBER, n=(0, 0, 1), ol=1.0, bevel=0.4)
+            cel(L, [("rect", r0 - 3.4, BY - 18.2, r0 + 0.2, BY - 15.6)], GUN, ol=1.0, metal=0.8, bevel=0.4)
+            fill(L, [("rect", r0 + 2.6, BY - 15.0, r0 + 6.0, BY - 14.0)], YEL, 0.75)
+        elif stage == 3:  # open crate of rockets on the floor (right half)
+            cshadow(L, m + 4.5, BY + 0.6, 5, 1.0, 0.5)
+            box3(L, m + 0.8, BY - 4.4, m + 9.0, BY + 0.6, 2.2, OD_D, wear=0.4)
             for k in range(3):
-                y = BY - 7.4 - k * 1.9
-                x = m - 7.5 + k * 0.8
-                P(L, [("rect", x, y - 0.8, x + 8, y + 0.8)], OLIVE, form="cylh", ol=0.8, bevel=0.8)
-                P(L, [("poly", [(x + 8, y - 0.9), (x + 10.6, y), (x + 8, y + 0.9)])], C(150, 110, 60), ol=0.7, bevel=0.8,
-                  warm=1)
-                P(L, [("poly", [(x - 1.2, y - 1.3), (x + 0.4, y - 0.6), (x + 0.4, y + 0.6), (x - 1.2, y + 1.3)])], STEEL_D,
-                  ol=0.6, bevel=0.6)
-        elif stage == 5:  # sandbags + a second launcher + hazard plate
-            for (x, y) in ((m - 3, BY - 2.2), (m + 3.4, BY - 2.2), (m + 0.2, BY - 6)):
-                P(L, [("ell", x + 3, y, 3.4, 2.1)], CANVAS * 0.85, form="sphere", ol=1.2, bevel=2, grit=0.14)
-            pl = P(L, [("rect", m - 9, BY - 34, m + 7, BY - 28)], C(150, 120, 70), ol=1.3, bevel=1.5, rust=0.4,
-                   wear=0.3)
-            stripes(L, pl, CHARC, 1.3, 1.0, 0.85)
-            P(L, [("rect", m - 10, BY - 26.5, m + 9, BY - 23.6)], STEEL, form="cylh", ol=1.4, bevel=1.5, rust=0.3,
-              wear=0.3)
-            P(L, [("line", [(m - 9, BY - 26), (m - 7.6, BY - 29)], 0.4), ("line", [(m + 7, BY - 26), (m + 5.6, BY - 29)], 0.4)],
-              STEEL_D, form="flat", ol=0.5)
+                y = BY - 5.2 - k * 1.3
+                x = m + 1.2 + k * 0.6
+                cel(L, [("rect", x, y - 0.6, x + 5.6, y + 0.6)], OD, form="cylh", ol=0.9, metal=0.3, bevel=0.3, pad=5)
+                cel(L, [("poly", [(x + 5.6, y - 0.65), (x + 7.4, y), (x + 5.6, y + 0.65)])], OXRED, form="cylh", ol=0.9,
+                    metal=0.5, bevel=0.3, pad=5)
+            fill(L, [("rect", m + 2, BY - 2.4, m + 6.5, BY - 1.6)], C(214, 196, 140), 0.55)
+        elif stage == 5:  # spare launcher on wall pegs + a hazard sign
+            for x in (m - 7.5, m + 6.5):
+                cel(L, [("rect", x, BY - 31, x + 1.2, BY - 26.6)], GUN, ol=0.9, metal=0.6, bevel=0.3)
+            cel(L, [("rect", m - 9, BY - 30.2, m + 9, BY - 26.8), ("ell", m + 9, BY - 28.5, 0.6, 1.7)], GUN,
+                form="cylh", ol=1.8, metal=0.7, wear=0.3)
+            fill(L, [("rect", m - 3, BY - 29.8, m - 1.6, BY - 27.2)], YEL, 0.75)
+            fill(L, [("rect", m - 1.0, BY - 29.8, m + 0.4, BY - 27.2)], YEL, 0.75)
+            cel(L, [("poly", [(m + 5.5, BY - 24.2), (m + 8.8, BY - 18.6), (m + 2.2, BY - 18.6)])], YEL, n=(0, 0, 1),
+                ol=1.3, bevel=0, wear=0.3)
+            fill(L, [("rect", m + 5.2, BY - 22.4, m + 5.8, BY - 20.4)], C(30, 24, 22), 1)
+            fill(L, [("ell", m + 5.5, BY - 19.6, 0.32, 0.32)], C(30, 24, 22), 1)
     elif hero == "vesper_thorn":
         if stage == 1:  # bench with the long vial rifle on a bipod
-            table(m - 9, m + 9, BY - 10)
-            P(L, [("poly", [(m - 9, BY - 12.5), (m + 10, BY - 14), (m + 10, BY - 12.8), (m - 9, BY - 11.2)])],
-              STEEL_D, ol=1.1, bevel=1, rust=0.2)
-            P(L, [("poly", [(m - 10, BY - 13), (m - 3.5, BY - 13.6), (m - 3.2, BY - 11.2), (m - 9.5, BY - 10.6)])],
-              WOOD, ol=1.1, bevel=1.2, tex=wt)
-            P(L, [("rect", m - 2, BY - 16, m + 3, BY - 14)], CHARC, form="cylh", ol=0.9, bevel=1)
-            P(L, [("rect", m + 1, BY - 12.6, m + 2.2, BY - 11)], TONIC, form="cylv", ol=0.6, bevel=1)
-        elif stage == 3:  # hanging lantern + a rack of vials
-            P(L, [("line", [(m - 4, BY - 36), (m - 4, BY - 30)], 0.3)], CHARC, form="flat", ol=0.3)
-            glow(L, m - 4, BY - 27, 5.5, AMBER, 0.42)
-            P(L, [("poly", [(m - 6, BY - 30), (m - 2, BY - 30), (m - 1.6, BY - 24), (m - 6.4, BY - 24)])], BRASS,
-              ol=1.1, bevel=1.2, rust=0.2)
-            P(L, [("rect", m - 5.3, BY - 29, m - 2.7, BY - 25)], BULB, form="flat", ol=0, warm=1)
-            P(L, [("rect", m + 1, BY - 21, m + 10, BY - 19.8)], WOOD_D, form="cylh", ol=1.0, bevel=1)
+            rug()
+            table(m - 8.5, m + 8.5, BY - 9.5)
+            cel(L, [("poly", [(m - 8, BY - 12.6), (m + 9.6, BY - 13.6), (m + 9.6, BY - 12.6), (m - 8, BY - 11.6)])],
+                GUN, ol=1.3, metal=0.8, bevel=0.3)
+            cel(L, [("poly", [(m - 9.5, BY - 12.4), (m - 3.4, BY - 13.2), (m - 3.0, BY - 11.0), (m - 9.0, BY - 10.0)])],
+                WOOD3, ol=1.4, bevel=0.6)
+            cel(L, [("rect", m - 2.2, BY - 15.6, m + 3.2, BY - 13.6)], RUBBER, form="cylh", ol=1.1, metal=0.7)
+            cel(L, [("ell", m + 3.2, BY - 14.6, 0.4, 1.0)], C(150, 210, 230), n=(1, 0, 0.5), ol=0.6, bevel=0, gloss=1)
+            for k in (-1, 1):
+                ink(L, [(m + 7, BY - 12.6), (m + 7 + k * 1.2, BY - 9.6)], 0.2, INK3, 1)
+            cel(L, [("rect", m + 0.6, BY - 12.4, m + 2.0, BY - 10.6)], TONIC3, form="cylv", ol=0.8, gloss=0.6,
+                metal=0.6)
+        elif stage == 3:  # lantern on a bracket + a rack of tonic vials
+            ink(L, [(m - 6.5, BY - 30), (m - 3.5, BY - 30), (m - 3.5, BY - 28)], 0.3, C(40, 36, 40), 1)
+            glow2(L, m - 3.5, BY - 25, 5.0, AMBER, 0.4)
+            cel(L, [("poly", [(m - 5.4, BY - 28), (m - 1.6, BY - 28), (m - 1.2, BY - 26.8), (m - 5.8, BY - 26.8)])],
+                BRASS, ol=1.1, metal=0.8, bevel=0.3)
+            cel(L, [("rect", m - 5.2, BY - 26.8, m - 1.8, BY - 22.6)], BULB, n=(0, 0, 1), ol=1.1, bevel=0, rim=0,
+                line=C(120, 80, 30), gloss=0.5)
+            cel(L, [("rect", m - 5.8, BY - 22.6, m - 1.2, BY - 21.6)], BRASS, form="cylh", ol=1.0, metal=0.8, bevel=0.3)
+            shelf(m + 0.5, m + 9.5, BY - 19)
             for k in range(4):
-                P(L, [("rect", m + 1.6 + k * 2.2, BY - 24, m + 3.1 + k * 2.2, BY - 21)], TONIC * (0.85 + 0.1 * (k % 2)),
-                  form="cylv", ol=0.6, bevel=1, warm=0.4)
-        elif stage == 5:  # target sheet riddled with holes + glowing tonic crate
-            P(L, [("rect", m - 8, BY - 36, m + 2, BY - 24)], CANVAS, ol=1.2, bevel=1.2, rust=0.2, grit=0.12)
-            for r_ in (4.0, 2.6, 1.2):
-                P(L, [("ell", m - 3, BY - 30, r_, r_), ("-ell", m - 3, BY - 30, r_ - 0.5, r_ - 0.5)], CLOTH_R,
-                  form="flat", ol=0)
-            for (hx, hy) in ((-2.6, -30.4), (-3.8, -29), (-1.5, -31.5)):
-                P(L, [("ell", m + hx, BY + hy, 0.4, 0.4)], INK, form="flat", ol=0)
-            glow(L, m + 6, BY - 4, 5, TONIC, 0.3)
-            crate(m + 2, m + 10, BY - 5, OLIVE_D)
+                x = m + 1.3 + k * 2.1
+                cel(L, [("rect", x, BY - 22.6, x + 1.5, BY - 19), ("ell", x + 0.75, BY - 19, 0.75, 0.3)],
+                    TONIC3 * (0.9 + 0.1 * (k % 2)), form="cylv", ol=0.9, metal=0.5, gloss=0.4, pad=4)
+                cel(L, [("rect", x + 0.3, BY - 23.6, x + 1.2, BY - 22.6)], LEATH3, ol=0.6, bevel=0.2, pad=4)
+        elif stage == 5:  # paper target + glowing tonic crate
+            cel(L, [("rect", m - 8.6, BY - 34, m - 0.6, BY - 24)], CREAM, n=(0, 0, 1), ol=1.4, bevel=0.6)
+            ink(L, [(m - 6.5, BY - 34), (m - 6.5, BY - 35)], 0.2, INK3, 1)
+            for r_ in (3.4, 2.2, 1.0):
+                ink(L, [(m - 4.6 + math.cos(t) * r_, BY - 29 + math.sin(t) * r_) for t in np.linspace(0, 2 * math.pi, 28)],
+                    0.22, RED3, 0.95)
+            for (hx, hy) in ((-4.2, -29.4), (-5.0, -28.2), (-3.6, -30.4), (-2.0, -27.6)):
+                fill(L, [("ell", m + hx, BY + hy, 0.32, 0.32)], C(24, 18, 16), 1)
+            glow2(L, m + 5.4, BY - 4.5, 5.5, TONIC3, 0.32)
+            cshadow(L, m + 5, BY + 0.6, 5, 1.0, 0.5)
+            box3(L, m + 1.2, BY - 4.6, m + 8.8, BY + 0.6, 2.2, OD_D, wear=0.4)
             for k in range(3):
-                P(L, [("rect", m + 3 + k * 2.4, BY - 8, m + 4.6 + k * 2.4, BY - 5)], TONIC, form="cylv", ol=0.6,
-                  bevel=1, warm=0.5)
+                x = m + 2.2 + k * 2.2
+                cel(L, [("rect", x, BY - 7.6, x + 1.5, BY - 4.6), ("ell", x + 0.75, BY - 7.6, 0.75, 0.3)], TONIC3,
+                    form="cylv", ol=0.8, metal=0.5, gloss=0.4, pad=4)
     elif hero == "pebble":
-        if stage == 1:  # anvil on a stump
-            shadow(L, m, BY + 0.5, 7, 1.4, 0.5)
-            P(L, [("rect", m - 4, BY - 8, m + 4, BY)], WOOD_D, form="cylv", ol=1.5, bevel=2, tex=wt)
-            P(L, [("ell", m, BY - 8, 4, 0.9)], WOOD * 1.1, form="flat", ol=0.8, bevel=1)
-            P(L, [("poly", [(m - 7, BY - 13), (m + 5, BY - 13), (m + 7.5, BY - 12), (m + 4, BY - 10.6),
-                            (m + 2, BY - 10.6), (m + 2.5, BY - 8.2), (m - 3.5, BY - 8.2), (m - 3, BY - 10.6), (m - 5, BY - 11.6)])],
-              STEEL_D, ol=1.6, bevel=2, grit=0.05, wear=0.4)
-        elif stage == 3:  # the maul leaning on the wall
-            P(L, [("line", [(m + 3, BY - 1), (m + 8, BY - 26)], 1.0)], WOOD, form="flat", ol=1.2, bevel=1.2, tex=wt)
-            P(L, [("poly", [(m + 3.5, BY - 31), (m + 12, BY - 29.5), (m + 11.2, BY - 23.5), (m + 2.8, BY - 25)])],
-              STEEL, ol=1.6, bevel=2, rust=0.3, wear=0.4)
-            P(L, [("rect", m + 6.6, BY - 27.6, m + 8.6, BY - 24.4)], LEATHER, ol=0.5, form="flat")
-        elif stage == 5:  # stone blocks + a chain hoist
-            for (x, y, w, h) in ((m - 10, BY - 6, 7, 6), (m - 9, BY - 11.5, 6, 5.5), (m - 3, BY - 4.5, 5, 4.5)):
-                P(L, [("rect", x, y, x + w, y + h)], C(132, 122, 108), ol=1.4, bevel=2, grit=0.2)
-            P(L, [("rect", m - 9, BY - 40, m + 9, BY - 38)], STEEL_D, form="cylh", ol=1.2, bevel=1, rust=0.4)
+        if stage == 1:  # anvil on a stump (right half)
+            rug()
+            a0 = m + 3.0
+            cshadow(L, a0, BY + 0.5, 5, 1.0, 0.5)
+            drum(L, a0, BY - 7.0, BY, 3.2, WOOD3_D, ry=0.9, top=PLY)
+            for r_ in (2.0, 1.1):
+                ink(L, [(a0 + math.cos(t) * r_, BY - 7.0 + math.sin(t) * r_ * 0.28) for t in np.linspace(0, 6.3, 20)],
+                    0.12, WOOD3_D, 0.6)
+            cel(L, [("poly", [(a0 - 6.0, BY - 11.8), (a0 + 3.8, BY - 11.8), (a0 + 6.0, BY - 11.0), (a0 + 3.4, BY - 10.0),
+                              (a0 + 2.0, BY - 10.0), (a0 + 2.2, BY - 7.6), (a0 - 2.8, BY - 7.6), (a0 - 2.4, BY - 10.0),
+                              (a0 - 4.4, BY - 10.6)])], GUN * 0.9, ol=2.0, metal=0.8, bevel=1.2)
+            hline(L, [(a0 - 5.0, BY - 11.4), (a0 + 3.6, BY - 11.4)], 0.16, SPEC, 0.7)
+        elif stage == 3:  # the maul leaning on the wall, far right
+            cel(L, [("line", [(m + 7.6, BY - 0.6), (m + 8.6, BY - 22)], 0.8)], WOOD3, form="cylv", ol=1.4, bevel=0.4)
+            cel(L, [("rect", m + 6.9, BY - 3.4, m + 8.4, BY - 0.6)], LEATH3, ol=0.8, bevel=0.3)
+            box3(L, m + 4.4, BY - 26.4, m + 12.4, BY - 21.0, 2.6, GUN, metal=0.6, wear=0.5)
+            fill(L, [("rect", m + 4.4, BY - 24.4, m + 12.4, BY - 23.2)], tone_set(GUN)["line"], 0.8)
+            cel(L, [("rect", m + 7.8, BY - 21.0, m + 9.2, BY - 19.6)], LEATH3, ol=0.8, bevel=0.3)
+        elif stage == 5:  # chain hoist + a quarried stone block (left half)
+            hx = m - 5.0
+            cel(L, [("rect", m - 9.5, BY - 36, m + 1.5, BY - 34.4)], GUN, form="cylh", ol=1.4, metal=0.7, rust=0.3)
+            cel(L, [("rect", hx - 1.7, BY - 34.4, hx + 1.7, BY - 31.4)], OXRED, ol=1.3, metal=0.5, bevel=0.5)
             for k in range(9):
-                P(L, [("ell", m - 2, BY - 37 + k * 2.0, 0.6, 1.0), ("-ell", m - 2, BY - 37 + k * 2.0, 0.25, 0.5)],
-                  STEEL_L, form="flat", ol=0.4, bevel=0.6)
-            P(L, [("poly", [(m - 3.5, BY - 19.5), (m - 0.5, BY - 19.5), (m - 2, BY - 16.5)])], STEEL, ol=0.8, bevel=1)
+                y = BY - 30.8 + k * 1.6
+                cel(L, [("ell", hx, y, 0.5 if k % 2 else 0.25, 0.85)], STEEL3, form="sphere", ol=0.7, metal=0.9,
+                    bevel=0.2, pad=4)
+            cel(L, [("poly", [(hx - 1.3, BY - 16.4), (hx + 1.3, BY - 16.4), (hx, BY - 14.6)])], GUN, ol=0.9,
+                metal=0.8, bevel=0.3)
+            ink(L, [(hx, BY - 14.6), (hx - 3.2, BY - 9.6)], 0.2, C(60, 56, 54), 1)
+            ink(L, [(hx, BY - 14.6), (hx + 3.2, BY - 9.6)], 0.2, C(60, 56, 54), 1)
+            cshadow(L, hx, BY + 0.6, 5.5, 1.0, 0.5)
+            box3(L, hx - 4.0, BY - 9.6, hx + 3.2, BY + 0.4, 2.4, C(100, 94, 88), wear=0.3)
+            ink(L, [(hx - 2.6, BY - 6), (hx - 1.0, BY - 4.6), (hx - 0.2, BY - 5.6)], 0.15, C(70, 64, 60), 0.8)
     elif hero == "bolt_juno":
         if stage == 1:  # cable spool + car battery
-            shadow(L, m, BY + 0.5, 8, 1.4, 0.5)
-            P(L, [("ell", m - 3, BY - 5.5, 5.5, 5.5), ("-ell", m - 3, BY - 5.5, 1.2, 1.2)], WOOD, form="flat", ol=1.5,
-              bevel=1.8, tex=wt)
-            P(L, [("ell", m - 3, BY - 5.5, 3.8, 3.8), ("-ell", m - 3, BY - 5.5, 1.2, 1.2)], C(176, 100, 56),
-              form="sphere", ol=0.8, bevel=1.5, warm=0.6,
-              tex=lambda h, w: 0.15 * np.sin(np.hypot(*np.mgrid[0:h, 0:w] - np.array([h / 2, w / 2])[:, None, None]) * 2.5))
-            P(L, [("rect", m + 3, BY - 6, m + 10, BY)], CHARC, ol=1.4, bevel=1.5, wear=0.3)
-            P(L, [("rect", m + 4, BY - 7, m + 5.4, BY - 6)], CLOTH_R, ol=0.6, form="flat")
-            P(L, [("rect", m + 7.6, BY - 7, m + 9, BY - 6)], STEEL_L, ol=0.6, form="flat")
-            cable(L, [(m + 4.7, BY - 7), (m + 2, BY - 10), (m - 3, BY - 11.5)], 0.4, CLOTH_R, 0.5)
-        elif stage == 3:  # wires strung on ceramic insulators, a spark
-            for (x, y) in ((m - 9, BY - 30), (m - 1, BY - 26), (m + 8, BY - 31)):
-                P(L, [("rect", x - 0.9, y - 1.6, x + 0.9, y + 0.6)], BONE, form="cylv", ol=0.8, bevel=1)
-            cable(L, sag(m - 9, BY - 30, m - 1, BY - 26, 1.2, 8), 0.4, CHARC, 0.5)
-            cable(L, sag(m - 1, BY - 26, m + 8, BY - 31, 1.5, 8), 0.4, CHARC, 0.5)
-            glow(L, m + 3.5, BY - 27.3, 3.4, C(150, 200, 230), 0.5)
-            P(L, [("line", [(m + 3, BY - 29.5), (m + 4.5, BY - 27.5), (m + 2.8, BY - 26.8), (m + 4.2, BY - 24.5)], 0.25)],
-              C(230, 240, 250), form="flat", ol=0)
-        elif stage == 5:  # breaker cabinet with live gauges
-            shadow(L, m + 4, BY + 0.5, 6, 1.4, 0.5)
-            P(L, [("rect", m - 1, BY - 22, m + 9.5, BY)], C(70, 84, 82), ol=1.6, bevel=2, rust=0.4, streaks=1.0, wear=0.3)
-            for (gx, gy) in ((m + 1.8, BY - 18), (m + 6.4, BY - 18)):
-                glow(L, gx, gy, 2.2, C(140, 200, 120), 0.35)
-                P(L, [("ell", gx, gy, 1.6, 1.6)], BONE, form="sphere", ol=0.7, bevel=1)
-                P(L, [("line", [(gx, gy), (gx + 0.9, gy - 0.9)], 0.2)], CHARC, form="flat", ol=0)
+            rug()
+            cshadow(L, m, BY + 0.5, 8, 1.0, 0.5)
+            cel(L, [("ell", m - 3.4, BY - 5.4, 5.2, 5.4), ("-ell", m - 3.4, BY - 5.4, 1.0, 1.0)], WOOD3,
+                n=(0.2, 0, 1), ol=1.8, bevel=1.0)
+            cel(L, [("ell", m - 3.4, BY - 5.4, 3.6, 3.7), ("-ell", m - 3.4, BY - 5.4, 1.0, 1.0)], C(186, 104, 54),
+                form="sphere", ol=1.0, bevel=0.5, metal=0.9)
+            for r_ in (2.0, 2.8):
+                ink(L, [(m - 3.4 + math.cos(t) * r_, BY - 5.4 + math.sin(t) * r_) for t in np.linspace(0, 6.3, 24)],
+                    0.12, C(110, 54, 24), 0.7)
+            box3(L, m + 2.8, BY - 5.6, m + 9.6, BY, 2.4, RUBBER, top=C(60, 58, 64), wear=0.2)
+            fill(L, [("rect", m + 3.4, BY - 3.4, m + 9.0, BY - 2.2)], YEL, 0.75)
+            for (tx, c) in ((m + 4.2, RED3), (m + 8.0, GUN)):
+                cel(L, [("rect", tx, BY - 7.0, tx + 1.2, BY - 6.0)], c, form="cylv", ol=0.8, metal=0.8, bevel=0.2,
+                    pad=4)
+            cel(L, [("line", [(m + 4.8, BY - 7), (m + 2.4, BY - 10.2), (m - 3.4, BY - 11.6)], 0.32)], RED3, form="flat",
+                ol=0.8, bevel=0.3)
+        elif stage == 3:  # wires strung on ceramic insulators high on the wall, an arcing spark
+            pts = [(m - 8.6, BY - 33), (m - 0.6, BY - 30.5), (m + 8.4, BY - 34)]
+            ink(L, sag(pts[0][0], pts[0][1], pts[1][0], pts[1][1], 1.2, 12), 0.3, C(36, 32, 34), 1)
+            ink(L, sag(pts[1][0], pts[1][1], pts[2][0], pts[2][1], 1.4, 12), 0.3, C(36, 32, 34), 1)
+            for (x, y) in pts:
+                cel(L, [("rect", x - 0.4, y - 3.0, x + 0.4, y - 1.4)], GUN, ol=0.8, metal=0.8, bevel=0.2, pad=4)
+                for k in range(3):
+                    cel(L, [("ell", x, y - 1.2 + k * 0.7, 1.0 - k * 0.15, 0.36)], CREAM, form="sphere", ol=0.8,
+                        metal=0.6, bevel=0.2, pad=4)
+            glow2(L, m + 3.8, BY - 30.4, 3.6, C(150, 210, 240), 0.55)
+            zz = [(m + 3.0, BY - 33.2), (m + 4.6, BY - 31.0), (m + 2.8, BY - 30.2), (m + 4.4, BY - 28.0)]
+            ink(L, zz, 0.3, C(170, 220, 255), 0.9)
+            ink(L, zz, 0.12, C(255, 255, 255), 1)
+        elif stage == 5:  # wall-mounted breaker panel with live gauges + conduit
+            box3(L, m - 1.0, BY - 26, m + 9.0, BY - 13, 1.4, TEAL3, metal=0.3, wear=0.4, rust=0.1)
+            for gx in (m + 1.6, m + 6.4):
+                glow2(L, gx, BY - 22.6, 2.3, C(140, 220, 140), 0.35)
+                gauge(L, gx, BY - 22.6, 1.4, C(206, 230, 196), needle=0.3)
             for k in range(4):
-                P(L, [("rect", m + 0.6 + k * 2.2, BY - 13, m + 2.0 + k * 2.2, BY - 10)], CHARC, ol=0.4, form="flat")
-                P(L, [("rect", m + 0.8 + k * 2.2, BY - 12.6 + (k % 2) * 1.2, m + 1.8 + k * 2.2, BY - 11.6 + (k % 2) * 1.2)],
-                  BONE, ol=0, form="flat")
-            pl = shape([("rect", m, BY - 6, m + 8.5, BY - 4)])
-            stripes(L, pl, C(186, 140, 60), 1.0, 1.0, 0.8)
+                x = m + 0.2 + k * 2.2
+                fill(L, [("rect", x, BY - 19.2, x + 1.5, BY - 16.4)], C(26, 26, 30), 1)
+                cel(L, [("rect", x + 0.25, BY - 18.9 + (k % 2) * 1.2, x + 1.25, BY - 17.8 + (k % 2) * 1.2)], CREAM,
+                    ol=0, bevel=0.2, pad=4)
+            st = shape([("rect", m - 0.6, BY - 15.4, m + 8.6, BY - 14.0)])
+            fill(L, [("rect", m - 0.6, BY - 15.4, m + 8.6, BY - 14.0)], YEL, 0.9)
+            stripes(L, st, C(30, 26, 24), 0.9, 1.0, 0.9)
+            cel(L, [("rect", m + 6.6, BY - 13, m + 7.6, BY - 6.4)], GUN, form="cylv", ol=1.0, metal=0.7, bevel=0.3)
     elif hero == "sister_cinder":
         if stage == 1:  # medicine table: tonic bottles, bandage rolls, a basin
-            table(m - 9, m + 9, BY - 10, WOOD)
-            P(L, [("rect", m - 8.6, BY - 10.6, m + 8.6, BY - 9.8)], CANVAS, form="flat", ol=0.6, bevel=1)
-            for k, c in enumerate((TONIC, AMBER * 0.85, TONIC * 0.8)):
-                x = m - 7 + k * 2.8
-                glow(L, x + 0.8, BY - 12, 1.6, c, 0.18)
-                P(L, [("rect", x, BY - 14, x + 1.8, BY - 10.6)], c, form="cylv", ol=0.7, bevel=1, warm=0.5)
-                P(L, [("rect", x + 0.4, BY - 15, x + 1.4, BY - 14)], LEATHER, ol=0.4, form="flat")
+            rug()
+            table(m - 8.5, m + 8.5, BY - 9.5)
+            cel(L, [("rect", m - 8.2, BY - 10.2, m + 8.2, BY - 9.5)], CREAM, n=(0, -0.6, 0.8), ol=0.8, bevel=0)
+            for k, c in enumerate((TONIC3, C(214, 150, 70), TONIC3 * 0.85)):
+                x = m - 7 + k * 2.6
+                glow2(L, x + 0.8, BY - 12, 1.8, c, 0.18)
+                cel(L, [("rect", x, BY - 13.4, x + 1.7, BY - 10.2), ("ell", x + 0.85, BY - 10.2, 0.85, 0.3)], c,
+                    form="cylv", ol=0.9, metal=0.6, gloss=0.4, pad=4)
+                cel(L, [("rect", x + 0.45, BY - 14.4, x + 1.25, BY - 13.4)], LEATH3, ol=0.6, bevel=0.2, pad=4)
             for k in range(2):
-                P(L, [("ell", m + 2 + k * 2.6, BY - 11.6, 1.2, 1.1)], BONE, form="sphere", ol=0.7, bevel=1)
-            P(L, [("ell", m + 7, BY - 11.2, 2.0, 0.8)], STEEL_L, form="cylh", ol=0.8, bevel=1)
-        elif stage == 3:  # wall cabinet with a faded red cross
-            P(L, [("rect", m - 6, BY - 30, m + 6, BY - 18)], BONE * 0.9, ol=1.5, bevel=2, rust=0.35, streaks=0.8,
-              wear=0.3)
-            P(L, [("rect", m - 1.2, BY - 28, m + 1.2, BY - 20)], CLOTH_R, ol=0, form="flat", grit=0.15)
-            P(L, [("rect", m - 4, BY - 25.2, m + 4, BY - 22.8)], CLOTH_R, ol=0, form="flat", grit=0.15)
-            P(L, [("rect", m + 4.4, BY - 25, m + 5.2, BY - 23)], STEEL, ol=0.4, form="flat")
-        elif stage == 5:  # cot with a blanket + IV stand
-            shadow(L, m, BY + 0.6, 10, 1.4, 0.5)
-            P(L, [("rect", m - 10, BY - 6, m + 6, BY - 4.4)], STEEL_D, form="cylh", ol=1.2, bevel=1)
-            for lx in (m - 9.5, m + 4.8):
-                P(L, [("line", [(lx, BY - 4.4), (lx + 0.6, BY)], 0.5)], STEEL_D, form="flat", ol=0.6)
-            P(L, [("poly", [(m - 10, BY - 6), (m + 6, BY - 6), (m + 6.5, BY - 3.6), (m - 1, BY - 3.2), (m - 10.5, BY - 4)])],
-              C(108, 112, 84), ol=1.2, bevel=1.5, grit=0.15)
-            P(L, [("ell", m - 8, BY - 6.8, 2.2, 1.2)], CANVAS, form="sphere", ol=0.8, bevel=1)
-            P(L, [("line", [(m + 9, BY), (m + 9, BY - 20)], 0.5), ("line", [(m + 7, BY), (m + 11, BY)], 0.5),
-                  ("line", [(m + 7.8, BY - 20), (m + 10.2, BY - 20)], 0.4)], STEEL, form="flat", ol=0.6)
-            glow(L, m + 8.4, BY - 17.5, 2.0, TONIC, 0.3)
-            P(L, [("rect", m + 7.4, BY - 19.6, m + 9.4, BY - 15.6)], TONIC, ol=0.6, form="cylv", bevel=1, warm=0.5)
-            cable(L, sag(m + 8.4, BY - 15.6, m + 3, BY - 6.5, 3, 8), 0.2, C(180, 180, 170), 0.2)
+                cel(L, [("ell", m + 1.6 + k * 2.4, BY - 11.2, 1.1, 1.1)], CREAM, form="sphere", ol=1.0, bevel=0.4)
+                ink(L, [(m + 1.6 + k * 2.4, BY - 11.2), (m + 2.2 + k * 2.4, BY - 11.0)], 0.12, C(150, 130, 100), 0.8)
+            cel(L, [("ell", m + 6.6, BY - 10.6, 1.9, 0.7)], CHROME, form="cylh", ol=1.1, metal=1.0, bevel=0.3)
+        elif stage == 3:  # enamel wall cabinet with a red cross
+            box3(L, m - 6, BY - 30, m + 6, BY - 18.5, 1.6, CREAM, gloss=0.4, wear=0.3)
+            fill(L, [("rect", m - 1.1, BY - 28.2, m + 1.1, BY - 20.4)], RED3, 1)
+            fill(L, [("rect", m - 3.9, BY - 25.4, m + 3.9, BY - 23.2)], RED3, 1)
+            ink(L, [(m, BY - 30), (m, BY - 18.5)], 0.14, tone_set(CREAM)["line"], 0.5)
+            cel(L, [("rect", m + 4.2, BY - 25.2, m + 5.0, BY - 23.0)], CHROME, ol=0.6, metal=1, bevel=0.2, pad=4)
+        elif stage == 5:  # IV stand by the table + a medic bag on the floor
+            cel(L, [("line", [(m + 9.8, BY), (m + 9.8, BY - 22)], 0.38)], CHROME, form="cylv", ol=0.9, metal=1)
+            ink(L, [(m + 8.2, BY), (m + 11.4, BY)], 0.36, GUN, 1)
+            ink(L, [(m + 8.4, BY - 22), (m + 11.2, BY - 22)], 0.3, GUN, 1)
+            glow2(L, m + 9.0, BY - 19.4, 2.2, TONIC3, 0.3)
+            cel(L, [("poly", [(m + 8.0, BY - 21.6), (m + 10.0, BY - 21.6), (m + 10.2, BY - 17.8), (m + 9.0, BY - 17.0),
+                              (m + 7.8, BY - 17.8)])], TONIC3, ol=0.9, gloss=0.6, metal=0.4, bevel=0.6)
+            ink(L, sag(m + 9.0, BY - 17.0, m + 7.0, BY - 9.6, 2.0, 10), 0.12, C(200, 200, 190), 0.8)
+            cshadow(L, m - 1, BY + 0.9, 4.5, 0.8, 0.5)
+            cel(L, [("poly", [(m - 4.4, BY + 0.9), (m + 2.4, BY + 0.9), (m + 2.0, BY - 3.0), (m + 0.4, BY - 4.0),
+                              (m - 2.4, BY - 4.0), (m - 4.0, BY - 3.0)])], RED3 * 0.9, form="cylv", ol=1.4, bevel=1.0)
+            fill(L, [("rect", m - 1.6, BY - 2.6, m - 0.4, BY - 0.6)], CREAM, 1)
+            fill(L, [("rect", m - 2.0, BY - 2.2, m - 0.0, BY - 1.0)], CREAM, 1)
+            cel(L, [("line", sag(m - 2.6, BY - 4.0, m + 0.6, BY - 4.0, -1.4, 8), 0.32)], LEATH3, form="flat", ol=0.7,
+                bevel=0.2)
     elif hero == "quill_marrow":
         if stage == 1:  # writing desk with an open field journal + candle
-            table(m - 9, m + 9, BY - 10, WOOD_D)
-            P(L, [("poly", [(m - 6, BY - 10.6), (m - 0.4, BY - 11.4), (m + 5, BY - 10.6), (m + 5, BY - 10), (m - 6, BY - 10)])],
-              BONE, ol=0.8, bevel=1, form="flat")
+            rug()
+            table(m - 8.5, m + 8.5, BY - 9.5, WOOD3_D)
+            cel(L, [("poly", [(m - 5.6, BY - 10.0), (m - 0.4, BY - 10.8), (m + 4.8, BY - 10.0), (m + 4.8, BY - 9.6),
+                              (m - 5.6, BY - 9.6)])], CREAM, n=(0, -0.8, 0.6), ol=1.0, bevel=0)
+            ink(L, [(m - 0.4, BY - 10.8), (m - 0.4, BY - 9.6)], 0.12, C(120, 100, 80), 0.9)
             for k in range(3):
-                P(L, [("line", [(m - 5, BY - 10.5 + 0 * k), (m - 1, BY - 10.9)], 0.12)], CHARC, form="flat", ol=0)
-            P(L, [("line", [(m + 6, BY - 14.5), (m + 3.6, BY - 10.6)], 0.25)], BONE, form="flat", ol=0.3)
-            glow(L, m - 7, BY - 15, 2.6, AMBER, 0.4)
-            P(L, [("rect", m - 7.6, BY - 13.6, m - 6.4, BY - 10.6)], BONE, form="cylv", ol=0.5, bevel=1)
-            P(L, [("ell", m - 7, BY - 14.4, 0.4, 0.7)], BULB, form="flat", ol=0)
+                ink(L, [(m - 4.8, BY - 10.0 - k * 0.0 + 0.1), (m - 1.2, BY - 10.5)], 0.08, C(90, 80, 70), 0.6)
+            cel(L, [("line", [(m + 6.2, BY - 14.6), (m + 3.6, BY - 10.4)], 0.22)], CREAM, form="flat", ol=0.6)
+            glow2(L, m - 6.8, BY - 15, 3.0, AMBER, 0.42)
+            cel(L, [("rect", m - 7.4, BY - 13.4, m - 6.2, BY - 10.0)], CREAM, form="cylv", ol=0.9, bevel=0.3)
+            cel(L, [("ell", m - 6.8, BY - 14.3, 0.45, 0.8)], BULB, n=(0, 0, 1), ol=0.5, bevel=0, rim=0,
+                line=C(200, 110, 40))
         elif stage == 3:  # shelf of specimen jars
-            P(L, [("rect", m - 9, BY - 21, m + 9, BY - 19.6)], WOOD_D, form="cylh", ol=1.0, bevel=1)
+            shelf(m - 9, m + 9, BY - 20)
             for k in range(4):
-                x = m - 8 + k * 4.3
-                c = [TONIC * 0.8, C(150, 140, 90), TONIC, C(120, 100, 80)][k]
-                P(L, [("rect", x, BY - 25, x + 3.2, BY - 21)], c, form="cylv", ol=0.7, bevel=1.2, warm=0.2)
-                P(L, [("rect", x - 0.2, BY - 25.8, x + 3.4, BY - 25)], LEATHER, ol=0.4, form="flat")
-                P(L, [("ell", x + 1.6, BY - 23, 0.9, 0.7)], BONE * 0.8, form="sphere", ol=0, bevel=1)
+                x = m - 8 + k * 4.2
+                c = [TONIC3 * 0.8, C(170, 156, 100), TONIC3, C(150, 120, 96)][k]
+                cel(L, [("rect", x, BY - 24.4, x + 3.2, BY - 20), ("ell", x + 1.6, BY - 20, 1.6, 0.4)], c,
+                    form="cylv", ol=1.0, metal=0.5, gloss=0.5)
+                cel(L, [("rect", x - 0.2, BY - 25.4, x + 3.4, BY - 24.4)], LEATH3, form="cylh", ol=0.8, bevel=0.3)
+                fill(L, [("ell", x + 1.6, BY - 22.2, 0.9, 0.7)], tone_set(c)["deep"], 0.7)
         elif stage == 5:  # pinboard: map, notes, red string
-            P(L, [("rect", m - 9, BY - 40, m + 9, BY - 27)], C(128, 98, 66), ol=1.4, bevel=1.6, grit=0.14)
-            P(L, [("poly", [(m - 7.6, BY - 38.6), (m + 1, BY - 39), (m + 1.4, BY - 31.4), (m - 7.4, BY - 31)])],
-              C(176, 160, 120), ol=0.6, bevel=1, grit=0.12)
-            for (nx, ny) in ((m + 2.6, BY - 38), (m + 5.4, BY - 34), (m + 3, BY - 31), (m - 5, BY - 30)):
-                P(L, [("rect", nx, ny, nx + 2.6, ny + 2.4)], BONE, ol=0.4, bevel=0.6, form="flat")
-            P(L, [("line", [(m - 4, BY - 36), (m + 4, BY - 37), (m + 6.6, BY - 33), (m - 3.6, BY - 29)], 0.15)],
-              CLOTH_R, form="flat", ol=0)
+            cel(L, [("rect", m - 9, BY - 38, m + 9, BY - 26)], C(150, 112, 72), n=(0, 0, 1), ol=1.8, bevel=0.8)
+            cel(L, [("poly", [(m - 7.6, BY - 36.6), (m + 0.8, BY - 37), (m + 1.2, BY - 29.6), (m - 7.4, BY - 29.2)])],
+                C(200, 186, 146), n=(0, 0, 1), ol=1.0, bevel=0)
+            ink(L, [(m - 6.5, BY - 33), (m - 4, BY - 34.5), (m - 1.6, BY - 32), (m, BY - 33.6)], 0.14,
+                C(110, 130, 120), 0.8)
+            for (nx_, ny_) in ((m + 2.4, BY - 36.6), (m + 5.4, BY - 33), (m + 2.8, BY - 30), (m - 5, BY - 28.8)):
+                cel(L, [("rect", nx_, ny_, nx_ + 2.6, ny_ + 2.3)], CREAM, n=(0, 0, 1), ol=0.7, bevel=0, rim=0, pad=4)
+                fill(L, [("ell", nx_ + 1.3, ny_ + 0.3, 0.35, 0.35)], RED3, 1)
+            ink(L, [(m - 4, BY - 34.6), (m + 3.7, BY - 36.3), (m + 6.7, BY - 32.7), (m - 3.7, BY - 28.5)], 0.12, RED3, 1)
     elif hero == "nyx_caldera":
-        if stage == 1:  # dark footlocker
-            crate(m - 7, m + 7, BY - 7, C(64, 56, 66))
-            P(L, [("rect", m - 1, BY - 6.4, m + 1, BY - 4.6)], BRASS, ol=0.5, bevel=0.8, warm=1)
+        if stage == 1:  # dark footlocker with brass corners
+            rug()
+            cshadow(L, m, BY + 0.6, 7.5, 1.0, 0.5)
+            box3(L, m - 7, BY - 6.2, m + 7, BY + 0.4, 2.8, C(70, 62, 80), wear=0.3)
+            ink(L, [(m - 7, BY - 4.6), (m + 7, BY - 4.6)], 0.2, tone_set(C(70, 62, 80))["line"], 0.9)
+            cel(L, [("rect", m - 1.0, BY - 5.6, m + 1.0, BY - 3.6)], BRASS, ol=0.8, metal=1, bevel=0.3)
+            for (cx_, cy_) in ((m - 6.4, BY - 5.6), (m + 5.6, BY - 5.6), (m - 6.4, BY - 0.6), (m + 5.6, BY - 0.6)):
+                fill(L, [("rect", cx_, cy_, cx_ + 0.8, cy_ + 0.8)], BRASS * 1.1, 1)
         elif stage == 3:  # crossed twin blades on the wall
-            for (a, b) in (((m - 6, BY - 32), (m + 5, BY - 19)), ((m + 6, BY - 32), (m - 5, BY - 19))):
-                P(L, [("line", [a, ((a[0] + b[0]) * 0.5 + (b[0] - a[0]) * 0.18, (a[1] + b[1]) * 0.5 + 1.4)], 0.9),
-                      ("line", [((a[0] + b[0]) * 0.5 + (b[0] - a[0]) * 0.18, (a[1] + b[1]) * 0.5 + 1.4), b], 0.9)],
-                  STEEL_L, form="flat", ol=1.0, bevel=1.0, grit=0.03)
-            for (x, y) in ((m - 4.6, BY - 20.6), (m + 4.6, BY - 20.6)):
-                P(L, [("ell", x, y, 1.2, 1.2)], LEATHER, form="sphere", ol=0.6, bevel=1)
-        elif stage == 5:  # hooded cloak on a hook + a smoke-bomb pouch + amber lamp
-            P(L, [("poly", [(m + 3, BY - 34), (m + 7, BY - 33), (m + 9, BY - 20), (m + 8, BY - 9), (m + 2.5, BY - 9),
-                            (m + 1.8, BY - 22)])], C(60, 54, 64), ol=1.4, bevel=2.5, grit=0.12, form="cylv")
-            P(L, [("ell", m + 5, BY - 33.4, 2.4, 2.2)], C(48, 44, 52), form="sphere", ol=1.0, bevel=1.5)
-            glow(L, m - 4, BY - 13, 3.4, AMBER, 0.45)
-            P(L, [("rect", m - 5.6, BY - 15.4, m - 2.4, BY - 10.4)], BRASS, ol=0.9, bevel=1)
-            P(L, [("rect", m - 5, BY - 14.6, m - 3, BY - 11.4)], BULB, ol=0, form="flat")
-            for k in range(3):
-                P(L, [("ell", m - 6 + k * 2.4, BY - 8.6, 1.0, 1.0)], CHARC, form="sphere", ol=0.6, bevel=1)
+            for sgn in (-1, 1):
+                a, b = (m - 3.5 - 5.5 * sgn, BY - 31), (m - 3.5 + 4.5 * sgn, BY - 19.5)
+                mid = ((a[0] + b[0]) * 0.5 + (b[0] - a[0]) * 0.12, (a[1] + b[1]) * 0.5 + 1.0)
+                cel(L, [("poly", [(a[0] - 0.2 * sgn, a[1]), (mid[0] - 0.6, mid[1] - 0.2), (b[0], b[1]),
+                                  (mid[0] + 0.6, mid[1] + 0.4)])], CHROME, ol=1.4, metal=1.0, bevel=0.6)
+                hline(L, [a, mid], 0.12, SPEC, 0.8)
+                cel(L, [("line", [(b[0] - sgn * 0.6, b[1] - 1.4), (b[0] + sgn * 1.4, b[1] + 0.4)], 0.5)], BRASS,
+                    form="flat", ol=0.8, metal=1, bevel=0.2)
+                cel(L, [("line", [b, (b[0] + sgn * 1.4, b[1] + 2.2)], 0.55)], LEATH3, form="flat", ol=0.9, bevel=0.2)
+        elif stage == 5:  # hooded cloak on a hook + oil lamp
+            cel(L, [("poly", [(m + 3.6, BY - 32.6), (m + 7.0, BY - 32.6), (m + 9.4, BY - 28.6), (m + 9.8, BY - 17),
+                              (m + 8.8, BY - 9.0), (m + 6.2, BY - 10.0), (m + 4.4, BY - 8.8), (m + 1.6, BY - 9.6),
+                              (m + 0.8, BY - 17), (m + 1.2, BY - 28.6)])], C(66, 58, 76), form="cylv", ol=1.8,
+                bevel=1.4)
+            for (xa, xb) in ((m + 3.4, m + 2.8), (m + 5.4, m + 5.0), (m + 7.4, m + 7.6)):
+                ink(L, [(xa, BY - 27), (xb, BY - 10.2)], 0.14, C(36, 30, 44), 0.8)
+            cel(L, [("poly", [(m + 2.8, BY - 33.6), (m + 7.8, BY - 33.6), (m + 8.4, BY - 30.4), (m + 5.3, BY - 28.6),
+                              (m + 2.2, BY - 30.4)])], C(54, 48, 64), form="sphere", ol=1.3, bevel=1)
+            fill(L, [("ell", m + 5.3, BY - 31.0, 1.4, 1.1)], C(20, 16, 26), 1)
+            ink(L, [(m + 5.3, BY - 35.4), (m + 5.3, BY - 33.6)], 0.25, GUN, 1)
+            glow2(L, m - 4, BY - 12.6, 3.6, AMBER, 0.45)
+            cel(L, [("rect", m - 5.6, BY - 15.6, m - 2.4, BY - 10.2)], BULB, n=(0, 0, 1), ol=1.1, bevel=0, rim=0,
+                line=C(120, 80, 30), gloss=0.5)
+            cel(L, [("rect", m - 6.0, BY - 16.4, m - 2.0, BY - 15.4)], BRASS, form="cylh", ol=0.9, metal=0.9, bevel=0.2)
+            cel(L, [("rect", m - 6.0, BY - 10.4, m - 2.0, BY - 9.4)], BRASS, form="cylh", ol=0.9, metal=0.9, bevel=0.2)
+            ink(L, [(m - 4, BY - 16.4), (m - 4, BY - 18)], 0.2, GUN, 1)
     elif hero == "helm_wisp":
         if stage == 1:  # her scout drone on a maintenance stand
-            shadow(L, m, BY + 0.5, 6, 1.4, 0.5)
-            P(L, [("line", [(m - 4, BY), (m, BY - 9)], 0.6), ("line", [(m + 4, BY), (m, BY - 9)], 0.6)], STEEL_D,
-              form="flat", ol=0.7)
-            P(L, [("poly", [(m - 3.4, BY - 13), (m + 3.4, BY - 13), (m + 2.6, BY - 9.4), (m - 2.6, BY - 9.4)])],
-              C(110, 116, 112), ol=1.4, bevel=1.8, wear=0.4, rust=0.15)
-            P(L, [("line", [(m - 8, BY - 13.6), (m + 8, BY - 13.6)], 0.5)], STEEL_D, form="flat", ol=0.6)
+            rug()
+            cshadow(L, m, BY + 0.5, 5.5, 1.0, 0.5)
+            for k in (-1, 1):
+                ink(L, [(m + k * 4, BY), (m, BY - 8.6)], 0.34, GUN, 1)
+            cel(L, [("poly", [(m - 3.6, BY - 12.8), (m + 3.6, BY - 12.8), (m + 2.8, BY - 9.2), (m - 2.8, BY - 9.2)])],
+                C(150, 156, 150), form="cylv", ol=1.6, metal=0.6, wear=0.4)
+            cel(L, [("line", [(m - 8, BY - 13.2), (m + 8, BY - 13.2)], 0.45)], GUN, form="cylh", ol=1.0, metal=0.8)
             for x in (m - 8, m + 8):
-                P(L, [("ell", x, BY - 14, 2.6, 0.5)], STEEL_L, form="flat", ol=0.5)
-            glow(L, m, BY - 11, 1.6, C(150, 210, 180), 0.4)
-            P(L, [("ell", m, BY - 11.2, 0.7, 0.7)], C(170, 220, 190), form="sphere", ol=0.4, bevel=0.8)
-        elif stage == 3:  # a second drone hung on the wall + her toolbox
-            P(L, [("poly", [(m - 7, BY - 28), (m - 1, BY - 28), (m - 1.6, BY - 25), (m - 6.4, BY - 25)])],
-              C(96, 104, 100), ol=1.2, bevel=1.5, wear=0.3)
-            P(L, [("line", [(m - 11, BY - 28.6), (m + 3, BY - 28.6)], 0.4)], STEEL_D, form="flat", ol=0.5)
-            P(L, [("line", [(m - 4, BY - 33), (m - 4, BY - 28.6)], 0.25)], CHARC, form="flat", ol=0.3)
-            shadow(L, m + 5, BY + 0.5, 5, 1.2, 0.5)
-            P(L, [("rect", m + 1.5, BY - 5, m + 9.5, BY)], CLOTH_R * 0.95, ol=1.3, bevel=1.5, rust=0.35, wear=0.4)
-            P(L, [("line", [(m + 3.5, BY - 5), (m + 4, BY - 6.6), (m + 7, BY - 6.6), (m + 7.5, BY - 5)], 0.4)], STEEL,
-              form="flat", ol=0.5)
+                cel(L, [("rect", x - 0.4, BY - 14.2, x + 0.4, BY - 13.2)], GUN, ol=0.6, metal=0.8, bevel=0.2, pad=4)
+                cel(L, [("ell", x, BY - 14.4, 2.8, 0.45)], C(200, 210, 210), n=(0, -0.9, 0.4), ol=0.7, bevel=0,
+                    alpha=0.9)
+            glow2(L, m, BY - 10.8, 1.8, C(150, 230, 190), 0.45)
+            cel(L, [("ell", m, BY - 10.9, 0.8, 0.8)], C(170, 230, 200), form="sphere", ol=0.6, metal=1, bevel=0.3)
+        elif stage == 3:  # a spare drone on wall hooks + her red toolbox
+            cel(L, [("line", [(m - 9.6, BY - 27.6), (m + 1.8, BY - 27.6)], 0.4)], GUN, form="cylh", ol=0.9, metal=0.8)
+            cel(L, [("poly", [(m - 6.8, BY - 27.2), (m - 0.8, BY - 27.2), (m - 1.4, BY - 24.2), (m - 6.2, BY - 24.2)])],
+                C(132, 140, 136), form="cylv", ol=1.4, metal=0.6, wear=0.4)
+            for x in (m - 9.6, m + 1.8):
+                cel(L, [("ell", x, BY - 28.1, 2.1, 0.4)], C(200, 210, 210), n=(0, -0.9, 0.4), ol=0.6, bevel=0)
+            cshadow(L, m + 5.2, BY + 0.5, 4.6, 0.9, 0.5)
+            box3(L, m + 1.4, BY - 4.6, m + 9.2, BY + 0.2, 2.2, RED3, wear=0.5, metal=0.3)
+            cel(L, [("line", [(m + 3.4, BY - 4.6 - 1.0), (m + 3.8, BY - 6.4), (m + 6.8, BY - 6.4), (m + 7.2, BY - 5.6)],
+                     0.36)], GUN, form="flat", ol=0.8, metal=0.8, bevel=0.2)
+            fill(L, [("rect", m + 1.4, BY - 2.6, m + 9.2, BY - 2.2)], tone_set(RED3)["line"], 0.9)
         elif stage == 5:  # the bent propeller from her plane + flight jacket on a peg
-            P(L, [("poly", [(m - 9, BY - 1), (m - 7.6, BY - 2), (m - 2, BY - 18), (m - 0.6, BY - 30), (m - 2.4, BY - 30),
-                            (m - 4, BY - 18)])], C(96, 90, 80), ol=1.4, bevel=1.5, rust=0.45, wear=0.4)
-            P(L, [("ell", m - 2.6, BY - 17.4, 1.6, 1.6)], STEEL_D, form="sphere", ol=0.9, bevel=1)
-            P(L, [("rect", m - 1.5, BY - 31, m - 0.5, BY - 28)], C(186, 150, 60), ol=0, form="flat")
-            P(L, [("poly", [(m + 2, BY - 31), (m + 8, BY - 31), (m + 9.4, BY - 20), (m + 7, BY - 15), (m + 3, BY - 15),
-                            (m + 0.6, BY - 20)])], LEATHER, ol=1.3, bevel=2, grit=0.12, wear=0.3, form="cylv")
-            P(L, [("poly", [(m + 2.6, BY - 31), (m + 7.4, BY - 31), (m + 5, BY - 28.5)])], C(160, 140, 112), ol=0.6,
-              bevel=1, grit=0.2)
+            cel(L, [("poly", [(m - 8.6, BY - 1), (m - 7.4, BY - 2.0), (m - 2.2, BY - 17.4), (m - 0.8, BY - 29.6),
+                              (m - 2.4, BY - 29.8), (m - 4.0, BY - 17.4)])], C(110, 104, 94), ol=1.8, metal=0.5,
+                bevel=0.8, wear=0.5)
+            fill(L, [("poly", [(m - 1.0, BY - 29.4), (m - 2.4, BY - 29.6), (m - 2.5, BY - 27.6), (m - 1.0, BY - 27.4)])],
+                 YEL, 0.9)
+            cel(L, [("ell", m - 2.8, BY - 17.2, 1.6, 1.6)], GUN, form="sphere", ol=1.1, metal=0.9, bevel=0.5)
+            # flight jacket on a hanger: body + sleeves + shearling collar
+            for (sx0, sx1) in (((m + 1.2, m - 0.2), (m + 2.6, m + 1.6)), ((m + 8.8, m + 10.2), (m + 7.4, m + 8.4))):
+                cel(L, [("poly", [(sx0[0], BY - 29.6), (sx1[0], BY - 29.0), (sx1[1], BY - 16.6), (sx0[1], BY - 17.2)])],
+                    LEATH3 * 0.9, form="cylv", ol=1.5, bevel=0.8)
+            cel(L, [("poly", [(m + 1.8, BY - 31), (m + 8.2, BY - 31), (m + 8.4, BY - 15.4), (m + 1.6, BY - 15.4)])],
+                LEATH3, form="cylv", ol=1.8, bevel=1.0, wear=0.3)
+            cel(L, [("poly", [(m + 1.6, BY - 31.4), (m + 8.4, BY - 31.4), (m + 7.0, BY - 28.6), (m + 5, BY - 27.4),
+                              (m + 3.0, BY - 28.6)])], CREAM, ol=1.0, bevel=0.5)
+            ink(L, [(m + 5, BY - 27.4), (m + 5, BY - 15.6)], 0.16, tone_set(LEATH3)["line"], 0.9)
+            fill(L, [("rect", m + 1.8, BY - 17.0, m + 8.2, BY - 15.6)], tone_set(LEATH3)["shadow"], 0.9)
+            ink(L, [(m + 2.0, BY - 31.6), (m + 5, BY - 33), (m + 8.0, BY - 31.6)], 0.22, GUN, 1)
+            ink(L, [(m + 5, BY - 33), (m + 5, BY - 34.4)], 0.25, GUN, 1)
     return L
 
 
 # =========================================================== kennel, stash, trophies, cosmetics
 PET_BED = {"noel": 110.0, "bentley": 125.0, "lillie": 140.0}  # bed centre x (art units)
-PET_COL = {"noel": C(118, 118, 120), "bentley": C(178, 156, 116), "lillie": C(158, 96, 58)}
+PET_COL = {"noel": C(96, 112, 132), "bentley": C(176, 150, 104), "lillie": C(160, 84, 62)}
 BED_Y = 141.0
 
 
@@ -1134,121 +1617,150 @@ def kennel(pet, stage):
     L = Layer()
     x = PET_BED[pet]
     col = PET_COL[pet]
-    if stage == 1:  # a padded bed made from an old tyre + blanket
-        shadow(L, x, BED_Y + 1.5, 7.2, 1.6, 0.6)
-        P(L, [("ell", x, BED_Y, 6.6, 2.9)], CHARC, form="sphere", ol=1.5, bevel=2.2, grit=0.14)
-        P(L, [("ell", x, BED_Y - 0.6, 5.0, 1.9)], col, form="sphere", ol=0.8, bevel=1.6, grit=0.14)
-        P(L, [("poly", [(x - 4.5, BED_Y - 1), (x + 1, BED_Y - 2.2), (x + 4, BED_Y + 0.8), (x - 3, BED_Y + 1.4)])],
-          col * 0.8 + CANVAS * 0.2, ol=0, bevel=1.2, grit=0.2, form="flat")
-    elif stage == 2:  # dented bowl
-        P(L, [("poly", [(x + 4.4, BED_Y + 3.4), (x + 8.6, BED_Y + 3.4), (x + 8.0, BED_Y + 5.2), (x + 5.0, BED_Y + 5.2)])],
-          STEEL_L, ol=1.0, bevel=1.2, form="cylv", wear=0.3)
-        P(L, [("ell", x + 6.5, BED_Y + 3.4, 2.1, 0.5)], C(110, 76, 50), form="flat", ol=0)
-    elif stage == 3:  # carved name plank on a stake
-        P(L, [("line", [(x - 5.6, BED_Y - 1), (x - 5.6, BED_Y - 9)], 0.6)], WOOD_D, form="flat", ol=0.7)
-        P(L, [("poly", [(x - 9, BED_Y - 11.4), (x - 2, BED_Y - 11.8), (x - 2.2, BED_Y - 8.6), (x - 9.2, BED_Y - 8.4)])],
-          WOOD, ol=1.1, bevel=1.2, grit=0.1, wear=0.3)
+    if stage == 1:  # a round bolster bed with a cushion
+        cshadow(L, x, BED_Y + 1.6, 7.0, 1.5, 0.6)
+        cel(L, [("ell", x, BED_Y, 6.6, 2.9)], col, form="sphere", ol=2.0, bevel=2.0, rim=0.8)
+        cel(L, [("ell", x, BED_Y - 0.5, 4.8, 1.8)], col * 0.62 + CREAM * 0.38, n=(0, -0.8, 0.6), ol=1.0, bevel=0.6)
+        ink(L, [(x - 5.6, BED_Y + 1.2), (x, BED_Y + 2.4), (x + 5.6, BED_Y + 1.2)], 0.14, tone_set(col)["line"], 0.6)
+    elif stage == 2:  # enamel bowl with kibble
+        bx = x + 6.4
+        cel(L, [("poly", [(bx - 2.2, BED_Y + 3.3), (bx + 2.2, BED_Y + 3.3), (bx + 1.6, BED_Y + 5.2), (bx - 1.6, BED_Y + 5.2)])],
+            CHROME, form="cylv", ol=1.4, metal=1.0, bevel=0.5)
+        cel(L, [("ell", bx, BED_Y + 3.3, 2.2, 0.55)], C(120, 82, 52), n=(0, -0.9, 0.4), ol=0.9, bevel=0)
+        for k in range(4):
+            fill(L, [("ell", bx - 1.2 + k * 0.8, BED_Y + 3.2 + (k % 2) * 0.15, 0.32, 0.22)], C(150, 102, 60), 1)
+    elif stage == 3:  # a little name sign on a stake behind the bed
+        sx = x - 5.4
+        cel(L, [("line", [(sx, BED_Y - 1), (sx, BED_Y - 6.6)], 0.5)], WOOD3_D, form="cylv", ol=0.9, bevel=0.2)
+        cel(L, [("poly", [(sx - 2.6, BED_Y - 9.0), (sx + 2.6, BED_Y - 9.2), (sx + 2.5, BED_Y - 6.4), (sx - 2.7, BED_Y - 6.3)])],
+            PLY, n=(0, 0, 1), ol=1.2, bevel=0.4)
         for k in range(3):
-            P(L, [("line", [(x - 8 + k * 2.0, BED_Y - 10.2), (x - 7 + k * 2.0, BED_Y - 9.6)], 0.25)], WOOD_D * 0.6,
-              form="flat", ol=0)
-        P(L, [("ell", x - 3.4, BED_Y - 10, 0.6, 0.6)], col, form="flat", ol=0)
+            ink(L, [(sx - 1.8 + k * 1.3, BED_Y - 8.2), (sx - 1.2 + k * 1.3, BED_Y - 7.2)], 0.14, WOOD3_D, 0.9)
+        fill(L, [("ell", sx + 1.9, BED_Y - 7.8, 0.45, 0.45)], col, 1)
     return L
 
 
 def stash(stage):
     L = Layer()
     if stage == 0:  # the lockbox: olive footlocker with a brass hasp, in the door light
-        shadow(L, 120, 112.5, 13, 2.2, 0.6)
-        P(L, [("rect", 108, 102, 132, 112)], OLIVE, ol=2.0, bevel=2.6, rust=0.3, wear=0.35, streaks=0.6)
-        P(L, [("rect", 107.5, 100, 132.5, 103.4)], OLIVE_D, form="cylh", ol=1.6, bevel=1.6, rust=0.3, wear=0.3)
-        for x in (110, 129):
-            P(L, [("rect", x, 100.5, x + 1.4, 112)], STEEL_D, ol=0.6, bevel=0.8, rust=0.4)
-        P(L, [("rect", 118.6, 103, 121.4, 106.6)], BRASS, ol=1.0, bevel=1.2, warm=1)
-        P(L, [("rect", 114, 107, 126, 109.6)], C(170, 150, 104) * 0.8, ol=0.4, form="flat", grit=0.18)
-    elif stage == 1:  # a second crate on the left
-        shadow(L, 102, 112.5, 7, 1.6, 0.55)
-        P(L, [("rect", 95.5, 104, 107.5, 112)], WOOD, ol=1.6, bevel=2, grit=0.12, wear=0.3)
-        P(L, [("line", [(96.2, 104.8), (106.8, 111.2)], 0.5)], WOOD_D, form="flat", ol=0)
-        rivets(L, [(96.4, 104.8), (106.6, 104.8)], STEEL)
+        cshadow(L, 120, 112.4, 13, 1.8, 0.6)
+        box3(L, 108, 102.5, 132, 112, 5, OD, top=OD * 1.04, wear=0.4, rust=0.12)
+        fill(L, [("rect", 108, 104.6, 132, 105.3)], tone_set(OD)["line"], 0.9)
+        for x in (110.2, 128.6):
+            cel(L, [("rect", x, 102.5, x + 1.2, 112)], GUN, n=(0, 0, 1), ol=0.8, metal=0.7, bevel=0.3)
+        cel(L, [("rect", 118.6, 103.6, 121.4, 107.2)], BRASS, ol=1.0, metal=1.0, bevel=0.5)
+        cel(L, [("rect", 119.4, 106.4, 120.6, 108.4)], GUN, ol=0.7, metal=0.8, bevel=0.2)
+        fill(L, [("rect", 113.4, 108.6, 126.6, 110.2)], C(214, 196, 140), 0.45)
+    elif stage == 1:  # a wooden crate on the left
+        cshadow(L, 101.5, 112.4, 6.5, 1.4, 0.55)
+        box3(L, 95.5, 104.2, 107, 112, 4, WOOD3, top=PLY)
+        ink(L, [(96, 104.6), (106.6, 111.6)], 0.4, WOOD3_D, 1)
+        for y in (104.2, 111.4):
+            fill(L, [("rect", 95.5, y, 107, y + 0.6)], WOOD3_D, 0.9)
     elif stage == 2:  # a steel ammo chest on the right
-        shadow(L, 138, 112.5, 7, 1.6, 0.55)
-        P(L, [("rect", 132.5, 104.5, 144, 112)], C(70, 84, 82), ol=1.6, bevel=2, rust=0.4, wear=0.35)
-        P(L, [("rect", 136.5, 103.2, 140, 104.6)], STEEL_D, ol=0.6, bevel=0.8)
-    elif stage == 3:  # a strongbox on top of the stack
-        P(L, [("rect", 112, 92.5, 128, 100)], C(84, 70, 60), ol=1.6, bevel=2, rust=0.35, wear=0.35)
-        P(L, [("rect", 118.8, 94.6, 121.2, 97.4)], BRASS, ol=0.7, bevel=1, warm=1)
-        for x in (113, 126.4):
-            P(L, [("rect", x, 92.5, x + 0.9, 100)], STEEL_D, ol=0, bevel=0.8)
+        cshadow(L, 138.5, 112.4, 6.5, 1.4, 0.55)
+        box3(L, 133, 104.6, 144, 112, 3.6, TEAL3, metal=0.35, wear=0.4)
+        cel(L, [("line", [(136.6, 103.6), (137, 102.6), (140, 102.6), (140.4, 103.6)], 0.4)], GUN, form="flat",
+            ol=0.8, metal=0.8, bevel=0.2)
+        cel(L, [("rect", 142.6, 106.6, 143.6, 109.6)], GUN, ol=0.7, metal=0.8, bevel=0.2)
+    elif stage == 3:  # a strongbox on top of the lockbox
+        box3(L, 112.5, 94.2, 127.5, 100.4, 3.6, C(96, 80, 70), metal=0.4, wear=0.4)
+        cel(L, [("ell", 120, 97.3, 1.5, 1.5)], BRASS, form="sphere", ol=1.0, metal=1, bevel=0.4)
+        ink(L, [(120, 97.3), (120.9, 96.6)], 0.16, INK3, 1)
+        for x in (113.6, 125.8):
+            fill(L, [("rect", x, 94.2, x + 0.6, 100.4)], GUN, 1)
     return L
 
 
 def trophy(boss):
+    return wall_shadow(_trophy(boss), 100.0 if boss == "dread_naught" else 140.0, 0, 44)
+
+
+def _trophy(boss):
     L = Layer()
-    if boss == "wall":  # an empty plank board above the door
-        P(L, [("rect", 103, 29, 137, 39.5)], WOOD_D, ol=1.6, bevel=2, grit=0.12, wear=0.2,
-          tex=lambda h, w: 0.1 * ((np.arange(h)[:, None] // 11) % 2) + 0.05 * np.sin(np.arange(w)[None, :] * 0.05))
-        for x in (106, 134):
-            rivets(L, [(x, 31), (x, 37.5)], STEEL)
+    if boss == "wall":  # plank board above the door
+        cel(L, [("rect", 103, 29.5, 137, 39.5)], WOOD3_D, n=(0, 0, 1), ol=2.0, bevel=0.6)
+        for y in (32.8, 36.2):
+            ink(L, [(103.4, y), (136.6, y)], 0.16, C(50, 34, 24), 0.8)
+        wood_grain(L, 104, 29.8, 136, 39.2, C(70, 48, 32), 4)
+        bolts(L, [(105.4, 31.2), (105.4, 37.8), (134.6, 31.2), (134.6, 37.8)], STEEL3, 0.35)
     elif boss == "dread_naught":  # the war-machine's cracked visor plate
-        P(L, [("poly", [(108, 30), (118, 30), (119, 34), (117, 38.5), (109, 38.5), (107, 34)])], STEEL, ol=1.5,
-          bevel=2, rust=0.4, wear=0.4)
-        P(L, [("rect", 109.5, 33, 116.5, 34.6)], CHARC, ol=0, form="flat")
-        glow(L, 111, 33.8, 1.8, C(220, 70, 50), 0.4)
-        glow(L, 115, 33.8, 1.8, C(220, 70, 50), 0.4)
-        P(L, [("line", [(113, 30), (112, 33), (114, 36)], 0.2)], INK, form="flat", ol=0)
+        cel(L, [("poly", [(108, 30.2), (118, 30.2), (119.2, 34), (117, 38.6), (109, 38.6), (106.8, 34)])], STEEL3,
+            ol=2.0, metal=0.8, bevel=1.2, wear=0.4)
+        fill(L, [("rect", 109.4, 33.0, 116.6, 34.8)], C(24, 20, 22), 1)
+        for gx in (111.0, 115.0):
+            glow2(L, gx, 33.9, 2.0, C(240, 80, 50), 0.45)
+            fill(L, [("ell", gx, 33.9, 1.1, 0.5)], C(255, 120, 80), 1)
+        ink(L, [(113, 30.4), (112, 33), (114.2, 36), (113.6, 38.4)], 0.2, INK3, 1)
     elif boss == "mutant_overlord":  # horned mutant skull
-        bone = C(170, 156, 124)
-        for sgn in (-1, 1):  # curled horns
-            P(L, [("line", [(128 + sgn * 3.2, 31.6), (128 + sgn * 6.4, 29.6), (128 + sgn * 7.4, 26.4), (128 + sgn * 6.2, 24.6)], 1.1)],
-              C(120, 104, 80), form="flat", ol=1.0, bevel=1.0, grit=0.1)
-        P(L, [("poly", [(124, 30.5), (128, 29.2), (132, 30.5), (133, 33.5), (131.4, 36), (130.6, 39.4), (125.4, 39.4),
-                        (124.6, 36), (123, 33.5)])], bone, form="sphere", ol=1.5, bevel=2.2, grit=0.08, rust=0.15)
+        bone = C(206, 190, 156)
+        for sgn in (-1, 1):
+            cel(L, [("line", [(128 + sgn * 3.2, 31.6), (128 + sgn * 6.4, 29.4), (128 + sgn * 7.4, 26.2),
+                              (128 + sgn * 6.0, 24.4)], 1.0)], C(140, 120, 92), form="cylv", ol=1.4, bevel=0.6)
+        cel(L, [("poly", [(124, 30.5), (128, 29.2), (132, 30.5), (133, 33.5), (131.4, 36), (130.6, 39.4), (125.4, 39.4),
+                          (124.6, 36), (123, 33.5)])], bone, form="sphere", ol=2.0, bevel=1.6)
         for x in (126.0, 130.0):
-            P(L, [("poly", [(x - 1.4, 33.2), (x + 1.3, 33.0), (x + 0.6, 35.0), (x - 1.0, 35.0)])], C(28, 30, 22), form="flat", ol=0)
-            glow(L, x, 34.1, 1.4, TONIC, 0.4)
-        P(L, [("poly", [(127.4, 35.8), (128.6, 35.8), (128, 37)])], C(40, 34, 28), form="flat", ol=0)
+            fill(L, [("poly", [(x - 1.4, 33.2), (x + 1.3, 33.0), (x + 0.6, 35.0), (x - 1.0, 35.0)])], C(30, 26, 22), 1)
+            glow2(L, x, 34.1, 1.5, TONIC3, 0.45)
+        fill(L, [("poly", [(127.4, 35.8), (128.6, 35.8), (128, 37)])], C(40, 34, 28), 1)
         for k in range(4):
-            P(L, [("rect", 125.8 + k * 1.15, 38.2, 126.5 + k * 1.15, 39.6)], C(210, 196, 160), ol=0.3, form="flat")
-        P(L, [("line", [(129.5, 30), (130.5, 32), (129.6, 33)], 0.18)], INK, form="flat", ol=0)
+            cel(L, [("rect", 125.8 + k * 1.15, 38.1, 126.6 + k * 1.15, 39.6)], C(226, 214, 184), ol=0.6, bevel=0.2,
+                pad=4)
+        ink(L, [(129.5, 30), (130.5, 32), (129.6, 33)], 0.18, INK3, 1)
     return L
 
 
 def cosmetic(cz):
     L = Layer()
-    if cz == "banner":  # Generator maxed: a painted canvas banner hung from a rib
-        P(L, [("line", [(48, 14), (70, 12.5)], 0.6)], STEEL_D, form="flat", ol=0.8)
+    if cz == "banner":  # canvas banner hung from a rib
+        cel(L, [("line", [(48, 14), (70, 12.5)], 0.5)], GUN, form="cylh", ol=1.0, metal=0.8)
         pts = [(49, 14.5), (69, 13), (69.5, 36), (64.5, 41), (59, 37.5), (53.5, 41.5), (49, 37)]
-        P(L, pts and [("poly", pts)], CANVAS * 0.9, ol=1.4, bevel=2.5, grit=0.14, form="cylv", rust=0.15)
-        P(L, [("ell", 59.2, 24, 5.4, 5.4), ("-ell", 59.2, 24, 4.0, 4.0)], CLOTH_R, form="flat", ol=0, grit=0.15)
-        P(L, [("poly", [(59.2, 19.6), (61, 24), (59.2, 28.4), (57.4, 24)])], AMBER * 0.85, form="flat", ol=0, grit=0.1)
-        P(L, [("line", [(50, 33), (68.6, 32)], 0.5)], CLOTH_R, form="flat", ol=0)
-    elif cz == "flag":  # 25 extracts: tattered flag on a pole off a rib
-        P(L, [("line", [(206, 12), (192, 18)], 0.5)], STEEL_L, form="flat", ol=0.7)
-        P(L, [("poly", [(204.5, 13), (205, 30), (201, 28.5), (198.5, 31.5), (194, 27), (193.5, 18.4)])], TEALD,
-          ol=1.2, bevel=2, grit=0.15, form="cylv")
-        P(L, [("line", [(196, 22), (203, 20)], 0.6)], BONE, form="flat", ol=0)
-    elif cz == "campfire":  # every station r3: a burning oil drum
-        shadow(L, 153, 145.5, 6, 1.6, 0.6)
-        glow(L, 153, 128, 12, AMBER, 0.28)
-        soft(L, [("ell", 153, 146, 16, 3)], C(255, 170, 90), 0.18, 5)
-        P(L, [("rect", 148.5, 131, 157.5, 145.5)], RUST, form="cylv", ol=1.6, bevel=2, rust=0.6, streaks=1.2)
-        for y in (134.5, 141.5):
-            P(L, [("rect", 148.5, y, 157.5, y + 1)], RUST * 0.7, form="cylv", ol=0, bevel=1)
-        P(L, [("ell", 153, 131, 4.5, 1.2)], CHARC, form="flat", ol=1.0)
-        flame(L, 153, 131.2, 3.6, 8)
-        soft(L, [("ell", 154, 116, 3, 4), ("ell", 156, 108, 4, 4)], C(110, 100, 92), 0.25, 5)
-    elif cz == "toys":  # kennel maxed: ball + rope toy by the beds
-        P(L, [("ell", 101.5, 145.6, 1.7, 1.7)], CLOTH_R, form="sphere", ol=1.0, bevel=1.4)
-        P(L, [("line", [(144.5, 146.5), (149, 145)], 0.9)], CANVAS, form="flat", ol=0.8, bevel=1, grit=0.2)
+        cel(L, [("poly", pts)], CANV3 * 0.95, form="cylv", ol=2.0, bevel=1.2, grad=0.2)
+        for k in range(3):
+            ink(L, [(53 + k * 5, 15), (52.6 + k * 5.2, 36)], 0.14, tone_set(CANV3)["shadow"], 0.6)
+        ink(L, [(59.2 + 5.0 * math.cos(t), 24 + 5.0 * math.sin(t)) for t in np.linspace(0, 6.3, 40)], 1.1, RED3, 0.95)
+        fill(L, [("poly", [(59.2, 19.6), (61, 24), (59.2, 28.4), (57.4, 24)])], C(222, 150, 60), 1)
+        ink(L, [(50.4, 33), (68.4, 32)], 0.45, RED3, 0.95)
+    elif cz == "flag":  # tattered flag on a pole off a rib
+        cel(L, [("line", [(206, 12), (192, 18.4)], 0.42)], CHROME, form="flat", ol=0.9, metal=1)
+        cel(L, [("poly", [(204.5, 13), (205, 30), (201, 28.5), (198.5, 31.5), (194, 27), (193.5, 18.4)])], TEAL3,
+            form="cylv", ol=1.8, bevel=1.2, grad=0.2)
+        ink(L, [(196, 22.4), (203, 20.4)], 0.55, CREAM, 0.9)
+        ink(L, [(197, 25.4), (202.6, 23.8)], 0.3, CREAM, 0.7)
+    elif cz == "campfire":  # burning oil drum (fire barrel)
+        bx = 152.0
+        cshadow(L, bx, 145.8, 5.6, 1.4, 0.6)
+        glow2(L, bx, 128, 12, AMBER, 0.26)
+        soft(L, [("ell", bx, 146, 15, 2.8)], C(255, 170, 90), 0.16, 5)
+        drum(L, bx, 131.4, 145.4, 4.2, RUST * 1.15, ry=1.2, open_top=True, metal=0.3, rust=0.25)
+        for y in (135.2, 141.4):
+            cel(L, [("rect", bx - 4.2, y, bx + 4.2, y + 0.9)], RUST, form="cylv", ol=0.8, metal=0.5, bevel=0.2)
+        for k in range(4):
+            fill(L, [("ell", bx - 2.6 + k * 1.7, 138.4, 0.45, 0.6)], C(255, 150, 60), 0.9)
+        # flames: three hard-edged tongues, hot core
+        for (fx, fh, fw, c) in ((bx - 1.4, 6.5, 1.8, C(230, 110, 44)), (bx + 1.2, 8.5, 2.0, C(240, 128, 50)),
+                                (bx, 5, 1.4, C(255, 200, 110))):
+            fill(L, [("poly", [(fx - fw, 131.4), (fx - fw * 0.7, 131.4 - fh * 0.45), (fx - fw * 0.1, 131.4 - fh * 0.7),
+                               (fx, 131.4 - fh), (fx + fw * 0.4, 131.4 - fh * 0.55), (fx + fw, 131.4)])], c, 1)
+        fill(L, [("ell", bx, 131.0, 2.4, 0.8)], C(255, 236, 180), 1)
+        soft(L, [("ell", bx + 1, 117, 2.6, 3.4), ("ell", bx + 2.6, 110, 3.4, 3.4)], C(130, 118, 110), 0.2, 5)
+    elif cz == "toys":  # tennis ball + rope toy by the beds
+        cel(L, [("ell", 101.6, 145.4, 1.6, 1.6)], C(196, 206, 90), form="sphere", ol=1.2, bevel=0.6)
+        ink(L, [(100.4, 144.6), (101.6, 145.6), (102.8, 144.6)], 0.14, CREAM, 0.9)
+        cel(L, [("line", [(144.6, 146.4), (149, 145)], 0.8)], CANV3, form="cylh", ol=1.1, bevel=0.3)
+        for k in range(4):
+            ink(L, [(145.4 + k * 1.0, 145.6 - k * 0.3), (145.8 + k * 1.0, 146.6 - k * 0.3)], 0.12, C(120, 100, 70), 0.9)
         for x in (144.2, 149.3):
-            P(L, [("ell", x, 146.4 - (x - 144.2) * 0.3, 0.8, 0.8)], CANVAS * 0.8, form="sphere", ol=0.6, bevel=0.8)
-    elif cz == "case":  # first Legendary: glass display case on the right door leaf
-        P(L, [("rect", 152, 47, 166, 63)], WOOD_D, ol=1.5, bevel=1.6, grit=0.1)
-        P(L, [("rect", 153.2, 48.2, 164.8, 61.8)], C(70, 86, 88), ol=0, bevel=1, form="flat")
-        glow(L, 159, 55, 4, AMBER, 0.3)
-        P(L, [("line", [(155, 60), (163, 50)], 0.8)], C(200, 160, 80), form="flat", ol=0.6, warm=1)
-        P(L, [("line", [(154, 49), (157, 52.5)], 0.3), ("line", [(161, 49), (164, 52.5)], 0.25)],
-          C(200, 220, 220), form="flat", ol=0, alpha=0.6)
+            cel(L, [("ell", x, 146.4 - (x - 144.2) * 0.3, 0.8, 0.8)], RED3, form="sphere", ol=0.9, bevel=0.3)
+    elif cz == "case":  # glass display case on the right door leaf, a legendary blade inside
+        cel(L, [("rect", 152, 47, 166, 63)], WOOD3_D, n=(0, 0, 1), ol=2.0, bevel=0.8)
+        cel(L, [("rect", 153.2, 48.2, 164.8, 61.8)], C(46, 52, 60), n=(0, 0, 1), ol=0.8, bevel=0, rim=0)
+        glow2(L, 159, 55, 4.5, AMBER, 0.32)
+        cel(L, [("poly", [(155, 60.4), (162.6, 50.2), (163.4, 50.8), (155.8, 61)])], C(220, 176, 90), ol=1.0, metal=1,
+            bevel=0.3)
+        cel(L, [("line", [(155.2, 58.4), (157.4, 60.2)], 0.4)], BRASS, form="flat", ol=0.6, metal=1)
+        hline(L, [(154.0, 49.4), (157.2, 53.6)], 0.32, SPEC, 0.5)
+        hline(L, [(160.6, 49.2), (163.8, 53.4)], 0.18, SPEC, 0.4)
     return L
 
 
@@ -1375,17 +1887,34 @@ def previews(outdir, rects):
     compose(mid, ("dread_naught",), ("campfire",), rects=rects).save(os.path.join(outdir, "preview_mid.png"))
     full = compose(mx, ("dread_naught", "mutant_overlord"), ("banner", "flag", "campfire", "toys", "case"), rects=rects)
     full.save(os.path.join(outdir, "preview_max.png"))
-    # side by side with a hero portrait at the same on-screen pixel density
-    hero = Image.open("assets/sprites/characters/sister_cinder/sister_cinder.png").convert("RGBA")
-    crop_ = full.crop((int(150 * S), int(60 * S), int(210 * S), int(100 * S)))
-    hs = crop_.height
-    hero = hero.resize((hs, hs), Image.NEAREST)
-    pet = Image.open("assets/sprites/portraits/pet_noel.png").convert("RGBA").resize((hs, hs), Image.LANCZOS)
-    cmp_ = Image.new("RGBA", (crop_.width + hs * 2 + 20, hs), (30, 24, 20, 255))
-    cmp_.alpha_composite(crop_, (0, 0))
-    cmp_.alpha_composite(hero, (crop_.width + 10, 0))
-    cmp_.alpha_composite(pet, (crop_.width + hs + 20, 0))
-    cmp_.save(os.path.join(outdir, "compare_with_hero.png"))
+    closeup(full, os.path.join(outdir, "props_closeup.png"))
+
+
+def closeup(full, path, k=1.6):
+    """Prop zones of the max hangar shown large, next to hero portraits."""
+    zones = [(0, 50, 94, 97), (146, 50, 240, 97), (0, 95, 104, 150), (146, 92, 240, 150), (92, 90, 150, 150)]
+    tiles = []
+    for (x0, y0, x1, y1) in zones:
+        c = full.crop((int(x0 * S), int(y0 * S), int(x1 * S), int(y1 * S)))
+        tiles.append(c.resize((int(c.width * k), int(c.height * k)), Image.LANCZOS))
+    ph = tiles[4].height // 2
+    ports = [Image.open("assets/sprites/portraits/%s.png" % h).convert("RGBA").resize((ph, ph), Image.NEAREST)
+             for h in ("sister_cinder", "helm_wisp", "pebble", "quill_marrow")]
+    gap = 12
+    cw = tiles[0].width + tiles[1].width + gap * 3
+    rh = [max(tiles[0].height, tiles[1].height), max(tiles[2].height, tiles[3].height), tiles[4].height]
+    sheet = Image.new("RGBA", (cw, sum(rh) + gap * 4), (28, 24, 26, 255))
+    y = gap
+    sheet.alpha_composite(tiles[0], (gap, y))
+    sheet.alpha_composite(tiles[1], (gap * 2 + tiles[0].width, y))
+    y += rh[0] + gap
+    sheet.alpha_composite(tiles[2], (gap, y))
+    sheet.alpha_composite(tiles[3], (gap * 2 + tiles[2].width, y))
+    y += rh[1] + gap
+    sheet.alpha_composite(tiles[4], (gap, y))
+    for i, pimg in enumerate(ports):
+        sheet.alpha_composite(pimg, (gap * 2 + tiles[4].width + (i % 2) * (ph + gap), y + (i // 2) * ph))
+    sheet.save(path)
 
 
 if __name__ == "__main__":
