@@ -255,7 +255,7 @@ static func _table() -> Dictionary:
 				"cooldown": 14.0, "duration": 5.0,
 			},
 			"move_speed_mult": 1.1,
-			"max_hp_bonus": 0,
+			"max_hp_bonus": 20,
 			"damage_mult": 1.1,
 			"heal_amount": 0,
 			"heal_cd": 999.0,

@@ -159,6 +159,7 @@ static func _weapon_table() -> Dictionary:
 			"melee": {
 				"shape": "arc", "arc_deg": 100.0, "radius": 72.0,
 				"windup": 0.08, "knockback": 180.0, "shake": 0.03,
+				"lifesteal": 0.10, "resist": 0.8, "guard_on_hit": 0.35,
 				"smear": Color(0.95, 0.9, 0.8),
 			},
 			"recoil": 0.0,
