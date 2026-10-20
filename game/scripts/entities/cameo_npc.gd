@@ -39,7 +39,9 @@ func _ready() -> void:
 	_body.z_index = 1
 	add_child(_body)
 	var c := CharacterDefs.get_character(hero)
-	_anim.setup(_body, str(c.get("anim", "")), RadioDefs.NPC_WORLD, RadioDefs.NPC_FEET)
+	## Perched NPCs (Vesper's tower) stand on the platform: the animator owns the
+	## sprite position, so the perch goes into its feet line.
+	_anim.setup(_body, str(c.get("anim", "")), RadioDefs.NPC_WORLD, RadioDefs.NPC_FEET - perch * UnitAnim.ART_GROW)
 	_anim.set_locomotion("idle")
 	if perch <= 0.0:
 		UnitAnim.add_contact_shadow(self, 58.0, RadioDefs.NPC_FEET, 0.5)

@@ -45,7 +45,7 @@ func _ready() -> void:
 func _place_chip() -> void:
 	var m := MobileLayout.control_safe_margin()
 	## Below the HUD vitals + pack chip so it never covers the bars.
-	_chip.position = Vector2(m.position.x, m.position.y + 112)
+	_chip.position = Vector2(m.position.x, m.position.y + 196)
 	_fps.position = _chip.position + Vector2(78, 6)
 
 

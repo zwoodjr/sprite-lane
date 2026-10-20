@@ -93,13 +93,13 @@ void fragment() {
 	float gate = vnoise(p / 2400.0 + seed_off.yx * 0.9 + 13.0);
 	if (gate > 0.58) {
 		float r = vnoise(p / 1100.0 + seed_off * 0.7 + 200.0) * 0.85 + vnoise(p / 300.0 + seed_off + 31.0) * 0.15;
-		float w = abs(r - 0.5) + dz * 0.008;
+		float w = abs(r - 0.5) + dz * 0.003 + e * 0.05;
 		float width = 0.02 * smoothstep(0.58, 0.65, gate);
-		if (w < width) {
-			col = tex_frame(tex_river, p, alt, 512.0);
-		} else if (w < width + 0.006) {
-			col.rgb *= 0.86;
-		}
+		// soft painted bank: the riverbed fades in, a shaded lip runs along it
+		float kr = 1.0 - smoothstep(width - 0.003, width + 0.001, w);
+		if (kr > 0.0) col = mix(col, tex_frame(tex_river, p, alt, 512.0), kr);
+		float bank = (1.0 - smoothstep(width, width + 0.01, w)) * (1.0 - kr);
+		col.rgb *= 1.0 - 0.16 * bank;
 	}
 
 	// --- roads

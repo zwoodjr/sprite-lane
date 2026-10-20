@@ -23,12 +23,15 @@ const BAR_W := 200.0 ## on-screen width of the slim bars
 ## panel under it, a slim phase strip at the top centre, hints that fade.
 const HP_BAR_H := 15.0
 const XP_BAR_H := 7.0
-const MAP_SIZE := 150.0
+const MAP_SIZE := 104.0
+## Visual tier slim HUD: PressStart2P pixel text, no plates behind the readouts.
+const PIXEL_FONT := "res://assets/fonts/PressStart2P.ttf"
+const XpLineScript := preload("res://scripts/ui/xp_line.gd")
 const PANEL_ALPHA := 0.5
 const HINT_SHOW := 4.0
 ## Locked "smashed readout" bars (scripts/ui/readout_bar.gd).
 const ReadoutScript := preload("res://scripts/ui/readout_bar.gd")
-const HP_READOUT := Vector2(232, 34)
+const HP_READOUT := Vector2(250, 36)
 const XP_READOUT := Vector2(232, 24)
 var root: Control
 var _match: Node = null
@@ -95,6 +98,11 @@ var _pack_panel: PanelContainer
 var _hp_readout: Control
 var _xp_readout: Control
 var _hint_index: int = 0
+var _pixel: Font = null
+var _xp_line: Control = null
+var _run_lv: int = 1
+var _phase_id: String = ""
+var _phase_shown_t: float = 0.0
 
 const ROTATING_HINTS := [
 	"Gold arrows on the screen edge point to extract pads.",
@@ -181,6 +189,17 @@ func _caption(text: String) -> Label:
 	l.add_theme_font_override("font", UiTheme.font_button)
 	return l
 
+## Pixel-font HUD text (PressStart2P) with a dark outline so it reads on any ground.
+func _px(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
+	var l := _label(text, size, color)
+	if _pixel == null and ResourceLoader.exists(PIXEL_FONT):
+		_pixel = load(PIXEL_FONT)
+	if _pixel:
+		l.add_theme_font_override("font", _pixel)
+	l.add_theme_constant_override("outline_size", 4)
+	l.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
+	return l
+
 func _label(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
 	var l := Label.new()
 	l.text = text
@@ -224,7 +243,12 @@ func _build() -> void:
 	_hp_readout = _readout("hp", "HP", HP_READOUT)
 	vb.add_child(_hp_readout)
 	_xp_readout = _readout("xp", "LV", XP_READOUT)
+	_xp_readout.visible = false
 	vb.add_child(_xp_readout)
+	_xp_line = Control.new()
+	_xp_line.set_script(XpLineScript)
+	_xp_line.custom_minimum_size = Vector2(HP_READOUT.x - 20.0, 5)
+	vb.add_child(_xp_line)
 	var hp_row := Control.new()
 	hp_row.visible = false
 	hp_row.custom_minimum_size = Vector2(BAR_W, HP_BAR_H)
@@ -259,10 +283,7 @@ func _build() -> void:
 	_run_xp_bar.max_value = 1.0
 	_run_xp_bar.step = 0.0
 	xp_row.add_child(_run_xp_bar)
-	_ammo_label = _label("24 / 24", 12)
-	_ammo_label.add_theme_constant_override("outline_size", 4)
-	_ammo_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	_ammo_label.add_theme_font_override("font", UiTheme.font_button)
+	_ammo_label = _px("24 / 24", 8, UiTheme.TEXT_DIM)
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
 	_reload_bar.custom_minimum_size = Vector2(BAR_W, 5)
@@ -280,6 +301,7 @@ func _build() -> void:
 	## Pack / pouch / plague: a compact chip right under the vitals block.
 	_pack_panel = _panel(PANEL_ALPHA)
 	_pack_panel.name = "PackChip"
+	_pack_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(_pack_panel)
 	var pv := VBoxContainer.new()
 	pv.add_theme_constant_override("separation", 2)
@@ -289,6 +311,7 @@ func _build() -> void:
 
 	## Top-center: phase card
 	_phase_card = _panel(0.35)
+	_phase_card.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(_phase_card)
 	var pc := VBoxContainer.new()
 	pc.add_theme_constant_override("separation", 0)
@@ -299,25 +322,29 @@ func _build() -> void:
 	row.add_theme_constant_override("separation", 14)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(row)
-	_phase_label = _label("LOCKOUT", 15, UiTheme.AMBER)
-	_phase_label.add_theme_font_override("font", UiTheme.font_display)
+	row.add_theme_constant_override("separation", 10)
+	_phase_label = _px("EXTRACT IN", 12, UiTheme.AMBER)
 	row.add_child(_phase_label)
-	_timer_label = _label("1:30", 22)
-	_timer_label.add_theme_font_override("font", UiTheme.font_display)
-	_timer_label.add_theme_constant_override("outline_size", 4)
+	_timer_label = _px("1:30", 12, Color(0.94, 0.8, 0.5))
 	row.add_child(_timer_label)
 	_phase_bar = ProgressBar.new()
+	_phase_bar.visible = false
 	_phase_bar.custom_minimum_size = Vector2(120, 4)
 	UiTheme.skin_bar(_phase_bar, UiTheme.AMBER)
 	_phase_bar.show_percentage = false
 	_phase_bar.max_value = 1.0
 	_phase_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(_phase_bar)
-	_phase_hint = _label("", 11, UiTheme.TEXT_DIM)
+	var tick_gap := Control.new()
+	tick_gap.custom_minimum_size = Vector2(0, 12)
+	tick_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.add_child(tick_gap)
+	_phase_hint = _px("", 7, Color(0.8, 0.74, 0.62, 0.85))
+	_phase_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_phase_hint.clip_text = true
 	_phase_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_phase_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pc.add_child(_phase_hint)
-	_jobs_label = _label("", 11, RadioDefs.MAP_COLOR)
+	_jobs_label = _px("", 7, RadioDefs.MAP_COLOR)
 	_jobs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_jobs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_jobs_label.visible = false
@@ -325,21 +352,19 @@ func _build() -> void:
 
 	## Top-right: threat + counters
 	_threat_panel = _panel(PANEL_ALPHA)
+	_threat_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(_threat_panel)
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 0)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
-	_threat_label = _label("LOOT ×1.0", 19, UiTheme.AMBER)
-	_threat_label.add_theme_font_override("font", UiTheme.font_display)
-	_threat_label.add_theme_constant_override("outline_size", 4)
+	_threat_label = _px("LOOT x1.0", 12, UiTheme.AMBER)
 	_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_label)
-	_threat_sub = _label("THREAT 0", 10, UiTheme.TEXT_DIM)
+	_threat_sub = _px("THREAT 0", 7, UiTheme.TEXT_DIM)
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_sub)
-	_counter_label = _label("", 11, UiTheme.AMBER)
-	_counter_label.add_theme_font_override("font", UiTheme.font_button)
+	_counter_label = _px("", 7, Color(0.86, 0.75, 0.52, 0.85))
 	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_counter_label)
 
@@ -408,17 +433,23 @@ func _layout() -> void:
 	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + map_s + 4.0)
 	## Top-centre: a slim phase strip between the two corners.
 	var left_w := vit.size.x + 8.0
-	var phase_w := clampf(vp.x - 2.0 * maxf(left_w, map_s + 8.0) - 2.0 * m.position.x, 180.0, 340.0)
+	## Slim HUD: the extract readout sits centred in the gap between the vitals
+	## and the minimap (not the screen centre), so long hints fit on one line.
+	var gap_l := m.position.x + left_w
+	var gap_r := right - map_s - 8.0
+	var phase_w := clampf(gap_r - gap_l, 150.0, 340.0)
 	_phase_card.custom_minimum_size = Vector2(phase_w, 0)
 	_phase_hint.custom_minimum_size = Vector2(phase_w - 20.0, 0)
 	if _jobs_label:
 		_jobs_label.custom_minimum_size = Vector2(phase_w - 20.0, 0)
 	_phase_bar.custom_minimum_size = Vector2(phase_w - 24.0, 4)
 	_phase_card.reset_size()
-	_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y)
+	var phase_cx := (gap_l + gap_r) * 0.5
+	_phase_card.position = Vector2(phase_cx - _phase_card.size.x * 0.5, m.position.y + 2.0)
 	if _extract_bar:
-		_extract_bar.position = Vector2(m.position.x, vp.y * 0.36)
-		_extract_bar.size = Vector2(22, vp.y * 0.28)
+		var tw := minf(220.0, phase_w - 20.0)
+		_extract_bar.size = Vector2(tw, 8)
+		_extract_bar.position = Vector2(phase_cx - tw * 0.5, m.position.y + 22.0)
 	var below := maxf(_threat_panel.position.y + _threat_panel.size.y, m.position.y + vit.size.y + 60.0) + 10.0
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
@@ -438,15 +469,12 @@ func _build_depth(vb: VBoxContainer) -> void:
 	_pack_row.add_theme_constant_override("separation", 4)
 	_pack_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_pack_row)
-	_pack_row.add_child(_icon(MedicineDefs.icon_path("backpack"), 22))
-	_pack_label = _label("PACK 0/8", 14, UiTheme.TEXT)
-	_pack_label.add_theme_font_override("font", UiTheme.font_button)
+	_pack_label = _px("PACK 0/8   LV 1", 10, Color(0.86, 0.75, 0.52))
 	_pack_row.add_child(_pack_label)
-	_med_icon = _icon(MedicineDefs.icon_path("medicine"), 22)
+	_med_icon = _icon(MedicineDefs.icon_path("medicine"), 18)
 	_med_icon.visible = false
 	_pack_row.add_child(_med_icon)
-	_med_label = _label("", 14, Color(1.0, 0.55, 0.5))
-	_med_label.add_theme_font_override("font", UiTheme.font_button)
+	_med_label = _px("", 9, Color(1.0, 0.55, 0.5))
 	_pack_row.add_child(_med_label)
 	_tonic_row = HBoxContainer.new()
 	_tonic_row.add_theme_constant_override("separation", 2)
@@ -524,10 +552,11 @@ func set_jobs(lines: PackedStringArray) -> void:
 func set_pack(weight: int, cap: int, medicine: int) -> void:
 	if _pack_label == null:
 		return
-	var txt := "PACK %d/%d" % [weight, cap]
+	var txt := "PACK %d/%d   LV %d" % [weight, cap, _run_lv]
 	if _pack_label.text != txt:
 		_pack_label.text = txt
-		_pack_label.add_theme_color_override("font_color", UiTheme.RUST if weight >= cap else UiTheme.TEXT)
+		_pack_label.add_theme_color_override("font_color", UiTheme.RUST if weight >= cap else Color(0.86, 0.75, 0.52))
+		_pack_label.set_meta("pack", Vector2i(weight, cap))
 	_med_icon.visible = medicine > 0
 	_med_label.text = "×%d" % medicine if medicine > 0 else ""
 	var pouch := GameState.pouch()
@@ -628,6 +657,9 @@ func _process(delta: float) -> void:
 			var cells := int(round(hr * 10.0))
 			_ammo_label.text = ("OVERHEAT " if over else "HEAT ") + "|".repeat(cells) + ".".repeat(10 - cells)
 			_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if over or hr > 0.8 else (UiTheme.AMBER if hr > 0.5 else UiTheme.TEXT))
+	_phase_shown_t += delta
+	if _phase_hint:
+		_phase_hint.modulate.a = clampf((6.0 - _phase_shown_t) / 0.8, 0.0, 1.0)
 	## Rotating tips (when the tutorial isn't talking)
 	if GameState.settings.get("show_hints", true) and (tutorial == null or not is_instance_valid(tutorial)):
 		_hint_cycle_t += delta
@@ -657,8 +689,14 @@ func ping_pads() -> void:
 		_minimap.call("ping")
 
 func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, player: Node) -> void:
-	_phase_label.text = str(phase.get("label", "")).to_upper()
+	var is_open0 := bool(phase.get("extract_open", false))
+	var is_last0 := bool(phase.get("is_last", false))
+	_phase_label.text = "LAST CHANCE" if is_last0 else ("EXTRACT OPEN" if is_open0 else "EXTRACT IN")
 	_timer_label.text = _fmt_time(time_left)
+	var pid0 := str(phase.get("id", ""))
+	if pid0 != _phase_id:
+		_phase_id = pid0
+		_phase_shown_t = 0.0
 	var dur := float(phase.get("duration", 1.0))
 	_phase_bar.value = 1.0 - time_left / maxf(dur, 0.01)
 	var is_open := bool(phase.get("extract_open", false))
@@ -694,20 +732,26 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	else:
 		_timer_label.scale = Vector2.ONE
 	## Loot multiplier (big) + Threat (rises with it)
-	_threat_label.text = "LOOT ×%.1f" % loot
+	_threat_label.text = "LOOT x%.1f" % loot
 	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
 	_threat_label.add_theme_color_override("font_color", tl_col)
-	_threat_sub.text = "THREAT %d · +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
+	_threat_sub.text = "THREAT %d +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
 	if tl != _last_tl:
 		_last_tl = tl
 		_pulse(_threat_panel)
-	_counter_label.text = "Bag %d · Kills %d" % [GameState.bag_value(), GameState.kills]
+	_counter_label.text = "BAG %d  KILLS %d" % [GameState.bag_value(), GameState.kills]
 	var rp: Dictionary = GameState.run_bar_state()
 	_run_level_label.text = "LV %d%s" % [
 		int(rp["level"]),
 		"  MAX" if bool(rp.get("capped", false)) else "",
 	]
 	_run_xp_bar.value = float(rp["ratio"])
+	if _xp_line:
+		_xp_line.call("set_ratio", float(rp["ratio"]))
+	if int(rp["level"]) != _run_lv and _pack_label:
+		_run_lv = int(rp["level"])
+		var pk: Vector2i = _pack_label.get_meta("pack", Vector2i(0, 0))
+		_pack_label.text = "PACK %d/%d   LV %d" % [pk.x, pk.y, _run_lv]
 	if _xp_readout:
 		_xp_readout.call("set_value", float(rp["ratio"]), 1.0, "%d" % int(rp["level"]))
 	if player and is_instance_valid(player) and not bool(player.call("is_reloading")):

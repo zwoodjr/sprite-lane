@@ -52,10 +52,12 @@ func _ready() -> void:
 	_left_handed = bool(GameState.settings.get("left_handed", false))
 	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
 
-	btn_dash = _make_button("DASH", 62.0, UiTheme.TEAL, "res://assets/sprites/ui/btn_dash.png")
-	btn_ability = _make_button("ABILITY", 44.0, UiTheme.AMBER,
+	btn_dash = _make_button("DASH", 58.0, UiTheme.TEAL)
+	btn_ability = _make_button("ABILITY", 40.0, UiTheme.AMBER,
 		CharacterDefs.ability_icon_path(GameState.selected_character_id))
-	btn_pause = _make_button("II", 24.0, Color(0.75, 0.68, 0.58), "res://assets/sprites/ui/btn_pause.png")
+	btn_pause = _make_button("II", 20.0, Color(0.75, 0.68, 0.58))
+	for b in [btn_dash, btn_ability, btn_pause]:
+		b.set("slim", true)
 
 	btn_dash.pressed_down.connect(TouchInput.pulse_dash)
 	btn_ability.pressed_down.connect(TouchInput.pulse_ability)
@@ -98,8 +100,8 @@ func _layout() -> void:
 	var h := m.size.y
 	## Bottom-right thumb cluster (mirrored when left-handed): big DASH in the
 	## corner, ABILITY up-and-left of it.
-	_place(btn_dash, Vector2(w - 78, h - 92))
-	_place(btn_ability, Vector2(w - 186, h - 150))
+	_place(btn_dash, Vector2(w - 82, h - 96))
+	_place(btn_ability, Vector2(w - 186, h - 136))
 	## Pause sits low in the bottom-left corner, in easy left-thumb reach; the
 	## floating stick still starts anywhere else in the left area.
 	_place(btn_pause, Vector2(30, h - 30))
