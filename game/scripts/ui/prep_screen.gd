@@ -45,7 +45,7 @@ func _rebuild() -> void:
 	var keep := _scroll.scroll_vertical
 	for ch in _list.get_children():
 		_list.remove_child(ch)
-		ch.free()
+		ch.queue_free()
 	var c := CharacterDefs.get_character(_hero)
 	var rank := GameState.station_rank(_hero)
 	## Who + station rank.

@@ -276,7 +276,7 @@ func _rebuild() -> void:
 		_scroll_y_keep = _scroll.scroll_vertical
 	for c in _list.get_children():
 		_list.remove_child(c)
-		c.free()
+		c.queue_free()
 	_scrap_label.text = "%d SCRAP" % GameState.account_scrap
 	match _tab:
 		"camp":

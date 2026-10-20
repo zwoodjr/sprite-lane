@@ -58,7 +58,7 @@ func show_tab(t: String) -> void:
 func _rebuild() -> void:
 	for ch in _list.get_children():
 		_list.remove_child(ch)
-		ch.free()
+		ch.queue_free()
 	_scrap.text = "%d SCRAP" % GameState.account_scrap
 	match _tab:
 		"daily":

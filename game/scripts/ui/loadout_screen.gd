@@ -100,13 +100,13 @@ func refresh() -> void:
 	_hero_label.text = str(CharacterDefs.get_character(_hero).get("display_name", _hero))
 	for ch in _grid.get_children():
 		_grid.remove_child(ch)
-		ch.free()
+		ch.queue_free()
 	var eq := GameState.equipped_items(_hero)
 	for sl in GearDefs.LOADOUT_SLOTS:
 		_grid.add_child(_slot_tile(str(sl), eq.get(sl, {})))
 	for ch in _list.get_children():
 		_list.remove_child(ch)
-		ch.free()
+		ch.queue_free()
 	if _slot == "":
 		_build_summary(eq)
 	else:

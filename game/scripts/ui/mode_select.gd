@@ -124,7 +124,7 @@ func _tier_row(mode: Dictionary) -> Control:
 func _build_detail(mode: Dictionary) -> void:
 	for ch in _detail.get_children():
 		_detail.remove_child(ch)
-		ch.free()
+		ch.queue_free()
 	var p := card(UiTheme.AMBER, Color(0.2, 0.14, 0.09, 0.95))
 	_detail.add_child(p)
 	var v := VBoxContainer.new()
