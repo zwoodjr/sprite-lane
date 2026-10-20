@@ -123,7 +123,7 @@ func _prop(name: String, at: Vector2, size: float) -> Sprite2D:
 	var s := Sprite2D.new()
 	if ResourceLoader.exists(PROP % name):
 		s.texture = load(PROP % name)
-		var k := size / float(maxi(s.texture.get_width(), s.texture.get_height()))
+		var k := size * UnitAnim.ART_GROW / float(maxi(s.texture.get_width(), s.texture.get_height()))
 		s.scale = Vector2(k, k)
 		s.offset = Vector2(0, -float(s.texture.get_height()) * 0.5)
 	s.position = at + Vector2(0, 10)

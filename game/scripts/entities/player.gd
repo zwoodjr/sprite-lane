@@ -34,7 +34,7 @@ const HURT_IFRAMES := 0.5
 ## until it leaves trigger_range × (1 + hysteresis).
 const TARGET_HYSTERESIS := 0.10
 ## Rough enemy body radius added to melee reach (centre-to-centre distances).
-const ENEMY_BODY_R := 16.0
+const ENEMY_BODY_R := 16.0 ## × body_scale (which includes UnitAnim.BODY_K)
 ## Shove when hit (px/s impulse, decays fast).
 const KNOCK_TAKEN := 160.0
 
@@ -145,10 +145,12 @@ var exposure_stage: int = -1
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
-## One 128 px hero frame spans this many world px (hero body ≈ 45 px tall).
-const HERO_FRAME_WORLD := 56.0
+## One 128 px hero frame at native density (1 texel = 1 screen px).
+const HERO_FRAME_WORLD := 128.0 * UnitAnim.TEXEL
 ## Local y where the hero's feet stand (collision centre is the origin).
-const FEET_Y := 20.0
+const FEET_Y := 32.0
+## Melee reach grew with the native-size hero (her maul / blades reach further on screen).
+const MELEE_K := 1.25
 var _anim: UnitAnim = UnitAnim.new()
 ## <id>_weapon.json: per-state/frame weapon tip, hit_frames, melee|ranged.
 var _wpn_art: Dictionary = {}
@@ -906,7 +908,7 @@ func vial_burst(pos: Vector2) -> void:
 ## Targeting & attacks (auto: fire / swing only when an enemy is in range)
 
 func get_trigger_range() -> float:
-	return float(_weapon.get("trigger_range", 400.0))
+	return float(_weapon.get("trigger_range", 400.0)) * (MELEE_K if is_melee() else 1.0)
 
 func get_target() -> Node2D:
 	return _target if _target != null and is_instance_valid(_target) else null
@@ -1171,6 +1173,9 @@ func _on_anim_frame(state: String, frame: int) -> void:
 ## Melee hitbox with Piercing Slugs' melee adaptation (+arc / reach).
 func _melee_params() -> Dictionary:
 	var m: Dictionary = (_weapon["melee"] as Dictionary).duplicate()
+	for key in ["radius", "length", "width"]:
+		if m.has(key):
+			m[key] = float(m[key]) * MELEE_K
 	var reach := float(GameState.up("piercing", "reach", 0.0))
 	if reach > 0.0:
 		m["radius"] = float(m.get("radius", 70.0)) * (1.0 + reach)

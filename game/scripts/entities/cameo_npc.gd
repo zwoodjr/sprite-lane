@@ -28,14 +28,14 @@ func _ready() -> void:
 	if prop_path != "" and ResourceLoader.exists(prop_path):
 		_prop = Sprite2D.new()
 		_prop.texture = load(prop_path)
-		var k := prop_world / float(maxi(_prop.texture.get_width(), _prop.texture.get_height()))
+		var k := prop_world * UnitAnim.ART_GROW / float(maxi(_prop.texture.get_width(), _prop.texture.get_height()))
 		_prop.scale = Vector2(k, k)
 		_prop.offset = Vector2(0, -float(_prop.texture.get_height()) * 0.5)
-		_prop.position = prop_offset + Vector2(0, 10)
+		_prop.position = prop_offset * UnitAnim.ART_GROW + Vector2(0, 10)
 		_prop.z_index = -1 if perch <= 0.0 else 0
 		add_child(_prop)
 	_body = Sprite2D.new()
-	_body.position = Vector2(0, -perch)
+	_body.position = Vector2(0, -perch * UnitAnim.ART_GROW)
 	_body.z_index = 1
 	add_child(_body)
 	var c := CharacterDefs.get_character(hero)
@@ -49,7 +49,7 @@ func _ready() -> void:
 	_tag.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tag.size = Vector2(200, 16)
-	_tag.position = Vector2(-100, -perch - 70)
+	_tag.position = Vector2(-100, -perch * UnitAnim.ART_GROW - 110)
 	_tag.z_index = 4
 	add_child(_tag)
 

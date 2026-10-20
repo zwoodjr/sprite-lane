@@ -512,9 +512,9 @@ func _spawn_enemy() -> void:
 
 ## Just outside the visible screen along dir (from the camera's view centre),
 ## kept within SPAWN_MIN..SPAWN_MAX of the hero so mobs walk in quickly.
-const SPAWN_MARGIN := 48.0
-const SPAWN_MIN := 520.0
-const SPAWN_MAX := 760.0
+const SPAWN_MARGIN := 84.0
+const SPAWN_MIN := 540.0
+const SPAWN_MAX := 820.0
 
 func _spawn_point_outside_view(dir: Vector2) -> Vector2:
 	var cam: Camera2D = player.get_node_or_null("Camera2D") as Camera2D

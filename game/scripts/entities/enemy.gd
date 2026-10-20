@@ -252,14 +252,17 @@ func _apply_look() -> void:
 		if states.has("idle"):
 			fs = (states["idle"]["tex"] as Texture2D).get_height()
 		## Size class from the art: normal 128 (per-kind scale), elite 192, boss 256.
+		## Gameplay size (collision, reach, separation) grows with BODY_K; the art
+		## itself always draws at native density (1 texel = 1 screen px).
 		if fs >= 256:
 			body_scale = BOSS_SCALE
 		elif fs >= 192:
 			body_scale = ELITE_SCALE
 		else:
 			body_scale = clampf(float(_def.get("scale", 1.0)), 0.85, 1.4)
+		body_scale *= UnitAnim.BODY_K
 		body.self_modulate = _def.get("tint", Color.WHITE)
-		_anim.setup(body, prefix, MOB_FRAME_WORLD * body_scale, FEET_Y * body_scale)
+		_anim.setup(body, prefix, UnitAnim.native(fs), FEET_Y * body_scale)
 		_atk = UnitAnim.load_json(prefix + "_attack.json")
 		var col := get_node_or_null("CollisionShape2D") as Node2D
 		if col:
@@ -267,7 +270,7 @@ func _apply_look() -> void:
 	if hp_bar:
 		hp_bar.max_value = max_hp
 		hp_bar.value = hp
-		var top := FEET_Y * body_scale - MOB_FRAME_WORLD * body_scale * 0.92
+		var top := FEET_Y * body_scale - _anim.world_frame_px() * 0.66
 		hp_bar.offset_top = top
 		hp_bar.offset_bottom = top + 6.0
 		hp_bar.offset_left = -16.0 * sqrt(body_scale)
@@ -541,7 +544,7 @@ func _atk_hit(f: int) -> void:
 		var centre := global_position + Vector2(0, 12)
 		hit = _player.global_position.distance_to(centre) <= 70.0 * body_scale + 10.0
 		if first:
-			Juice.shake(0.12 * body_scale)
+			Juice.shake(0.12 * body_scale / UnitAnim.BODY_K)
 			Juice.dust_puff(centre, 10)
 	else:
 		hit = _player.global_position.distance_to(origin) <= 18.0 + 12.0 * body_scale
@@ -849,7 +852,7 @@ func set_traits(ids: Array) -> void:
 	_tag.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tag.size = Vector2(160, 16)
-	_tag.position = Vector2(-80, FEET_Y * body_scale - MOB_FRAME_WORLD * body_scale * 0.92 - 18.0)
+	_tag.position = Vector2(-80, FEET_Y * body_scale - _anim.world_frame_px() * 0.66 - 18.0)
 	_tag.z_index = 4
 	add_child(_tag)
 	if "shielded" in traits:

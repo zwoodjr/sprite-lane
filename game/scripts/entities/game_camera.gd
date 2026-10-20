@@ -3,7 +3,7 @@ extends Camera2D
 ## Follow camera: zoomed in (1.35), hero sits ~45% down the screen, and the
 ## view leads 15% of the screen in the move direction. Plus Juice shake.
 
-const SURVIVOR_ZOOM := 1.35
+const SURVIVOR_ZOOM := UnitAnim.SCREEN_ZOOM
 ## Hero screen height as a fraction from the top (0.5 = centred).
 const HERO_SCREEN_Y := 0.45
 ## Look-ahead as a fraction of the visible world size, along the move direction.

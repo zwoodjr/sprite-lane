@@ -7,8 +7,8 @@ signal rampage_ended
 
 ## One 128 px pet frame spans this many world px (same px density as heroes,
 ## so the dogs read dog-sized next to their human).
-const PET_FRAME_WORLD := 58.0
-const FEET_Y := 12.0
+const PET_FRAME_WORLD := 128.0 * UnitAnim.TEXEL
+const FEET_Y := 20.0
 ## Standing still this long → sit down.
 const SIT_AFTER := 2.0
 
@@ -76,7 +76,8 @@ func _apply_look() -> void:
 	var prefix := str(_def.get("anim", "res://assets/sprites/pets/noel/noel"))
 	if body and prefix != _anim_prefix:
 		_anim_prefix = prefix
-		_anim.setup(body, prefix, float(_def.get("frame_world", PET_FRAME_WORLD)), FEET_Y)
+		## Native density for every pet (mech frame_world sizes predate the visual tier).
+		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y)
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
 		name_label.add_theme_font_size_override("font_size", 10)
@@ -86,6 +87,8 @@ func _apply_look() -> void:
 		elif _accent_left > 0.0:
 			col = Color(1.0, 0.85, 0.45)
 		name_label.add_theme_color_override("font_color", col)
+		## Slim HUD look: the name only shows while the pet is doing something.
+		name_label.visible = col != Color(0.92, 0.86, 0.72)
 
 func _physics_process(delta: float) -> void:
 	_bite_cd = maxf(0.0, _bite_cd - delta)

@@ -7,7 +7,7 @@ extends Node2D
 const BulletScene := preload("res://scenes/entities/bullet.tscn")
 const HOVER_TEX := "res://assets/sprites/characters/helm_drone_hover.png"
 const FIRE_TEX := "res://assets/sprites/characters/helm_drone_fire.png"
-const WORLD_SIZE := 40.0 ## on-screen size in world px (art is 96 px)
+const WORLD_SIZE := 64.0 * UnitAnim.TEXEL ## native: 64 px art frames, 1 texel = 1 screen px
 
 var _player: Node2D
 var _slot: int = 0
@@ -52,7 +52,7 @@ func _ready() -> void:
 	z_index = 5
 	_sprite = Sprite2D.new()
 	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_sprite.scale = Vector2.ONE * (WORLD_SIZE / 96.0)
+	_sprite.scale = Vector2.ONE * (WORLD_SIZE / 64.0)
 	add_child(_sprite)
 	_hover_frames = _slice(HOVER_TEX, 4)
 	_fire_frames = _slice(FIRE_TEX, 2)

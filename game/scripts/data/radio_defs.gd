@@ -16,8 +16,8 @@ const SERVICES_PER_RUN := Vector2i(1, 2)
 const SERVICE_AT: Array = [Vector2(30.0, 50.0), Vector2(115.0, 150.0)]
 ## A cameo help moves that survivor's current story chapter this far (share of its need).
 const CAMEO_STORY_SHARE := 0.34
-const NPC_WORLD := 56.0
-const NPC_FEET := 20.0
+const NPC_WORLD := 128.0 * UnitAnim.TEXEL
+const NPC_FEET := 32.0
 const MAP_COLOR := Color(0.55, 1.0, 0.6)
 
 const JOBS := {

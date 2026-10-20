@@ -23,8 +23,12 @@ uniform int road_count = 0;
 uniform vec4 road_seg[8];
 uniform float road_off[8];
 uniform float road_half = 26.0;
+// World px per baked pixel (UnitAnim.TEXEL): the chunk bakes at native
+// density, so one tile texel = one bake pixel = one screen pixel.
+uniform float texel = 0.7407407;
 
 varying vec2 world;
+varying vec2 bpx;
 
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -52,17 +56,19 @@ float bayer4(vec2 p) {
 }
 
 vec4 tex_frame(sampler2D t, vec2 p, bool alt, float period) {
-	vec2 uv = alt ? vec2(p.y, -p.x) / period + vec2(0.37, 0.61) : p / period;
+	float per = period * texel;
+	vec2 uv = alt ? vec2(p.y, -p.x) / per + vec2(0.37, 0.61) : p / per;
 	return texture(t, uv);
 }
 
 void vertex() {
-	world = chunk_origin + VERTEX;
+	bpx = VERTEX;
+	world = chunk_origin + VERTEX * texel;
 }
 
 void fragment() {
-	vec2 p = floor(world) + 0.5;
-	float dz = bayer4(p);
+	vec2 p = world;
+	float dz = bayer4(floor(bpx));
 	bool alt = vnoise(p / 640.0 + seed_off * 1.7) + dz * 0.02 > 0.5;
 
 	// --- biome zones

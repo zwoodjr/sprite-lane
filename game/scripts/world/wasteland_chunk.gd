@@ -7,6 +7,8 @@ extends Node2D
 ## that the chunk is a single plain texture draw (as cheap as the old floor).
 
 const CHUNK_SIZE := 512
+## Bake resolution: native density (one baked pixel = one screen pixel).
+const BAKE_PX := 692
 
 var _coord: Vector2i
 var _vp: SubViewport
@@ -22,7 +24,7 @@ func configure(coord: Vector2i, mat: ShaderMaterial, atlas: Texture2D, decal_lis
 	_decal_list = decal_list
 	_vp = SubViewport.new()
 	_vp.name = "Bake"
-	_vp.size = Vector2i(CHUNK_SIZE, CHUNK_SIZE)
+	_vp.size = Vector2i(BAKE_PX, BAKE_PX)
 	_vp.disable_3d = true
 	_vp.transparent_bg = false
 	_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
@@ -31,9 +33,10 @@ func configure(coord: Vector2i, mat: ShaderMaterial, atlas: Texture2D, decal_lis
 	var ground := Node2D.new()
 	ground.material = mat
 	ground.draw.connect(func() -> void:
-		ground.draw_rect(Rect2(Vector2.ZERO, Vector2(CHUNK_SIZE, CHUNK_SIZE)), Color.WHITE))
+		ground.draw_rect(Rect2(Vector2.ZERO, Vector2(BAKE_PX, BAKE_PX)), Color.WHITE))
 	_vp.add_child(ground)
 	_decals = Node2D.new()
+	_decals.scale = Vector2.ONE * (float(BAKE_PX) / float(CHUNK_SIZE))
 	_decals.draw.connect(_draw_decals)
 	_vp.add_child(_decals)
 	add_child(_vp)
@@ -50,7 +53,7 @@ func bake() -> void:
 
 func _draw() -> void:
 	if _vp:
-		draw_texture(_vp.get_texture(), Vector2.ZERO)
+		draw_texture_rect(_vp.get_texture(), Rect2(Vector2.ZERO, Vector2(CHUNK_SIZE, CHUNK_SIZE)), false)
 
 
 func _draw_decals() -> void:

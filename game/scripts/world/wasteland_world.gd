@@ -142,11 +142,9 @@ static func prop_tex(n: String) -> Texture2D:
 	return load("res://assets/sprites/props/%s.png" % n) as Texture2D
 
 
-## World scale for a prop texture: the 2x painted set draws at half size.
+## World scale for a prop texture (native density, see UnitAnim.prop_scale).
 static func prop_scale(tex: Texture2D) -> float:
-	if tex and tex.resource_path.contains("/props_hd/"):
-		return 0.5
-	return 1.0
+	return UnitAnim.prop_scale(tex)
 
 
 func _build_landmark_catalog() -> void:
@@ -260,6 +258,7 @@ func _ground_material(segs: Array[Dictionary], origin: Vector2) -> ShaderMateria
 	mat.set_shader_parameter("seed_off", field.seed_off)
 	mat.set_shader_parameter("chunk_origin", origin)
 	mat.set_shader_parameter("road_half", GroundField.ROAD_HALF)
+	mat.set_shader_parameter("texel", float(WastelandChunk.CHUNK_SIZE) / float(WastelandChunk.BAKE_PX))
 	var sv := PackedVector4Array()
 	var so := PackedFloat32Array()
 	for s in segs:
@@ -361,7 +360,7 @@ func _populate_zone_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary
 			continue
 		var near := false
 		for t in taken:
-			if t.distance_to(p) < 140.0:
+			if t.distance_to(p) < 190.0:
 				near = true
 		for lm in landmarks:
 			if (lm["position"] as Vector2).distance_to(p) < BLOCK_CLEAR_LANDMARK:
@@ -373,7 +372,7 @@ func _populate_zone_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary
 		var tex: Texture2D = _zone_tex[kind]
 		var sp := Sprite2D.new()
 		sp.texture = tex
-		sp.scale = Vector2.ONE * (float(info[0]) / float(tex.get_height()))
+		sp.scale = Vector2.ONE * (float(info[0]) * UnitAnim.ART_GROW / float(tex.get_height()))
 		sp.offset = Vector2(0, -tex.get_height() * 0.5 + tex.get_height() * 0.08)
 		sp.position = (p - chunk.position).floor()
 		sp.flip_h = rng.randf() < 0.5
@@ -386,7 +385,7 @@ func _populate_zone_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary
 			body.position = sp.position
 			var cs := CollisionShape2D.new()
 			var shape := RectangleShape2D.new()
-			shape.size = block
+			shape.size = block * UnitAnim.ART_GROW
 			cs.shape = shape
 			body.add_child(cs)
 			chunk.add_child(body)
@@ -407,7 +406,7 @@ func _weighted(table: Array, rng: RandomNumberGenerator) -> String:
 
 func _place_mid(chunk: Node2D, kind: String, world_pos: Vector2, rng: RandomNumberGenerator, taken: Array[Vector2]) -> void:
 	for t in taken:
-		if t.distance_to(world_pos) < 110.0:
+		if t.distance_to(world_pos) < 150.0:
 			return
 	var info: Dictionary = MID_PROPS[kind]
 	if info.has("block"):
@@ -430,9 +429,9 @@ func _place_mid(chunk: Node2D, kind: String, world_pos: Vector2, rng: RandomNumb
 		body.position = sp.position
 		var cs := CollisionShape2D.new()
 		var shape := RectangleShape2D.new()
-		shape.size = info["block"]
+		shape.size = info["block"] * UnitAnim.ART_GROW
 		cs.shape = shape
-		var off: Vector2 = info["off"]
+		var off: Vector2 = info["off"] * UnitAnim.ART_GROW
 		if sp.flip_h:
 			off.x = -off.x
 		cs.position = off
@@ -490,7 +489,7 @@ func _populate_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], ta
 		wr.texture = _prop_wreck
 		var wh := _hash2(coord.x, coord.y, 77)
 		wr.position = Vector2((wh >> 3) % (CHUNK_SIZE - 80) + 40, (wh >> 9) % (CHUNK_SIZE - 80) + 40)
-		wr.scale = Vector2(1.3, 1.3) * prop_scale(wr.texture)
+		wr.scale = Vector2.ONE * prop_scale(wr.texture)
 		wr.z_index = 2
 		chunk.add_child(wr)
 	## Destructible crates — sparse (~⅕ prior density). Power-ups are rare finds.
@@ -532,7 +531,7 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 				sp.texture = _prop_wreck
 			sp.position = lp - chunk.position
 			sp.centered = true
-			sp.scale = Vector2(1.4, 1.4) * prop_scale(sp.texture)
+			sp.scale = Vector2.ONE * prop_scale(sp.texture)
 			sp.z_index = 3
 			chunk.add_child(sp)
 			var label := Label.new()

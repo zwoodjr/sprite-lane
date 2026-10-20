@@ -7,7 +7,7 @@ extends RefCounted
 
 enum Biome { EARTH, SAND, SCRUB, RUBBLE }
 
-const ROAD_HALF := 26.0
+const ROAD_HALF := 40.0
 const ROAD_STEP := 700.0
 const ROAD_STEPS := 9 ## per direction from the anchor (±6300 px)
 

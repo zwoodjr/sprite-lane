@@ -20,8 +20,8 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	if ResourceLoader.exists(TEX):
 		_sprite.texture = load(TEX)
-		_sprite.scale = Vector2.ONE * (120.0 / float(_sprite.texture.get_width()))
-	_sprite.position = Vector2(0, -40)
+		_sprite.scale = Vector2.ONE * (120.0 * UnitAnim.ART_GROW / float(_sprite.texture.get_width()))
+	_sprite.position = Vector2(0, -40 * UnitAnim.ART_GROW)
 	add_child(_sprite)
 	_label = Label.new()
 	_label.text = "LOCKED BUNKER"

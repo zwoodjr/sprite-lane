@@ -27,6 +27,31 @@ signal frame_event(state: String, frame: int)
 signal finished(state: String)
 
 const FEET_FROM_BOTTOM := 10.0
+## Visual tier: every unit / prop texel draws as exactly one screen pixel.
+## The match camera zoom (world px -> screen px) ...
+const SCREEN_ZOOM := 1.35
+## ... so one art texel spans this many world px.
+const TEXEL := 1.0 / SCREEN_ZOOM
+## Units / props grew ~1.5x in world space when they went native (bodies were
+## drawn at ~0.44-0.5 world px per texel); gameplay body sizes scale with it.
+const BODY_K := 1.4
+## World art sized before the visual tier (props, landmarks: 0.5 world px per
+## painted texel) grows by this to reach native density.
+const ART_GROW := 2.0 * TEXEL
+
+
+## World scale for a prop texture: the painted 2x set (props_hd, and every
+## native-res landmark) draws 1 texel = 1 screen px; the old 1x pixel props
+## draw at an exact 2x so they keep their relative size.
+static func prop_scale(tex: Texture2D) -> float:
+	if tex and tex.resource_path.contains("/props/"):
+		return 2.0 * TEXEL
+	return TEXEL
+
+
+## World size of a `px`-texel art span drawn at the native density.
+static func native(px: float) -> float:
+	return px * TEXEL
 const STATE_NAMES := [
 	"idle", "walk", "windup", "attack", "hit", "death", "dash", "ability",
 	"sit", "roar", "emerge", "rampage", "bark", "drop", "charge", "impact",

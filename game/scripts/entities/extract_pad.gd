@@ -34,8 +34,12 @@ func _ready() -> void:
 	label.add_theme_font_size_override("font_size", 13)
 	label.offset_left = -90.0
 	label.offset_right = 90.0
+	label.offset_top = 74.0
+	label.offset_bottom = 100.0
+	if sprite:
+		sprite.scale = Vector2.ONE * UnitAnim.prop_scale(sprite.texture)
 	_beam = Polygon2D.new()
-	_beam.polygon = PackedVector2Array([Vector2(-26, 0), Vector2(26, 0), Vector2(14, -420), Vector2(-14, -420)])
+	_beam.polygon = PackedVector2Array([Vector2(-38, 0), Vector2(38, 0), Vector2(20, -560), Vector2(-20, -560)])
 	_beam.color = Color(1.0, 0.85, 0.4, 0.0)
 	_beam.z_index = 5
 	add_child(_beam)
@@ -109,7 +113,7 @@ func _process(delta: float) -> void:
 
 
 func _draw_ring() -> void:
-	var r := 52.0
+	var r := 70.0
 	if open:
 		var pulse := 0.5 + 0.5 * sin(_t * 4.0)
 		var rc := Color(1, 0.4, 0.3) if last_chance else Color(1, 0.85, 0.35)
