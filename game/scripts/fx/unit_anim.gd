@@ -49,6 +49,37 @@ static func prop_scale(tex: Texture2D) -> float:
 	return TEXEL
 
 
+static var _shadow_tex: Texture2D = null
+
+
+## Soft cool contact shadow under a unit's feet (one shared radial texture).
+## Returns the Sprite2D (child of `parent`, drawn below its siblings).
+static func add_contact_shadow(parent: Node2D, width: float, feet_y: float, alpha: float = 0.5) -> Sprite2D:
+	if _shadow_tex == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(0.05, 0.04, 0.08, 1.0))
+		g.add_point(0.45, Color(0.05, 0.04, 0.08, 0.7))
+		g.set_color(g.get_point_count() - 1, Color(0.05, 0.04, 0.08, 0.0))
+		var t := GradientTexture2D.new()
+		t.gradient = g
+		t.fill = GradientTexture2D.FILL_RADIAL
+		t.fill_from = Vector2(0.5, 0.5)
+		t.fill_to = Vector2(1.0, 0.5)
+		t.width = 64
+		t.height = 64
+		_shadow_tex = t
+	var s := Sprite2D.new()
+	s.name = "ContactShadow"
+	s.texture = _shadow_tex
+	s.scale = Vector2(width / 64.0, width * 0.3 / 64.0)
+	s.position = Vector2(3.0, feet_y - 1.0)
+	s.modulate = Color(1, 1, 1, alpha)
+	s.z_index = -1
+	parent.add_child(s)
+	parent.move_child(s, 0)
+	return s
+
+
 ## World size of a `px`-texel art span drawn at the native density.
 static func native(px: float) -> float:
 	return px * TEXEL

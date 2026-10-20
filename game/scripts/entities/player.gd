@@ -249,6 +249,7 @@ func _build_visuals() -> void:
 	_muzzle_flash.material = add
 	_muzzle_flash.visible = false
 	gun.add_child(_muzzle_flash)
+	UnitAnim.add_contact_shadow(self, 58.0, FEET_Y, 0.55)
 	gun.z_index = 2
 
 ## Drones: Helm = weapon base + Squadron + Scrap Drone ranks (max 4).
@@ -1122,6 +1123,7 @@ func _fire_one_shot() -> void:
 			bl.set("pierce_falloff", 1.0)
 			bl.modulate = Color(0.75, 0.9, 1.4, 0.8)
 	_flash_left = 0.05
+	LightFx.flash(get_parent(), origin, 110.0, Color(1.0, 0.7, 0.32, 0.55), 0.09)
 	_muzzle_flash.position = _flash_pos
 	_muzzle_flash.rotation = aim.angle()
 	Juice.sfx("shot", -4.0)

@@ -264,6 +264,10 @@ func _apply_look() -> void:
 		body.self_modulate = _def.get("tint", Color.WHITE)
 		_anim.setup(body, prefix, UnitAnim.native(fs), FEET_Y * body_scale)
 		_atk = UnitAnim.load_json(prefix + "_attack.json")
+		var sh := get_node_or_null("ContactShadow") as Sprite2D
+		if sh:
+			sh.queue_free()
+		UnitAnim.add_contact_shadow(self, 44.0 * body_scale, FEET_Y * body_scale, 0.5)
 		var col := get_node_or_null("CollisionShape2D") as Node2D
 		if col:
 			col.scale = Vector2.ONE * body_scale

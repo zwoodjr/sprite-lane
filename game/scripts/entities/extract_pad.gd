@@ -73,8 +73,9 @@ func set_open(is_open: bool) -> void:
 		_channel = 0.0
 	if sprite:
 		sprite.texture = load(
-			"res://assets/sprites/props/extract_open.png" if open else "res://assets/sprites/props/extract_sealed.png"
+			"res://assets/sprites/props_hd/extract_open.png" if open else "res://assets/sprites/props_hd/extract_sealed.png"
 		) as Texture2D
+		sprite.scale = Vector2.ONE * UnitAnim.prop_scale(sprite.texture)
 	if open and not powered:
 		label.text = "%s · NO POWER — bring a cell" % pad_name
 		label.add_theme_color_override("font_color", Color(0.55, 0.8, 1.0))

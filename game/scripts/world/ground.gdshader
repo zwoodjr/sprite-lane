@@ -76,14 +76,18 @@ void fragment() {
 	vec2 pw = p + vec2(wq, -wq);
 	float m = vnoise(pw / 1300.0 + seed_off);
 	float n = vnoise(pw / 1100.0 + seed_off.yx + 57.0);
+	// Visual tier: patches BLEND into each other (ragged painted edges from a
+	// fine noise + dither) instead of hard cuts; rubble patches get a soft
+	// darker rim so they sit in the earth like the mockup's blended rubble.
+	float e = dz * 0.03 + (vnoise(p / 23.0 + seed_off * 3.1) - 0.5) * 0.045;
+	float ws = smoothstep(0.625, 0.66, m + e);
+	float wc = 1.0 - smoothstep(0.30, 0.335, m + e);
+	float wr = smoothstep(0.672, 0.705, n + e);
 	vec4 col = tex_frame(tex_earth, p, alt, 512.0);
-	if (n + dz * 0.06 > 0.69) {
-		col = tex_frame(tex_rubble, p, alt, 512.0);
-	} else if (m + dz * 0.06 > 0.64) {
-		col = tex_frame(tex_sand, p, alt, 512.0);
-	} else if (m + dz * 0.06 < 0.32) {
-		col = tex_frame(tex_scrub, p, alt, 512.0);
-	}
+	if (ws > 0.0) col = mix(col, tex_frame(tex_sand, p, alt, 512.0), ws);
+	if (wc > 0.0) col = mix(col, tex_frame(tex_scrub, p, alt, 512.0), wc);
+	if (wr > 0.0) col = mix(col, tex_frame(tex_rubble, p, alt, 512.0), wr);
+	col.rgb *= 1.0 - 0.10 * (1.0 - abs(wr * 2.0 - 1.0)) * step(0.01, wr);
 
 	// --- dried riverbeds (only in regions where the gate field allows)
 	float gate = vnoise(p / 2400.0 + seed_off.yx * 0.9 + 13.0);
@@ -120,22 +124,23 @@ void fragment() {
 			} else {
 				col = tex_frame(tex_asphalt, p, alt, 256.0);
 				// faded centre dashes
-				float cell = floor(along / 52.0);
+				float cell = floor(along / 80.0);
 				float fade = hash12(vec2(cell, 9.0) + seed_off);
-				if (abs(side) < 1.6 && fract(along / 52.0) < 0.5 && fade > 0.25) {
+				float wob = (hash12(floor(vec2(along / 3.0, side)) + seed_off) - 0.5) * 0.5;
+				if (abs(side) < 2.2 + wob && fract(along / 80.0) < 0.45 && fade > 0.22) {
 					col.rgb = mix(col.rgb, vec3(0.50, 0.44, 0.29), 0.45 + fade * 0.25);
 				}
 				// worn edge line
-				if (dist > hw - 9.0 && dist < hw - 7.4 && hash12(vec2(floor(along / 23.0), side > 0.0 ? 5.0 : 6.0) + seed_off) > 0.35) {
+				if (dist > hw - 12.0 && dist < hw - 10.0 && hash12(vec2(floor(along / 23.0), side > 0.0 ? 5.0 : 6.0) + seed_off) > 0.35) {
 					col.rgb = mix(col.rgb, vec3(0.42, 0.40, 0.36), 0.5);
 				}
 				// potholes: one candidate per 110 px of road
-				float pc = floor(along / 110.0);
+				float pc = floor(along / 150.0);
 				float h = hash12(vec2(pc, float(k) + 17.0) + seed_off);
 				if (h > 0.5) {
-					float pa = (pc + 0.25 + 0.5 * hash12(vec2(pc, 41.0) + seed_off)) * 110.0;
+					float pa = (pc + 0.25 + 0.5 * hash12(vec2(pc, 41.0) + seed_off)) * 150.0;
 					float ps = (hash12(vec2(pc, 43.0) + seed_off) - 0.5) * hw * 1.1;
-					float pr = 5.0 + 6.0 * hash12(vec2(pc, 47.0) + seed_off);
+					float pr = 7.0 + 8.0 * hash12(vec2(pc, 47.0) + seed_off);
 					vec2 q = vec2(along - pa, side - ps) / vec2(pr * 1.35, pr);
 					float qd = length(q);
 					if (qd < 1.0) {

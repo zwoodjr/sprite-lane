@@ -9,6 +9,8 @@ extends Node2D
 const CHUNK_SIZE := 512
 ## Bake resolution: native density (one baked pixel = one screen pixel).
 const BAKE_PX := 692
+## Decal atlas texels are native too: one texel = one bake px.
+const DECAL_TEXEL := float(CHUNK_SIZE) / float(BAKE_PX)
 
 var _coord: Vector2i
 var _vp: SubViewport
@@ -65,7 +67,7 @@ func _draw_decals() -> void:
 		var rot: float = d[2]
 		var flip: bool = d[3]
 		var tint: Color = d[4]
-		var size := region.size
+		var size := region.size * DECAL_TEXEL
 		var r := maxf(size.x, size.y) * 0.5 if rot != 0.0 else 0.0
 		var half := Vector2(r, r) if rot != 0.0 else size * 0.5
 		if not Rect2(half, Vector2(CHUNK_SIZE, CHUNK_SIZE) - half * 2.0).has_point(pos):

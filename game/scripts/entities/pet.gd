@@ -56,6 +56,7 @@ func _ready() -> void:
 	if _player == null:
 		_player = get_tree().get_first_node_in_group("player") as Node2D
 	_apply_look()
+	UnitAnim.add_contact_shadow(self, 50.0, FEET_Y, 0.4 if bool(_def.get("flying", false)) else 0.5)
 	## Drone Bat flies over walls and rocks.
 	if bool(_def.get("flying", false)):
 		collision_mask = 0

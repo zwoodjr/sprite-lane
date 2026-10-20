@@ -207,7 +207,7 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 			s["npc"] = _npc(giver, s["pos"], "field_tent", 110.0, Vector2(-62, 0), "Cinder's field tent")
 		"overwatch":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
-			s["npc"] = _npc(giver, s["pos"], "watch_tower", 150.0, Vector2(0, 0), "Vesper — overwatch", 70.0)
+			s["npc"] = _npc(giver, s["pos"], "watch_tower", 150.0, Vector2(0, 0), "Vesper — overwatch", 96.0)
 			s["fire_t"] = 1.0
 		"vault":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])

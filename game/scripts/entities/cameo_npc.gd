@@ -41,6 +41,8 @@ func _ready() -> void:
 	var c := CharacterDefs.get_character(hero)
 	_anim.setup(_body, str(c.get("anim", "")), RadioDefs.NPC_WORLD, RadioDefs.NPC_FEET)
 	_anim.set_locomotion("idle")
+	if perch <= 0.0:
+		UnitAnim.add_contact_shadow(self, 58.0, RadioDefs.NPC_FEET, 0.5)
 	_tag = Label.new()
 	_tag.text = label_text if label_text != "" else str(c.get("display_name", hero))
 	_tag.add_theme_font_size_override("font_size", 12)
