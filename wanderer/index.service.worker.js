@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1792456343|7889390';
+const CACHE_VERSION = '1792457212|14854237';
 /** @type {string} */
 const CACHE_PREFIX = 'Wanderer-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
