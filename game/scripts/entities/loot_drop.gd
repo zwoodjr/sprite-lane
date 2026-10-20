@@ -104,14 +104,14 @@ func _collect() -> void:
 	match kind:
 		"scrap":
 			GameState.add_scrap(maxi(1, int(round(value))))
-			Juice.sfx("pickup", -14.0, 0.2)
+			Juice.sfx("pick_scrap")
 		"xp":
 			GameState.add_run_xp(maxi(1, int(round(value))))
-			Juice.sfx("pickup", -16.0, 0.3)
+			Juice.sfx("pick_xp")
 		"tonic":
 			if _player.has_method("heal"):
 				_player.call("heal", value)
 			GameState.cleanse_exposure(MedicineDefs.TONIC_PICKUP_CLEANSE)
 			Juice.float_text(_player.global_position + Vector2(0, -36), "+%d" % int(value), UiTheme.TEAL, 16)
-			Juice.sfx("pickup", -4.0)
+			Juice.sfx("pick_tonic")
 	queue_free()

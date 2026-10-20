@@ -59,7 +59,8 @@ func spawn(tier: int, at: Vector2 = Vector2.INF) -> void:
 	_goal = centre
 	if _hud and _hud.has_method("show_toast"):
 		_hud.call("show_toast", "RADIO: a raider crew is working the area — they're after the medicine", FactionDefs.CREW_MAP_COLOR)
-	Juice.sfx("threat_up", -4.0)
+	Juice.sfx("radio_chatter")
+	Juice.sfx("threat_up", -6.0)
 
 
 func _pick_carrier() -> void:

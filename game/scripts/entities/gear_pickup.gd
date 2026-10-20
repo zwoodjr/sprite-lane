@@ -105,7 +105,8 @@ func _collect() -> void:
 		GameState.add_run_loot(item)
 		var rar := str(item.get("rarity", "common"))
 		Juice.float_text(global_position + Vector2(0, -30), str(item.get("name", "Gear")), GearDefs.RARITY_COLOR.get(rar, Color.WHITE), 17 if rar in ["epic", "legendary"] else 14)
-	Juice.sfx("pickup")
+	var rr := str(item.get("rarity", "common")) if material_id == "" else "common"
+	Juice.sfx({"rare": "pick_rare", "epic": "pick_epic", "legendary": "pick_legendary"}.get(rr, "pick_common"))
 	Juice.haptic(20)
 	queue_free()
 

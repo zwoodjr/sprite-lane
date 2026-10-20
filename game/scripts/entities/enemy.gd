@@ -210,7 +210,7 @@ func _spawn_entrance() -> void:
 		_anim.play("roar")
 		_spawn_in = maxf(_spawn_in, _anim.frame_count("roar") / 10.0)
 		Juice.shake(0.35)
-		Juice.sfx("ability", 0.0, 0.5)
+		Juice.mob_sfx("roar", self)
 		return
 	modulate.a = 0.0
 	var tw := create_tween()
@@ -502,6 +502,8 @@ func _attack(dir: Vector2) -> void:
 		_fire_cd *= float(FactionDefs.TRAITS["overclocked"]["cooldown"])
 	_atk_dir = dir
 	_face(dir.x)
+	if _atk_type() != "ranged":
+		Juice.mob_sfx("attack", self, -2.0)
 	if _archetype() == "charger":
 		_lunge_dir = dir
 		## Long enough to actually reach where the player stood (+ a little overshoot).
@@ -537,10 +539,10 @@ func _atk_hit(f: int) -> void:
 		if _archetype() == "brute" and first:
 			for a in [-0.22, 0.0, 0.22]:
 				_fire_from(origin, aim.rotated(a), 360.0, damage)
-			Juice.sfx("enemy_shot", -2.0)
+			Juice.mob_sfx("shot", self, 0.0)
 		else:
 			_fire_from(origin, aim, 430.0 if _archetype() != "brute" else 380.0, damage)
-			Juice.sfx("enemy_shot", -6.0)
+			Juice.mob_sfx("shot", self, -3.0)
 		return
 	## Melee: brutes slam the telegraphed ring; others bite / claw at the origin.
 	var hit := false
@@ -550,6 +552,7 @@ func _atk_hit(f: int) -> void:
 		if first:
 			Juice.shake(0.12 * body_scale / UnitAnim.BODY_K)
 			Juice.dust_puff(centre, 10)
+			Juice.sfx_at("brute_slam", centre, -3.0)
 	else:
 		hit = _player.global_position.distance_to(origin) <= 18.0 + 12.0 * body_scale
 	if hit and _player.has_method("take_damage"):
@@ -598,7 +601,8 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 		Juice.damage_number(global_position + Vector2(0, -26), amount, false, num_color)
 	else:
 		Juice.damage_number(global_position + Vector2(0, -26), amount, crit)
-		Juice.sfx("hit", -8.0)
+		Juice.sfx_at("hit_metal" if faction == EnemyDefs.MACHINE else "hit_flesh", global_position, -3.0)
+		Juice.mob_sfx("hurt", self, -5.0)
 	if from_dir.length() > 0.01:
 		var resist := 0.35 if _archetype() == "brute" else 1.0
 		var k := 220.0 if knock < 0.0 else knock
@@ -695,7 +699,7 @@ func _die() -> void:
 	var pl := get_tree().get_first_node_in_group("player")
 	if pl != null and pl.has_method("on_kill"):
 		pl.call("on_kill", self)
-	Juice.sfx("enemy_die", -2.0)
+	Juice.mob_sfx("die", self)
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
 	Juice.shake(0.12 if _archetype() != "brute" else 0.3)

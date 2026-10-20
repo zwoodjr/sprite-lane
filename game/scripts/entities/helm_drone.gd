@@ -183,4 +183,4 @@ func _fire() -> void:
 	if _player.has_method("special_ammo"):
 		bullet.set("ammo", str(_player.call("special_ammo")))
 	get_tree().current_scene.add_child(bullet)
-	Juice.sfx("shot", -12.0)
+	Juice.sfx_at("drone_fire", global_position, -3.0)

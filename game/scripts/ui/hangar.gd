@@ -389,9 +389,9 @@ func _pips(rank: int, max_r: int) -> HBoxContainer:
 
 func buy(id: String) -> bool:
 	if not GameState.try_buy_camp(id):
-		Juice.sfx("ui_tap")
+		Juice.sfx("ui_denied")
 		return false
-	Juice.sfx("pickup")
+	Juice.sfx("ui_purchase")
 	for m in GameState.check_milestones():
 		_toast("Milestone: %s — the hangar changes" % str(m["name"]))
 		GameState.save_profile()
@@ -465,9 +465,9 @@ func _mech_build_row(mid: String) -> PanelContainer:
 
 func build_mech(mid: String) -> bool:
 	if not GameState.build_mech(mid):
-		Juice.sfx("ui_tap")
+		Juice.sfx("ui_denied")
 		return false
-	Juice.sfx("pickup")
+	Juice.sfx("ui_purchase")
 	_toast("%s rebuilt — equip it on the survivor screen" % str(PetDefs.get_pet(mid)["name"]))
 	_rebuild()
 	return true
@@ -568,9 +568,9 @@ func _tonic_row(tid: String) -> PanelContainer:
 
 func brew(tid: String) -> bool:
 	if not GameState.brew(tid):
-		Juice.sfx("ui_tap")
+		Juice.sfx("ui_denied")
 		return false
-	Juice.sfx("pickup")
+	Juice.sfx("ui_purchase")
 	_toast("Brewed %s" % MedicineDefs.item_name(tid))
 	_rebuild()
 	return true
@@ -578,7 +578,7 @@ func brew(tid: String) -> bool:
 
 func toggle_tonic(tid: String) -> bool:
 	var ok := GameState.toggle_tonic(tid)
-	Juice.sfx("ui_tap")
+	Juice.sfx("ui_toggle")
 	_rebuild()
 	return ok
 
@@ -650,7 +650,7 @@ func inspect_item(uid: int) -> void:
 	var sal := UiTheme.big_button("SALVAGE  +%d SCRAP" % GearDefs.salvage_value(it), UiTheme.RUST, 60, 18)
 	sal.pressed.connect(func() -> void:
 		GameState.salvage(uid)
-		Juice.sfx("pickup")
+		Juice.sfx("ui_purchase")
 		close_popup()
 		_rebuild())
 	v.add_child(sal)
@@ -662,7 +662,7 @@ func inspect_item(uid: int) -> void:
 		var eq := UiTheme.big_button("EQUIP ON %s" % hname.to_upper(), UiTheme.TEAL, 60, 18)
 		eq.pressed.connect(func() -> void:
 			if GameState.quick_equip(uid, hero):
-				Juice.sfx("pickup")
+				Juice.sfx("ui_equip")
 			close_popup()
 			_rebuild())
 		v.add_child(eq)

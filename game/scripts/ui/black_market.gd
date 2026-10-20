@@ -92,7 +92,7 @@ func buy(id: String) -> bool:
 			GameState.run_rerolls_left += 1
 	GameState.scrap_found -= int(it["cost"])
 	bought += 1
-	Juice.sfx("pickup")
+	Juice.sfx("ui_purchase")
 	if _jobs and is_instance_valid(_jobs):
 		_jobs.call("on_market_buy")
 	_rebuild()

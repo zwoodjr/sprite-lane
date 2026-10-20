@@ -4,17 +4,29 @@ extends Node
 ## Autoload as "Juice". Everything is fire-and-forget and safe to call
 ## from any scene (no-ops when there's no camera / scene).
 
-const SFX_NAMES := [
-	"shot", "enemy_shot", "hit", "enemy_die", "hurt", "dash", "reload", "break",
-	"pickup", "extract_open", "seal", "extract_win", "wipe", "ui_tap", "threat_up",
-	"ability", "empty",
-]
-const POOL_SIZE := 12
+const SoundScript = preload("res://scripts/autoload/sound.gd")
 
-var _streams: Dictionary = {}
-var _players: Array[AudioStreamPlayer] = []
-var _next_player: int = 0
-var _last_play_ms: Dictionary = {}
+## Legacy one-word ids (pre sound pass) -> new ids. "@x" = per-hero lookup.
+const LEGACY := {
+	"shot": "@fire", "shoot": "fire_helm", "enemy_shot": "machine_shot", "hit": "hit_flesh", "enemy_die": "plague_die",
+	"hurt": "@hurt", "dash": "dash", "reload": "@reload", "break": "break_wood", "pickup": "pick_common",
+	"extract_open": "ext_open", "seal": "ext_close", "extract_win": "ext_success", "wipe": "run_wipe",
+	"threat_up": "threat_up", "ability": "@ability", "empty": "dry_fire", "mount": "dash",
+}
+## Per-hero sound kit.
+const HERO_SFX := {
+	"ash_rook": {"fire": "fire_rook", "impact": "boom_rook", "reload": "reload_launcher", "ability": "ab_rush"},
+	"vesper_thorn": {"fire": "fire_vesper", "reload": "reload_rifle", "ability": "ab_vial"},
+	"pebble": {"swing": "swing_pebble", "impact": "impact_pebble", "ability": "swing_pebble"},
+	"bolt_juno": {"swing": "swing_juno", "impact": "impact_juno", "ability": "swing_juno", "voice": "m"},
+	"sister_cinder": {"fire": "fire_cinder", "reload": "reload_rifle", "ability": "ab_heal"},
+	"quill_marrow": {"fire": "fire_quill", "swing": "swing_quill", "impact": "impact_quill", "reload": "reload_smg", "ability": "ab_mark"},
+	"nyx_caldera": {"swing": "swing_nyx", "impact": "impact_nyx", "ability": "ab_blade"},
+	"helm_wisp": {"fire": "fire_helm", "reload": "reload_pistol", "ability": "ab_drone"},
+}
+
+## Audio director (buses, pools, music, ambience). See sound.gd.
+var snd: Node
 
 var _trauma: float = 0.0
 var _shake_t: float = 0.0
@@ -25,15 +37,9 @@ var _pixel_font: Font
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	for n in SFX_NAMES:
-		var path := "res://assets/sfx/%s.wav" % n
-		if ResourceLoader.exists(path):
-			_streams[n] = load(path)
-	for i in range(POOL_SIZE):
-		var p := AudioStreamPlayer.new()
-		p.bus = "Master"
-		add_child(p)
-		_players.append(p)
+	snd = SoundScript.new()
+	snd.name = "Sound"
+	add_child(snd)
 	_spark_tex = _make_spark_texture()
 	if ResourceLoader.exists("res://assets/fonts/PressStart2P.ttf"):
 		_pixel_font = load("res://assets/fonts/PressStart2P.ttf")
@@ -41,22 +47,72 @@ func _ready() -> void:
 
 ## --- Audio -----------------------------------------------------------------
 
-func sfx(name: String, volume_db: float = 0.0, pitch_jitter: float = 0.08) -> void:
-	if not GameState.settings.get("sfx", true):
-		return
-	if not _streams.has(name):
-		return
-	## Rate-limit identical sounds so 20 bullets in a frame don't clip.
-	var now := Time.get_ticks_msec()
-	if now - int(_last_play_ms.get(name, -1000)) < 35:
-		return
-	_last_play_ms[name] = now
-	var p := _players[_next_player]
-	_next_player = (_next_player + 1) % _players.size()
-	p.stream = _streams[name]
-	p.volume_db = volume_db
-	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
-	p.play()
+## Fire-and-forget SFX. `name` is a sound id (see sound.gd) or a legacy word.
+## pitch_jitter < 0 uses the id's own default. Returns the voice (or null).
+func sfx(name: String, volume_db: float = 0.0, pitch_jitter: float = -1.0) -> Node:
+	if snd == null:
+		return null
+	return snd.call("play", resolve(name), volume_db, pitch_jitter, Vector2.INF)
+
+
+## Positional SFX in world space: pans + fades with distance from the camera.
+func sfx_at(name: String, pos: Vector2, volume_db: float = 0.0, pitch_jitter: float = -1.0) -> Node:
+	if snd == null:
+		return null
+	return snd.call("play", resolve(name), volume_db, pitch_jitter, pos)
+
+
+## The selected hero's sound for a slot (fire / swing / impact / reload / ability / hurt / death).
+func hero_sfx(kind: String, volume_db: float = 0.0) -> Node:
+	return sfx("@" + kind, volume_db)
+
+
+## A mob's voice for an event (attack / hurt / die / shot), by faction + role.
+func mob_sfx(event: String, mob: Node, volume_db: float = 0.0) -> Node:
+	if mob == null or not (mob is Node2D):
+		return null
+	var fac := str(mob.get("faction")) if mob.get("faction") != null else "plague"
+	if fac != "machine" and fac != "raider":
+		fac = "plague"
+	var id := fac + "_" + event
+	if event == "shot" and fac == "plague":
+		id = "plague_spit"
+	var role := str(mob.get("role")) if mob.get("role") != null else ""
+	if event == "roar":
+		id = "elite_spawn" if role != "boss" else ("boss_roar_machine" if fac == "machine" else "boss_roar_plague")
+	if role == "boss" or role == "elite":
+		volume_db += 3.0
+	return sfx_at(id, (mob as Node2D).global_position, volume_db)
+
+
+func resolve(name: String) -> String:
+	var id: String = LEGACY.get(name, name)
+	if not id.begins_with("@"):
+		return id
+	var kind := id.substr(1)
+	var hero := GameState.selected_character_id
+	var kit: Dictionary = HERO_SFX.get(hero, HERO_SFX["helm_wisp"])
+	match kind:
+		"hurt":
+			return "hurt_m" if kit.get("voice", "f") == "m" else "hurt_f"
+		"death":
+			return "death_m" if kit.get("voice", "f") == "m" else "death_f"
+		"fire":
+			return str(kit.get("fire", kit.get("swing", "fire_helm")))
+		"swing":
+			return str(kit.get("swing", kit.get("fire", "dash")))
+		"impact":
+			return str(kit.get("impact", "hit_flesh"))
+		"reload":
+			return str(kit.get("reload", "reload_rifle"))
+		"ability":
+			return str(kit.get("ability", "ab_rush"))
+	return kind
+
+
+func apply_audio_settings() -> void:
+	if snd:
+		snd.call("apply_settings")
 
 
 func haptic(ms: int = 20) -> void:

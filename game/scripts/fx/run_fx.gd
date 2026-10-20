@@ -73,6 +73,8 @@ static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, c
 		return 0
 	var tree := player.get_tree()
 	var hits := 0
+	if src != "mine":
+		Juice.sfx_at("explosion", pos, -2.0 if radius < 100.0 else 0.0)
 	for e in enemies_in(tree, pos, radius):
 		var dir: Vector2 = ((e as Node2D).global_position - pos).normalized()
 		player.call("hit_enemy", e, dmg, dir, knock, false, src)

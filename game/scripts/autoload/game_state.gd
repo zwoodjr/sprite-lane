@@ -116,6 +116,12 @@ const SAVE_PATH := "user://wanderer_save.json"
 const SAVE_VERSION := 4
 var settings: Dictionary = {
 	"sfx": true,
+	"mute": false,
+	"vol_master": 1.0,
+	"vol_music": 0.7,
+	"vol_sfx": 1.0,
+	"vol_ambience": 0.8,
+	"vol_ui": 0.8,
 	"haptics": true,
 	"screen_shake": true,
 	"stick_scale": 1.0,

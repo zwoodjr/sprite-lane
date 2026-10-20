@@ -45,7 +45,7 @@ Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill t
 
 - `tools/test_runner.tscn` — headless bot playtest: `godot --headless --path game res://tools/test_runner.tscn`
 - `tools/screenshot.tscn` — renders every screen to PNG (needs a display / xvfb)
-- `tools/gen_sfx.py`, `tools/gen_sprites.py` — regenerate original audio / Dust Apothecary chunky-pixel art (`gen_sprites_v2.py` wraps the same generator)
+- `tools/audio/build_sfx.py`, `tools/audio/build_music.py` — rebuild all audio from CC0 recordings + synthesis (see `assets/ATTRIBUTION.md`); `tools/gen_sprites.py` — Dust Apothecary chunky-pixel art (`gen_sprites_v2.py` wraps the same generator)
 
 ## Meta progression (Phases A–D)
 - **Hangar** (`HangarDefs`): shared camp upgrades (Generator, Radio Tower, Scrap Press, Ammo Bench), a station per survivor, Kennel ranks per dog, Stash slots. The hangar picture builds out per rank (`tools/gen_hangar_art.py`). Old flat-Hangar spend is refunded once.

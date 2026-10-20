@@ -92,7 +92,7 @@ static func _spawn_pickup(parent: Node, pos: Vector2) -> void:
 func _break_open() -> void:
 	_broken = true
 	var pos := global_position
-	Juice.sfx("break")
+	Juice.sfx_at("break_wood", pos)
 	Juice.shake(0.1)
 	Juice.burst(pos, Color(0.7, 0.5, 0.3), 16, 200.0, 0.5, 1.2)
 	broken.emit(pos)

@@ -290,7 +290,7 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 		eqb.custom_minimum_size.x = 118
 		eqb.pressed.connect(func() -> void:
 			if GameState.equip(_hero, _slot, uid):
-				Juice.sfx("pickup")
+				Juice.sfx("ui_equip")
 			refresh())
 		btns.add_child(eqb)
 	if bool(it.get("needs_heart", false)) and not bool(it.get("charged", false)):

@@ -120,7 +120,7 @@ func _daily_row(q: Dictionary, i: int) -> PanelContainer:
 	b.disabled = claimed or not done
 	b.pressed.connect(func() -> void:
 		if claim(i) > 0:
-			Juice.sfx("pickup"))
+			Juice.sfx("ui_purchase"))
 	h.add_child(b)
 	return p
 

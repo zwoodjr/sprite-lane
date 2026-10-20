@@ -512,7 +512,7 @@ func _tick_buffs(delta: float) -> void:
 
 func apply_powerup(def: Dictionary) -> void:
 	var id := str(def.get("id", ""))
-	Juice.sfx("pickup")
+	Juice.sfx("pick_ammo" if def.has("ammo") or id.ends_with("ammo") else "pick_rare")
 	Juice.haptic(15)
 	Juice.burst(global_position, def.get("color", Color.WHITE), 16, 180.0, 0.5)
 	Juice.float_text(global_position + Vector2(0, -30), str(def.get("name", "Boost")), def.get("color", Color.WHITE), 20)
@@ -762,7 +762,7 @@ func _fire_ability() -> void:
 			b.set("pierce_left", 0)
 			b.set("bounces_left", 0)
 			_vial_coat_left = float(a.get("coat_time", 4.0))
-			Juice.sfx("shot", 0.0)
+			Juice.sfx("fire_vesper", -5.0)
 		"maul_slam":
 			var centre := global_position + _facing_dir() * 18.0 + Vector2(0, 8)
 			var roll2 := _roll_damage(float(a.get("damage_mult", 2.2)))
@@ -771,6 +771,7 @@ func _fire_ability() -> void:
 			Juice.dust_puff(centre, 16)
 			Juice.shake(float(a.get("shake", 0.4)))
 			Juice.hitstop(0.07)
+			Juice.sfx("ab_slam")
 		"overload":
 			_overload()
 		"dissect":
@@ -783,9 +784,11 @@ func _fire_ability() -> void:
 				_spawn_smear("line", {"length": 60.0, "width": 26.0, "smear": Color(1.0, 0.6, 0.85)}, d3)
 				hit_enemy(tg, float(roll3[0]), d3, 220.0, true, "ability")
 				Juice.float_text(tg.global_position + Vector2(0, -40), "MARKED", UpgradeDefs.MARK_TINT, 14)
+				Juice.sfx("impact_quill", 2.0)
 				Juice.hitstop(0.05)
 		"blade_rush":
 			Juice.shake(0.1)
+			Juice.sfx("impact_nyx", 1.0)
 		"rig_assist":
 			_overclock_left = float(a.get("overclock_time", 4.0))
 			for i in range(int(a.get("temp_drones", 1))):
@@ -829,7 +832,7 @@ func _overload() -> void:
 		n += 1
 		cur = RunFx.nearest_enemy(get_tree(), prev, float(a.get("jump", 170.0)), hit)
 	Juice.shake(0.15)
-	Juice.sfx("hit", 0.0, 0.3)
+	Juice.sfx("ab_overload")
 	if GameState.has_evo("thunderhead"):
 		_storm_left = float(GameState.up("thunderhead", "time", 5.0))
 
@@ -885,13 +888,13 @@ func _on_rush_end() -> void:
 			float(_ability.get("end_slam_damage", 40.0)) * damage_mult, Color(1.0, 0.75, 0.4), "ability", 420.0, 0.6)
 		Juice.dust_puff(global_position + Vector2(0, 14), 16)
 		Juice.shake(0.3)
+		Juice.sfx("brute_slam")
 	if str(_ability.get("id", "")) != "rattle_rush" or GameState.run_rank("aftershock") <= 0:
 		return
 	var dmg := float(GameState.up("aftershock", "damage", 45.0)) * damage_mult * float(GameState.up("earthquake", "aftershock_mult", 1.0))
 	RunFx.explosion(self, global_position, float(GameState.up("aftershock", "radius", 120.0)), dmg, Color(1.0, 0.55, 0.2), "ability", 360.0)
 	Juice.shake(0.35)
 	Juice.hitstop(0.05)
-	Juice.sfx("enemy_die", 0.0, 0.2)
 
 ## Vesper's vial lands: a poison cloud that lingers.
 func vial_burst(pos: Vector2) -> void:
@@ -904,6 +907,7 @@ func vial_burst(pos: Vector2) -> void:
 	RunFx.ground(get_parent(), self, pos, "poison", r, float(a.get("cloud_time", 3.5)), float(a.get("cloud_dps", 12.0)))
 	RunFx.ring(get_parent(), pos, r, Color(0.55, 1.0, 0.35), 0.35)
 	Juice.burst(pos, Color(0.55, 1.0, 0.35), 20, 160.0, 0.5, 1.4)
+	Juice.sfx_at("ab_vial_break", pos)
 
 ## =============================================================================
 ## Targeting & attacks (auto: fire / swing only when an enemy is in range)
@@ -1160,7 +1164,7 @@ func _start_swing() -> void:
 		_anim.play_over("windup", windup)
 	else:
 		_anim.play("attack", _swing_atk_fps)
-	Juice.sfx("dash", -10.0, 0.2)
+	Juice.hero_sfx("swing", -1.0)
 
 func _on_anim_finished(state: String) -> void:
 	if state == "windup" and _swing_hits_left > 0:
@@ -1214,7 +1218,7 @@ func _melee_impact() -> void:
 		_guard_left = maxf(_guard_left, float(m.get("guard_on_hit", 0.0)))
 		if first:
 			Juice.hitstop(0.05)
-		Juice.sfx("hit", -2.0)
+		Juice.hero_sfx("impact", -1.0)
 		var sh := float(m.get("shake", 0.0))
 		if sh > 0.0:
 			Juice.shake(sh * (1.3 if any_crit else 1.0))
@@ -1404,7 +1408,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		_iframes = HURT_IFRAMES * 0.6
 		Juice.float_text(global_position + Vector2(0, -36), "BLOCKED", Color(0.9, 0.85, 0.6), 16)
 		Juice.burst(global_position, Color(0.95, 0.85, 0.55), 18, 160.0, 0.35)
-		Juice.sfx("hit", -2.0, 0.1)
+		Juice.sfx("shield_block")
 		return
 	var dmg := float(amount) * resist_mult
 	## Dust Surge: enemies hit harder while it lasts.
@@ -1496,6 +1500,7 @@ func _go_down() -> void:
 		return
 	Juice.burst(global_position, Color(0.9, 0.3, 0.2), 30, 240.0, 0.7, 1.5)
 	Juice.hitstop(0.12)
+	Juice.hero_sfx("death")
 	remove_from_group("player")
 	died.emit()
 	set_physics_process(false)

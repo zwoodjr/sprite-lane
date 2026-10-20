@@ -65,4 +65,4 @@ func _land() -> void:
 		_sprite.offset = Vector2(0, -float(_sprite.texture.get_height()) * 0.4)
 	_sprite.position = Vector2.ZERO
 	Juice.dust_puff(global_position + Vector2(0, 8), 10)
-	Juice.sfx("pickup", -6.0)
+	Juice.sfx_at("crate_land", global_position)

@@ -70,7 +70,8 @@ func open(new_level: int, choices: Array) -> void:
 	get_tree().paused = true
 	_root.visible = true
 	_build()
-	Juice.sfx("ui_tap")
+	Juice.sfx("level_up")
+	Juice.sfx("card_show", -2.0)
 	Juice.haptic(35)
 
 func _build() -> void:
@@ -298,13 +299,13 @@ func reroll() -> bool:
 	_choices = Progression.roll_run_choices(UpgradeDefs.CHOICES_PER_LEVEL, ids)
 	GameState.pending_run_choices = _choices
 	_guard = 0.15
-	Juice.sfx("ui_tap")
+	Juice.sfx("reroll")
 	_build()
 	return true
 
 func _pick(upgrade: Dictionary) -> void:
 	GameState.apply_run_upgrade(upgrade)
-	Juice.sfx("pickup")
+	Juice.sfx("card_pick")
 	Juice.haptic(25)
 	chosen.emit(upgrade)
 	close()

@@ -188,7 +188,7 @@ func drop_item(id: String) -> void:
 		var h := HaulPickup.spawn(p.get_parent(), p.global_position + Vector2(randf_range(-20, 20), 18), id, 1, false)
 		if h:
 			h.dropped = true
-	Juice.sfx("ui_tap")
+	Juice.sfx("pack_full")
 	show_pack()
 
 func _show_help() -> void:

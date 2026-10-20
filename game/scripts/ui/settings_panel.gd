@@ -9,7 +9,12 @@ const ROWS := [
 	{"key": "stick_scale", "type": "slider", "label": "Stick size", "desc": "Bigger = finer control, more thumb travel.", "min": 0.75, "max": 1.4, "step": 0.05},
 	{"key": "left_handed", "type": "toggle", "label": "Left-handed layout", "desc": "Stick on the right, DASH / ABILITY on the left."},
 	{"key": "show_hints", "type": "toggle", "label": "Show hints", "desc": "Ghost stick and rotating tips."},
-	{"key": "sfx", "type": "toggle", "label": "Sound effects", "desc": ""},
+	{"key": "mute", "type": "toggle", "label": "Mute all audio", "desc": ""},
+	{"key": "vol_master", "type": "slider", "label": "Master volume", "desc": "", "min": 0.0, "max": 1.0, "step": 0.05},
+	{"key": "vol_music", "type": "slider", "label": "Music", "desc": "", "min": 0.0, "max": 1.0, "step": 0.05},
+	{"key": "vol_sfx", "type": "slider", "label": "Effects", "desc": "Weapons, mobs, pickups.", "min": 0.0, "max": 1.0, "step": 0.05},
+	{"key": "vol_ambience", "type": "slider", "label": "Ambience", "desc": "Wind, zone beds, the hangar.", "min": 0.0, "max": 1.0, "step": 0.05},
+	{"key": "vol_ui", "type": "slider", "label": "Interface", "desc": "", "min": 0.0, "max": 1.0, "step": 0.05},
 	{"key": "haptics", "type": "toggle", "label": "Vibration", "desc": ""},
 	{"key": "screen_shake", "type": "toggle", "label": "Screen shake", "desc": ""},
 	{"key": "heat_shimmer", "type": "toggle", "label": "Heat shimmer", "desc": "Faint heat haze over the map. Off saves battery."},
@@ -48,7 +53,8 @@ func _make_row(row: Dictionary) -> Control:
 			b.toggled.connect(func(on: bool) -> void:
 				GameState.set_setting(key, on)
 				_style_toggle(b)
-				Juice.sfx("ui_tap")
+				Juice.apply_audio_settings()
+				Juice.sfx("ui_toggle")
 				changed.emit()
 			)
 			h.add_child(b)
@@ -68,9 +74,15 @@ func _make_row(row: Dictionary) -> Control:
 			s.value_changed.connect(func(v: float) -> void:
 				val.text = _fmt(key, v)
 				GameState.settings[key] = v
+				if key.begins_with("vol_"):
+					Juice.apply_audio_settings()
 				changed.emit()
 			)
-			s.drag_ended.connect(func(_c: bool) -> void: GameState.save_profile())
+			s.drag_ended.connect(func(_c: bool) -> void:
+				GameState.save_profile()
+				if key.begins_with("vol_"):
+					Juice.sfx("ui_tap" if key == "vol_ui" else "pick_rare")
+			)
 			box.add_child(s)
 			box.add_child(val)
 			h.add_child(box)

@@ -16,6 +16,8 @@ var player_inside: bool = false
 var _channel: float = 0.0
 var _t: float = 0.0
 var _fired: bool = false
+## Channel riser voice (stopped if the channel breaks).
+var _chan_snd: Node = null
 var last_chance: bool = false
 ## Military Base (Depth E7): a dead pad needs a power cell before it will channel.
 var powered: bool = true
@@ -66,6 +68,7 @@ func reset_channel() -> void:
 		_channel = 0.0
 		channel_changed.emit(0.0)
 		Juice.float_text(global_position + Vector2(0, -60), "INTERRUPTED", Color(1, 0.4, 0.3), 14)
+		_cancel_channel_sound()
 
 func set_open(is_open: bool) -> void:
 	open = is_open
@@ -95,8 +98,12 @@ func _process(delta: float) -> void:
 		set_powered(true)
 		GameState.run_has_cell = false
 		Juice.float_text(global_position + Vector2(0, -70), "POWERED!", Color(0.5, 0.9, 1.0), 18)
-		Juice.sfx("extract_open")
+		Juice.sfx("ab_overload", -6.0)
 	if open and player_inside and not _fired and powered:
+		if _channel <= 0.05 and (_chan_snd == null or not is_instance_valid(_chan_snd) or not bool(_chan_snd.get("playing"))):
+			_chan_snd = Juice.sfx("pad_channel")
+			if _chan_snd:
+				_chan_snd.set("pitch_scale", clampf(3.0 / maxf(_need(), 0.1), 0.7, 2.5))
 		_channel += delta
 		channel_changed.emit(_channel / _need())
 		if int(_channel * 10.0) % 3 == 0:
@@ -105,12 +112,21 @@ func _process(delta: float) -> void:
 			_fired = true
 			extract_requested.emit()
 	elif _channel > 0.0:
+		if not _fired:
+			_cancel_channel_sound()
 		_channel = maxf(0.0, _channel - delta * 3.0)
 		channel_changed.emit(_channel / _need())
 	if open and powered and player_inside and Input.is_action_just_pressed("interact") and not _fired:
 		_fired = true
 		extract_requested.emit()
 	_ring.queue_redraw()
+
+
+func _cancel_channel_sound() -> void:
+	if _chan_snd != null and is_instance_valid(_chan_snd) and bool(_chan_snd.get("playing")) and _chan_snd.get_meta("sid", "") == "pad_channel":
+		_chan_snd.call("stop")
+		Juice.sfx("pad_cancel")
+	_chan_snd = null
 
 
 func _draw_ring() -> void:

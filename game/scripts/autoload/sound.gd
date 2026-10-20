@@ -1,0 +1,475 @@
+extends Node
+
+## Audio director (child of the Juice autoload, reachable as Juice.snd).
+## - Buses Master > Music / SFX / Ambience / UI, created at runtime.
+## - Every SFX id has 1..N variants: res://assets/audio/sfx/<id>_<n>.ogg.
+## - Per-id voice limits, cooldowns, pitch/volume jitter, optional 2D position.
+## - Music: menu theme, or four in-run stems that crossfade with intensity.
+## - Ambience: per-zone loop beds (+ hangar), crossfaded; storm overlay.
+## Everything degrades to silence when a file is missing (headless-safe).
+
+const SFX_DIR := "res://assets/audio/sfx/"
+const MUS_DIR := "res://assets/audio/music/"
+const AMB_DIR := "res://assets/audio/amb/"
+const BUSES := ["Music", "SFX", "Ambience", "UI"]
+const POOL_2D := 24
+const POOL_FLAT := 18
+const MAX_VARIANTS := 6
+
+## id -> {bus, max, cd (ms), pitch, vol}
+const IDS := [
+	"fire_rook", "boom_rook", "fire_vesper", "fire_cinder", "fire_quill", "fire_helm", "drone_fire", "drone_servo",
+	"swing_pebble", "impact_pebble", "swing_juno", "impact_juno", "swing_nyx", "impact_nyx", "swing_quill", "impact_quill",
+	"reload_rifle", "reload_launcher", "reload_pistol", "reload_smg", "dry_fire", "hit_flesh", "hit_metal", "explosion",
+	"ab_rush", "ab_vial", "ab_vial_break", "ab_slam", "ab_overload", "ab_heal", "ab_mark", "ab_blade", "ab_drone",
+	"dash", "hurt_f", "hurt_m", "shield_block", "death_f", "death_m", "lowhp_loop", "level_up", "card_show", "card_pick", "reroll",
+	"pick_scrap", "pick_xp", "pick_tonic", "pick_common", "pick_rare", "pick_epic", "pick_legendary", "pick_ammo", "pick_lore",
+	"pack_full", "crate_land", "crate_open", "radio_blip", "radio_chatter", "ext_ping", "ext_open", "ext_close", "ext_last",
+	"storm", "pad_channel", "pad_cancel", "ext_success", "run_wipe", "threat_up", "elite_spawn", "boss_roar_plague", "boss_roar_machine",
+	"plague_attack", "plague_hurt", "plague_die", "plague_spit", "machine_attack", "machine_hurt", "machine_die", "machine_shot",
+	"raider_attack", "raider_hurt", "raider_die", "raider_shot", "brute_slam",
+	"noel_bark", "noel_growl", "bentley_yip", "lillie_charge", "lillie_hit", "mech_servo", "pet_gift",
+	"mine_drop", "mine_boom", "break_wood", "break_metal", "event_start", "supply_crash",
+	"ui_tap", "ui_back", "ui_tab", "ui_toggle", "ui_open", "ui_purchase", "ui_denied", "ui_equip",
+]
+## Overrides; anything unlisted uses _default_cfg().
+const CFG := {
+	"fire_quill": {"max": 3, "cd": 45, "pitch": 0.05},
+	"fire_helm": {"max": 3, "cd": 40},
+	"drone_fire": {"max": 3, "cd": 60},
+	"hit_flesh": {"max": 4, "cd": 45, "pitch": 0.12},
+	"hit_metal": {"max": 4, "cd": 45, "pitch": 0.12},
+	"pick_scrap": {"max": 3, "cd": 55, "pitch": 0.12},
+	"pick_xp": {"max": 3, "cd": 45, "pitch": 0.15},
+	"plague_attack": {"max": 3, "cd": 120}, "plague_hurt": {"max": 3, "cd": 90}, "plague_die": {"max": 4, "cd": 60},
+	"plague_spit": {"max": 3, "cd": 90},
+	"machine_attack": {"max": 3, "cd": 120}, "machine_hurt": {"max": 3, "cd": 90}, "machine_die": {"max": 4, "cd": 60},
+	"machine_shot": {"max": 3, "cd": 80},
+	"raider_attack": {"max": 2, "cd": 150}, "raider_hurt": {"max": 2, "cd": 120}, "raider_die": {"max": 3, "cd": 80},
+	"raider_shot": {"max": 3, "cd": 80},
+	"explosion": {"max": 4, "cd": 50, "pitch": 0.08}, "boom_rook": {"max": 3, "cd": 50},
+	"mine_boom": {"max": 3, "cd": 60},
+	"boss_roar_plague": {"max": 1, "cd": 1500, "pitch": 0.02}, "boss_roar_machine": {"max": 1, "cd": 1500, "pitch": 0.02},
+	"elite_spawn": {"max": 1, "cd": 1200, "pitch": 0.03},
+	"lowhp_loop": {"max": 1, "pitch": 0.0},
+	"radio_chatter": {"max": 1, "cd": 1500, "pitch": 0.02}, "radio_blip": {"max": 2, "cd": 200},
+	"ext_open": {"max": 1, "cd": 1000, "pitch": 0.0}, "ext_last": {"max": 1, "cd": 1000, "pitch": 0.0},
+	"ext_close": {"max": 1, "cd": 1000, "pitch": 0.0}, "storm": {"max": 1, "cd": 2000, "pitch": 0.0},
+	"ext_success": {"max": 1, "cd": 2000, "pitch": 0.0}, "run_wipe": {"max": 1, "cd": 2000, "pitch": 0.0},
+	"level_up": {"max": 1, "cd": 400, "pitch": 0.0}, "threat_up": {"max": 1, "cd": 800, "pitch": 0.0},
+	"pick_legendary": {"max": 1, "cd": 300, "pitch": 0.0}, "pick_epic": {"max": 1, "cd": 200, "pitch": 0.02},
+	"pad_channel": {"max": 1, "cd": 200, "pitch": 0.0},
+	"noel_bark": {"max": 2, "cd": 250}, "bentley_yip": {"max": 2, "cd": 250}, "noel_growl": {"max": 1, "cd": 900},
+	"dash": {"max": 2, "cd": 60},
+}
+## Big moments pull the music down for a beat. id -> [dB, hold seconds]
+const DUCK := {
+	"boom_rook": [-3.0, 0.25], "explosion": [-3.0, 0.25], "ab_slam": [-5.0, 0.4], "ab_overload": [-4.0, 0.4],
+	"boss_roar_plague": [-8.0, 1.2], "boss_roar_machine": [-8.0, 1.2], "elite_spawn": [-6.0, 0.8],
+	"ext_open": [-6.0, 1.5], "ext_last": [-6.0, 1.5], "ext_close": [-5.0, 0.8], "storm": [-8.0, 2.5],
+	"radio_chatter": [-7.0, 1.4], "event_start": [-6.0, 1.2], "level_up": [-5.0, 0.8],
+	"ext_success": [-12.0, 2.5], "run_wipe": [-12.0, 2.5], "threat_up": [-5.0, 0.8], "death_f": [-10.0, 2.0], "death_m": [-10.0, 2.0],
+	"pick_legendary": [-6.0, 1.0], "supply_crash": [-5.0, 0.6],
+}
+## Zone grade (ZoneDefs) -> ambience bed.
+const ZONE_AMB := {
+	"": "amb_wasteland", "refinery": "amb_refinery", "city": "amb_city_night", "quarantine": "amb_quarantine",
+	"raider": "amb_raider", "chemical": "amb_chemical", "military": "amb_military", "crater": "amb_crater", "dustfall": "amb_dustfall",
+}
+const STEMS := ["mus_run_base", "mus_run_pulse", "mus_run_tension", "mus_run_boss"]
+## Default mix levels (dB) per player type.
+const MUSIC_DB := -4.0
+const AMB_DB := -3.0
+
+var _streams: Dictionary = {}       ## id -> Array[AudioStream]
+var _last_variant: Dictionary = {}
+var _last_ms: Dictionary = {}
+var _flat: Array[AudioStreamPlayer] = []
+var _pos: Array[AudioStreamPlayer2D] = []
+var _flat_i: int = 0
+var _pos_i: int = 0
+
+var _menu_player: AudioStreamPlayer
+var _stem_players: Array[AudioStreamPlayer] = []
+var _amb_a: AudioStreamPlayer
+var _amb_b: AudioStreamPlayer
+var _storm_player: AudioStreamPlayer
+var _lowhp_player: AudioStreamPlayer
+var _amb_current: String = ""
+var _music_state: String = ""
+var _stem_target: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _stem_level: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _menu_level: float = 0.0
+var _menu_target: float = 0.0
+var _storm_level: float = 0.0
+var _storm_target: float = 0.0
+var _lowhp_level: float = 0.0
+var _lowhp_target: float = 0.0
+var _duck_db: float = 0.0
+var _duck_hold: float = 0.0
+var _ctx_t: float = 0.0
+## Optional explicit intensity override (0..1) for tools / the review reel; <0 = automatic.
+var intensity_override: float = -1.0
+var intensity: float = 0.0
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_ensure_buses()
+	for id in IDS:
+		var arr: Array = []
+		for i in range(1, MAX_VARIANTS + 1):
+			var p := "%s%s_%d.ogg" % [SFX_DIR, id, i]
+			if ResourceLoader.exists(p):
+				arr.append(load(p))
+		if not arr.is_empty():
+			_streams[id] = arr
+	for i in range(POOL_FLAT):
+		var a := AudioStreamPlayer.new()
+		a.bus = "SFX"
+		add_child(a)
+		_flat.append(a)
+	for i in range(POOL_2D):
+		var b := AudioStreamPlayer2D.new()
+		b.bus = "SFX"
+		b.max_distance = 1500.0
+		b.attenuation = 1.6
+		b.panning_strength = 0.55
+		add_child(b)
+		_pos.append(b)
+	_menu_player = _loop_player("Music", MUS_DIR + "mus_menu.ogg")
+	for s in STEMS:
+		_stem_players.append(_loop_player("Music", MUS_DIR + s + ".ogg"))
+	_amb_a = _loop_player("Ambience", "")
+	_amb_b = _loop_player("Ambience", "")
+	_storm_player = _loop_player("Ambience", AMB_DIR + "amb_storm.ogg")
+	_lowhp_player = _loop_player("SFX", SFX_DIR + "lowhp_loop_1.ogg")
+	apply_settings()
+
+
+func _loop_player(bus: String, path: String) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.bus = bus
+	p.volume_db = -80.0
+	if path != "" and ResourceLoader.exists(path):
+		p.stream = _looped(load(path))
+	add_child(p)
+	return p
+
+
+func _looped(s: AudioStream) -> AudioStream:
+	if s is AudioStreamOggVorbis:
+		(s as AudioStreamOggVorbis).loop = true
+	elif s is AudioStreamWAV:
+		(s as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+	return s
+
+
+func _ensure_buses() -> void:
+	for b in BUSES:
+		if AudioServer.get_bus_index(b) == -1:
+			AudioServer.add_bus()
+			var idx := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(idx, b)
+			AudioServer.set_bus_send(idx, "Master")
+	## Glue + safety: gentle compression on SFX, a limiter on Master so hordes never clip.
+	var sfx_i := AudioServer.get_bus_index("SFX")
+	if AudioServer.get_bus_effect_count(sfx_i) == 0:
+		var c := AudioEffectCompressor.new()
+		c.threshold = -14.0
+		c.ratio = 3.0
+		c.attack_us = 3000.0
+		c.release_ms = 140.0
+		AudioServer.add_bus_effect(sfx_i, c)
+	if AudioServer.get_bus_effect_count(0) == 0:
+		var l := AudioEffectHardLimiter.new()
+		l.ceiling_db = -0.8
+		AudioServer.add_bus_effect(0, l)
+
+
+## --- settings ----------------------------------------------------------------
+
+func apply_settings() -> void:
+	var st: Dictionary = GameState.settings
+	var mute := bool(st.get("mute", false))
+	_set_bus("Master", float(st.get("vol_master", 1.0)), mute)
+	_set_bus("Music", float(st.get("vol_music", 0.7)), false)
+	var sfx_on := bool(st.get("sfx", true))
+	_set_bus("SFX", float(st.get("vol_sfx", 1.0)), not sfx_on)
+	_set_bus("UI", float(st.get("vol_ui", 0.8)), not sfx_on)
+	_set_bus("Ambience", float(st.get("vol_ambience", 0.8)), false)
+
+
+func _set_bus(name: String, lin: float, muted: bool) -> void:
+	var i := AudioServer.get_bus_index(name)
+	if i < 0:
+		return
+	AudioServer.set_bus_mute(i, muted or lin <= 0.001)
+	var extra := _duck_db if name == "Music" else 0.0
+	AudioServer.set_bus_volume_db(i, linear_to_db(maxf(lin, 0.001)) + extra)
+
+
+## --- one-shots -----------------------------------------------------------------
+
+func has(id: String) -> bool:
+	return _streams.has(id)
+
+
+func _cfg(id: String) -> Dictionary:
+	var d := {"max": 4, "cd": 35, "pitch": 0.06, "bus": "UI" if id.begins_with("ui_") else "SFX"}
+	if CFG.has(id):
+		for k in CFG[id]:
+			d[k] = CFG[id][k]
+	return d
+
+
+## Plays a variant of `id`. at = world position for positional sounds (Vector2.INF = flat).
+func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Vector2 = Vector2.INF) -> Node:
+	if not _streams.has(id):
+		return null
+	var c := _cfg(id)
+	var now := Time.get_ticks_msec()
+	if now - int(_last_ms.get(id, -100000)) < int(c["cd"]):
+		return null
+	## Voice limit: count live voices of this id.
+	var live := 0
+	var oldest: Node = null
+	var oldest_t := 1 << 62
+	for p in _flat:
+		if p.playing and p.get_meta("sid", "") == id:
+			live += 1
+			if int(p.get_meta("t", 0)) < oldest_t:
+				oldest_t = int(p.get_meta("t", 0))
+				oldest = p
+	for p2 in _pos:
+		if p2.playing and p2.get_meta("sid", "") == id:
+			live += 1
+			if int(p2.get_meta("t", 0)) < oldest_t:
+				oldest_t = int(p2.get_meta("t", 0))
+				oldest = p2
+	if live >= int(c["max"]):
+		## Hordes: skip rather than cut; one-off big sounds restart.
+		if int(c["max"]) > 1 or oldest == null:
+			return null
+		oldest.call("stop")
+	_last_ms[id] = now
+	var arr: Array = _streams[id]
+	var vi := randi() % arr.size()
+	if arr.size() > 1 and vi == int(_last_variant.get(id, -1)):
+		vi = (vi + 1) % arr.size()
+	_last_variant[id] = vi
+	var jit := float(c["pitch"]) if pitch_jitter < 0.0 else pitch_jitter
+	var vol := volume_db + randf_range(-1.2, 0.6)
+	var player: Node
+	if at != Vector2.INF:
+		var b := _next_pos()
+		b.global_position = at
+		player = b
+	else:
+		player = _next_flat()
+	player.set("bus", str(c["bus"]))
+	player.set("stream", arr[vi])
+	player.set("volume_db", vol)
+	player.set("pitch_scale", 1.0 + randf_range(-jit, jit))
+	player.set_meta("sid", id)
+	player.set_meta("t", now)
+	player.call("play")
+	if DUCK.has(id):
+		duck(float(DUCK[id][0]), float(DUCK[id][1]))
+	return player
+
+
+func _next_flat() -> AudioStreamPlayer:
+	## Prefer an idle voice; otherwise steal round-robin.
+	for k in range(_flat.size()):
+		var i := (_flat_i + k) % _flat.size()
+		if not _flat[i].playing:
+			_flat_i = (i + 1) % _flat.size()
+			return _flat[i]
+	var p := _flat[_flat_i]
+	_flat_i = (_flat_i + 1) % _flat.size()
+	return p
+
+
+func _next_pos() -> AudioStreamPlayer2D:
+	for k in range(_pos.size()):
+		var i := (_pos_i + k) % _pos.size()
+		if not _pos[i].playing:
+			_pos_i = (i + 1) % _pos.size()
+			return _pos[i]
+	var p := _pos[_pos_i]
+	_pos_i = (_pos_i + 1) % _pos.size()
+	return p
+
+
+func stop(handle: Node) -> void:
+	if handle != null and is_instance_valid(handle) and handle.has_method("stop"):
+		handle.call("stop")
+
+
+func duck(amount_db: float, hold: float) -> void:
+	_duck_db = minf(_duck_db, amount_db)
+	_duck_hold = maxf(_duck_hold, hold)
+
+
+## --- music / ambience ------------------------------------------------------------
+
+func set_music(state: String) -> void:
+	if state == _music_state:
+		return
+	_music_state = state
+	match state:
+		"menu":
+			_menu_target = 1.0
+			_stem_target = [0.0, 0.0, 0.0, 0.0]
+			if _menu_player.stream and not _menu_player.playing:
+				_menu_player.play()
+		"run":
+			_menu_target = 0.0
+			for p in _stem_players:
+				if p.stream and not p.playing:
+					p.play()
+			## Keep stems phase-locked: restart together.
+			for p in _stem_players:
+				if p.stream:
+					p.seek(0.0)
+		_:
+			_menu_target = 0.0
+			_stem_target = [0.0, 0.0, 0.0, 0.0]
+
+
+func set_ambience(id: String) -> void:
+	if id == _amb_current:
+		return
+	_amb_current = id
+	## Swap into the quiet player and crossfade.
+	var tmp := _amb_a
+	_amb_a = _amb_b
+	_amb_b = tmp
+	var path := AMB_DIR + id + ".ogg"
+	if id != "" and ResourceLoader.exists(path):
+		_amb_a.stream = _looped(load(path))
+		_amb_a.volume_db = -60.0
+		_amb_a.play(randf() * 20.0)
+	else:
+		_amb_a.stop()
+
+
+func set_storm(on: bool) -> void:
+	_storm_target = 1.0 if on else 0.0
+	if on and _storm_player.stream and not _storm_player.playing:
+		_storm_player.play()
+
+
+func set_low_hp(on: bool) -> void:
+	_lowhp_target = 1.0 if on else 0.0
+	if on and _lowhp_player.stream and not _lowhp_player.playing:
+		_lowhp_player.play()
+
+
+## 0 = calm, ~0.35 pulse joins, ~0.65 drums, boss = boss stem.
+func set_run_intensity(v: float, boss: bool) -> void:
+	intensity = clampf(v, 0.0, 1.0)
+	_stem_target[0] = 1.0
+	_stem_target[1] = clampf((intensity - 0.2) / 0.2, 0.0, 1.0)
+	_stem_target[2] = clampf((intensity - 0.55) / 0.15, 0.0, 1.0)
+	_stem_target[3] = 1.0 if boss else 0.0
+
+
+func _process(delta: float) -> void:
+	_ctx_t -= delta
+	if _ctx_t <= 0.0:
+		_ctx_t = 0.25
+		_auto_context()
+	_menu_level = move_toward(_menu_level, _menu_target, delta * 0.5)
+	_menu_player.volume_db = _lin_db(_menu_level) + MUSIC_DB
+	if _menu_level <= 0.001 and _menu_player.playing and _menu_target == 0.0:
+		_menu_player.stop()
+	for i in range(_stem_players.size()):
+		_stem_level[i] = move_toward(_stem_level[i], _stem_target[i], delta * (0.6 if _stem_target[i] > _stem_level[i] else 0.35))
+		_stem_players[i].volume_db = _lin_db(_stem_level[i]) + MUSIC_DB
+	if _music_state != "run" and _stem_players.size() > 0 and _stem_level.max() <= 0.001:
+		for p in _stem_players:
+			if p.playing:
+				p.stop()
+	## Ambience crossfade (2 s).
+	_amb_a.volume_db = move_toward(_amb_a.volume_db, AMB_DB if _amb_current != "" else -60.0, delta * 30.0)
+	_amb_b.volume_db = move_toward(_amb_b.volume_db, -60.0, delta * 30.0)
+	if _amb_b.playing and _amb_b.volume_db <= -59.0:
+		_amb_b.stop()
+	_storm_level = move_toward(_storm_level, _storm_target, delta * 0.4)
+	_storm_player.volume_db = _lin_db(_storm_level)
+	if _storm_level <= 0.001 and _storm_player.playing:
+		_storm_player.stop()
+	_lowhp_level = move_toward(_lowhp_level, _lowhp_target, delta * 1.5)
+	_lowhp_player.volume_db = _lin_db(_lowhp_level) - 4.0
+	if _lowhp_level <= 0.001 and _lowhp_player.playing:
+		_lowhp_player.stop()
+	## Ducking recovers after its hold.
+	if _duck_hold > 0.0:
+		_duck_hold -= delta
+	else:
+		_duck_db = move_toward(_duck_db, 0.0, delta * 8.0)
+	_set_bus("Music", float(GameState.settings.get("vol_music", 0.7)), false)
+
+
+func _lin_db(v: float) -> float:
+	return -80.0 if v <= 0.001 else linear_to_db(v)
+
+
+## Reads the running scene and game state to pick music/ambience on its own,
+## so menus and the match never need to call into audio explicitly.
+func _auto_context() -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var path := scene.scene_file_path
+	if path.ends_with("match.tscn"):
+		set_music("run")
+		var grade := str(ZoneDefs.zone(GameState.zone_tier()).get("grade", ""))
+		set_ambience(str(ZONE_AMB.get(grade, "amb_wasteland")))
+		var storming := scene.has_method("is_storming") and bool(scene.call("is_storming"))
+		set_storm(storming)
+		var boss := false
+		var elites := 0
+		for e in get_tree().get_nodes_in_group("enemies"):
+			var r := str(e.get("role")) if e.get("role") != null else ""
+			if r == "boss":
+				boss = true
+			elif r == "elite":
+				elites += 1
+		var v := 0.15 + 0.1 * float(GameState.threat_level)
+		v += 0.12 * float(elites)
+		if scene.get("_extract_open") == true:
+			v += 0.1
+		if _last_window(scene):
+			v = maxf(v, 0.75)
+		if storming:
+			v = 1.0
+		if intensity_override >= 0.0:
+			v = intensity_override
+		set_run_intensity(v, boss)
+		var pl := get_tree().get_first_node_in_group("player")
+		if pl != null and pl.get("max_hp") != null:
+			var hp_r := float(pl.get("hp")) / maxf(float(pl.get("max_hp")), 1.0)
+			set_low_hp(hp_r > 0.0 and hp_r < 0.3)
+		else:
+			set_low_hp(false)
+	else:
+		set_storm(false)
+		set_low_hp(false)
+		if path.ends_with("result_screen.tscn"):
+			set_music("none")
+			set_ambience("amb_wasteland")
+		else:
+			set_music("menu")
+			set_ambience("amb_hangar")
+
+
+func _last_window(scene: Node) -> bool:
+	var phases: Variant = scene.get("_phases")
+	var idx: Variant = scene.get("_phase_index")
+	if phases is Array and idx is int and int(idx) < (phases as Array).size():
+		var ph: Variant = (phases as Array)[int(idx)]
+		return ph is Dictionary and bool((ph as Dictionary).get("is_last", false)) and scene.get("_extract_open") == true
+	return false

@@ -123,7 +123,7 @@ func _process(delta: float) -> void:
 	_bar.value = clampf(_progress, 0.0, 1.0)
 	_bar.visible = id != "wait_open"
 	if _progress >= 1.0:
-		Juice.sfx("pickup", -6.0)
+		Juice.sfx("pick_rare", -6.0)
 		if _step >= STEPS.size() - 1:
 			_finish()
 			set_process(false)

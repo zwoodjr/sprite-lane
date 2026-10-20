@@ -113,6 +113,7 @@ func _physics_process(delta: float) -> void:
 		elif _full_cd <= 0.0:
 			_full_cd = 2.5
 			Juice.float_text(global_position + Vector2(0, -34), "PACK FULL", UiTheme.RUST, 14)
+			Juice.sfx("pack_full")
 		return
 	if room and id != "medicine" and d < MAGNET_R + GameState.pickup_radius_bonus():
 		global_position += to.normalized() * MAGNET_SPEED * delta
@@ -125,12 +126,13 @@ func _collect() -> void:
 	if id == "medicine":
 		Juice.float_text(global_position + Vector2(0, -44), "MEDICINE", col, 20)
 		Juice.burst(global_position, col, 16, 160.0, 0.5)
-		Juice.sfx("pickup", 0.0)
+		Juice.sfx("pick_tonic", 2.0)
+		Juice.sfx("pick_epic", -6.0)
 		Juice.haptic(30)
 		var hud := get_tree().get_first_node_in_group("hud")
 		if hud and hud.has_method("show_toast"):
 			hud.call("show_toast", "Medicine in the pack — it's heavy, and the plague can smell it" if GameState.smells_medicine() else "Medicine in the pack", col)
 	else:
 		Juice.float_text(global_position + Vector2(0, -26), "+%d %s" % [n, MedicineDefs.item_name(id)], col, 13)
-		Juice.sfx("pickup", -10.0, 0.2)
+		Juice.sfx("pick_common", -4.0)
 	queue_free()

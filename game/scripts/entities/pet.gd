@@ -158,7 +158,8 @@ func _begin_rampage(attacker: Node2D) -> void:
 	_chains_left = int(_def.get("rampage_chain", 0))
 	_aoe_cd = 0.05
 	_apply_look()
-	Juice.sfx("ability", -2.0)
+	Juice.sfx_at("noel_growl", global_position)
+	Juice.sfx_at("noel_bark", global_position, -2.0)
 	Juice.burst(global_position, Color(1.0, 0.35, 0.2), 20, 200.0, 0.55)
 	Juice.float_text(global_position + Vector2(0, -28), "NOEL RAMPAGE!", Color(1.0, 0.45, 0.25), 18)
 	Juice.shake(0.18)
@@ -278,7 +279,7 @@ func _do_bark() -> void:
 	var stun := float(_def.get("bark_stun", 0.0))
 	var mark_mult := float(_def.get("bark_mark_mult", 1.0))
 	var mark_t := float(_def.get("bark_mark_time", 0.0))
-	Juice.sfx("ability", -4.0)
+	Juice.sfx_at("bentley_yip", global_position)
 	Juice.float_text(global_position + Vector2(0, -26), "BARK!", Color(1.0, 0.9, 0.5), 16)
 	_anim.play("bark")
 	Juice.burst(global_position, Color(1.0, 0.85, 0.4), 12, radius * 0.6, 0.35)
@@ -305,7 +306,7 @@ func _do_find() -> void:
 	_accent_left = maxf(_accent_left, 0.4)
 	_apply_look()
 	var radius := float(_def.get("find_radius", 520.0))
-	Juice.sfx("pickup", -6.0)
+	Juice.sfx_at("pet_gift", global_position)
 	Juice.float_text(global_position + Vector2(0, -26), "FOUND!", Color(0.7, 0.95, 0.6), 15)
 	_anim.play("drop")
 	## Ping breakables in range.
@@ -373,7 +374,7 @@ func _try_start_ram() -> void:
 	_ram_wake_hit.clear()
 	_ram_cd = float(_def.get("ram_cooldown", 6.5))
 	_apply_look()
-	Juice.sfx("dash", -2.0)
+	Juice.sfx_at("lillie_charge", global_position)
 	_anim.set_facing(_ram_dir.x < 0.0)
 	_anim.play("charge" if _anim.has_state("charge") else "windup")
 	var lil := _ability_id() == "ram_headbutt"
@@ -442,7 +443,7 @@ func _ram_impact(connected: bool) -> void:
 	## Snap onto the target so the boom reads on their body, not empty dust.
 	if _target != null and is_instance_valid(_target):
 		global_position = global_position.lerp((_target as Node2D).global_position, 0.55)
-	Juice.sfx("enemy_die", -4.0)
+	Juice.sfx_at("lillie_hit", global_position)
 	_anim.play("impact" if _anim.has_state("impact") else "attack")
 	if int(_def.get("shock_chain", 0)) > 0 and _target != null and is_instance_valid(_target):
 		_shock_chain(_target)
@@ -487,7 +488,7 @@ func _bite(enemy: Node2D) -> void:
 		_anim.play("attack")
 	if enemy.has_method("take_damage"):
 		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized(), float(_def.get("bite_knock", 30.0)))
-	Juice.sfx("hit", -10.0)
+	Juice.sfx_at("hit_flesh", enemy.global_position, -4.0)
 	Juice.burst(enemy.global_position, Color(0.95, 0.75, 0.45), 6, 90.0, 0.25)
 
 func _nearest_enemy(max_d: float) -> Node2D:
@@ -583,7 +584,8 @@ func _do_strafe() -> int:
 	var dmg := float(_def.get("strafe_damage", 7.0)) * GameState.pet_power_mult()
 	_anim.play("attack")
 	_accent_left = 0.4
-	Juice.sfx("shoot", -8.0)
+	Juice.sfx_at("mech_servo", global_position)
+	Juice.sfx_at("drone_fire", global_position, -2.0)
 	var n := 0
 	for i in range(shots):
 		var e: Variant = foes[i % foes.size()]
@@ -621,7 +623,7 @@ func _do_mortar() -> Vector2:
 	var at := best.global_position
 	_anim.set_facing(at.x < global_position.x)
 	_anim.play("attack")
-	Juice.sfx("ability", -6.0)
+	Juice.sfx_at("mech_servo", global_position, 2.0)
 	Juice.burst(global_position + Vector2(0, -30), Color(0.6, 0.9, 1.0), 8, 90.0, 0.3)
 	RunFx.ring(get_parent(), at, radius, Color(1.0, 0.6, 0.3, 0.8), float(_def.get("mortar_delay", 0.7)), 3.0)
 	var dmg := float(_def.get("mortar_damage", 34.0)) * GameState.pet_power_mult() * GameState.aoe_damage_mult()

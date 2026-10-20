@@ -44,7 +44,7 @@ func hit(screen_pos: Vector2, slop: float = 1.25) -> bool:
 
 func press(index: int) -> void:
 	if disabled:
-		Juice.sfx("empty", -6.0)
+		Juice.sfx("ui_denied", -4.0)
 		return
 	held = true
 	touch_index = index

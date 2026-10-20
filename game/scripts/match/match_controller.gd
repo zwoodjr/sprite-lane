@@ -226,7 +226,7 @@ func _maybe_ping_next_window() -> void:
 	hud.show_toast(
 		("LAST CHANCE opens in %ds — red pads marked" if last else "Extract opens in %ds — 2 pads marked on the map") % int(ceil(_phase_time_left / GameState.timer_scale())),
 		UiTheme.DANGER if last else Color(0.55, 1.0, 0.6))
-	Juice.sfx("ui_tap")
+	Juice.sfx("ext_ping")
 
 func _process(delta: float) -> void:
 	if _ended:
@@ -273,6 +273,7 @@ func _maybe_radio_stub() -> void:
 	if ping.is_empty():
 		return
 	hud.show_toast(str(ping.get("toast", "Radio static…")), UiTheme.AMBER)
+	Juice.sfx("radio_chatter")
 
 func _start_phase(index: int) -> void:
 	_phase_index = index
@@ -309,7 +310,7 @@ func _start_phase(index: int) -> void:
 				jobs.call("spawn_warden", _pads)
 			else:
 				stake = str(jobs.call("roll_stake", _window_index))
-		Juice.sfx("extract_open")
+		Juice.sfx("ext_last" if bool(phase.get("is_last", false)) else "ext_open")
 		Juice.haptic(40)
 		if bool(phase.get("is_last", false)):
 			hud.show_banner("LAST CHANCE", "Reach a red pad before the Dust storm hits", UiTheme.DANGER)
@@ -347,7 +348,7 @@ func _start_dust_storm() -> void:
 	hud.set_extract_open(false)
 	_storm_left = ModeDefs.STORM_SECONDS
 	hud.show_banner("DUST STORM", "The last window closed", Color(0.85, 0.6, 0.35))
-	Juice.sfx("threat_up")
+	Juice.sfx("storm")
 	Juice.shake(0.5)
 	_storm_overlay = ColorRect.new()
 	_storm_overlay.color = Color(0.55, 0.38, 0.2, 0.0)
@@ -446,9 +447,11 @@ func spawn_special(role: String, kind: String = "") -> Node:
 	if role == "boss":
 		hud.show_banner("BOSS", "%s is hunting you" % nm, UiTheme.DANGER)
 		Juice.sfx("threat_up")
+		Juice.mob_sfx("roar", enemy)
 		Juice.shake(0.3)
 	else:
 		hud.show_toast("ELITE: %s inbound — it carries good gear" % nm, UiTheme.RUST)
+		Juice.mob_sfx("roar", enemy)
 	return enemy
 
 ## An elite / boss of a given kind at a given spot (Dust Warden on the pads).

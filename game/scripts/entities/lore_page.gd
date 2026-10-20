@@ -37,5 +37,5 @@ func _physics_process(delta: float) -> void:
 			var hud := get_tree().get_first_node_in_group("hud")
 			if hud and hud.has_method("show_toast"):
 				hud.call("show_toast", "Found a page: \"%s\" — read it in the Logbook" % str(pg.get("title", "")), Color(0.95, 0.88, 0.7))
-			Juice.sfx("pickup")
+			Juice.sfx("pick_lore")
 		queue_free()

@@ -63,7 +63,7 @@ func build(c: VBoxContainer) -> void:
 func select_tier(id: String) -> bool:
 	var m := ModeDefs.get_mode(id)
 	if not GameState.is_tier_unlocked(int(m["tier"])):
-		Juice.sfx("empty", -6.0)
+		Juice.sfx("ui_denied", -4.0)
 		return false
 	GameState.selected_mode_id = str(m["id"])
 	GameState.save_profile()

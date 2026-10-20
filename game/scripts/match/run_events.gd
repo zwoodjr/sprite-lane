@@ -86,7 +86,7 @@ func radio(text: String) -> void:
 	_radio.visible = true
 	_radio.modulate.a = 1.0
 	_radio_left = 6.0
-	Juice.sfx("ui_tap")
+	Juice.sfx("radio_chatter")
 
 
 func active_event() -> String:

@@ -54,5 +54,5 @@ func _burst() -> void:
 	dmg *= pb
 	r *= sqrt(pb)
 	RunFx.explosion(player, global_position, r, dmg, Color(0.55, 0.95, 0.35), "mine", 180.0)
-	Juice.sfx("hit", -4.0, 0.3)
+	Juice.sfx_at("mine_boom", global_position)
 	queue_free()

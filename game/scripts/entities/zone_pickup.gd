@@ -43,6 +43,6 @@ func take() -> void:
 	if tw != null and tw.has_method("on_pickup"):
 		tw.call("on_pickup", kind, global_position)
 	Juice.float_text(global_position + Vector2(0, -40), str(LABEL.get(kind, kind.to_upper())), COLOR.get(kind, Color.WHITE), 17)
-	Juice.sfx("pickup")
+	Juice.sfx("pick_rare")
 	Juice.burst(global_position, COLOR.get(kind, Color.WHITE), 12, 120.0, 0.4)
 	queue_free()

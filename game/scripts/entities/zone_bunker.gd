@@ -72,7 +72,7 @@ func open_bunker() -> bool:
 		GearPickup.spawn(parent, global_position + Vector2(-26, 18), it)
 	if not ZoneDefs.exclusive(tier).is_empty() and randf() < float(b["exclusive_chance"]):
 		GearPickup.spawn(parent, global_position + Vector2(26, 18), GameState.make_exclusive(tier))
-	Juice.sfx("extract_open")
+	Juice.sfx("crate_open", 2.0)
 	Juice.burst(global_position, Color(1.0, 0.85, 0.45), 24, 200.0, 0.6)
 	Juice.float_text(global_position + Vector2(0, -100), "BUNKER OPEN", Color(1.0, 0.85, 0.45), 20)
 	return true

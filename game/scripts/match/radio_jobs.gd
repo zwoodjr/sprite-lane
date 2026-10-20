@@ -337,7 +337,7 @@ func _snipe(s: Dictionary, j: Dictionary) -> void:
 	Juice.burst(best.global_position, Color(0.7, 1.0, 0.5), 8, 140.0, 0.3)
 	var dmg := float(j["damage"]) * float(GameState.get_mode().get("enemy_hp", 1.0))
 	best.call("take_damage", dmg, (best.global_position - from).normalized(), 120.0, true)
-	Juice.sfx("shot", -6.0)
+	Juice.sfx_at("drone_fire", best.global_position)
 
 
 func _open_vault(s: Dictionary, j: Dictionary) -> void:
@@ -345,7 +345,8 @@ func _open_vault(s: Dictionary, j: Dictionary) -> void:
 	Juice.shake(0.45)
 	Juice.burst(pos, Color(1.0, 0.7, 0.3), 40, 280.0, 0.7, 1.6)
 	Juice.dust_puff(pos, 24)
-	Juice.sfx("enemy_die", 0.0, 0.2)
+	Juice.sfx_at("explosion", pos)
+	Juice.sfx("crate_open")
 	if s["node"] and is_instance_valid(s["node"]):
 		(s["node"] as Node2D).modulate = Color(0.55, 0.5, 0.45)
 	var tier := int(GameState.get_mode().get("tier", 1))
@@ -432,7 +433,7 @@ func _complete(id: String) -> void:
 	else:
 		hud.show_toast("%s — thanks!" % str(j["name"]), RadioDefs.MAP_COLOR)
 	GameState.cameo_help(str(j["giver"]))
-	Juice.sfx("pickup")
+	Juice.sfx("pick_rare")
 	## The survivor heads home (escorts leave at extract anyway).
 	var npc: Variant = s.get("npc", null)
 	if npc is Node2D and is_instance_valid(npc) and id != "rescue":

@@ -334,7 +334,7 @@ func cap_button(kind: String = "back", px: float = 64.0) -> Button:
 		b.add_theme_stylebox_override(s, e)
 	b.add_theme_color_override("icon_hover_color", Color(1.12, 1.08, 1.0))
 	b.add_theme_color_override("icon_pressed_color", Color(0.8, 0.75, 0.7))
-	b.pressed.connect(func() -> void: Juice.sfx("ui_tap"))
+	b.pressed.connect(func() -> void: Juice.sfx("ui_back"))
 	return b
 
 
