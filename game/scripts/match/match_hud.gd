@@ -355,7 +355,7 @@ func _build() -> void:
 	_threat_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(_threat_panel)
 	var tv := VBoxContainer.new()
-	tv.add_theme_constant_override("separation", 0)
+	tv.add_theme_constant_override("separation", 2)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
 	_threat_label = _px("LOOT x1.0", 12, UiTheme.AMBER)
@@ -430,7 +430,8 @@ func _layout() -> void:
 		_minimap.position = Vector2(right - map_s, m.position.y)
 	_threat_panel.custom_minimum_size = Vector2(map_s, 0)
 	_threat_panel.reset_size()
-	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + map_s + 4.0)
+	## Clear of the minimap's SEALED / OPEN plate on its lower rim (they touched at 720x1560).
+	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + map_s + 12.0)
 	## Top-centre: a slim phase strip between the two corners.
 	var left_w := vit.size.x + 8.0
 	## Slim HUD: the extract readout sits centred in the gap between the vitals
