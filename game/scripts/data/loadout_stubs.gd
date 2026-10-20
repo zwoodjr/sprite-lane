@@ -159,7 +159,7 @@ static func _weapon_table() -> Dictionary:
 			"muzzle": Vector2(16, 2),
 			"melee": {
 				"shape": "arc", "arc_deg": 100.0, "radius": 72.0,
-				"windup": 0.08, "knockback": 180.0, "shake": 0.03,
+				"windup": 0.08, "knockback": 50.0, "shake": 0.03,
 				"lifesteal": 0.10, "resist": 0.8, "guard_on_hit": 0.35,
 				"smear": Color(0.95, 0.9, 0.8),
 			},
@@ -183,7 +183,7 @@ static func _weapon_table() -> Dictionary:
 			"muzzle": Vector2(12, 0),
 			"melee": {
 				"shape": "arc", "arc_deg": 100.0, "radius": 72.0,
-				"windup": 0.05, "knockback": 160.0, "shake": 0.0,
+				"windup": 0.05, "knockback": 25.0, "shake": 0.0,
 				"lifesteal": 0.12, "resist": 0.8, "guard_on_hit": 0.35,
 				"alternate_deg": 22.0,
 				"smear": Color(0.75, 0.9, 1.0),
