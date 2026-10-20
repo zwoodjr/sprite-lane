@@ -39,6 +39,20 @@ static func enemies_in(tree: SceneTree, pos: Vector2, radius: float) -> Array:
 	return out
 
 
+## Crates / wrecks caught in a blast or ram take the hit too.
+static func damage_breakables(tree: SceneTree, pos: Vector2, radius: float, dmg: float, skip: Array = []) -> Array:
+	var out: Array = []
+	if tree == null:
+		return out
+	for n in tree.get_nodes_in_group("breakables"):
+		if n in skip or not (n is Node2D) or not is_instance_valid(n) or not n.has_method("take_damage"):
+			continue
+		if pos.distance_to((n as Node2D).global_position) - 16.0 <= radius:
+			n.call("take_damage", dmg)
+			out.append(n)
+	return out
+
+
 static func nearest_enemy(tree: SceneTree, pos: Vector2, radius: float, skip: Array = []) -> Node2D:
 	var best: Node2D = null
 	var bd := radius
@@ -65,6 +79,7 @@ static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, c
 		if stun > 0.0 and is_instance_valid(e) and e.has_method("apply_status"):
 			e.call("apply_status", "stun", stun)
 		hits += 1
+	damage_breakables(tree, pos, radius, dmg)
 	ring(player.get_parent(), pos, radius, color, 0.32)
 	Juice.burst(pos, color, 18, radius * 2.6, 0.35, 1.5)
 	Juice.burst(pos, Color(0.5, 0.45, 0.4, 0.7), 8, radius, 0.6, 2.0)

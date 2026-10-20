@@ -868,6 +868,12 @@ func _update_rush_ram() -> void:
 		var dir := ((e as Node2D).global_position - global_position).normalized()
 		hit_enemy(e, float(a.get("ram_damage", 22.0)) * damage_mult, dir, float(a.get("ram_knock", 380.0)), false, "ability")
 		Juice.shake(0.08)
+	## Demolition: Rook smashes crates and wrecks he charges through.
+	var smashed := RunFx.damage_breakables(get_tree(), global_position, float(a.get("ram_radius", 36.0)),
+		maxf(float(a.get("ram_damage", 22.0)) * damage_mult, 999.0), _ram_hit)
+	if not smashed.is_empty():
+		_ram_hit.append_array(smashed)
+		Juice.shake(0.08)
 
 func _on_rush_end() -> void:
 	## Short Charge (E5 ability B): the charge ends in a ground slam.

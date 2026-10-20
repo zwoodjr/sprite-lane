@@ -157,6 +157,14 @@ func _physics_process(delta: float) -> void:
 		return
 	if _arm_left > 0.0:
 		_arm_left -= delta
+		if _arm_left <= 0.0 and from_player and monitoring:
+			## Spawned already touching a crate (point blank): body_entered fired
+			## during the arm grace and was ignored, so resolve it now.
+			for b in get_overlapping_bodies():
+				if b.is_in_group("breakables"):
+					_on_body_entered(b)
+					if _hit:
+						return
 	if homing_turn > 0.0 and homing_target != null and is_instance_valid(homing_target) and not homing_target.is_queued_for_deletion():
 		var want := homing_target.global_position - global_position
 		if want.length() > 4.0:
@@ -191,6 +199,10 @@ func _on_body_entered(body: Node2D) -> void:
 	if _hit or _arm_left > 0.0:
 		return
 	if _is_friendly(body):
+		return
+	## Walls / props never stopped shots (the bullet couldn't see static bodies
+	## until it became monitorable) — keep that feel: only crates catch rounds.
+	if (body is StaticBody2D or body is TileMap) and not body.is_in_group("breakables"):
 		return
 
 	if from_player:

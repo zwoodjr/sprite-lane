@@ -139,6 +139,7 @@ func _run() -> void:
 	GameState.stories = keep_st
 	var keep_kit := GameState.kit.duplicate(true)
 	await _test_depth_e5()
+	await _test_ash_breaks()
 	GameState.kit = keep_kit
 	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
 	await _test_depth_e6()
@@ -1821,3 +1822,57 @@ func _test_depth_e4() -> void:
 	_check(w2 != null and str(w2.get("role")) == "elite", "e4 warden elite below tier 5")
 	await _end_depth_match(m)
 	print("DEPTH_E4_OK")
+
+
+## Ash Rook breaks crates: rockets (incl. point blank), the Rush ram and the slam.
+func _ash_crate(m: Node, pos: Vector2) -> Node2D:
+	var br: StaticBody2D = (load("res://scenes/entities/breakable.tscn") as PackedScene).instantiate()
+	m.get_node("World").add_child(br)
+	br.setup("herb_crate", null, 20.0)
+	br.global_position = pos
+	return br
+
+
+func _test_ash_breaks() -> void:
+	GameState.kit = {"ash_rook": {"style": "boom", "ability": "a", "quirk": ""}}
+	var m: Node = await _depth_match("smog", "ash_rook", {})
+	var player: Node2D = m.get_node("World/Player")
+	player.set("max_hp", 99999.0)
+	player.set("hp", 99999.0)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	for c in get_tree().get_nodes_in_group("breakables"):
+		c.queue_free()
+	await get_tree().physics_frame
+	## Rocket at range: auto-targets the crate and breaks it.
+	var far := _ash_crate(m, player.global_position + Vector2(160, 0))
+	for i in range(120):
+		await get_tree().physics_frame
+		if not is_instance_valid(far):
+			break
+	_check(not is_instance_valid(far), "ash rocket breaks a crate")
+	## Point blank: crate overlapping the muzzle.
+	player.set("_reload_left", 0.0)
+	player.set("_fire_cd", 0.0)
+	var near := _ash_crate(m, player.global_position + Vector2(30, -6))
+	for i in range(120):
+		await get_tree().physics_frame
+		if not is_instance_valid(near):
+			break
+	_check(not is_instance_valid(near), "ash point-blank rocket breaks a crate")
+	## Rattle Rush ram smashes a crate he runs into.
+	var ram := _ash_crate(m, player.global_position + Vector2(20, 0))
+	player.call("_ability_cast", "rattle_rush")
+	player.call("_update_rush_ram")
+	await get_tree().physics_frame
+	_check(not is_instance_valid(ram) or ram.is_queued_for_deletion(), "ash rush ram breaks a crate")
+	player.set("_rush_active", false)
+	## Short Charge slam / blasts break crates in the radius.
+	var ab: Dictionary = player.get("_ability")
+	ab["end_slam_radius"] = 120.0
+	var slam := _ash_crate(m, player.global_position + Vector2(-80, 0))
+	player.call("_on_rush_end")
+	await get_tree().physics_frame
+	_check(not is_instance_valid(slam) or slam.is_queued_for_deletion(), "ash slam breaks a crate")
+	ab.erase("end_slam_radius")
+	await _end_depth_match(m)

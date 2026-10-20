@@ -11,7 +11,7 @@ collision_layer = 8
 ; Default mask = world|enemies (5). Script retargets for enemy shots.
 collision_mask = 5
 monitoring = true
-monitorable = false
+monitorable = true
 script = ExtResource("1_bullet")
 
 [node name="Sprite" type="Sprite2D" parent="."]
