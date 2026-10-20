@@ -23,7 +23,7 @@ const BAR_W := 200.0 ## on-screen width of the slim bars
 ## panel under it, a slim phase strip at the top centre, hints that fade.
 const HP_BAR_H := 15.0
 const XP_BAR_H := 7.0
-const MAP_SIZE := 104.0
+const MAP_SIZE := 135.0 ## +30% (icons, rim markers)
 ## Visual tier slim HUD: PressStart2P pixel text, no plates behind the readouts.
 const PIXEL_FONT := "res://assets/fonts/PressStart2P.ttf"
 const XpLineScript := preload("res://scripts/ui/xp_line.gd")
@@ -423,7 +423,7 @@ func _layout() -> void:
 		_pack_panel.reset_size()
 	## Top-right: a big minimap, the loot / threat panel under it.
 	var right := m.position.x + m.size.x
-	var map_s := minf(MAP_SIZE, vp.x * 0.24)
+	var map_s := minf(MAP_SIZE, vp.x * 0.3)
 	if _minimap:
 		_minimap.custom_minimum_size = Vector2(map_s, map_s)
 		_minimap.size = Vector2(map_s, map_s)

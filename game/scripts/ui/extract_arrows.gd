@@ -6,10 +6,23 @@ var _player: Node2D
 var _pads: Array = []
 var _extract_open: bool = false
 var _arrow_tex: Texture2D
+var _glyphs: Control
+var _g_n: int = 0
+var _g_pos := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+var _g_col := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	## Pad glyphs on a nearest-filtered child (the painted chevron stays smooth).
+	_glyphs = Control.new()
+	_glyphs.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_glyphs.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_glyphs.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_glyphs)
+	_glyphs.draw.connect(func() -> void:
+		for i in range(_g_n):
+			MapIcons.draw(_glyphs, MapIcons.PAD, _g_pos[i], _g_col[i], 2.0))
 	_arrow_tex = UiTheme.tex("extract_arrow")
 	if _arrow_tex == null:
 		_arrow_tex = load("res://assets/sprites/ui/extract_arrow.png")
@@ -34,6 +47,9 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
+	_g_n = 0
+	if _glyphs:
+		_glyphs.queue_redraw()
 	if _player == null or not is_instance_valid(_player):
 		return
 	var vp := get_viewport_rect().size
@@ -54,15 +70,16 @@ func _draw() -> void:
 		if dir.length() < 0.01:
 			dir = Vector2.UP
 		var edge: Vector2 = _edge_point(center, dir, vp, margin)
-		var col: Color = Color(1.0, 0.85, 0.35, 0.95) if _extract_open else Color(0.8, 0.7, 0.45, 0.8)
+		## Minimap icon language: open = green, sealed = dim, last chance = red.
+		var col: Color = MapIcons.C_PAD_OPEN if _extract_open else Color(MapIcons.C_PAD_SEALED, 0.85)
 		if bool(pad.get("last_chance")):
-			col = Color(1.0, 0.4, 0.3, 0.95)
+			col = MapIcons.C_PAD_LAST
 		var ang: float = dir.angle() + PI * 0.5
 		if _arrow_tex:
 			## Painted brass chevron (64 px art) — tinted only for sealed / last chance.
 			var k := 40.0 / float(_arrow_tex.get_width())
 			draw_set_transform(edge, ang, Vector2(k, k))
-			var tint := Color.WHITE if _extract_open else Color(0.75, 0.7, 0.62, 0.85)
+			var tint := Color(0.6, 1.0, 0.6) if _extract_open else Color(0.75, 0.7, 0.62, 0.85)
 			if bool(pad.get("last_chance")):
 				tint = Color(1.0, 0.55, 0.45)
 			draw_texture(_arrow_tex, -_arrow_tex.get_size() * 0.5, tint)
@@ -80,7 +97,11 @@ func _draw() -> void:
 		var f: Font = UiTheme.font_button
 		var fs := 14
 		var tw := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var lp := edge + Vector2(-tw * 0.5, 34)
+		var lp := edge + Vector2(-tw * 0.5 + 9.0, 34)
+		if _g_n < _g_pos.size():
+			_g_pos[_g_n] = (lp + Vector2(-11.0, -5.0)).round()
+			_g_col[_g_n] = col
+			_g_n += 1
 		draw_string_outline(f, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.06, 0.04, 0.03, 0.9))
 		draw_string(f, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 

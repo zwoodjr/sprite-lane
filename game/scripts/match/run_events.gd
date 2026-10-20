@@ -76,6 +76,7 @@ func _build_ui() -> void:
 	_arrow = Control.new()
 	_arrow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_arrow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_arrow.draw.connect(_draw_arrow)
 	_layer.add_child(_arrow)
 
@@ -90,6 +91,18 @@ func radio(text: String) -> void:
 
 func active_event() -> String:
 	return _active
+
+
+## Minimap: where the active event wants you ({} when there is no place to go).
+func map_target() -> Dictionary:
+	if _active == "":
+		return {}
+	var tgt := _target_pos
+	if _target_node != null and is_instance_valid(_target_node):
+		tgt = _target_node.global_position
+	if tgt == Vector2.INF:
+		return {}
+	return {"pos": tgt, "id": _active}
 
 
 func _process(delta: float) -> void:
@@ -305,7 +318,9 @@ func _draw_arrow() -> void:
 	var tx := INF if absf(d.x) < 0.001 else (r.size.x * 0.5) / absf(d.x)
 	var ty := INF if absf(d.y) < 0.001 else (r.size.y * 0.5) / absf(d.y)
 	var p := c + d * minf(tx, ty)
-	var col := Color(0.55, 1.0, 0.6) if _active != "elite_hunt" else UiTheme.RUST
-	var pts := PackedVector2Array([p + d * 18.0, p + d.orthogonal() * 12.0, p - d.orthogonal() * 12.0])
-	_arrow.draw_colored_polygon(pts, col)
-	_arrow.draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0.05, 0.04, 0.03), 2.0)
+	## Same icon language as the minimap: cyan "!" (crate / crosshair for those events).
+	var hunt := _active == "elite_hunt"
+	var col := MapIcons.C_HUNT if hunt else MapIcons.C_EVENT
+	var icon := MapIcons.TARGET if hunt else (MapIcons.CRATE if _active == "supply_crash" else MapIcons.BANG)
+	MapIcons.draw_chevron(_arrow, p + d * 18.0, d, col, 16.0, 11.0)
+	MapIcons.draw(_arrow, icon, p - d * 14.0, col, 2.0)

@@ -141,6 +141,7 @@ func _run() -> void:
 	await _test_depth_e5()
 	await _test_ash_breaks()
 	GameState.kit = keep_kit
+	await _test_minimap()
 	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
 	await _test_depth_e6()
 	var keep_e7 := [GameState.tier_clears.duplicate(true), GameState.plane_parts.duplicate(), GameState.pacts.duplicate(), GameState.best_tier_extracted]
@@ -1876,3 +1877,56 @@ func _test_ash_breaks() -> void:
 	_check(not is_instance_valid(slam) or slam.is_queued_for_deletion(), "ash slam breaks a crate")
 	ab.erase("end_slam_radius")
 	await _end_depth_match(m)
+
+
+## Minimap upgrade: 30% bigger, pixel icons, capped mobs, rim markers, legend.
+func _test_minimap() -> void:
+	for id in range(MapIcons.COUNT):
+		_check(MapIcons.tex(id) != null, "minimap glyph %d baked" % id)
+	_check(MapIcons.rarity_color("legendary") != MapIcons.rarity_color("common") and MapIcons.rarity_color("uncommon").g > 0.8, "minimap rarity colours")
+	var m := await _depth_match("drift", "ash_rook")
+	var hud: Node = m.get_node("HUD")
+	var mm: Control = hud.get("_minimap")
+	var tp: Control = hud.get("_threat_panel")
+	_check(mm != null and mm.size.x >= 134.0, "minimap 30%% bigger (%.0f)" % (mm.size.x if mm else 0.0))
+	if mm == null:
+		await _end_depth_match(m)
+		return
+	_check(not mm.get_global_rect().intersects(tp.get_global_rect()), "minimap clear of loot readout")
+	var vp := mm.get_viewport_rect().size
+	_check(mm.get_global_rect().end.x <= vp.x and mm.position.y >= 0.0, "minimap inside the screen")
+	var player: Node2D = m.get_node("World/Player")
+	var o := player.global_position
+	for i in range(40):
+		_mob(m, "scrap_hound", o + Vector2.from_angle(TAU * i / 40.0) * (150.0 + i * 8.0))
+	var el := _mob(m, "scrap_hound", o + Vector2(200, 0))
+	el.call("set_role", "elite")
+	var boss: Node = m.call("spawn_special", "boss")
+	(boss as Node2D).global_position = o + Vector2(-5000, 0)
+	var it := {"rarity": "legendary"}
+	GearPickup.spawn(m.get_node("World"), o + Vector2(0, 120), it)
+	HaulPickup.spawn(m.get_node("World"), o + Vector2(0, -150), "medicine", 1, false)
+	m.get_node("RunEvents").call("start_event", "scrap_spike")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	mm.call("_gather")
+	var ids: Array = mm.call("icon_ids")
+	_check(ids.count(MapIcons.SKULL) <= 24 and ids.count(MapIcons.SKULL) >= 20, "minimap caps mobs (%d)" % ids.count(MapIcons.SKULL))
+	_check(ids.has(MapIcons.SKULL_BIG), "minimap shows the elite")
+	_check(ids.has(MapIcons.GEM) and ids.has(MapIcons.CROSS), "minimap shows gear + medicine")
+	_check(ids.has(MapIcons.BANG) or (mm.call("rim_ids") as Array).has(MapIcons.BANG), "minimap shows the event")
+	_check((mm.call("rim_ids") as Array).has(MapIcons.SKULL_BIG), "far boss pinned to the rim")
+	_check(int(mm.call("rim_count")) <= 7, "rim markers capped")
+	var ev: Dictionary = m.get_node("RunEvents").call("map_target")
+	_check(not ev.is_empty() and str(ev["id"]) == "scrap_spike", "event exposes its map target")
+	m.get_node("RadioJobs").call("start", "field_tent", o + Vector2(300, 300))
+	var jt: Array = m.get_node("RadioJobs").call("map_targets")
+	_check(jt.size() >= 1 and str(jt[0]["id"]) == "field_tent", "radio jobs expose map targets")
+	mm.call("toggle_legend")
+	_check(bool(mm.call("legend_visible")) and not get_tree().paused, "legend toggles, nothing pauses")
+	mm.call("toggle_legend")
+	_check(not bool(mm.call("legend_visible")), "legend toggles off")
+	for k in range(12):
+		await get_tree().process_frame
+	await _end_depth_match(m)
+	print("MINIMAP_OK")

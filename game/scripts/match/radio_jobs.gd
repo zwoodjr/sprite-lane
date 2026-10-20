@@ -63,6 +63,7 @@ func setup(ctl: Node, p: Node2D, w: Node2D, h: Node, ev: Node) -> void:
 	_arrow = Control.new()
 	_arrow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_arrow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_arrow.draw.connect(_draw_arrows)
 	_layer.add_child(_arrow)
 
@@ -542,6 +543,36 @@ func spawn_warden(pads: Array) -> Node:
 
 
 ## Screen-edge arrows toward active job targets.
+## Minimap: one entry per active job with somewhere to go ({pos, id, kind}).
+func map_targets() -> Array:
+	var out: Array = []
+	for id in active.keys():
+		var s: Dictionary = active[id]
+		var tgt: Vector2 = s["pos"]
+		if s["node"] != null and is_instance_valid(s["node"]):
+			tgt = (s["node"] as Node2D).global_position
+		elif s["npc"] != null and is_instance_valid(s["npc"]):
+			tgt = (s["npc"] as Node2D).global_position
+		if tgt == Vector2.INF:
+			continue
+		out.append({"pos": tgt, "id": str(id), "kind": str(RadioDefs.job(str(id)).get("kind", "contract"))})
+	return out
+
+
+## Shared with the minimap: crosshair / cross / plane / tent / market / tower / vault / crate, else "!".
+static func job_icon(id: String) -> int:
+	match id:
+		"bounty": return MapIcons.TARGET
+		"medicine_cache": return MapIcons.CROSS
+		"black_box": return MapIcons.PLANE
+		"field_tent", "rescue": return MapIcons.TENT
+		"black_market": return MapIcons.MARKET
+		"overwatch", "defend_relay": return MapIcons.TOWER
+		"vault": return MapIcons.VAULT
+		"care_package": return MapIcons.CRATE
+	return MapIcons.BANG
+
+
 func _draw_arrows() -> void:
 	if player == null or not is_instance_valid(player):
 		return
@@ -564,6 +595,5 @@ func _draw_arrows() -> void:
 		var tx := INF if absf(d.x) < 0.001 else (r.size.x * 0.5) / absf(d.x)
 		var ty := INF if absf(d.y) < 0.001 else (r.size.y * 0.5) / absf(d.y)
 		var p := c + d * minf(tx, ty)
-		var pts := PackedVector2Array([p + d * 18.0, p + d.orthogonal() * 11.0, p - d.orthogonal() * 11.0])
-		_arrow.draw_colored_polygon(pts, RadioDefs.MAP_COLOR)
-		_arrow.draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0.05, 0.04, 0.03), 2.0)
+		MapIcons.draw_chevron(_arrow, p + d * 18.0, d, RadioDefs.MAP_COLOR, 15.0, 10.0)
+		MapIcons.draw(_arrow, job_icon(str(id)), p - d * 13.0, RadioDefs.MAP_COLOR, 2.0)
