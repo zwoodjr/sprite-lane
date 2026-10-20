@@ -249,6 +249,7 @@ func _on_body_entered(body: Node2D) -> void:
 func _apply_splash(primary: Node) -> void:
 	if splash_radius <= 0.0 or not from_player:
 		return
+	LightFx.flash(get_parent(), global_position, splash_radius * 2.6, Color(1.0, 0.58, 0.22, 0.7), 0.3)
 	var tree := get_tree()
 	if tree == null:
 		return

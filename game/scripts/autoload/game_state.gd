@@ -122,6 +122,7 @@ var settings: Dictionary = {
 	"left_handed": false,
 	"show_hints": true,
 	"heat_shimmer": false,
+	"film_grain": true,
 }
 var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.

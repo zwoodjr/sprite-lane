@@ -81,6 +81,7 @@ static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, c
 		hits += 1
 	damage_breakables(tree, pos, radius, dmg)
 	ring(player.get_parent(), pos, radius, color, 0.32)
+	LightFx.flash(player.get_parent(), pos, radius * 2.4, Color(1.0, 0.6, 0.25, 0.7), 0.35)
 	Juice.burst(pos, color, 18, radius * 2.6, 0.35, 1.5)
 	Juice.burst(pos, Color(0.5, 0.45, 0.4, 0.7), 8, radius, 0.6, 2.0)
 	return hits

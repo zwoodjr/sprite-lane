@@ -44,6 +44,8 @@ func _ready() -> void:
 	if mode == "burn":
 		_sprite.offset = Vector2(0, -float(_frames[0].get_height()) * 0.35) if not _frames.is_empty() else Vector2.ZERO
 	add_child(_sprite)
+	if mode == "burn":
+		LightFx.lamp(self, Vector2.ZERO, radius * 2.6, Color(1.0, 0.5, 0.2, 0.35), 0.25)
 	_sprite.modulate.a = 0.0
 	var tw := _sprite.create_tween()
 	tw.tween_property(_sprite, "modulate:a", float((art["tint"] as Color).a), 0.12)

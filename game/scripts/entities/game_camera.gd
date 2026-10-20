@@ -21,7 +21,12 @@ func set_target(t: Node2D) -> void:
 func _ready() -> void:
 	zoom = Vector2(SURVIVOR_ZOOM, SURVIVOR_ZOOM)
 	make_current()
+	var grade := CanvasLayer.new()
+	grade.name = "ScreenGrade"
+	grade.set_script(load("res://scripts/fx/screen_grade.gd"))
+	add_child(grade)
 	_add_ambient_dust()
+	_add_motes()
 	var amb := Node2D.new()
 	amb.name = "AmbientFx"
 	amb.set_script(load("res://scripts/fx/ambient_fx.gd"))
@@ -55,6 +60,46 @@ func _add_ambient_dust() -> void:
 	var cm := CanvasModulate.new()
 	cm.color = Color(1.0, 0.95, 0.88)
 	add_child(cm)
+
+
+## Per-zone drifting motes: tiny 1-2 px flecks (dust / ash / spores / embers)
+## floating slowly over the world, separate from the wind-blown dust.
+const MOTES := {
+	"haze": Color(1.0, 0.86, 0.62, 0.5), "drift": Color(1.0, 0.86, 0.62, 0.5),
+	"smog": Color(0.75, 0.72, 0.7, 0.55), "pall": Color(0.78, 0.8, 0.86, 0.5),
+	"blight": Color(0.72, 0.95, 0.5, 0.55), "shroud": Color(1.0, 0.6, 0.35, 0.6),
+	"choke": Color(0.86, 0.95, 0.45, 0.55), "blackout": Color(0.82, 0.8, 0.72, 0.5),
+	"deadfall": Color(0.8, 0.76, 0.72, 0.55), "dustfall": Color(1.0, 0.74, 0.4, 0.65),
+}
+
+
+func _add_motes() -> void:
+	var zid := str(ZoneDefs.zone(GameState.zone_tier()).get("id", "haze"))
+	var col: Color = MOTES.get(zid, MOTES["haze"])
+	var p := CPUParticles2D.new()
+	p.name = "Motes"
+	p.amount = 70
+	p.lifetime = 9.0
+	p.preprocess = 9.0
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	p.emission_rect_extents = Vector2(420, 760)
+	p.direction = Vector2(0.4, -1.0)
+	p.spread = 40.0
+	p.gravity = Vector2.ZERO
+	p.initial_velocity_min = 4.0
+	p.initial_velocity_max = 14.0
+	p.scale_amount_min = 1.0
+	p.scale_amount_max = 2.0
+	var g := Gradient.new()
+	g.set_color(0, Color(col, 0.0))
+	g.add_point(0.25, col)
+	g.add_point(0.75, col)
+	g.set_color(g.get_point_count() - 1, Color(col, 0.0))
+	p.color_ramp = g
+	p.local_coords = false
+	p.z_as_relative = false
+	p.z_index = 31
+	add_child(p)
 
 
 ## Visible world size at the current zoom (world px).
