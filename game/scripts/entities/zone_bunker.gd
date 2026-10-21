@@ -20,8 +20,9 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	if ResourceLoader.exists(TEX):
 		_sprite.texture = load(TEX)
-		_sprite.scale = Vector2.ONE * (120.0 * UnitAnim.ART_GROW / float(_sprite.texture.get_width()))
-	_sprite.position = Vector2(0, -40 * UnitAnim.ART_GROW)
+		## Native density (style bible): base of the art on the bunker's spot.
+		_sprite.scale = Vector2.ONE * UnitAnim.TEXEL
+	_sprite.position = Vector2(0, -float(_sprite.texture.get_height() if _sprite.texture else 94) * 0.5 * UnitAnim.TEXEL + 8.0)
 	add_child(_sprite)
 	_label = Label.new()
 	_label.text = "LOCKED BUNKER"

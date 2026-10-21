@@ -33,18 +33,17 @@ const BreakableScene := preload("res://scenes/entities/breakable.tscn")
 const DecalAtlas := preload("res://scripts/world/decal_atlas.gd")
 const GroundShader := preload("res://scripts/world/ground.gdshader")
 
-## Mid-scale landmark props. "block": collision rect size + centre offset from
-## the sprite centre (footprint only — most props stay walk-through).
+## Mid-scale road props. Collision footprints come from PropMeta (generated
+## with the art by tools/art_world/build.py; most props stay walk-through).
 const MID_PROPS := {
 	"wreck_car": {},
-	"wreck_truck": {"block": Vector2(108, 18), "off": Vector2(0, 12)},
-	"wreck_bus": {"block": Vector2(162, 24), "off": Vector2(0, 15)},
-	"wall_collapsed": {"block": Vector2(46, 24), "off": Vector2(-26, 3)},
-	"sandbags": {"block": Vector2(84, 22), "off": Vector2(0, 4)},
+	"wreck_truck": {},
+	"wreck_bus": {},
+	"wall_collapsed": {},
+	"sandbags": {},
 	"fence_broken": {},
 	"pole_down": {},
 	"barrels_rust": {},
-	"crater": {"ground": true},
 }
 ## Biome → [prop, weight] (rolled 0-2 times per chunk).
 const BIOME_PROPS := {
@@ -81,10 +80,6 @@ const BIOME_CLUSTERS := {
 	2: [["fence_line", 25], ["rock_garden", 20], ["boneyard", 15], ["camp", 15], ["signpost", 10]],
 	3: [["ruins", 30], ["sandbag_nest", 25], ["camp", 25], ["wreck_site", 10]],
 }
-## Props that block movement (footprint only, at native density via ART_GROW).
-const CLUSTER_BLOCK := {
-	"wall_ruin": Vector2(60, 18), "sandbags": Vector2(84, 22), "wall_collapsed": Vector2(46, 24), "rock_large": Vector2(34, 16),
-}
 ## Chance a chunk is a clearing (no cluster), else 1-2 clusters.
 const CLEARING_CHANCE := 0.26
 ## Rare foreground occluder (dead bush / grass drawn OVER units), per chunk.
@@ -100,6 +95,8 @@ const RIVER_DECALS := ["crack", "pebbles", "pebbles", "toxic", "toxic", "bones"]
 ## Keep blockers off the drop point and landmark/extract spots.
 const BLOCK_CLEAR_ORIGIN := 420.0
 const BLOCK_CLEAR_LANDMARK := 200.0
+## Landmark rooms keep other dressing out (their own set-piece fills them).
+const LANDMARK_ROOM := 300.0
 
 var field: GroundField
 var _mid_tex: Dictionary = {}
@@ -108,6 +105,8 @@ var _ground_tex: Dictionary = {}
 ## Depth E7: the tier's zone (ground set, props, tint — ZoneDefs).
 var zone: Dictionary = {}
 var _zone_tex: Dictionary = {}
+## Zone grade (ground / decal set suffix) and its 4 ground colours.
+var _grade: String = "haze"
 ## Chunks waiting for their one-off floor bake (one per frame, nearest first).
 var _bake_queue: Array[WastelandChunk] = []
 
@@ -120,8 +119,9 @@ func setup(p_seed: int, player: Node2D) -> void:
 	_chunks_root = Node2D.new()
 	_chunks_root.name = "Chunks"
 	_chunks_root.z_index = -10
-	## Half-strength zone tint (audit value pass: no full colour wash).
-	_chunks_root.modulate = Color.WHITE.lerp(zone.get("tint", Color.WHITE), 0.5)
+	## Style bible: the floor is authored in the zone's own 4 ground colours,
+	## so it gets no tint at all (mood comes from light pools).
+	_chunks_root.modulate = Color.WHITE
 	add_child(_chunks_root)
 	_props_root = Node2D.new()
 	_props_root.name = "Props"
@@ -140,6 +140,7 @@ func setup(p_seed: int, player: Node2D) -> void:
 
 func _load_textures() -> void:
 	var grade := str(zone.get("grade", ""))
+	_grade = grade if grade != "" else "haze"
 	for k in ["earth", "sand", "scrub", "rubble", "riverbed", "asphalt"]:
 		var zp := "res://assets/sprites/tiles/zones/ground_%s_%s.png" % [k, grade]
 		if grade != "" and ResourceLoader.exists(zp):
@@ -152,7 +153,8 @@ func _load_textures() -> void:
 			_zone_tex[str(zk)] = load(zpath) as Texture2D
 	for k in MID_PROPS.keys():
 		_mid_tex[k] = prop_tex(str(k))
-	_atlas = load("res://assets/sprites/decals/decal_atlas.png") as Texture2D
+	var ap := "res://assets/sprites/decals/decal_atlas_%s.png" % _grade
+	_atlas = load(ap if ResourceLoader.exists(ap) else "res://assets/sprites/decals/decal_atlas.png") as Texture2D
 	_decor.clear()
 	for n in [
 		"rock_small", "rock_small", "rock_large", "dead_bush", "dead_bush",
@@ -171,12 +173,58 @@ func _load_textures() -> void:
 	_prop_pillar = prop_tex("ruin_pillar")
 
 
-## Painted 2x prop art (tools/paint_pass.py) when it exists, else the original.
+## Style-bible prop art (tools/art_world/build.py), one density for everything.
 static func prop_tex(n: String) -> Texture2D:
-	var hd := "res://assets/sprites/props_hd/%s.png" % n
-	if ResourceLoader.exists(hd):
-		return load(hd) as Texture2D
 	return load("res://assets/sprites/props/%s.png" % n) as Texture2D
+
+
+## Positions are floored to whole art texels (bible 1.1).
+static func snap(p: Vector2) -> Vector2:
+	return (p / UnitAnim.TEXEL).floor() * UnitAnim.TEXEL
+
+
+## Engine contact shadow for a prop (never baked into the art): the hard pixel
+## ellipse under its footprint (PropMeta "foot"), below the prop's sprite.
+static func add_prop_shadow(parent: Node2D, kind: String, at: Vector2, flip: bool = false) -> void:
+	var m := PropMeta.info(kind)
+	if m.is_empty() or m.get("flat", false):
+		return
+	var f: Vector2 = m["foot"]
+	var sz: Vector2 = m["size"]
+	var fx := (f.x + f.y) * 0.5
+	if flip:
+		fx = -fx
+	var s := Sprite2D.new()
+	## Props are deep, not round: the ellipse is 0.8 x footprint wide but at
+	## most 12 texels tall, so a sandbag wall doesn't drag a huge oval.
+	s.texture = UnitAnim.pixel_shadow_tex(int(round((f.y - f.x) * 0.8)), 12)
+	s.scale = Vector2.ONE * UnitAnim.TEXEL
+	s.position = at + Vector2(fx + 2.0, sz.y * 0.5) * UnitAnim.TEXEL
+	s.z_index = 1
+	parent.add_child(s)
+
+
+## Static collision footprint from PropMeta (no-op for walk-through props).
+static func add_prop_block(parent: Node2D, kind: String, at: Vector2, flip: bool = false) -> bool:
+	var r := PropMeta.block_rect(kind, flip)
+	if r.size == Vector2.ZERO:
+		return false
+	var body := StaticBody2D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = at
+	var cs := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = r.size
+	cs.shape = shape
+	cs.position = r.get_center()
+	body.add_child(cs)
+	parent.add_child(body)
+	return true
+
+
+static func blocks(kind: String) -> bool:
+	return (PropMeta.info(kind) as Dictionary).has("block")
 
 
 ## World scale for a prop texture (native density, see UnitAnim.prop_scale).
@@ -295,6 +343,10 @@ func _ground_material(segs: Array[Dictionary], origin: Vector2) -> ShaderMateria
 	mat.set_shader_parameter("chunk_origin", origin)
 	mat.set_shader_parameter("road_half", GroundField.ROAD_HALF)
 	mat.set_shader_parameter("texel", float(WastelandChunk.CHUNK_SIZE) / float(WastelandChunk.BAKE_PX))
+	var zc: Array = ZoneDefs.ground_colors(_grade)
+	for i in range(4):
+		var c: Color = zc[i]
+		mat.set_shader_parameter("zc%d" % i, Vector3(c.r, c.g, c.b))
 	var sv := PackedVector4Array()
 	var so := PackedFloat32Array()
 	for s in segs:
@@ -318,8 +370,21 @@ func _rng_for(coord: Vector2i, salt: int) -> RandomNumberGenerator:
 
 
 func _decal(kind: String, rng: RandomNumberGenerator) -> Rect2:
-	var n := 2 if kind in ["oil", "toxic", "tracks", "stain"] else 3
+	var n := 2 if kind in ["oil", "toxic", "stain", "crater"] or kind.begins_with("tracks") else 3
 	return DecalAtlas.REGIONS["%s_%d" % [kind, rng.randi() % n]]
+
+
+## Tyre tracks are pre-drawn in 4 directions (pixel art is never rotated):
+## pick the one closest to the road direction.
+func _tracks_kind(dir: Vector2) -> String:
+	var a := fposmod(dir.angle(), PI)
+	if a < PI / 8.0 or a >= PI * 7.0 / 8.0:
+		return "tracksh"
+	if a < PI * 3.0 / 8.0:
+		return "tracksd"
+	if a < PI * 5.0 / 8.0:
+		return "tracksv"
+	return "tracksa"
 
 
 ## Wrecks and downed power poles along roads, tyre tracks and oil on the asphalt.
@@ -338,7 +403,7 @@ func _populate_road(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], dec
 			if p.x == INF:
 				break
 			var lat := rng.randf_range(-0.6, 0.6) * GroundField.ROAD_HALF
-			decals.append([_decal("tracks", rng), p + nrm * lat - chunk.position, dir.angle(), false, Color(1, 1, 1, rng.randf_range(0.6, 1.0))])
+			decals.append([_decal(_tracks_kind(dir), rng), (p + nrm * lat - chunk.position).floor(), 0.0, false, Color.WHITE])
 			if rng.randf() < 0.6:
 				var q := p + dir * rng.randf_range(-60, 60) + nrm * rng.randf_range(-20, 20)
 				decals.append([_decal("oil", rng), q - chunk.position, 0.0, rng.randf() < 0.5, Color.WHITE])
@@ -384,6 +449,9 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 		for t in taken:
 			if t.distance_to(anchor) < 260.0:
 				clash = true
+		for lm in landmarks:
+			if (lm["position"] as Vector2).distance_to(anchor) < LANDMARK_ROOM + 120.0:
+				clash = true
 		if clash:
 			continue
 		taken.append(anchor)
@@ -394,8 +462,9 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 			var wp := anchor + off
 			if kind.begins_with("@"):
 				var dk := kind.substr(1)
-				var rot := rng.randf_range(-0.5, 0.5) if dk in ["crack", "tracks"] else 0.0
-				decals.append([_decal(dk, rng), (wp - chunk.position).floor(), rot, rng.randf() < 0.5, Color.WHITE])
+				if dk == "tracks":
+					dk = ["tracksh", "tracksd", "tracksa"][rng.randi() % 3]
+				decals.append([_decal(dk, rng), (wp - chunk.position).floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
 			elif kind == "crate":
 				if rng.randf() < 0.75 and wp.length() > 160.0:
 					_place_crate(chunk, wp - chunk.position, rng)
@@ -403,7 +472,8 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 				if rng.randf() < 0.7:
 					LightFx.fire(chunk, (wp - chunk.position).floor(), 0.9)
 			else:
-				_place_cluster_prop(chunk, kind, wp, flip != (rng.randf() < 0.3))
+				## Never mirrored: every sprite is lit from the top-left (bible 1.4).
+				_place_cluster_prop(chunk, kind, wp, rng.randf() < 0.0)
 	## A lone crate out in the open now and then (clearings keep some loot).
 	if n == 0 and rng.randf() < 0.6:
 		var lp := Vector2(rng.randf_range(60, CHUNK_SIZE - 60), rng.randf_range(60, CHUNK_SIZE - 60))
@@ -414,12 +484,14 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 		var p := Vector2(rng.randf_range(30, CHUNK_SIZE - 30), rng.randf_range(30, CHUNK_SIZE - 30))
 		if GroundField.road_dist(chunk.position + p, segs) < GroundField.ROAD_HALF + 20.0:
 			continue
+		var sk: String = ["rock_small", "dead_bush", "tire", "bones"][rng.randi() % 4]
 		var sp := Sprite2D.new()
-		sp.texture = prop_tex(["rock_small", "dead_bush", "tire", "bones"][rng.randi() % 4])
+		sp.texture = prop_tex(sk)
 		sp.scale = Vector2.ONE * prop_scale(sp.texture)
-		sp.position = p.floor()
-		sp.flip_h = rng.randf() < 0.5
+		sp.position = snap(p)
+		sp.flip_h = rng.randf() < 0.0 ## lit top-left: never mirrored
 		sp.z_index = 2
+		add_prop_shadow(chunk, sk, sp.position, sp.flip_h)
 		chunk.add_child(sp)
 	## Rare foreground occluder: a dead bush drawn over the units, slightly see-through.
 	if rng.randf() < OCCLUDER_CHANCE:
@@ -427,11 +499,12 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 		if GroundField.road_dist(chunk.position + p2, segs) > GroundField.ROAD_HALF + 30.0 and (chunk.position + p2).length() > 300.0:
 			var oc := Sprite2D.new()
 			oc.texture = prop_tex("dead_bush")
-			oc.scale = Vector2.ONE * prop_scale(oc.texture) * 1.2
-			oc.position = p2.floor()
+			oc.scale = Vector2.ONE * prop_scale(oc.texture)
+			oc.position = snap(p2)
 			oc.z_as_relative = false
 			oc.z_index = 40
-			oc.modulate = Color(0.8, 0.76, 0.72, 0.82)
+			## Bible alpha steps only (25/50/75/100%): the occluder sits at 75%.
+			oc.modulate = Color(1, 1, 1, 0.75)
 			chunk.add_child(oc)
 
 
@@ -439,8 +512,8 @@ func _place_cluster_prop(chunk: Node2D, kind: String, world_pos: Vector2, flip: 
 	var tex := prop_tex(kind)
 	if tex == null:
 		return
-	var blocks := CLUSTER_BLOCK.has(kind) or (MID_PROPS.has(kind) and (MID_PROPS[kind] as Dictionary).has("block"))
-	if blocks:
+	var is_block := blocks(kind)
+	if is_block:
 		if world_pos.length() < BLOCK_CLEAR_ORIGIN:
 			return
 		for lm in landmarks:
@@ -449,31 +522,18 @@ func _place_cluster_prop(chunk: Node2D, kind: String, world_pos: Vector2, flip: 
 	var sp := Sprite2D.new()
 	sp.texture = tex
 	sp.scale = Vector2.ONE * prop_scale(tex)
-	sp.position = (world_pos - chunk.position).floor()
+	sp.position = snap(world_pos - chunk.position)
 	sp.flip_h = flip
-	sp.z_index = 1 if kind == "crater" else 2
+	sp.z_index = 2
+	add_prop_shadow(chunk, kind, sp.position, flip)
 	chunk.add_child(sp)
-	if blocks:
-		var body := StaticBody2D.new()
-		body.collision_layer = 1
-		body.collision_mask = 0
-		body.position = sp.position
-		var cs := CollisionShape2D.new()
-		var shape := RectangleShape2D.new()
-		var size: Vector2 = CLUSTER_BLOCK.get(kind, (MID_PROPS.get(kind, {}) as Dictionary).get("block", Vector2(40, 16)))
-		shape.size = size * UnitAnim.ART_GROW
-		cs.shape = shape
-		var off: Vector2 = (MID_PROPS.get(kind, {}) as Dictionary).get("off", Vector2(0, 6)) * UnitAnim.ART_GROW
-		if flip:
-			off.x = -off.x
-		cs.position = off
-		body.add_child(cs)
-		chunk.add_child(body)
+	if is_block:
+		add_prop_block(chunk, kind, sp.position, flip)
 
 
 func _place_crate(chunk: Node2D, local: Vector2, rng: RandomNumberGenerator) -> void:
 	var br: StaticBody2D = BreakableScene.instantiate()
-	br.position = local.floor()
+	br.position = snap(local)
 	br.z_index = 2
 	chunk.add_child(br)
 	match rng.randi() % 4:
@@ -485,6 +545,7 @@ func _place_crate(chunk: Node2D, local: Vector2, rng: RandomNumberGenerator) -> 
 			br.setup("apothecary_chest", _prop_chest, 32.0)
 		_:
 			br.setup("vial_crate", _prop_vial, 20.0)
+	add_prop_shadow(chunk, br.kind, br.position)
 
 
 ## Depth E7: this zone's own props (refinery tanks, city lamps, chem vats...).
@@ -504,37 +565,31 @@ func _populate_zone_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary
 			if t.distance_to(p) < 190.0:
 				near = true
 		for lm in landmarks:
-			if (lm["position"] as Vector2).distance_to(p) < BLOCK_CLEAR_LANDMARK:
+			if (lm["position"] as Vector2).distance_to(p) < LANDMARK_ROOM:
 				near = true
 		if near:
 			continue
 		taken.append(p)
-		var info: Array = ZoneDefs.PROP_INFO.get(kind, [110.0, Vector2.ZERO])
 		var tex: Texture2D = _zone_tex[kind]
 		var sp := Sprite2D.new()
 		sp.texture = tex
-		sp.scale = Vector2.ONE * (float(info[0]) * UnitAnim.ART_GROW / float(tex.get_height()))
-		sp.offset = Vector2(0, -tex.get_height() * 0.5 + tex.get_height() * 0.08)
-		sp.position = (p - chunk.position).floor()
-		sp.flip_h = rng.randf() < 0.5
+		## Native density: the art is drawn at its size class (no fit-to-height).
+		sp.scale = Vector2.ONE * UnitAnim.TEXEL
+		sp.position = snap(p - chunk.position)
+		sp.flip_h = rng.randf() < 0.0 ## lit top-left: never mirrored
 		sp.z_index = 2
-		## Visual tier: lit zone props cast a pool of light.
-		if kind == "street_lamp":
-			LightFx.lamp(chunk, sp.position + Vector2(38 if not sp.flip_h else -38, -6), 150.0, Color(1.0, 0.78, 0.45, 0.38), 0.05)
-		elif kind == "chem_vat":
-			LightFx.lamp(chunk, sp.position + Vector2(0, -60), 130.0, Color(0.5, 1.0, 0.3, 0.26), 0.1)
-		var block: Vector2 = info[1]
-		if block.x > 0.0:
-			var body := StaticBody2D.new()
-			body.collision_layer = 1
-			body.collision_mask = 0
-			body.position = sp.position
-			var cs := CollisionShape2D.new()
-			var shape := RectangleShape2D.new()
-			shape.size = block * UnitAnim.ART_GROW
-			cs.shape = shape
-			body.add_child(cs)
-			chunk.add_child(body)
+		## Lit zone props cast a pool of light (the one soft gradient allowed).
+		var m := PropMeta.info(kind)
+		if m.has("light"):
+			var lp: Vector2 = m["light"]
+			if sp.flip_h:
+				lp.x = -lp.x
+			if kind == "street_lamp":
+				LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
+			elif kind == "chem_vat":
+				LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 130.0, Color(0.61, 0.81, 0.24, 0.26), 0.1)
+		add_prop_shadow(chunk, kind, sp.position, sp.flip_h)
+		add_prop_block(chunk, kind, sp.position, sp.flip_h)
 		chunk.add_child(sp)
 
 
@@ -554,8 +609,10 @@ func _place_mid(chunk: Node2D, kind: String, world_pos: Vector2, rng: RandomNumb
 	for t in taken:
 		if t.distance_to(world_pos) < 150.0:
 			return
-	var info: Dictionary = MID_PROPS[kind]
-	if info.has("block"):
+	for lm in landmarks:
+		if (lm["position"] as Vector2).distance_to(world_pos) < LANDMARK_ROOM:
+			return
+	if blocks(kind):
 		if world_pos.length() < BLOCK_CLEAR_ORIGIN:
 			return
 		for lm in landmarks:
@@ -565,24 +622,11 @@ func _place_mid(chunk: Node2D, kind: String, world_pos: Vector2, rng: RandomNumb
 	var sp := Sprite2D.new()
 	sp.texture = _mid_tex[kind]
 	sp.scale = Vector2.ONE * prop_scale(sp.texture)
-	sp.position = (world_pos - chunk.position).floor()
-	sp.flip_h = rng.randf() < 0.5
-	sp.z_index = 1 if info.get("ground", false) else 2
-	if info.has("block"):
-		var body := StaticBody2D.new()
-		body.collision_layer = 1
-		body.collision_mask = 0
-		body.position = sp.position
-		var cs := CollisionShape2D.new()
-		var shape := RectangleShape2D.new()
-		shape.size = info["block"] * UnitAnim.ART_GROW
-		cs.shape = shape
-		var off: Vector2 = info["off"] * UnitAnim.ART_GROW
-		if sp.flip_h:
-			off.x = -off.x
-		cs.position = off
-		body.add_child(cs)
-		chunk.add_child(body)
+	sp.position = snap(world_pos - chunk.position)
+	sp.flip_h = rng.randf() < 0.0 ## lit top-left: never mirrored
+	sp.z_index = 2
+	add_prop_shadow(chunk, kind, sp.position, sp.flip_h)
+	add_prop_block(chunk, kind, sp.position, sp.flip_h)
 	chunk.add_child(sp)
 
 
@@ -606,11 +650,38 @@ func _populate_decals(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], d
 			if kind == "toxic" and rng.randf() < 0.5:
 				kind = "pebbles"
 			var off := Vector2(rng.randfn(0.0, spread), rng.randfn(0.0, spread * 0.7))
-			var rot := rng.randf_range(-0.6, 0.6) if kind == "crack" else 0.0
-			decals.append([_decal(kind, rng), (center + off).floor(), rot, rng.randf() < 0.5, Color.WHITE])
+			decals.append([_decal(kind, rng), (center + off).floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
 	for i in range(rng.randi() % 3):
 		var p := Vector2(rng.randf_range(10, CHUNK_SIZE - 10), rng.randf_range(10, CHUNK_SIZE - 10))
 		decals.append([_decal(["pebbles", "grass", "crack"][rng.randi() % 3], rng), p.floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
+	## Old shell craters (they used to be a prop): a flat ground decal now.
+	if rng.randf() < 0.22 and field.biome_at(chunk.position + Vector2(256, 256)) != 2:
+		var cp := Vector2(rng.randf_range(70, CHUNK_SIZE - 70), rng.randf_range(50, CHUNK_SIZE - 50))
+		if GroundField.road_dist(chunk.position + cp, segs) > GroundField.ROAD_HALF + 60.0:
+			decals.append([_decal("crater", rng), cp.floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
+
+
+## Landmark set-pieces (bible: max 1 per screen; the world composed as rooms
+## round one landmark). The hero prop stands at the back of the room and the
+## dressing rings a clearing of ~160 px, where the extract pads land (they are
+## rolled within 80 px of the landmark). Entries: [kind, dx, dy] in world px;
+## "@x" = floor decal. The first entry is the hero prop (label anchor).
+const LANDMARK_SETS := [
+	## 0 wreck field (Scrapyard, Convoy Wreck)
+	[["wreck", 0, -190], ["wreck_car", -200, -90], ["barrels_rust", 190, -120], ["scrap_pile", 210, 60], ["tire", -180, 90],
+		["tire", 120, -190], ["scrap_pile", -150, 170], ["@oil", 20, -130], ["@oil", -110, -40], ["@tracksh", -40, 40],
+		["@scrap", 80, 100], ["@scrap", -60, -60], ["@stain", 0, -150]],
+	## 1 garage / wall ruin (Flood Garage)
+	[["wall_collapsed", 0, -190], ["wall_ruin", -190, -120], ["ruin_pillar", 190, -150], ["scrap_pile", 200, 70],
+		["barrels_rust", -200, 60], ["rock_small", -110, 170], ["@stain", -20, -110], ["@pebbles", 60, 40], ["@pebbles", -90, 30],
+		["@crack", 30, 110]],
+	## 2 signal tower
+	[["signal_tower", 0, -200], ["fence_broken", -190, -110], ["barrels_rust", 170, -110], ["sign_post", -170, 90],
+		["scrap_pile", 190, 80], ["@tracksv", 30, 40], ["@pebbles", -30, -100], ["@scrap", 70, 90], ["@crack", -110, 120]],
+	## 3 ruined arcade pillars (Neon Market, Herb Cache)
+	[["wall_ruin", 0, -190], ["ruin_pillar", -170, -110], ["ruin_pillar", 170, -120], ["sandbags", -150, 150], ["bones", 60, -100],
+		["rock_large", 190, 90], ["dead_bush", -200, 20], ["@pebbles", 0, 30], ["@bones", 60, 50], ["@grass", -80, 110]],
+]
 
 
 func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
@@ -618,25 +689,28 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 		var lp: Vector2 = lm["position"]
 		var lc := _chunk_coord(lp)
 		if lc == coord:
-			var sp := Sprite2D.new()
-			## kind: 0 wreck · 1 wall/garage · 2 tower · 3 market pillar
 			var k := int(lm["kind"])
-			if k == 2:
-				sp.texture = _prop_tower
-			elif k == 1:
-				sp.texture = _prop_wall
-			elif k == 3:
-				sp.texture = _prop_pillar
-			else:
-				sp.texture = _prop_wreck
-			sp.position = lp - chunk.position
-			sp.centered = true
-			sp.scale = Vector2.ONE * prop_scale(sp.texture)
-			sp.z_index = 3
-			chunk.add_child(sp)
+			var set_rng := _rng_for(coord, 97)
+			for e in LANDMARK_SETS[k]:
+				var kind := str(e[0])
+				var wp := lp + Vector2(float(e[1]), float(e[2]))
+				if kind.begins_with("@"):
+					(chunk as WastelandChunk).add_decal([_decal(kind.substr(1), set_rng), (wp - chunk.position).floor(), 0.0, false, Color.WHITE])
+					continue
+				var sp := Sprite2D.new()
+				sp.texture = prop_tex(kind)
+				sp.scale = Vector2.ONE * prop_scale(sp.texture)
+				sp.position = snap(wp - chunk.position)
+				sp.z_index = 2
+				add_prop_shadow(chunk, kind, sp.position)
+				add_prop_block(chunk, kind, sp.position)
+				chunk.add_child(sp)
+			var hero: Array = LANDMARK_SETS[k][0]
+			var sp_pos := snap(lp + Vector2(float(hero[1]), float(hero[2])) - chunk.position)
+			var sp_tex := prop_tex(str(hero[0]))
 			var label := Label.new()
 			label.text = str(lm["name"])
-			label.position = sp.position + Vector2(-40, -50)
+			label.position = sp_pos + Vector2(-40, -sp_tex.get_height() * 0.5 * UnitAnim.TEXEL - 18.0)
 			label.add_theme_font_size_override("font_size", 12)
 			label.add_theme_color_override("font_color", Color(0.95, 0.8, 0.45))
 			label.z_index = 3

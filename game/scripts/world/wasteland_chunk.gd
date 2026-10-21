@@ -38,11 +38,16 @@ func configure(coord: Vector2i, mat: ShaderMaterial, atlas: Texture2D, decal_lis
 		ground.draw_rect(Rect2(Vector2.ZERO, Vector2(BAKE_PX, BAKE_PX)), Color.WHITE))
 	_vp.add_child(ground)
 	_decals = Node2D.new()
-	_decals.scale = Vector2.ONE * (float(BAKE_PX) / float(CHUNK_SIZE))
+	## Decals draw in bake-pixel space (see _draw_decals).
 	_decals.draw.connect(_draw_decals)
 	_vp.add_child(_decals)
 	add_child(_vp)
 	queue_redraw()
+
+
+## Queue one more floor decal (before the bake): [region, pos, rot, flip, tint].
+func add_decal(d: Array) -> void:
+	_decal_list.append(d)
 
 
 ## Render the floor + decals into the chunk texture (once).
@@ -64,19 +69,13 @@ func _draw_decals() -> void:
 	for d in _decal_list:
 		var region: Rect2 = d[0]
 		var pos: Vector2 = d[1]
-		var rot: float = d[2]
-		var flip: bool = d[3]
 		var tint: Color = d[4]
-		var size := region.size * DECAL_TEXEL
-		var r := maxf(size.x, size.y) * 0.5 if rot != 0.0 else 0.0
-		var half := Vector2(r, r) if rot != 0.0 else size * 0.5
+		## Bake-pixel space: one atlas texel = one bake px, top-left snapped to a
+		## whole pixel (no rotation: pixel art is never rotated, bible 1.1).
+		var size := region.size
+		var half := size * 0.5 * DECAL_TEXEL
 		if not Rect2(half, Vector2(CHUNK_SIZE, CHUNK_SIZE) - half * 2.0).has_point(pos):
 			continue ## would be clipped by the chunk edge
-		if flip:
-			size.x = -size.x
-		if rot != 0.0:
-			_decals.draw_set_transform(pos, rot, Vector2.ONE)
-			_decals.draw_texture_rect_region(_atlas, Rect2(-size * 0.5, size), region, tint)
-			_decals.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		else:
-			_decals.draw_texture_rect_region(_atlas, Rect2((pos - size * 0.5).floor(), size), region, tint)
+		var tl := (pos / DECAL_TEXEL - size * 0.5).floor()
+		## `flip` is ignored: decals are lit top-left and are never mirrored.
+		_decals.draw_texture_rect_region(_atlas, Rect2(tl, size), region, tint)

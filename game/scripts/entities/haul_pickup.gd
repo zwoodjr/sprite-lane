@@ -7,7 +7,7 @@ extends Node2D
 ## Medicine crates show on the minimap (group "map_markers").
 
 const ICON_WORLD := 24.0
-const CRATE_WORLD := 80.0 * UnitAnim.TEXEL ## native: 80 px painted crate
+const CRATE_WORLD := 46.0 * UnitAnim.TEXEL ## native: the 46 px style-bible crate
 const PICK_R := 26.0
 const MAGNET_R := 90.0
 const MAGNET_SPEED := 360.0

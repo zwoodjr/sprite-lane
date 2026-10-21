@@ -55,8 +55,10 @@ const ZONE_LOOK := {
 	"dustfall": {"cool": Vector3(0.84, 0.80, 0.92), "warm": Vector3(1.10, 0.96, 0.80), "contrast": 1.12},
 }
 const GRAIN := 0.035
-## Share of the per-zone split-tone kept (1 = full wash).
-const WASH := 0.5
+## Share of the per-zone split-tone kept (1 = full wash). Style bible 2.1:
+## zone tint <= 10%, no full-screen washes; the ground is authored in each
+## zone's own palette and mood comes from light pools.
+const WASH := 0.1
 const PIVOT := 0.36
 
 var _mat: ShaderMaterial
@@ -84,7 +86,10 @@ func _ready() -> void:
 	for k in ["cool", "warm"]:
 		look[k] = Vector3.ONE.lerp(look[k], WASH)
 	look["vignette"] = float(look["vignette"]) * 0.5
-	look["contrast"] = 1.0 + (float(look["contrast"]) - 1.0) * 0.6
+	## Palette-true: no global contrast / saturation curve over the bible palette.
+	look["contrast"] = 1.0
+	look["sat"] = 1.0
+	look["lift"] = 0.0
 	look["pivot"] = PIVOT
 	for k in look:
 		var v: Variant = look[k]

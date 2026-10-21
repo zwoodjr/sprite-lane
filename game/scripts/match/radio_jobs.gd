@@ -124,8 +124,8 @@ func _prop(name: String, at: Vector2, size: float) -> Sprite2D:
 	var s := Sprite2D.new()
 	if ResourceLoader.exists(PROP % name):
 		s.texture = load(PROP % name)
-		var k := size * UnitAnim.ART_GROW / float(maxi(s.texture.get_width(), s.texture.get_height()))
-		s.scale = Vector2(k, k)
+		## Native density (style bible): the art is drawn at its size class.
+		s.scale = Vector2.ONE * UnitAnim.TEXEL
 		s.offset = Vector2(0, -float(s.texture.get_height()) * 0.5)
 	s.position = at + Vector2(0, 10)
 	s.z_index = -1
@@ -208,7 +208,7 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 			s["npc"] = _npc(giver, s["pos"], "field_tent", 110.0, Vector2(-62, 0), "Cinder's field tent")
 		"overwatch":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
-			s["npc"] = _npc(giver, s["pos"], "watch_tower", 150.0, Vector2(0, 0), "Vesper — overwatch", 115.0)
+			s["npc"] = _npc(giver, s["pos"], "watch_tower", 150.0, Vector2(0, 0), "Vesper — overwatch", 87.0)
 			s["fire_t"] = 1.0
 		"vault":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])

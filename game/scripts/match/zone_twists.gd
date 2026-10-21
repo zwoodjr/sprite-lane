@@ -384,10 +384,16 @@ func _tick_air(delta: float) -> void:
 ## --- Crater City --------------------------------------------------------------------
 func _spawn_sinkhole(at: Vector2, r: float) -> void:
 	var sp := Sprite2D.new()
-	var path := ZONE_DIR % "sinkhole"
+	## Native-density art in three sizes per zone; pick the closest (no scaling).
+	var grade := str(ZoneDefs.zone(tier).get("grade", "crater"))
+	if grade != "dustfall":
+		grade = "crater"
+	var want := r * 2.3 / UnitAnim.TEXEL
+	var size := "s" if want < 215.0 else ("m" if want < 265.0 else "l")
+	var path := ZONE_DIR % ("sinkhole_%s_%s" % [grade, size])
 	if ResourceLoader.exists(path):
 		sp.texture = load(path)
-		sp.scale = Vector2(1.0, 0.6) * (r * 2.3 / float(sp.texture.get_width()))
+		sp.scale = Vector2.ONE * UnitAnim.TEXEL
 	sp.z_index = -4
 	sp.position = at
 	world.add_child(sp)
@@ -436,7 +442,7 @@ func drop_rubble(at: Vector2) -> void:
 	var path := ZONE_DIR % "rubble_chunk"
 	if ResourceLoader.exists(path):
 		chunk.texture = load(path)
-		chunk.scale = Vector2.ONE * (r * 1.1 / float(chunk.texture.get_width()))
+		chunk.scale = Vector2.ONE * UnitAnim.TEXEL
 	chunk.position = at + Vector2(0, -420)
 	chunk.z_index = 12
 	world.add_child(chunk)

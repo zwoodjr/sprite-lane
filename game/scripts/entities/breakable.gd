@@ -27,9 +27,14 @@ func setup(kind_id: String, tex: Texture2D, p_hp: float = 24.0) -> void:
 	sprite.centered = true
 	## Native density: one painted texel = one screen px.
 	sprite.scale = Vector2.ONE * UnitAnim.prop_scale(tex)
+	## Footprint from the native art: most of the width, the lower 70% (still a
+	## generous target for shots and swings).
 	var cs := get_node_or_null("CollisionShape2D") as CollisionShape2D
-	if cs:
-		cs.scale = Vector2.ONE * UnitAnim.ART_GROW
+	if cs and tex:
+		var r := RectangleShape2D.new()
+		r.size = Vector2(maxf(24.0, tex.get_width() * 0.9 * UnitAnim.TEXEL), maxf(20.0, tex.get_height() * 0.7 * UnitAnim.TEXEL))
+		cs.shape = r
+		cs.position = Vector2(0, tex.get_height() * 0.15 * UnitAnim.TEXEL)
 
 
 func _ready() -> void:

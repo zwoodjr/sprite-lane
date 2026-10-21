@@ -40,40 +40,61 @@ const BODY_K := 1.4
 const ART_GROW := 2.0 * TEXEL
 
 
-## World scale for a prop texture: the painted 2x set (props_hd, and every
-## native-res landmark) draws 1 texel = 1 screen px; the old 1x pixel props
-## draw at an exact 2x so they keep their relative size.
-static func prop_scale(tex: Texture2D) -> float:
-	if tex and tex.resource_path.contains("/props/"):
-		return 2.0 * TEXEL
+## World scale for a prop texture. Style bible v1: every world prop is drawn
+## at the one world density (1 art texel = 1 design px), so there is no 2x
+## branch any more; the only sprite scale is the global TEXEL.
+static func prop_scale(_tex: Texture2D = null) -> float:
 	return TEXEL
 
 
-static var _shadow_tex: Texture2D = null
+## INK #140c0e: the bible's universal outline / shadow colour.
+const SHADOW_INK := Color(0.0784, 0.0471, 0.0549)
+static var _shadow_cache: Dictionary = {}
 
 
-## Soft cool contact shadow under a unit's feet (one shared radial texture).
-## Returns the Sprite2D (child of `parent`, drawn below its siblings).
+## Hard 2-step pixel ellipse (bible 1.4): INK at 45% in the core, 27% at the
+## rim, `w` texels wide and 0.3 w tall (`hmax` > 0 caps the height: long,
+## shallow props like sandbag walls). Cached per size.
+static func pixel_shadow_tex(w: int, hmax: int = 0) -> Texture2D:
+	w = clampi(w, 6, 400)
+	var hgt := maxi(3, int(round(w * 0.3)))
+	if hmax > 0:
+		hgt = mini(hgt, maxi(3, hmax))
+	var key := w * 1000 + hgt
+	if _shadow_cache.has(key):
+		return _shadow_cache[key]
+	var img := Image.create(w, hgt, false, Image.FORMAT_RGBA8)
+	var rx := w * 0.5
+	var ry := hgt * 0.5
+	var core := Color(SHADOW_INK, 0.45)
+	var rim := Color(SHADOW_INK, 0.27)
+	for y in range(hgt):
+		for x in range(w):
+			var dx := (x + 0.5 - rx) / rx
+			var dy := (y + 0.5 - ry) / ry
+			if dx * dx + dy * dy > 1.0:
+				continue
+			var ix := (x + 0.5 - rx) / maxf(1.0, rx - 2.0)
+			var iy := (y + 0.5 - ry) / maxf(1.0, ry - 1.0)
+			img.set_pixel(x, y, core if ix * ix + iy * iy <= 1.0 else rim)
+	var t := ImageTexture.create_from_image(img)
+	_shadow_cache[key] = t
+	return t
+
+
+## Contact shadow under a unit's (or prop's) feet: the bible's hard pixel
+## ellipse, width = 0.8 x footprint, offset (+2, +1) texels down-right.
+## `width` is the footprint in world px. Returns the Sprite2D (child of
+## `parent`, drawn below its siblings).
 static func add_contact_shadow(parent: Node2D, width: float, feet_y: float, alpha: float = 0.5) -> Sprite2D:
-	if _shadow_tex == null:
-		var g := Gradient.new()
-		g.set_color(0, Color(0.05, 0.04, 0.08, 1.0))
-		g.add_point(0.45, Color(0.05, 0.04, 0.08, 0.7))
-		g.set_color(g.get_point_count() - 1, Color(0.05, 0.04, 0.08, 0.0))
-		var t := GradientTexture2D.new()
-		t.gradient = g
-		t.fill = GradientTexture2D.FILL_RADIAL
-		t.fill_from = Vector2(0.5, 0.5)
-		t.fill_to = Vector2(1.0, 0.5)
-		t.width = 64
-		t.height = 64
-		_shadow_tex = t
 	var s := Sprite2D.new()
 	s.name = "ContactShadow"
-	s.texture = _shadow_tex
-	s.scale = Vector2(width / 64.0, width * 0.3 / 64.0)
-	s.position = Vector2(3.0, feet_y - 1.0)
-	s.modulate = Color(1, 1, 1, alpha)
+	s.texture = pixel_shadow_tex(int(round(width * 0.8 / TEXEL)))
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	s.scale = Vector2.ONE * TEXEL
+	s.position = Vector2(2.0 * TEXEL, feet_y + TEXEL)
+	## Flying units pass a lower alpha: their shadow reads fainter.
+	s.modulate = Color(1, 1, 1, clampf(alpha / 0.5, 0.0, 1.0))
 	s.z_index = -1
 	parent.add_child(s)
 	parent.move_child(s, 0)

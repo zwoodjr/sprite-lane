@@ -28,8 +28,8 @@ func _ready() -> void:
 	if prop_path != "" and ResourceLoader.exists(prop_path):
 		_prop = Sprite2D.new()
 		_prop.texture = load(prop_path)
-		var k := prop_world * UnitAnim.ART_GROW / float(maxi(_prop.texture.get_width(), _prop.texture.get_height()))
-		_prop.scale = Vector2(k, k)
+		## Native density (style bible): the art is drawn at its size class.
+		_prop.scale = Vector2.ONE * UnitAnim.TEXEL
 		_prop.offset = Vector2(0, -float(_prop.texture.get_height()) * 0.5)
 		_prop.position = prop_offset * UnitAnim.ART_GROW + Vector2(0, 10)
 		_prop.z_index = -1 if perch <= 0.0 else 0

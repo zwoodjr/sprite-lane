@@ -7,11 +7,11 @@ extends RefCounted
 ## tier-clear trophies, Dust Pacts and Helm's plane parts. All tuning lives here.
 
 ## Zone per tier (index tier-1). "twists" are run by scripts/match/zone_twists.gd.
-## "grade": ground texture set suffix ("" = the original wasteland).
+## "grade": ground texture + decal set suffix (style bible zone sub-palette).
 ## "props": zone props rolled into each chunk (art in assets/sprites/depth/zone/).
 const ZONES: Array = [
-	{"id": "haze", "name": "The Haze", "grade": "", "twists": [], "props": []},
-	{"id": "drift", "name": "The Drift", "grade": "", "twists": [], "props": []},
+	{"id": "haze", "name": "The Haze", "grade": "haze", "twists": [], "props": ["power_pole", "wreck_pile"]},
+	{"id": "drift", "name": "The Drift", "grade": "drift", "twists": [], "props": ["beast_ribs", "buried_wreck"]},
 	{"id": "smog", "name": "Old Refinery", "grade": "refinery", "twists": ["smog", "bunkers"],
 		"props": ["oil_tank", "pipe_rack"], "tint": Color(0.86, 0.84, 0.8)},
 	{"id": "pall", "name": "Dead City", "grade": "city", "twists": ["night", "wraith_phase"],
@@ -32,13 +32,29 @@ const ZONES: Array = [
 		"props": ["dust_spire", "slab_ruin", "tank_wreck"], "tint": Color(1.0, 0.86, 0.66)},
 ]
 const PROP_DIR := "res://assets/sprites/depth/zone/%s.png"
-## Zone props: [world height px, collision block (0 = walk-through)].
+## Style bible 2.2 zone ground colours (crack, base, mid, speck) per grade.
+## Source of truth: tools/art_world/pal.py; the ground shader steps down this ramp.
+const GROUND := {
+	"haze": [Color("#433428"), Color("#5b4a3b"), Color("#685645"), Color("#7e6953")],
+	"drift": [Color("#433424"), Color("#5d4a36"), Color("#6a5640"), Color("#7e6a50")],
+	"refinery": [Color("#3a3633"), Color("#524d46"), Color("#5f5951"), Color("#746c60")],
+	"city": [Color("#34363f"), Color("#494e5a"), Color("#54596a"), Color("#676d7b")],
+	"quarantine": [Color("#36382f"), Color("#4d4f43"), Color("#585b4d"), Color("#6b6f5f")],
+	"raider": [Color("#4a3028"), Color("#67453a"), Color("#755244"), Color("#896555")],
+	"chemical": [Color("#37372d"), Color("#4e4e3c"), Color("#5a5a46"), Color("#6d6e56")],
+	"military": [Color("#323834"), Color("#474f4b"), Color("#535b56"), Color("#676f69")],
+	"crater": [Color("#3a3634"), Color("#534c49"), Color("#5f5854"), Color("#726c67")],
+	"dustfall": [Color("#502f1b"), Color("#6b452e"), Color("#775038"), Color("#8a6549")],
+}
+## Zone props: [legacy world height, legacy block]. The art is native size now and
+## footprints come from PropMeta (tools/art_world/build.py); kept as the zone prop list.
 const PROP_INFO := {
 	"oil_tank": [150.0, Vector2(96, 26)], "pipe_rack": [110.0, Vector2(0, 0)], "street_lamp": [130.0, Vector2(0, 0)],
 	"shop_ruin": [150.0, Vector2(120, 26)], "quarantine_tent": [120.0, Vector2(100, 24)], "hazard_barrier": [70.0, Vector2(90, 16)],
 	"spike_barricade": [80.0, Vector2(100, 18)], "raider_totem": [130.0, Vector2(0, 0)], "chem_vat": [130.0, Vector2(70, 24)],
 	"tank_wreck": [120.0, Vector2(130, 30)], "guard_post": [150.0, Vector2(64, 22)], "slab_ruin": [110.0, Vector2(110, 24)],
-	"dust_spire": [160.0, Vector2(40, 18)],
+	"dust_spire": [160.0, Vector2(40, 18)], "power_pole": [0.0, Vector2.ZERO], "wreck_pile": [0.0, Vector2.ZERO],
+	"beast_ribs": [0.0, Vector2.ZERO], "buried_wreck": [0.0, Vector2.ZERO],
 }
 const PROPS_PER_CHUNK := Vector2i(1, 2)
 
@@ -119,6 +135,10 @@ const PLANE_LAYER := "res://assets/sprites/depth/plane/plane_%d.png"
 const PLANE_RECT := Rect2(490, 330, 222, 118)
 ## Trophies: per survivor, each tier cleared from Smog up.
 const TROPHY_FROM_TIER := 3
+
+
+static func ground_colors(grade: String) -> Array:
+	return GROUND.get(grade, GROUND["haze"])
 
 
 static func zone(tier: int) -> Dictionary:

@@ -26,11 +26,14 @@ uniform float road_half = 26.0;
 // World px per baked pixel (UnitAnim.TEXEL): the chunk bakes at native
 // density, so one tile texel = one bake pixel = one screen pixel.
 uniform float texel = 0.7407407;
-// Value pass (audit): the floor sits in a mid, low-saturation band so actors,
-// loot and VFX own the bright / saturated end.
-uniform float ground_sat = 0.72;
-uniform float ground_gain = 1.32;
-uniform float ground_lift = 0.07;
+// Style bible 2.2: the zone's 4 ground colours (crack / base / mid / speck).
+// Every tile is authored in exactly these, and every shading step below
+// (banks, shoulders, potholes, rims) moves one step down this ramp, so the
+// floor never leaves the zone palette.
+uniform vec3 zc0 = vec3(0.263, 0.204, 0.157);
+uniform vec3 zc1 = vec3(0.357, 0.290, 0.231);
+uniform vec3 zc2 = vec3(0.408, 0.337, 0.271);
+uniform vec3 zc3 = vec3(0.494, 0.412, 0.325);
 
 varying vec2 world;
 varying vec2 bpx;
@@ -60,10 +63,23 @@ float bayer4(vec2 p) {
 	return m[i] / 16.0 - 0.5;
 }
 
+// Two frames per texture (straight / offset) so the period never reads as a
+// grid. No rotation or flip: tiles are lit top-left and must stay that way.
 vec4 tex_frame(sampler2D t, vec2 p, bool alt, float period) {
 	float per = period * texel;
-	vec2 uv = alt ? vec2(p.y, -p.x) / per + vec2(0.37, 0.61) : p / per;
+	vec2 uv = p / per + (alt ? vec2(0.37, 0.61) : vec2(0.0));
 	return texture(t, uv);
+}
+
+// One step darker on the zone ramp (speck -> mid -> base -> crack).
+vec3 step_down(vec3 c) {
+	float d0 = distance(c, zc0);
+	float d1 = distance(c, zc1);
+	float d2 = distance(c, zc2);
+	float d3 = distance(c, zc3);
+	if (d3 <= d0 && d3 <= d1 && d3 <= d2) return zc2;
+	if (d2 <= d0 && d2 <= d1) return zc1;
+	return zc0;
 }
 
 void vertex() {
@@ -88,11 +104,13 @@ void fragment() {
 	float ws = smoothstep(0.625, 0.66, m + e);
 	float wc = 1.0 - smoothstep(0.30, 0.335, m + e);
 	float wr = smoothstep(0.672, 0.705, n + e);
-	vec4 col = tex_frame(tex_earth, p, alt, 512.0);
-	if (ws > 0.0) col = mix(col, tex_frame(tex_sand, p, alt, 512.0), ws);
-	if (wc > 0.0) col = mix(col, tex_frame(tex_scrub, p, alt, 512.0), wc);
-	if (wr > 0.0) col = mix(col, tex_frame(tex_rubble, p, alt, 512.0), wr);
-	col.rgb *= 1.0 - 0.10 * (1.0 - abs(wr * 2.0 - 1.0)) * step(0.01, wr);
+	// Patches meet in an ordered-dither band (palette pixels only, no blends).
+	float th = dz + 0.5;
+	vec4 col = tex_frame(tex_earth, p, alt, 256.0);
+	if (ws > th) col = tex_frame(tex_sand, p, alt, 256.0);
+	if (wc > th) col = tex_frame(tex_scrub, p, alt, 256.0);
+	if (wr > th) col = tex_frame(tex_rubble, p, alt, 256.0);
+	if (wr > 0.02 && wr < 0.98 && (1.0 - abs(wr * 2.0 - 1.0)) > th + 0.35) col.rgb = step_down(col.rgb);
 
 	// --- dried riverbeds (only in regions where the gate field allows)
 	float gate = vnoise(p / 2400.0 + seed_off.yx * 0.9 + 13.0);
@@ -102,9 +120,10 @@ void fragment() {
 		float width = 0.02 * smoothstep(0.58, 0.65, gate);
 		// soft painted bank: the riverbed fades in, a shaded lip runs along it
 		float kr = 1.0 - smoothstep(width - 0.003, width + 0.001, w);
-		if (kr > 0.0) col = mix(col, tex_frame(tex_river, p, alt, 512.0), kr);
-		float bank = (1.0 - smoothstep(width, width + 0.01, w)) * (1.0 - kr);
-		col.rgb *= 1.0 - 0.16 * bank;
+		if (kr > th) col = tex_frame(tex_river, p, alt, 256.0);
+		// a narrow shaded bank lip (dithered 2-3 px), not a wide dark smear
+		float bank = (1.0 - smoothstep(width, width + 0.0025, w)) * (1.0 - kr);
+		if (bank > th) col.rgb = step_down(col.rgb);
 	}
 
 	// --- roads
@@ -123,9 +142,9 @@ void fragment() {
 		float hw = road_half + (hash12(vec2(floor(along / 7.0), 3.0) + seed_off) - 0.5) * 4.0;
 		if (dist < hw + 3.0) {
 			if (dist > hw) {
-				col.rgb *= 0.82; // crumbled shoulder
+				col.rgb = step_down(col.rgb); // crumbled shoulder
 			} else if (dist > hw - 5.0 && hash12(floor(p / 2.0) + seed_off) > 0.55) {
-				col.rgb *= 0.9; // ragged asphalt edge lets dirt through
+				// ragged asphalt edge lets the dirt through
 			} else {
 				col = tex_frame(tex_asphalt, p, alt, 256.0);
 				// faded centre dashes
@@ -133,11 +152,11 @@ void fragment() {
 				float fade = hash12(vec2(cell, 9.0) + seed_off);
 				float wob = (hash12(floor(vec2(along / 3.0, side)) + seed_off) - 0.5) * 0.5;
 				if (abs(side) < 2.2 + wob && fract(along / 80.0) < 0.45 && fade > 0.22) {
-					col.rgb = mix(col.rgb, vec3(0.50, 0.44, 0.29), 0.45 + fade * 0.25);
+					if (fade > 0.55 || th < 0.5) col.rgb = zc3;
 				}
 				// worn edge line
 				if (dist > hw - 12.0 && dist < hw - 10.0 && hash12(vec2(floor(along / 23.0), side > 0.0 ? 5.0 : 6.0) + seed_off) > 0.35) {
-					col.rgb = mix(col.rgb, vec3(0.42, 0.40, 0.36), 0.5);
+					if (th < 0.6) col.rgb = zc2;
 				}
 				// potholes: one candidate per 110 px of road
 				float pc = floor(along / 150.0);
@@ -151,19 +170,14 @@ void fragment() {
 					if (qd < 1.0) {
 						// light from top-left: inner top-left wall in shadow
 						float lit = dot(normalize(q + 0.001), vec2(0.7, 0.7));
-						col.rgb = qd > 0.72 ? (lit > 0.0 ? vec3(0.33, 0.31, 0.29) : vec3(0.15, 0.13, 0.12)) : vec3(0.19, 0.17, 0.15);
+						col.rgb = qd > 0.72 ? (lit > 0.0 ? zc3 : zc0) : (qd > 0.5 ? zc1 : zc0);
 					} else if (qd < 1.25) {
-						col.rgb *= 0.86;
+						col.rgb = step_down(col.rgb);
 					}
 				}
 			}
 		}
 	}
 
-	// gentle large-scale value drift (±4%)
-	float drift = vnoise(p / 380.0 + seed_off * 1.3 + 7.0);
-	col.rgb *= 0.96 + drift * 0.08;
-	float gl = dot(col.rgb, vec3(0.299, 0.587, 0.114));
-	col.rgb = mix(vec3(gl), col.rgb, ground_sat) * ground_gain + ground_lift;
 	COLOR = vec4(col.rgb, 1.0);
 }
