@@ -26,6 +26,10 @@ var _fire_frames: Array[Texture2D] = []
 var temp_left: float = -1.0
 ## Scrap Drone (non-Helm heroes) gets a brass tint so it reads as salvage.
 var tint: Color = Color.WHITE
+## Scavenger: when nothing to shoot, fly out and grab loot within this range of the hero.
+var scavenge: bool = false
+var scavenge_range: float = 320.0
+var _fetch: Node2D = null
 
 
 func setup(player: Node2D, slot: int, weapon: Dictionary) -> void:
@@ -108,8 +112,17 @@ func _physics_process(delta: float) -> void:
 		_sprite.modulate.a = 0.5 + 0.5 * absf(sin(_t * 10.0)) if temp_left < 1.0 else 1.0
 	_fire_anim = maxf(0.0, _fire_anim - delta)
 	var want := _player.global_position + _slot_offset() + Vector2(0, sin(_t * 3.0 + _slot) * 3.0)
-	global_position = global_position.lerp(want, clampf(delta * 8.0, 0.0, 1.0))
 	_target = _pick_target()
+	if scavenge:
+		_fetch = _pick_loot() if _target == null else null
+		if _fetch != null:
+			want = _fetch.global_position + Vector2(0, -18)
+			if global_position.distance_to(_fetch.global_position) < 26.0 and _fetch.has_method("magnetize"):
+				_fetch.call("magnetize")
+				_fetch.set_meta("drone_grabbed", true)
+				_fetch = null
+	var speed := 8.0 if _fetch == null else 5.0
+	global_position = global_position.lerp(want, clampf(delta * speed, 0.0, 1.0))
 	if _target != null:
 		_sprite.flip_h = _target.global_position.x < global_position.x
 		if _cd <= 0.0:
@@ -121,6 +134,33 @@ func _physics_process(delta: float) -> void:
 		_sprite.texture = _fire_frames[int(_fire_anim * 20.0) % _fire_frames.size()]
 	elif _hover_frames.size() > 0:
 		_sprite.texture = _hover_frames[int(_t * 10.0) % _hover_frames.size()]
+
+
+## Nearest loot near the hero that no other drone is fetching and isn't already flying in.
+func _pick_loot() -> Node2D:
+	if _fetch != null and is_instance_valid(_fetch) and not _fetch.has_meta("drone_grabbed"):
+		return _fetch
+	var best: Node2D = null
+	var best_d := INF
+	for n in get_tree().get_nodes_in_group("loot"):
+		if not (n is Node2D) or not is_instance_valid(n) or n.has_meta("drone_grabbed"):
+			continue
+		if bool(n.get("_magnet")):
+			continue
+		var l := n as Node2D
+		if l.global_position.distance_to(_player.global_position) > scavenge_range:
+			continue
+		var taken := false
+		for d in _player.call("get_drones") if _player.has_method("get_drones") else []:
+			if d != self and is_instance_valid(d) and d.get("_fetch") == l:
+				taken = true
+		if taken:
+			continue
+		var dd := global_position.distance_to(l.global_position)
+		if dd < best_d:
+			best = l
+			best_d = dd
+	return best
 
 
 func _claimed_by_other(e: Node2D) -> bool:

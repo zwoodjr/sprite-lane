@@ -123,7 +123,7 @@ static func all() -> Array:
 			"max_rank": 2,
 			"ranks": [{"drones": 1}, {"drones": 2}],
 			"drone": {"drone_range": 360.0, "drone_interval": 1.0, "drone_damage": 7.0},
-			"desc": ["A drone flies with you and shoots", "A second drone joins"],
+			"desc": ["A drone flies with you, shoots, and fetches nearby scrap", "A second drone joins"],
 			"desc_helm": ["+1 of your drones (max 4)", "+1 more drone (max 4)"],
 			"combos": ["wingman", "dust_rounds", "squadron"]},
 		{"id": "spore_mines", "name": "Spore Mines", "rarity": "uncommon", "tags": ["Deployable", "Elemental"],

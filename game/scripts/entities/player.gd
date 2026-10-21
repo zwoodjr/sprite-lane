@@ -354,6 +354,7 @@ func _sync_drones() -> void:
 		d.set_script(DroneScript)
 		if base <= 0:
 			d.set("tint", Color(1.0, 0.82, 0.55))
+			d.set("scavenge", true)
 		get_parent().add_child(d)
 		d.call("setup", self, _drones.size(), wdef)
 		_drones.append(d)
