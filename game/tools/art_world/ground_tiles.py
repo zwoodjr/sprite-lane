@@ -40,7 +40,7 @@ def _wnoise(W, H, seed, sigma):
 
 def tile(cols, kind="earth", seed=1, W=256, H=256):
     cell, crack_keep, mid_amt, pebbles, grit, pits, ripples, plates = KINDS[kind]
-    rnd = random.Random(seed * 131 + hash(kind) % 1000)
+    rnd = random.Random(seed * 131 + sum(map(ord, kind)))  # stable across runs (no str hash)
     c0, c1, c2, c3 = [np.array(h(c), np.uint8) for c in cols]
     yy, xx = np.mgrid[0:H, 0:W].astype(float)
     n = _wnoise(W, H, rnd.randrange(1 << 30), 9) + 0.6 * _wnoise(W, H, rnd.randrange(1 << 30), 3)
