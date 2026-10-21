@@ -358,7 +358,9 @@ def bunker(open_=False):
     cv = Cv(212, 116)
     # earth berm piled over the sides and roof
     berm = m_poly(cv, [(4, 108), (30, 40), (70, 18), (140, 16), (184, 38), (208, 108)])
-    facets(cv, berm, [E[0], E[1], E[2], E[3]], seed=4, n=14, tilt=0.25, hl=False)
+    dome(cv, berm, [E[0], E[1], E[2], E[2]], flat=0.35, hl=False)
+    cv.fill(m_line(cv, (30, 40), (70, 18), 2) & berm, E[3])
+    cv.fill(m_line(cv, (70, 18), (140, 16), 2) & berm, E[3])
     blotch(cv, berm, [CL[0], CL[1], CL[1], CL[2]], 2, 2.0, 0.4)
     # concrete face with hazard header
     box(cv, 40, 44, 132, 56, 8, CONC)

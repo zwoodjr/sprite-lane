@@ -58,7 +58,7 @@ def wreck_car(paint=RU, seed=3):
     cv.px(5, 41, BR[3]); cv.px(100, 41, BR[1])
     # roof dent and grime
     body = cv.opaque()
-    _rust_and_holes(cv, body, seed, 7)
+    _rust_and_holes(cv, body, seed, 7, 0.18)
     streaks(cv, body, None, seed, 0)
     wheel(cv, 22, 50, 8)
     wheel(cv, 84, 50, 8)

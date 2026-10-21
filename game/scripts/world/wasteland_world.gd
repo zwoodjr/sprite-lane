@@ -80,6 +80,8 @@ const BIOME_CLUSTERS := {
 	2: [["fence_line", 25], ["rock_garden", 20], ["boneyard", 15], ["camp", 15], ["signpost", 10]],
 	3: [["ruins", 30], ["sandbag_nest", 25], ["camp", 25], ["wreck_site", 10]],
 }
+## Cluster layout scale for the native-size art (see _populate_clusters).
+const CLUSTER_K := 0.72
 ## Chance a chunk is a clearing (no cluster), else 1-2 clusters.
 const CLEARING_CHANCE := 0.26
 ## Rare foreground occluder (dead bush / grass drawn OVER units), per chunk.
@@ -404,9 +406,9 @@ func _populate_road(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], dec
 				break
 			var lat := rng.randf_range(-0.6, 0.6) * GroundField.ROAD_HALF
 			decals.append([_decal(_tracks_kind(dir), rng), (p + nrm * lat - chunk.position).floor(), 0.0, false, Color.WHITE])
-			if rng.randf() < 0.6:
+			if rng.randf() < 0.3:
 				var q := p + dir * rng.randf_range(-60, 60) + nrm * rng.randf_range(-20, 20)
-				decals.append([_decal("oil", rng), q - chunk.position, 0.0, rng.randf() < 0.5, Color.WHITE])
+				decals.append([_decal("oil", rng), (q - chunk.position).floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
 			if rng.randf() < 0.5:
 				var q2 := p + nrm * (GroundField.ROAD_HALF + rng.randf_range(4, 22)) * (1.0 if rng.randf() < 0.5 else -1.0)
 				decals.append([_decal("scrap" if rng.randf() < 0.6 else "pebbles", rng), q2 - chunk.position, 0.0, rng.randf() < 0.5, Color.WHITE])
@@ -458,7 +460,9 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 		var flip := rng.randf() < 0.5
 		for e in CLUSTERS[name]:
 			var kind := str(e[0])
-			var off := Vector2(float(e[1]) * (-1.0 if flip else 1.0), float(e[2])) + Vector2(rng.randf_range(-8, 8), rng.randf_range(-6, 6))
+			## Offsets were laid out for the old 2x props; the bible-size art sits
+			## tighter so a cluster still reads as one group with open ground round it.
+			var off := Vector2(float(e[1]) * (-1.0 if flip else 1.0), float(e[2])) * CLUSTER_K + Vector2(rng.randf_range(-6, 6), rng.randf_range(-4, 4))
 			var wp := anchor + off
 			if kind.begins_with("@"):
 				var dk := kind.substr(1)

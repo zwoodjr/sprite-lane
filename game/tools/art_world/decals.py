@@ -106,9 +106,9 @@ def oil(z, seed):
     W, H_ = SIZES["oil"][:2]
     cv, m = _pool(W, H_, seed)
     inner = ndi.binary_erosion(m, iterations=2)
+    # dark oil, but not a hole: ash-dark body, steel sheen on the lit rim
     cv.fill(m, A[0])
-    cv.fill(inner, ST[0])
-    # rainbow-less sheen: steel arc lit top-left, one glint
+    cv.fill(inner, A[1])
     sheen = inner & ~np.roll(np.roll(inner, 2, 0), 2, 1)
     cv.fill(clean_mask(sheen), ST[1])
     ys, xs = np.nonzero(inner)
