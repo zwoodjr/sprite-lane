@@ -428,9 +428,8 @@ func icon_well(icon_id: String, rarity: String = "common", px: int = 128) -> Con
 	well.add_theme_stylebox_override("panel", sb)
 	well.custom_minimum_size = Vector2(px, px)
 	well.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ic_px := 96 if px >= 112 else (48 if px < 96 else 96)
-	if px < 64:
-		ic_px = 48 if px >= 56 else 32
+	## Integer scales only: 48-px art x2 in wells >= 112, x1 in wells >= 56.
+	var ic_px := 96 if px >= 112 else (48 if px >= 56 else 32)
 	var c := CenterContainer.new()
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	well.add_child(c)

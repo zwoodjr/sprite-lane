@@ -12,33 +12,62 @@ var _hero: String = ""
 var _slot: String = ""
 var _hero_label: Label
 var _grid: GridContainer
+var _left: VBoxContainer
+var _right: VBoxContainer
+var _doll_hero: StripAnim
+const LEFT_SLOTS := ["head", "shoulders", "chest", "legs"]
+const RIGHT_SLOTS := ["hands", "boots", "charm", "vial"]
+const BOTTOM_SLOTS := ["weapon", "mod1", "mod2", "patch"]
+const SLOT_PX := 112.0
 var _scroll: ScrollContainer
 var _list: VBoxContainer
 
 
 func build(c: VBoxContainer) -> void:
-	c.add_theme_constant_override("separation", 10)
+	c.add_theme_constant_override("separation", 16)
 	_hero = GameState.selected_character_id
 	c.add_child(header("GEAR", _back))
 
+	## Paper doll: armour on the left, accessories on the right, weapon + mods
+	## under the hero, who stands in the middle at an integer scale.
+	var doll := HBoxContainer.new()
+	doll.add_theme_constant_override("separation", 16)
+	c.add_child(doll)
+	_left = VBoxContainer.new()
+	_left.add_theme_constant_override("separation", 8)
+	doll.add_child(_left)
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 0)
+	doll.add_child(mid)
 	var hr := HBoxContainer.new()
-	hr.add_theme_constant_override("separation", 10)
-	c.add_child(hr)
-	var prev := UiTheme.big_button("‹", UiTheme.LINE, 56, 28)
-	prev.custom_minimum_size.x = 70
+	hr.add_theme_constant_override("separation", 8)
+	mid.add_child(hr)
+	var prev := UiTheme.big_button("<", UiTheme.LINE, 64, 24)
+	prev.custom_minimum_size.x = 64
 	prev.pressed.connect(cycle_hero.bind(-1))
 	hr.add_child(prev)
-	_hero_label = UiTheme.title_label("", 28, UiTheme.AMBER)
+	_hero_label = UiTheme.head_label("", UiTheme.T_H2, UiTheme.AMBER)
+	_hero_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hero_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hero_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hero_label.clip_text = true
 	hr.add_child(_hero_label)
-	var nxt := UiTheme.big_button("›", UiTheme.LINE, 56, 28)
-	nxt.custom_minimum_size.x = 70
+	var nxt := UiTheme.big_button(">", UiTheme.LINE, 64, 24)
+	nxt.custom_minimum_size.x = 64
 	nxt.pressed.connect(cycle_hero.bind(1))
 	hr.add_child(nxt)
-
+	_doll_hero = StripAnim.make("", 256, 8.0)
+	_doll_hero.custom_minimum_size = Vector2(256, 256)
+	_doll_hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_doll_hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	mid.add_child(_doll_hero)
+	_right = VBoxContainer.new()
+	_right.add_theme_constant_override("separation", 8)
+	doll.add_child(_right)
 	_grid = GridContainer.new()
 	_grid.columns = 4
-	_grid.add_theme_constant_override("h_separation", 8)
+	_grid.add_theme_constant_override("h_separation", 16)
 	_grid.add_theme_constant_override("v_separation", 8)
 	c.add_child(_grid)
 
@@ -53,7 +82,7 @@ func build(c: VBoxContainer) -> void:
 	_scroll.add_child(_list)
 
 	var from_select := GameState.loadout_from in ["character_select", "prep"]
-	var deploy := UiTheme.big_button("DONE" if from_select else "DEPLOY", UiTheme.AMBER, 64, 22)
+	var deploy := UiTheme.big_button("DONE" if from_select else "DEPLOY", UiTheme.AMBER, 80, 32)
 	deploy.pressed.connect(func() -> void:
 		GameState.selected_character_id = _hero
 		GameState.save_profile()
@@ -97,13 +126,16 @@ func select_slot(sl: String) -> void:
 
 
 func refresh() -> void:
-	_hero_label.text = str(CharacterDefs.get_character(_hero).get("display_name", _hero))
-	for ch in _grid.get_children():
-		_grid.remove_child(ch)
-		ch.queue_free()
+	_hero_label.text = str(CharacterDefs.get_character(_hero).get("display_name", _hero)).to_upper()
+	_doll_hero.set_strip("res://assets/sprites/characters/%s/%s_idle.png" % [_hero, _hero])
 	var eq := GameState.equipped_items(_hero)
-	for sl in GearDefs.LOADOUT_SLOTS:
-		_grid.add_child(_slot_tile(str(sl), eq.get(sl, {})))
+	for pair in [[_left, LEFT_SLOTS], [_right, RIGHT_SLOTS], [_grid, BOTTOM_SLOTS]]:
+		var box: Container = pair[0]
+		for ch in box.get_children():
+			box.remove_child(ch)
+			ch.queue_free()
+		for sl in pair[1]:
+			box.add_child(_slot_tile(str(sl), eq.get(sl, {})))
 	for ch in _list.get_children():
 		_list.remove_child(ch)
 		ch.queue_free()
@@ -114,63 +146,45 @@ func refresh() -> void:
 	_scroll.scroll_vertical = 0
 
 
+## Icon slot: rarity-framed well, the item's icon (or the slot's, dimmed).
 func _slot_tile(sl: String, item: Dictionary) -> Control:
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(0, 112)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(SLOT_PX, SLOT_PX)
 	b.focus_mode = Control.FOCUS_NONE
-	var rar := str(item.get("rarity", "common"))
-	var sel := sl == _slot
-	var border: Color = GearDefs.RARITY_COLOR.get(rar, UiTheme.LINE) if not item.is_empty() else UiTheme.LINE
-	## Painted tile, tinted by rarity; selected slot glows brass.
-	var sb := UiTheme.plate("tile_on", 6.0) if sel else UiTheme.plate("tile", 6.0, Color.WHITE.lerp(border, 0.55) if not item.is_empty() else Color(0.85, 0.85, 0.85))
-	b.add_theme_stylebox_override("normal", sb)
-	b.add_theme_stylebox_override("hover", sb)
-	b.add_theme_stylebox_override("pressed", UiTheme.plate("tile_on", 6.0))
-	b.add_theme_stylebox_override("hover_pressed", UiTheme.plate("tile_on", 6.0))
+	b.flat = true
+	b.tooltip_text = GearDefs.SLOT_NAME.get(sl, sl)
+	for st in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+		b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 	b.pressed.connect(select_slot.bind(sl))
-	var ic := TextureRect.new()
-	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ic.offset_left = 18
-	ic.offset_right = -18
-	ic.offset_top = 8
-	ic.offset_bottom = -30
-	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var path := str(item.get("icon", "")) if not item.is_empty() else _empty_icon(sl)
-	if path != "" and ResourceLoader.exists(path):
-		ic.texture = load(path)
-	ic.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.28)
-	b.add_child(ic)
-	var lab := Label.new()
-	lab.text = GearDefs.SLOT_NAME.get(sl, sl).to_upper()
-	lab.add_theme_font_size_override("font_size", 13)
-	lab.add_theme_color_override("font_color", UiTheme.TEXT_DIM if item.is_empty() else (GearDefs.RARITY_COLOR.get(rar, UiTheme.TEXT) as Color))
-	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	lab.offset_top = -26
-	lab.offset_bottom = -4
-	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(lab)
+	var rar := str(item.get("rarity", "common")) if not item.is_empty() else "common"
+	var icon := IconSet.item(item) if not item.is_empty() else _empty_icon(sl)
+	var well := UiTheme.icon_well(icon, rar, int(SLOT_PX))
+	well.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if item.is_empty():
+		(well.get_child(0).get_child(0) as Control).modulate = Color(1, 1, 1, 0.3)
+	b.add_child(well)
+	if sl == _slot:
+		var hi := Panel.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0)
+		sb.border_color = UiTheme.AMBER
+		sb.set_border_width_all(4)
+		hi.add_theme_stylebox_override("panel", sb)
+		hi.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		hi.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(hi)
 	if not item.is_empty() and int(GameState.insured.get(_hero, -1)) == int(item.get("uid", -2)):
-		var ins := Label.new()
-		ins.text = "INSURED"
-		ins.add_theme_font_size_override("font_size", 11)
-		ins.add_theme_color_override("font_color", UiTheme.TEAL)
-		ins.position = Vector2(6, 2)
-		ins.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ins := IconSet.rect("up_iron_tonic", 48)
+		ins.position = Vector2(SLOT_PX - 52, 4)
 		b.add_child(ins)
 	return b
 
 
 func _empty_icon(sl: String) -> String:
 	if sl == "weapon":
-		return GearDefs.weapon_icon(_hero, "")
-	if sl in ["mod1", "mod2"]:
-		return "res://assets/sprites/icons/mods/icon_mod_grip.png" if GearDefs.is_melee_hero(_hero) else "res://assets/sprites/icons/mods/icon_mod_scope.png"
-	return str(GearDefs.SLOT_ICON.get(sl, ""))
+		var sts: Array = KitDefs.styles(_hero)
+		return IconSet.style(_hero, str(sts[0]["id"])) if not sts.is_empty() else "slot_weapon"
+	return IconSet.slot(sl)
 
 
 ## ---------------------------------------------------------------- summary
@@ -185,11 +199,17 @@ func _build_summary(eq: Dictionary) -> void:
 	var leg := GameState.gear_legendary()
 	GameState.selected_character_id = keep_hero
 	GameState._compute_gear()
-	_list.add_child(_note("Tap a slot to equip from the stash. Insure one item: it survives a death. Everything else you carried in is lost if you go down."))
+	_list.add_child(_note("Tap a slot to equip. Insure one item to keep it through a death."))
 	var lines := PackedStringArray()
 	for s in stats.keys():
 		lines.append_array(GearDefs.stat_lines({"stats": {s: stats[s]}}))
-	_list.add_child(_section("STATS", ", ".join(lines) if lines.size() else "No gear bonuses yet."))
+	if lines.size():
+		var fl := HFlowContainer.new()
+		fl.add_theme_constant_override("h_separation", 8)
+		fl.add_theme_constant_override("v_separation", 8)
+		for ln in lines:
+			fl.add_child(UiTheme.chip(ln, UiTheme.TEAL))
+		_list.add_child(fl)
 	var set_text := PackedStringArray()
 	for sid in sets.keys():
 		var n := int(sets[sid])
@@ -204,16 +224,26 @@ func _build_summary(eq: Dictionary) -> void:
 			set_text.append("%s %d/3" % [sv["name"], n])
 			for i in range(2):
 				set_text.append("   %s (%d) %s" % ["[x]" if n >= i + 2 else "[ ]", i + 2, (sv["bonus"] as Array)[i]])
-	_list.add_child(_section("SETS", "\n".join(set_text) if set_text.size() else "Wear 2+ pieces of a set for its bonus."))
+	if set_text.size():
+		_list.add_child(_section("SETS", "\n".join(set_text)))
 	if leg != "":
 		_list.add_child(_section("LEGENDARY", "%s — %s" % [GearDefs.LEGENDARIES[leg]["name"], GearDefs.LEGENDARIES[leg]["desc"]]))
-	_list.add_child(_section("MATERIALS", "Dust Hearts %d · Salvage Cores %d · Stash %d/%d" % [
-		GameState.material_count("dust_heart"), GameState.material_count("salvage_core"),
-		GameState.stash.size(), GameState.stash_capacity()]))
+	var mats := HBoxContainer.new()
+	mats.add_theme_constant_override("separation", 16)
+	_list.add_child(mats)
+	for pair in [["mat_dust_heart", str(GameState.material_count("dust_heart"))], ["mat_salvage_core", str(GameState.material_count("salvage_core"))],
+			["camp_stash", "%d/%d" % [GameState.stash.size(), GameState.stash_capacity()]]]:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		h.add_child(IconSet.rect(str(pair[0]), 48))
+		var l := UiTheme.pixel_label(str(pair[1]), UiTheme.PX_M, UiTheme.TEXT)
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(l)
+		mats.add_child(h)
 
 
 func _note(t: String) -> Label:
-	return UiTheme.body_label(t, 14, UiTheme.TEXT_DIM)
+	return UiTheme.body_label(t, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 
 
 func _section(title: String, body: String) -> PanelContainer:
@@ -221,8 +251,8 @@ func _section(title: String, body: String) -> PanelContainer:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 4)
 	p.add_child(v)
-	v.add_child(UiTheme.body_label(title, 16, UiTheme.AMBER, false))
-	v.add_child(UiTheme.body_label(body, 15, UiTheme.TEXT))
+	v.add_child(UiTheme.head_label(title, UiTheme.T_H3, UiTheme.AMBER))
+	v.add_child(UiTheme.body_label(body, UiTheme.T_SMALL, UiTheme.TEXT))
 	return p
 
 
@@ -230,7 +260,7 @@ func _section(title: String, body: String) -> PanelContainer:
 
 func _build_picker(eq: Dictionary) -> void:
 	var cur: Dictionary = eq.get(_slot, {})
-	_list.add_child(_note("%s — tap EQUIP on a stash item." % GearDefs.SLOT_NAME.get(_slot, _slot)))
+	_list.add_child(UiTheme.head_label(str(GearDefs.SLOT_NAME.get(_slot, _slot)).to_upper(), UiTheme.T_H2, UiTheme.AMBER))
 	if not cur.is_empty():
 		_list.add_child(_item_row(cur, true))
 	var any := false
@@ -242,60 +272,59 @@ func _build_picker(eq: Dictionary) -> void:
 		_list.add_child(_item_row(it, false))
 		any = true
 	if not any:
-		_list.add_child(_note("Nothing in the stash fits this slot yet. Gear drops in runs and reaches the stash when you extract."))
+		_list.add_child(_note("Nothing in the stash fits yet. Extract with gear to fill it."))
 
 
 func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 	var rar := str(it.get("rarity", "common"))
-	var col: Color = GearDefs.RARITY_COLOR.get(rar, UiTheme.TEXT)
+	var col: Color = IconSet.rarity_color(rar)
 	var p := card(col if equipped else UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
 	h.mouse_filter = Control.MOUSE_FILTER_PASS
 	p.add_child(h)
-	h.add_child(item_icon(it, 64))
+	h.add_child(item_icon(it, 112))
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.mouse_filter = Control.MOUSE_FILTER_PASS
 	info.add_theme_constant_override("separation", 1)
 	h.add_child(info)
-	info.add_child(UiTheme.body_label(str(it.get("name", "Item")), 17, col, false))
-	info.add_child(UiTheme.body_label("%s%s" % [GearDefs.RARITY_NAME.get(rar, rar), "  ·  equipped" if equipped else ""], 12, UiTheme.TEXT_DIM, false))
-	info.add_child(UiTheme.body_label("\n".join(GearDefs.stat_lines(it)), 13, UiTheme.TEXT))
+	info.add_child(UiTheme.head_label(str(it.get("name", "Item")), UiTheme.T_H3, col))
+	info.add_child(UiTheme.body_label("\n".join(GearDefs.stat_lines(it)), UiTheme.T_SMALL, UiTheme.TEXT))
 	var by := GameState.equipped_by(int(it.get("uid", -1)))
 	if not equipped and not by.is_empty():
-		info.add_child(UiTheme.body_label("On %s" % str(CharacterDefs.get_character(str(by[0])).get("display_name", by[0])), 12, UiTheme.RUST, false))
+		info.add_child(UiTheme.body_label("On %s" % str(CharacterDefs.get_character(str(by[0])).get("display_name", by[0])), UiTheme.T_SMALL, UiTheme.RUST, false))
 	var btns := VBoxContainer.new()
 	btns.add_theme_constant_override("separation", 6)
 	btns.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(btns)
 	var uid := int(it.get("uid", -1))
 	if equipped:
-		var un := UiTheme.big_button("REMOVE", UiTheme.LINE, 48, 15)
-		un.custom_minimum_size.x = 118
+		var un := UiTheme.big_button("REMOVE", UiTheme.LINE, 64, 20)
+		un.custom_minimum_size.x = 136
 		un.pressed.connect(func() -> void:
 			GameState.unequip(_hero, _slot)
 			refresh())
 		btns.add_child(un)
 		var insured := int(GameState.insured.get(_hero, -1)) == uid
-		var ins := UiTheme.big_button("INSURED" if insured else "INSURE", UiTheme.TEAL, 48, 15)
-		ins.custom_minimum_size.x = 118
+		var ins := UiTheme.big_button("INSURED" if insured else "INSURE", UiTheme.TEAL, 64, 20)
+		ins.custom_minimum_size.x = 136
 		ins.pressed.connect(func() -> void:
 			GameState.set_insured(_hero, -1 if insured else uid)
 			refresh())
 		btns.add_child(ins)
 	else:
-		var eqb := UiTheme.big_button("EQUIP", UiTheme.TEAL, 52, 17)
-		eqb.custom_minimum_size.x = 118
+		var eqb := UiTheme.big_button("EQUIP", UiTheme.TEAL, 64, 20)
+		eqb.custom_minimum_size.x = 136
 		eqb.pressed.connect(func() -> void:
 			if GameState.equip(_hero, _slot, uid):
 				Juice.sfx("ui_equip")
 			refresh())
 		btns.add_child(eqb)
 	if bool(it.get("needs_heart", false)) and not bool(it.get("charged", false)):
-		var ch := UiTheme.big_button("AWAKEN", UiTheme.RUST, 48, 15)
-		ch.custom_minimum_size.x = 118
+		var ch := UiTheme.big_button("AWAKEN", UiTheme.RUST, 64, 20)
+		ch.custom_minimum_size.x = 136
 		ch.disabled = GameState.material_count("dust_heart") <= 0
 		ch.pressed.connect(func() -> void:
 			GameState.charge_vial(uid)
@@ -306,33 +335,6 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 
 ## Item icon inside its rarity frame (shared with the Hangar stash grid).
 static func item_icon(it: Dictionary, size: float) -> Control:
-	var c := Control.new()
-	c.custom_minimum_size = Vector2(size, size)
-	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var fr := TextureRect.new()
-	var fp := FRAME % str(it.get("rarity", "common"))
-	if ResourceLoader.exists(fp):
-		fr.texture = load(fp)
-	fr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	fr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(fr)
-	var ic := TextureRect.new()
-	var ip := str(it.get("icon", ""))
-	if ip != "" and ResourceLoader.exists(ip):
-		ic.texture = load(ip)
-	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var pad := size * 0.16
-	ic.offset_left = pad
-	ic.offset_top = pad
-	ic.offset_right = -pad
-	ic.offset_bottom = -pad
-	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(ic)
-	return c
+	var w := UiTheme.icon_well(IconSet.item(it), str(it.get("rarity", "common")), int(size))
+	w.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return w

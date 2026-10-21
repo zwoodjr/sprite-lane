@@ -8,6 +8,7 @@ extends "res://scripts/ui/menu_base.gd"
 const HANGAR_DIR := "res://assets/sprites/hangar/"
 const TABS := ["camp", "survivors", "kennel", "brew", "stash"]
 const TAB_LABEL := {"camp": "CAMP", "survivors": "CREW", "kennel": "KENNEL", "brew": "BREW", "stash": "STASH"}
+const TAB_ICON := {"camp": "tab_camp", "survivors": "tab_crew", "kennel": "tab_kennel", "brew": "tab_brew", "stash": "tab_stash"}
 const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
 const PET_ON_BED := {"noel": Vector2(110, 141.5), "bentley": Vector2(125, 141.5), "lillie": Vector2(140, 141.5)}
 ## Painted layers are cropped PNGs; this gives each one's rect on the painted canvas.
@@ -26,10 +27,12 @@ var _popup: Control
 
 
 func build(c: VBoxContainer) -> void:
-	c.add_theme_constant_override("separation", 10)
+	c.add_theme_constant_override("separation", 16)
 	var top := header("HANGAR", GameState.go_main_menu)
-	_scrap_label = UiTheme.title_label("", 30, UiTheme.AMBER)
+	top.add_child(IconSet.rect("cur_scrap", 48))
+	_scrap_label = UiTheme.pixel_label("", UiTheme.PX_M, UiTheme.AMBER)
 	_scrap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_scrap_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_scrap_label)
 	c.add_child(top)
 
@@ -37,10 +40,12 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(_view)
 
 	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 6)
+	tabs.add_theme_constant_override("separation", 8)
 	c.add_child(tabs)
 	for t in TABS:
-		var b := UiTheme.big_button(TAB_LABEL[t], UiTheme.LINE, 54, 17)
+		var b := UiTheme.big_button(TAB_LABEL[t], UiTheme.LINE, 64, 16)
+		b.icon = IconSet.tex(str(TAB_ICON[t]), false)
+		b.add_theme_constant_override("h_separation", 4)
 		b.custom_minimum_size.x = 0
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(show_tab.bind(t))
@@ -62,22 +67,22 @@ func build(c: VBoxContainer) -> void:
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 8)
 	c.add_child(bottom)
-	var log_b := UiTheme.big_button("LOGBOOK", UiTheme.TEAL, 64, 17)
+	var log_b := UiTheme.big_button("LOGBOOK", UiTheme.TEAL, 64, 16)
 	log_b.custom_minimum_size.x = 0
 	log_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	log_b.pressed.connect(open_logbook)
 	bottom.add_child(log_b)
-	var gear_b := UiTheme.big_button("GEAR", UiTheme.TEAL, 64, 17)
+	var gear_b := UiTheme.big_button("GEAR", UiTheme.TEAL, 64, 16)
 	gear_b.custom_minimum_size.x = 0
 	gear_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gear_b.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
 	bottom.add_child(gear_b)
-	var tro_b := UiTheme.big_button("TROPHIES", UiTheme.TEAL, 64, 17)
+	var tro_b := UiTheme.big_button("TROPHIES", UiTheme.TEAL, 64, 16)
 	tro_b.custom_minimum_size.x = 0
 	tro_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tro_b.pressed.connect(open_trophies)
 	bottom.add_child(tro_b)
-	var play := UiTheme.big_button("DEPLOY", UiTheme.AMBER, 64, 22)
+	var play := UiTheme.big_button("DEPLOY", UiTheme.AMBER, 64, 24)
 	play.custom_minimum_size.x = 0
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play.size_flags_stretch_ratio = 1.4
@@ -277,15 +282,15 @@ func _rebuild() -> void:
 	for c in _list.get_children():
 		_list.remove_child(c)
 		c.queue_free()
-	_scrap_label.text = "%d SCRAP" % GameState.account_scrap
+	_scrap_label.text = "%d" % GameState.account_scrap
 	match _tab:
 		"camp":
-			_list.add_child(_note("Shared camp upgrades help every survivor."))
+			_list.add_child(_note("Shared upgrades help every survivor."))
 			for id in HangarDefs.ids_for("shared"):
-				_list.add_child(_row(str(id), null))
-			_list.add_child(_row("backpack", load(MedicineDefs.icon_path("backpack"))))
+				_list.add_child(_row(str(id), IconSet.tex("camp_" + str(id))))
+			_list.add_child(_row("backpack", IconSet.tex("camp_backpack")))
 		"survivors":
-			_list.add_child(_note("Each survivor's corner: their weapon and signature trick."))
+			_list.add_child(_note("Each survivor's weapon and signature trick."))
 			var ids: Array = HangarDefs.ids_for("station")
 			## Selected survivor first.
 			var mine := HangarDefs.station_id(GameState.selected_character_id)
@@ -293,9 +298,9 @@ func _rebuild() -> void:
 			ids.push_front(mine)
 			for id in ids:
 				var hero := str(id).substr(8)
-				_list.add_child(_row(str(id), load(CharacterDefs.ability_icon_path(hero))))
+				_list.add_child(_row(str(id), IconSet.tex(IconSet.ability(hero, "a"))))
 		"kennel":
-			_list.add_child(_note("Three ranks per dog. Noel guards, Bentley scouts, Lillie rams."))
+			_list.add_child(_note("Noel guards, Bentley scouts, Lillie rams."))
 			for id in HangarDefs.ids_for("kennel"):
 				if not PetDefs.is_mech(str(id).substr(7)):
 					_list.add_child(_row(str(id), _pet_frame(str(id).substr(7), true)))
@@ -313,7 +318,7 @@ func _rebuild() -> void:
 
 
 func _note(text: String) -> Label:
-	return UiTheme.body_label(text, 15, UiTheme.TEXT_DIM)
+	return UiTheme.body_label(text, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 
 
 func _row(id: String, icon: Texture2D) -> PanelContainer:
@@ -326,17 +331,22 @@ func _row(id: String, icon: Texture2D) -> PanelContainer:
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	var h := HBoxContainer.new()
 	h.mouse_filter = Control.MOUSE_FILTER_PASS
-	h.add_theme_constant_override("separation", 12)
+	h.add_theme_constant_override("separation", 16)
 	p.add_child(h)
 	if icon != null:
+		var well := PanelContainer.new()
+		well.add_theme_stylebox_override("panel", UiTheme.plate("inset", 4.0))
+		well.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		well.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(well)
 		var ir := TextureRect.new()
 		ir.texture = icon
-		ir.custom_minimum_size = Vector2(56, 56)
+		ir.custom_minimum_size = Vector2(96, 96)
 		ir.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ir.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ir.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ir.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		ir.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		h.add_child(ir)
+		well.add_child(ir)
 	var info := VBoxContainer.new()
 	info.mouse_filter = Control.MOUSE_FILTER_PASS
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -345,27 +355,29 @@ func _row(id: String, icon: Texture2D) -> PanelContainer:
 	var title := HBoxContainer.new()
 	title.mouse_filter = Control.MOUSE_FILTER_PASS
 	info.add_child(title)
-	var nm := UiTheme.body_label(HangarDefs.display_name(id), 19, UiTheme.AMBER, false)
+	var nm := UiTheme.head_label(HangarDefs.display_name(id), UiTheme.T_H2, UiTheme.AMBER if mine else UiTheme.TEXT)
 	nm.clip_text = true
+	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_child(nm)
-	title.add_child(_pips(rank, max_r))
-	if rank > 0:
-		info.add_child(UiTheme.body_label("Now: " + HangarDefs.rank_text(id, rank), 13, UiTheme.TEXT))
-	if not maxed:
-		info.add_child(UiTheme.body_label("Next: " + HangarDefs.rank_text(id, rank + 1), 13, UiTheme.TEXT_DIM))
-	else:
-		info.add_child(UiTheme.body_label(HangarDefs.blurb(id), 13, UiTheme.TEXT_DIM))
+	info.add_child(nm)
+	var pr := UiTheme.rank_pips(rank, max_r, not maxed)
+	info.add_child(pr)
+	var nx := UiTheme.body_label(HangarDefs.rank_text(id, rank + 1) if not maxed else HangarDefs.rank_text(id, rank), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	nx.max_lines_visible = 2
+	info.add_child(nx)
 	var btn: Button
 	if maxed:
-		btn = UiTheme.big_button("MAX", UiTheme.LINE, 60, 17)
+		btn = UiTheme.big_button("MAX", UiTheme.LINE, 64, 20)
 		btn.disabled = true
 	else:
 		var afford := GameState.account_scrap >= cost
-		btn = UiTheme.big_button("%d" % cost, UiTheme.TEAL if afford else UiTheme.RUST, 60, 19)
+		btn = UiTheme.big_button("%d" % cost, UiTheme.TEAL if afford else UiTheme.RUST, 64, 16)
+		btn.add_theme_font_override("font", UiTheme.font_pixel)
+		btn.add_theme_font_size_override("font_size", UiTheme.PX_M)
+		btn.icon = IconSet.tex("cur_scrap", false)
 		btn.disabled = not afford
 		btn.pressed.connect(buy.bind(id))
-	btn.custom_minimum_size.x = 104
+	btn.custom_minimum_size.x = 136
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.mouse_force_pass_scroll_events = true
 	h.add_child(btn)
@@ -404,20 +416,17 @@ func buy(id: String) -> bool:
 ## Workshop (Depth Update E6): Helm rebuilds war machines into mech pets.
 
 func _build_workshop() -> void:
-	var hd := UiTheme.body_label("WORKSHOP", 17, UiTheme.AMBER, false)
-	_list.add_child(hd)
 	var core_row := HBoxContainer.new()
 	core_row.add_theme_constant_override("separation", 8)
-	var ci := TextureRect.new()
-	ci.texture = load(MedicineDefs.icon_path("salvage_core"))
-	ci.custom_minimum_size = Vector2(30, 30)
-	ci.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	ci.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	core_row.add_child(ci)
-	var cl := UiTheme.body_label("Salvage Cores: %d" % GameState.salvage_cores(), 16, UiTheme.TEAL, false)
+	var hd := UiTheme.head_label("WORKSHOP", UiTheme.T_H2, UiTheme.AMBER)
+	hd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	core_row.add_child(hd)
+	core_row.add_child(IconSet.rect("mat_salvage_core", 48))
+	var cl := UiTheme.pixel_label("%d" % GameState.salvage_cores(), UiTheme.PX_M, UiTheme.TEAL)
+	cl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	core_row.add_child(cl)
 	_list.add_child(core_row)
-	_list.add_child(_note("Torn from war machines — elites and bosses always carry them. Helm rebuilds them into mech pets."))
+	_list.add_child(_note("Helm rebuilds war-machine cores into mech pets."))
 	for mid in PetDefs.MECH_IDS:
 		if GameState.pet_available(str(mid)):
 			_list.add_child(_row(HangarDefs.kennel_id(str(mid)), _pet_frame(str(mid), true)))
@@ -435,7 +444,7 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	p.add_child(h)
 	var ir := TextureRect.new()
 	ir.texture = _pet_frame(mid, true)
-	ir.custom_minimum_size = Vector2(56, 56)
+	ir.custom_minimum_size = Vector2(96, 96)
 	ir.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	ir.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	ir.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -447,15 +456,26 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
 	h.add_child(info)
-	info.add_child(UiTheme.body_label("Rebuild: %s" % str(d["name"]), 19, UiTheme.TEAL, false))
-	info.add_child(UiTheme.body_label("%s — %s" % [str(d["ability_name"]), str(d["ability_desc"])], 13, UiTheme.TEXT_DIM))
-	var need := UiTheme.body_label("%d cores · %d scrap" % [int(d["build_cores"]), int(d["build_scrap"])], 13,
-		UiTheme.TEXT if GameState.can_build_mech(mid) else UiTheme.RUST, false)
+	info.add_child(UiTheme.head_label(str(d["name"]), UiTheme.T_H2, UiTheme.TEAL))
+	var ad := UiTheme.body_label(str(d["ability_desc"]), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	ad.max_lines_visible = 2
+	info.add_child(ad)
+	var need := HBoxContainer.new()
+	need.add_theme_constant_override("separation", 8)
 	info.add_child(need)
+	var okc := GameState.can_build_mech(mid)
+	need.add_child(IconSet.rect("mat_salvage_core", 48))
+	var n1 := UiTheme.pixel_label("%d" % int(d["build_cores"]), UiTheme.PX_M, UiTheme.TEXT if okc else UiTheme.DANGER)
+	n1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	need.add_child(n1)
+	need.add_child(IconSet.rect("cur_scrap", 48))
+	var n2 := UiTheme.pixel_label("%d" % int(d["build_scrap"]), UiTheme.PX_M, UiTheme.TEXT if okc else UiTheme.DANGER)
+	n2.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	need.add_child(n2)
 	var ok := GameState.can_build_mech(mid)
-	var btn := UiTheme.big_button("BUILD", UiTheme.TEAL if ok else UiTheme.RUST, 60, 19)
+	var btn := UiTheme.big_button("BUILD", UiTheme.TEAL if ok else UiTheme.RUST, 64, 20)
 	btn.disabled = not ok
-	btn.custom_minimum_size.x = 104
+	btn.custom_minimum_size.x = 136
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.mouse_force_pass_scroll_events = true
 	btn.pressed.connect(build_mech.bind(mid))
@@ -477,17 +497,16 @@ func build_mech(mid: String) -> bool:
 ## Apothecary (Depth Update E1): Cinder brews tonics from run ingredients.
 
 func _build_brew() -> void:
-	_list.add_child(_note("Cinder's Apothecary. Brew tonics from what you carry home. Slotted tonics are drunk when you deploy and last the whole run."))
+	_list.add_child(_note("Brew from what you carry home. Slotted tonics last the whole run."))
 	var inv := HFlowContainer.new()
-	inv.add_theme_constant_override("h_separation", 14)
-	inv.add_theme_constant_override("v_separation", 6)
+	inv.add_theme_constant_override("h_separation", 16)
+	inv.add_theme_constant_override("v_separation", 8)
 	inv.mouse_filter = Control.MOUSE_FILTER_PASS
 	_list.add_child(inv)
 	for id in MedicineDefs.INGREDIENT_IDS + ["medicine"]:
-		inv.add_child(_chip(str(id), GameState.ingredient_count(str(id)), 40, UiTheme.TEXT))
+		inv.add_child(_chip(str(id), GameState.ingredient_count(str(id)), 48, UiTheme.TEXT))
 	var slots := GameState.tonic_slot_count()
-	var sl := UiTheme.body_label("TONIC SLOTS %d/%d%s" % [GameState.tonic_loadout.size(), slots,
-		"" if slots >= 2 else "  ·  2nd slot at Cinder's Medicine Table rank %d" % MedicineDefs.TONIC_SLOT_RANK], 15, UiTheme.AMBER)
+	var sl := UiTheme.head_label("TONIC SLOTS %d/%d" % [GameState.tonic_loadout.size(), slots], UiTheme.T_H3, UiTheme.AMBER)
 	_list.add_child(sl)
 	for tid in MedicineDefs.TONIC_IDS:
 		_list.add_child(_tonic_row(str(tid)))
@@ -498,16 +517,10 @@ func _chip(id: String, n: int, px: float, col: Color, need: int = -1) -> HBoxCon
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 2)
 	h.mouse_filter = Control.MOUSE_FILTER_PASS
-	var ic := TextureRect.new()
-	ic.custom_minimum_size = Vector2(px, px)
-	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ic.texture = load(MedicineDefs.icon_path(id))
-	h.add_child(ic)
+	h.add_child(IconSet.rect(IconSet.stuff(id), 48))
 	var txt := "%d" % n if need < 0 else "%d/%d" % [n, need]
-	var l := UiTheme.body_label(txt, 15 if px < 36 else 17, col, false)
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var l := UiTheme.pixel_label(txt, UiTheme.PX_M, col)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(l)
 	return h
 
@@ -521,23 +534,30 @@ func _tonic_row(tid: String) -> PanelContainer:
 	h.add_theme_constant_override("separation", 10)
 	h.mouse_filter = Control.MOUSE_FILTER_PASS
 	p.add_child(h)
-	var ic := TextureRect.new()
-	ic.texture = load(MedicineDefs.icon_path(tid))
-	ic.custom_minimum_size = Vector2(64, 64)
-	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(ic)
+	var well := PanelContainer.new()
+	well.add_theme_stylebox_override("panel", UiTheme.plate("inset", 4.0))
+	well.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	well.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	well.add_child(IconSet.rect("tonic_" + tid, 96))
+	h.add_child(well)
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
 	info.mouse_filter = Control.MOUSE_FILTER_PASS
 	h.add_child(info)
-	var nm := UiTheme.body_label("%s  ·  %d in stock" % [str(td["name"]), GameState.tonic_count(tid)], 18, UiTheme.AMBER, false)
+	var nh := HBoxContainer.new()
+	nh.add_theme_constant_override("separation", 8)
+	info.add_child(nh)
+	var nm := UiTheme.head_label(str(td["name"]), UiTheme.T_H2, UiTheme.AMBER if slotted else UiTheme.TEXT)
 	nm.clip_text = true
-	info.add_child(nm)
-	info.add_child(UiTheme.body_label(str(td["desc"]), 13, UiTheme.TEXT))
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nh.add_child(nm)
+	var stock := UiTheme.pixel_label("x%d" % GameState.tonic_count(tid), UiTheme.PX_M, UiTheme.TEXT)
+	stock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	nh.add_child(stock)
+	var dl := UiTheme.body_label(str(td["desc"]), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	dl.max_lines_visible = 2
+	info.add_child(dl)
 	var rec := HBoxContainer.new()
 	rec.add_theme_constant_override("separation", 8)
 	rec.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -545,20 +565,20 @@ func _tonic_row(tid: String) -> PanelContainer:
 	var r: Dictionary = td["recipe"]
 	for k in r.keys():
 		var have := GameState.ingredient_count(str(k))
-		rec.add_child(_chip(str(k), have, 28, UiTheme.TEAL if have >= int(r[k]) else UiTheme.RUST, int(r[k])))
+		rec.add_child(_chip(str(k), have, 48, UiTheme.TEAL if have >= int(r[k]) else UiTheme.DANGER, int(r[k])))
 	var btns := VBoxContainer.new()
 	btns.add_theme_constant_override("separation", 6)
 	btns.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(btns)
 	var can := GameState.can_brew(tid)
-	var b := UiTheme.big_button("BREW", UiTheme.TEAL if can else UiTheme.RUST, 50, 17)
-	b.custom_minimum_size.x = 104
+	var b := UiTheme.big_button("BREW", UiTheme.TEAL if can else UiTheme.RUST, 64, 20)
+	b.custom_minimum_size.x = 120
 	b.disabled = not can
 	b.mouse_force_pass_scroll_events = true
 	b.pressed.connect(brew.bind(tid))
 	btns.add_child(b)
-	var s := UiTheme.big_button("IN SLOT" if slotted else "BRING", UiTheme.AMBER if slotted else UiTheme.LINE, 46, 16)
-	s.custom_minimum_size.x = 104
+	var s := UiTheme.big_button("IN SLOT" if slotted else "BRING", UiTheme.AMBER if slotted else UiTheme.LINE, 64, 20)
+	s.custom_minimum_size.x = 120
 	s.disabled = not slotted and GameState.tonic_count(tid) <= 0
 	s.mouse_force_pass_scroll_events = true
 	s.pressed.connect(toggle_tonic.bind(tid))
@@ -588,15 +608,27 @@ func toggle_tonic(tid: String) -> bool:
 
 func _build_stash() -> void:
 	var cap := GameState.stash_capacity()
-	_list.add_child(_note("Shared lockbox: %d / %d slots. Gear you extract with lands here. Tap an item to inspect or salvage it." % [GameState.stash.size(), cap]))
-	var eqb := UiTheme.big_button("EQUIP SURVIVORS", UiTheme.TEAL, 58, 18)
+	var sh := HBoxContainer.new()
+	sh.add_theme_constant_override("separation", 8)
+	_list.add_child(sh)
+	for pair in [["camp_stash", "%d/%d" % [GameState.stash.size(), cap]], ["mat_dust_heart", str(GameState.material_count("dust_heart"))],
+			["mat_salvage_core", str(GameState.material_count("salvage_core"))]]:
+		sh.add_child(IconSet.rect(str(pair[0]), 48))
+		var pl := UiTheme.pixel_label(str(pair[1]), UiTheme.PX_M, UiTheme.TEXT)
+		pl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		sh.add_child(pl)
+		var g := Control.new()
+		g.custom_minimum_size = Vector2(8, 0)
+		sh.add_child(g)
+	var eqb := UiTheme.big_button("EQUIP SURVIVORS", UiTheme.TEAL, 64, 20)
+	eqb.icon = IconSet.tex("slot_chest", false)
 	eqb.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
 	_list.add_child(eqb)
-	_list.add_child(UiTheme.body_label("Dust Hearts %d  ·  Salvage Cores %d" % [GameState.material_count("dust_heart"), GameState.material_count("salvage_core")], 14, UiTheme.TEXT_DIM))
 	_list.add_child(_row("stash", null))
 	var grid := GridContainer.new()
 	grid.columns = 5
-	grid.add_theme_constant_override("h_separation", 8)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	grid.add_theme_constant_override("h_separation", 16)
 	grid.add_theme_constant_override("v_separation", 8)
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	_list.add_child(grid)
@@ -606,26 +638,23 @@ func _build_stash() -> void:
 
 func _slot(item: Dictionary) -> Control:
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(120, 104)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(112, 112)
+	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_force_pass_scroll_events = true
 	var clear := StyleBoxEmpty.new()
 	for st in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(st, clear)
-	var ic := LoadoutScreen.item_icon(item if not item.is_empty() else {"rarity": "common"}, 96.0)
+	var ic := LoadoutScreen.item_icon(item, 112.0) if not item.is_empty() else UiTheme.icon_well("", "common", 112)
 	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ic.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.35)
+	ic.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.4)
 	b.add_child(ic)
 	if item.is_empty():
 		b.disabled = true
 	else:
 		if not GameState.equipped_by(int(item.get("uid", -1))).is_empty():
-			var e := Label.new()
-			e.text = "E"
-			e.add_theme_font_size_override("font_size", 14)
-			e.add_theme_color_override("font_color", UiTheme.TEAL)
-			e.position = Vector2(10, 4)
+			var e := UiTheme.pixel_label("E", UiTheme.PX_M, UiTheme.TEAL)
+			e.position = Vector2(12, 12)
 			e.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			b.add_child(e)
 		b.pressed.connect(inspect_item.bind(int(item.get("uid", -1))))

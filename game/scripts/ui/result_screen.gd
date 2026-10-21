@@ -152,12 +152,12 @@ func build(c: VBoxContainer) -> void:
 		var sorted := gear_list.duplicate()
 		var order := {"common": 0, "rare": 1, "epic": 2, "legendary": 3}
 		sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(order.get(str(a.get("rarity", "")), 0)) < int(order.get(str(b.get("rarity", "")), 0)))
-		for i in range(mini(sorted.size(), 6)):
+		for i in range(mini(sorted.size(), 5)):
 			var w := _loot_well(sorted[i])
 			grid.add_child(w)
 			_loot_wells.append(w)
-		if gear_list.size() > 6:
-			var more := UiTheme.pixel_label("+%d" % (gear_list.size() - 6), UiTheme.PX_M, UiTheme.TEXT_DIM)
+		if gear_list.size() > 5:
+			var more := UiTheme.pixel_label("+%d" % (gear_list.size() - 5), UiTheme.PX_M, UiTheme.TEXT_DIM)
 			more.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			grid.add_child(more)
 	if _won and GameState.result_salvaged > 0:
@@ -310,7 +310,7 @@ func _stat(parent: Control, icon_id: String, value: String, col: Color) -> void:
 ## A gear well, hidden until its reveal.
 func _loot_well(it: Dictionary) -> Control:
 	var r := str(it.get("rarity", "common"))
-	var w := UiTheme.icon_well(IconSet.item(it), r, 96)
+	var w := UiTheme.icon_well(IconSet.item(it), r, 112)
 	w.set_meta("rarity", r)
 	w.tooltip_text = str(it.get("name", ""))
 	w.modulate.a = 0.0
