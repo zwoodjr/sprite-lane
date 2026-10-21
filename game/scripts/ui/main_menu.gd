@@ -6,96 +6,132 @@ func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
 	c.add_theme_constant_override("separation", 12)
 
-	## Logo + tagline
+	## Logo + one-line tagline; the logo slams in (title sting).
 	var logo := TextureRect.new()
 	if ResourceLoader.exists(LOGO):
 		logo.texture = load(LOGO)
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.custom_minimum_size = Vector2(0, 150 if portrait else 120)
+	logo.custom_minimum_size = Vector2(0, 144 if portrait else 112)
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.add_child(logo)
-	var tag := UiTheme.body_label("Drop in. Grab what you can. Get out before the dust takes you.", 18, UiTheme.TEXT)
+	_sting(logo)
+	var tag := UiTheme.head_label("DROP IN.  GRAB IT.  GET OUT.", UiTheme.T_H3, UiTheme.TEXT_DIM)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	c.add_child(tag)
 
 	## Hero showcase: the selected wanderer idling on the dunes, pet at heel.
+	## Integer scales of the 128-px frame (x3 on tall phones, x2 otherwise).
 	var stage := Control.new()
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage.custom_minimum_size = Vector2(0, 220)
+	stage.custom_minimum_size = Vector2(0, 256)
 	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.add_child(stage)
 	var hid := GameState.selected_character_id
-	var hero := StripAnim.make("res://assets/sprites/characters/%s/%s_idle.png" % [hid, hid], 300, 8.0)
-	hero.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	hero.size = Vector2(300, 300)
-	hero.position = Vector2(-150, -300)
+	var hero := StripAnim.make("res://assets/sprites/characters/%s/%s_idle.png" % [hid, hid], 256, 8.0)
 	var pet := PetDefs.get_pet(GameState.selected_pet_id)
-	var dog := StripAnim.make(str(pet.get("sprite", "")), 150, 7.0)
-	dog.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	dog.size = Vector2(150, 150)
-	dog.position = Vector2(60, -148)
+	var dog := StripAnim.make(str(pet.get("sprite", "")), 192, 7.0)
 	var shadow := _Shadow.new()
-	shadow.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	shadow.position = Vector2(-150, -40)
-	shadow.size = Vector2(320, 40)
 	stage.add_child(shadow)
 	stage.add_child(hero)
 	stage.add_child(dog)
 	stage.resized.connect(func() -> void:
-		var k := clampf(stage.size.y / 300.0, 0.55, 1.0)
-		hero.scale = Vector2.ONE * k
-		hero.pivot_offset = Vector2(150, 300)
-		dog.scale = Vector2.ONE * k
-		dog.pivot_offset = Vector2(75, 150)
+		var k := 4 if stage.size.y >= 520 else (3 if stage.size.y >= 384 else 2)
+		var hs := 128.0 * k
+		hero.size = Vector2(hs, hs)
+		hero.position = Vector2(floorf((stage.size.x - hs) * 0.5) - 24.0, stage.size.y - hs + 8.0 * k)
+		var ds := 64.0 * k
+		dog.size = Vector2(ds, ds)
+		dog.position = Vector2(hero.position.x + hs * 0.62, stage.size.y - ds + 4.0 * k)
+		shadow.size = Vector2(hs * 1.2, 24)
+		shadow.position = Vector2(hero.position.x - hs * 0.1, stage.size.y - 20.0)
 	)
+	## Idle breathing bob on top of the strip (keyed, 2 px steps).
+	var bob := hero.create_tween().set_loops()
+	bob.tween_property(hero, "position:y", -2.0, 0.5).as_relative().set_trans(Tween.TRANS_SINE)
+	bob.tween_property(hero, "position:y", 2.0, 0.5).as_relative().set_trans(Tween.TRANS_SINE)
 
-	## Account strip
-	var pc := card(UiTheme.LINE, Color(0.1, 0.075, 0.055, 0.9))
+	## Account strip: level badge + XP bar, scrap total. Numbers in pixels.
+	var pc := card(UiTheme.LINE)
 	c.add_child(pc)
-	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 4)
-	pc.add_child(pv)
-	var ab: Dictionary = GameState.account_bar_state()
 	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 8)
-	pv.add_child(top)
-	var who := UiTheme.body_label("%s  ·  Lv %d" % [str(GameState.get_character().get("display_name", "")), int(ab["level"])], 15, UiTheme.AMBER, false)
-	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(who)
-	top.add_child(UiTheme.body_label("%d scrap banked" % GameState.account_scrap, 15, UiTheme.TEXT, false))
+	top.add_theme_constant_override("separation", 16)
+	pc.add_child(top)
+	var ab: Dictionary = GameState.account_bar_state()
+	top.add_child(IconSet.rect("cur_level", 48))
+	var mid := VBoxContainer.new()
+	mid.add_theme_constant_override("separation", 8)
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_child(mid)
+	var who := HBoxContainer.new()
+	who.add_theme_constant_override("separation", 8)
+	mid.add_child(who)
+	var nm := UiTheme.head_label(str(GameState.get_character().get("display_name", "")).to_upper(), UiTheme.T_H3, UiTheme.TEXT)
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.add_child(nm)
+	var lv := UiTheme.pixel_label("LV %d" % int(ab["level"]), UiTheme.PX_M, UiTheme.AMBER)
+	lv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	who.add_child(lv)
 	var xp_bar := ProgressBar.new()
 	xp_bar.min_value = 0.0
 	xp_bar.max_value = 1.0
 	xp_bar.value = float(ab["ratio"])
 	xp_bar.show_percentage = false
-	xp_bar.custom_minimum_size = Vector2(0, 18)
+	xp_bar.custom_minimum_size = Vector2(0, 16)
 	UiTheme.skin_bar(xp_bar, UiTheme.TEAL)
-	pv.add_child(xp_bar)
-	var sub_l := "%d / %d XP  ·  %d extracts  ·  best %d" % [int(ab["into"]), int(ab["need"]), GameState.successful_extracts, GameState.best_payout]
-	pv.add_child(UiTheme.body_label(sub_l, 13, UiTheme.TEXT_DIM, false))
+	mid.add_child(xp_bar)
+	var sep := Control.new()
+	sep.custom_minimum_size = Vector2(8, 0)
+	top.add_child(sep)
+	top.add_child(IconSet.rect("cur_scrap", 48))
+	var scrap := UiTheme.pixel_label(str(GameState.account_scrap), UiTheme.PX_M, UiTheme.AMBER)
+	scrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(scrap)
 
 	## Actions — bottom of the screen, under the thumb.
 	var first := not GameState.tutorial_done
-	var play := UiTheme.big_button("PLAY" if not first else "PLAY  ·  TUTORIAL", UiTheme.AMBER, 92, 38)
+	var play := UiTheme.big_button("PLAY" if not first else "PLAY  ·  TUTORIAL", UiTheme.AMBER, 96, 40)
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play.pressed.connect(GameState.go_mode_select)
 	c.add_child(play)
 	_pulse(play)
 	var sub := HBoxContainer.new()
-	sub.add_theme_constant_override("separation", 10)
+	sub.add_theme_constant_override("separation", 16)
 	c.add_child(sub)
-	var items: Array = [["HANGAR", UiTheme.TEAL, GameState.go_hangar], ["HOW TO PLAY", UiTheme.LINE, GameState.go_how_to_play],
-		["SETTINGS", UiTheme.LINE, GameState.go_settings]]
+	var items: Array = [["HANGAR", UiTheme.TEAL, GameState.go_hangar, "tab_camp"], ["HELP", UiTheme.LINE, GameState.go_how_to_play, "set_hints"],
+		["SETTINGS", UiTheme.LINE, GameState.go_settings, "tab_workshop"]]
 	if MobileLayout.is_desktop():
-		items.append(["QUIT", UiTheme.RUST, func() -> void: get_tree().quit()])
+		items.append(["QUIT", UiTheme.RUST, func() -> void: get_tree().quit(), "set_reset"])
 	for it in items:
-		var b := UiTheme.big_button(str(it[0]), it[1], 62, 18)
+		var b := UiTheme.big_button(str(it[0]), it[1], 64, 20)
 		b.custom_minimum_size.x = 0
+		b.icon = IconSet.tex(str(it[3]), false)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.size_flags_stretch_ratio = 0.7 if str(it[0]) == "QUIT" else 1.0
 		b.pressed.connect(it[2])
 		sub.add_child(b)
+
+
+## Title sting: the logo drops in big, lands with a shake and a dust puff.
+func _sting(logo: Control) -> void:
+	logo.modulate.a = 0.0
+	await get_tree().process_frame
+	if not is_instance_valid(logo):
+		return
+	logo.pivot_offset = logo.size * 0.5
+	logo.scale = Vector2(1.5, 1.5)
+	var tw := logo.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(logo, "modulate:a", 1.0, 0.12)
+	tw.tween_property(logo, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(func() -> void:
+		Juice.haptic(20)
+		Juice.sfx("ui_tap", -4.0)
+	)
+	var x0 := logo.position.x
+	for k in [6.0, -5.0, 3.0, -2.0, 0.0]:
+		tw.chain().tween_property(logo, "position:x", x0 + k, 0.035)
 
 
 func _pulse(b: Control) -> void:
@@ -111,10 +147,12 @@ func _pulse(b: Control) -> void:
 class _Shadow extends Control:
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+	## Hard 2-step pixel ellipse (bible §1.4): INK 45% core, 27% rim.
 	func _draw() -> void:
 		var c := size * 0.5
-		for i in range(4):
-			var k := 1.0 - i * 0.2
-			draw_set_transform(c, 0.0, Vector2(1.0, 0.22))
-			draw_circle(Vector2.ZERO, size.x * 0.4 * k, Color(0.05, 0.03, 0.02, 0.16))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		for st in [[1.0, 0.27], [0.7, 0.45]]:
+			var pts := PackedVector2Array()
+			for i in range(28):
+				var a := TAU * i / 28.0
+				pts.append((c + Vector2(cos(a) * size.x * 0.5 * st[0], sin(a) * size.y * 0.5 * st[0])).floor())
+			draw_colored_polygon(pts, Color(0.078, 0.047, 0.055, st[1]))
