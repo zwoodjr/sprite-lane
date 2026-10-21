@@ -29,6 +29,7 @@ var _ping_t: float = 0.0 ## >0 while the "new pad" ping ring expands
 var _ring: Node2D
 var _beam: Polygon2D
 var _core: Polygon2D
+var _pxbeam: Node2D ## pixel beam strip at the pad (bone core, teal bands, motes)
 const BEAM_H := 1500.0
 
 
@@ -61,6 +62,10 @@ func _ready() -> void:
 	_core.z_as_relative = false
 	_core.z_index = 24
 	add_child(_core)
+	_pxbeam = Juice.px_loop(self, "fx_beam", Vector2(0, 4)) as Node2D
+	if _pxbeam:
+		_pxbeam.z_as_relative = false
+		_pxbeam.z_index = 24
 	_ring = Node2D.new()
 	_ring.z_index = 6
 	_ring.draw.connect(_draw_ring)
@@ -108,7 +113,8 @@ func set_open(is_open: bool) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	var bc := Color(1.0, 0.35, 0.3) if last_chance else Color(1.0, 0.82, 0.4)
+	## Extract is friendly: TEAL (bible §4); last chance goes SIGNAL red.
+	var bc := Color(1.0, 0.35, 0.3) if last_chance else Color(0.36, 0.82, 0.75)
 	if open and not powered:
 		bc = Color(0.5, 0.8, 1.0)
 	## Vertex colours carry the upward fade; modulate carries hue + pulse
@@ -116,6 +122,9 @@ func _process(delta: float) -> void:
 	_beam.modulate = Color(bc, (0.26 + 0.08 * sin(_t * 3.0)) if open else 0.0)
 	_core.modulate = Color(bc.lerp(Color.WHITE, 0.4), (0.32 + 0.12 * sin(_t * 5.0)) if open else 0.0)
 	_beam.visible = open
+	if _pxbeam:
+		_pxbeam.visible = open
+		_pxbeam.modulate = Color(1.0, 0.45, 0.4) if last_chance else (Color(0.7, 0.85, 1.0) if not powered and open else Color.WHITE)
 	_core.visible = open
 	if open and player_inside and not powered and GameState.run_has_cell:
 		set_powered(true)

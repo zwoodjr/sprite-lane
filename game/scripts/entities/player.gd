@@ -16,6 +16,11 @@ const DroneScript := preload("res://scripts/entities/helm_drone.gd")
 const OrbitScript := preload("res://scripts/entities/orbit_blades.gd")
 const TONIC_TEX := "res://assets/sprites/fx/fx_iron_tonic.png"
 const OVERLOAD_TEX := "res://assets/sprites/fx/fx_overload_arc.png"
+## Pixel VFX per weapon (assets/sprites/fx/px): muzzle by projectile, smear by weapon
+## (with the smear's base reach in world px; bigger reach scales it up).
+const MUZZLE_PX := {"rocket": "mz_launcher", "slug": "mz_rifle", "tracer": "mz_ar", "pistol": "mz_pistol", "smg": "mz_smg"}
+const SMEAR_PX := {"scrap_maul": ["sm_maul", 100.0], "chain_gauntlet": ["sm_chain", 175.0],
+	"bayonet_knife": ["sm_bayonet", 90.0], "dual_dustblades": ["sm_blade", 90.0]}
 ## --- Movement feel (tuned for thumbs) ---
 @export var base_speed: float = 205.0
 @export var accel: float = 2400.0       ## px/s² toward target velocity
@@ -159,7 +164,6 @@ var _swing_atk_fps: float = 12.0
 var _swing_hit_frames: Array = []
 var _dead: bool = false
 
-var _muzzle_flash: Polygon2D
 var _flash_pos: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
@@ -240,17 +244,7 @@ func _mag_size() -> int:
 
 func _build_visuals() -> void:
 	## (Ground shadow is baked into the hero strips.)
-	## Muzzle flash (a 4-point star, additive) placed at the per-hero muzzle.
-	_muzzle_flash = Polygon2D.new()
-	_muzzle_flash.polygon = PackedVector2Array([
-		Vector2(-2, 0), Vector2(0, -3.5), Vector2(11, 0), Vector2(0, 3.5),
-	])
-	_muzzle_flash.color = Color(1.0, 0.85, 0.45, 0.95)
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	_muzzle_flash.material = add
-	_muzzle_flash.visible = false
-	gun.add_child(_muzzle_flash)
+	## Muzzle flash: per-weapon pixel strip played at the weapon tip (Juice.fx).
 	UnitAnim.add_contact_shadow(self, 58.0, FEET_Y, 0.55)
 	_add_ground_ring()
 	_add_ammo_arc()
@@ -558,7 +552,6 @@ func _update_visuals(delta: float) -> void:
 		if _step_t > 0.26:
 			_step_t = 0.0
 			Juice.dust_puff(global_position + Vector2(0, 18), 3)
-	_muzzle_flash.visible = _flash_left > 0.0
 	## Blink during i-frames
 	if _hidden_left > 0.0:
 		body.modulate.a = 0.3
@@ -826,7 +819,7 @@ func _fire_ability() -> void:
 				GameState.cleanse_exposure(MedicineDefs.CINDER_HEAL_CLEANSE)
 			_post_heal_left = float(_char.get("post_heal_duration", 0.0))
 			Juice.float_text(global_position + Vector2(0, -34), "+%d" % int(amt), UiTheme.TEAL, 22)
-			Juice.burst(global_position, UiTheme.TEAL, 18, 140.0, 0.6)
+			Juice.fx("fx_heal", global_position + Vector2(0, FEET_Y - 2), {"follow": self})
 			if GameState.run_rank("sanctuary") > 0:
 				RunFx.ground(get_parent(), self, global_position + Vector2(0, FEET_Y - 4), "heal",
 					float(GameState.up("sanctuary", "radius", 72.0)), float(GameState.up("sanctuary", "time", 4.0)),
@@ -836,7 +829,8 @@ func _fire_ability() -> void:
 						float(GameState.up("sanctuary", "radius", 72.0)), float(GameState.up("sanctuary", "time", 4.0)),
 						float(GameState.up("cathedral_fire", "dps", 18.0)))
 		"rattle_rush":
-			Juice.burst(global_position, UiTheme.AMBER, 16, 160.0, 0.5)
+			Juice.dust_puff(global_position + Vector2(0, FEET_Y - 6), 12)
+			Juice.fx("ex_tiny", global_position + Vector2(0, FEET_Y - 10))
 			Juice.shake(0.12)
 		"vial_shot":
 			var t := _ability_pick(get_trigger_range() * 1.1)
@@ -856,8 +850,7 @@ func _fire_ability() -> void:
 			var centre := global_position + _facing_dir() * 18.0 + Vector2(0, 8)
 			var roll2 := _roll_damage(float(a.get("damage_mult", 2.2)))
 			RunFx.explosion(self, centre, float(a.get("radius", 120.0)), float(roll2[0]), Color(1.0, 0.75, 0.4), "ability",
-				float(a.get("knockback", 480.0)), float(a.get("stun", 0.8)))
-			Juice.dust_puff(centre, 16)
+				float(a.get("knockback", 480.0)), float(a.get("stun", 0.8)), "slam")
 			Juice.shake(float(a.get("shake", 0.4)))
 			Juice.hitstop(0.07)
 			Juice.sfx("ab_slam")
@@ -870,7 +863,8 @@ func _fire_ability() -> void:
 				tg.call("apply_status", "mark", float(a.get("mark_time", 5.0)), float(a.get("mark_mult", 1.5)))
 				var roll3 := _roll_damage(float(a.get("damage_mult", 2.5)))
 				var d3 := (tg.global_position - global_position).normalized()
-				_spawn_smear("line", {"length": 60.0, "width": 26.0, "smear": Color(1.0, 0.6, 0.85)}, d3)
+				_spawn_smear("arc", {"px": "sm_bayonet", "radius": 60.0}, d3)
+				Juice.fx("fx_mark", tg.global_position + Vector2(0, -10), {"follow": tg})
 				hit_enemy(tg, float(roll3[0]), d3, 220.0, true, "ability")
 				Juice.float_text(tg.global_position + Vector2(0, -40), "MARKED", UpgradeDefs.MARK_TINT, 14)
 				Juice.sfx("impact_quill", 2.0)
@@ -889,7 +883,7 @@ func _fire_ability() -> void:
 				_temp_drones.append(d)
 			for d in get_drones():
 				if is_instance_valid(d):
-					Juice.burst((d as Node2D).global_position, Color(0.5, 1.0, 0.85), 8, 90.0, 0.3)
+					Juice.fx("fx_drone_call", (d as Node2D).global_position, {"follow": d})
 			Juice.float_text(global_position + Vector2(0, -44), "OVERCLOCK", Color(0.5, 1.0, 0.85), 16)
 
 ## Juno OVERLOAD: burst around her, then an arc that jumps enemy to enemy.
@@ -898,7 +892,7 @@ func _overload() -> void:
 	var parent := get_parent()
 	var dmg_mult := float(a.get("damage_mult", 1.6))
 	var stun := float(a.get("stun", 1.3))
-	RunFx.sheet_once(parent, OVERLOAD_TEX, 3, global_position + Vector2(0, -6), 120.0, 14.0)
+	Juice.fx("ex_shock", global_position + Vector2(0, -6), {"follow": self})
 	RunFx.ring(parent, global_position + Vector2(0, 8), float(a.get("burst_radius", 80.0)), Color(0.5, 0.8, 1.0), 0.3)
 	var hit: Array = []
 	for e in RunFx.enemies_in(get_tree(), global_position, float(a.get("burst_radius", 80.0))):
@@ -912,7 +906,7 @@ func _overload() -> void:
 	var n := 0
 	while cur != null and n < links:
 		RunFx.zap(parent, prev, cur.global_position, Color(0.55, 0.85, 1.0), 0.28, 3.5)
-		RunFx.sheet_once(parent, OVERLOAD_TEX, 3, cur.global_position, 60.0, 18.0)
+		Juice.fx_impact(cur.global_position + Vector2(0, -8), "shock")
 		cur.call("apply_status", "stun", stun)
 		var roll2 := _roll_damage(dmg_mult)
 		hit_enemy(cur, float(roll2[0]), (cur.global_position - prev).normalized(), 120.0, bool(roll2[1]), "ability")
@@ -939,7 +933,7 @@ func _tick_ability_move(delta: float) -> void:
 				continue
 			_amove_hit.append(e)
 			var roll := _roll_damage(float(a.get("damage_mult", 1.8)))
-			_spawn_smear("arc", {"radius": 56.0, "arc_deg": 120.0, "smear": Color(0.75, 0.9, 1.0)}, _amove_dir)
+			_spawn_smear("arc", {"px": "sm_blade", "radius": 56.0}, _amove_dir)
 			hit_enemy(e, float(roll[0]), _amove_dir.orthogonal() * (1.0 if randf() < 0.5 else -1.0), float(a.get("knockback", 260.0)), bool(roll[1]), "ability")
 			Juice.hitstop(0.02)
 	elif _amove_kind == "lunge" and _ability_target != null and is_instance_valid(_ability_target):
@@ -974,8 +968,7 @@ func _on_rush_end() -> void:
 	## Short Charge (E5 ability B): the charge ends in a ground slam.
 	if str(_ability.get("id", "")) == "rattle_rush" and _ability.has("end_slam_radius"):
 		RunFx.explosion(self, global_position + Vector2(0, 10), float(_ability["end_slam_radius"]),
-			float(_ability.get("end_slam_damage", 40.0)) * damage_mult, Color(1.0, 0.75, 0.4), "ability", 420.0, 0.6)
-		Juice.dust_puff(global_position + Vector2(0, 14), 16)
+			float(_ability.get("end_slam_damage", 40.0)) * damage_mult, Color(1.0, 0.75, 0.4), "ability", 420.0, 0.6, "slam")
 		Juice.shake(0.3)
 		Juice.sfx("brute_slam")
 	if str(_ability.get("id", "")) != "rattle_rush" or GameState.run_rank("aftershock") <= 0:
@@ -995,7 +988,8 @@ func vial_burst(pos: Vector2) -> void:
 			e.call("apply_status", "slow", float(a.get("cloud_time", 3.5)), float(a["cloud_slow"]))
 	RunFx.ground(get_parent(), self, pos, "poison", r, float(a.get("cloud_time", 3.5)), float(a.get("cloud_dps", 12.0)))
 	RunFx.ring(get_parent(), pos, r, Color(0.55, 1.0, 0.35), 0.35)
-	Juice.burst(pos, Color(0.55, 1.0, 0.35), 20, 160.0, 0.5, 1.4)
+	Juice.fx("ex_plague", pos + Vector2(0, -10))
+	Juice.decal("dc_plague_pool", pos + Vector2(0, 8), float(a.get("cloud_time", 3.5)) + 1.2)
 	Juice.sfx_at("ab_vial_break", pos)
 
 ## =============================================================================
@@ -1217,8 +1211,7 @@ func _fire_one_shot() -> void:
 			bl.modulate = Color(0.75, 0.9, 1.4, 0.8)
 	_flash_left = 0.05
 	LightFx.flash(get_parent(), origin, 110.0, Color(1.0, 0.7, 0.32, 0.55), 0.09)
-	_muzzle_flash.position = _flash_pos
-	_muzzle_flash.rotation = aim.angle()
+	Juice.fx(MUZZLE_PX.get(str(_weapon.get("projectile", "pistol")), "mz_pistol"), origin, {"dir": aim, "follow": self})
 	Juice.sfx("shot", -4.0)
 	Juice.shake(float(_weapon.get("shake", 0.035)))
 	ammo_changed.emit(_ammo, _mag_size(), false)
@@ -1377,8 +1370,7 @@ func _melee_upgrades_on_swing(hit: Array, m: Dictionary) -> void:
 			_guard_left = maxf(_guard_left, float(GameState.up("mountain", "guard", 2.0)))
 		var roll2 := _roll_damage(float(GameState.up("quarry_slam", "mult", 0.5)))
 		RunFx.explosion(self, global_position + Vector2(0, 10), float(GameState.up("quarry_slam", "radius", 110.0)), float(roll2[0]),
-			Color(1.0, 0.8, 0.45), "main", 260.0, float(GameState.up("quarry_slam", "stun", 0.8)))
-		Juice.dust_puff(global_position + Vector2(0, 14), 14)
+			Color(1.0, 0.8, 0.45), "main", 260.0, float(GameState.up("quarry_slam", "stun", 0.8)), "slam")
 		Juice.shake(0.2)
 
 func _in_melee_box(e: Node2D, shape: String, m: Dictionary, dir: Vector2) -> bool:
@@ -1397,41 +1389,17 @@ func _in_melee_box(e: Node2D, shape: String, m: Dictionary, dir: Vector2) -> boo
 	var half := deg_to_rad(float(m.get("arc_deg", 120.0))) * 0.5
 	return absf(dir.angle_to(to)) <= half + asin(clampf(body_r / d, 0.0, 1.0))
 
-## Swing smear: a fading sector (arc) or streak (line) along the hitbox.
+## Swing smear: the weapon's pixel strip along the hitbox (mirrored to one of
+## 16 directions, never rotated). m["px"] overrides the strip (abilities).
 func _spawn_smear(shape: String, m: Dictionary, dir: Vector2) -> void:
-	var col: Color = m.get("smear", Color(1, 0.9, 0.75))
-	var poly := Polygon2D.new()
-	var pts := PackedVector2Array()
-	if shape == "line":
-		var length := float(m.get("length", 140.0))
-		var w := float(m.get("width", 30.0)) * 0.35
-		pts = PackedVector2Array([Vector2(10, -w * 0.5), Vector2(length, -w * 0.15), Vector2(length + 8, 0), Vector2(length, w * 0.15), Vector2(10, w * 0.5)])
-	else:
-		var r := float(m.get("radius", 70.0))
-		var half := deg_to_rad(float(m.get("arc_deg", 120.0))) * 0.5
-		var steps := 12
-		for i in range(steps + 1):
-			var a := lerpf(-half, half, float(i) / steps)
-			pts.append(Vector2(cos(a), sin(a)) * r)
-		for i in range(steps, -1, -1):
-			var a2 := lerpf(-half, half, float(i) / steps)
-			## Crescent: inner edge bulges toward the tip.
-			var inner := r * (0.55 + 0.3 * absf(a2) / maxf(half, 0.01))
-			pts.append(Vector2(cos(a2), sin(a2)) * inner)
-	poly.polygon = pts
-	poly.color = Color(col.r, col.g, col.b, 0.75)
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	poly.material = add
-	poly.rotation = dir.angle()
-	poly.position = Vector2(0, -4)
-	poly.z_index = 3
-	add_child(poly)
-	var tw := poly.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(poly, "modulate:a", 0.0, 0.16)
-	tw.tween_property(poly, "scale", Vector2(1.08, 1.08), 0.16)
-	tw.chain().tween_callback(poly.queue_free)
+	var def: Array = SMEAR_PX.get(str(_weapon.get("id", "")), ["sm_chain" if shape == "line" else "sm_blade", 90.0 if shape != "line" else 175.0])
+	var id := str(m.get("px", def[0]))
+	var base := float(m.get("px_base", def[1]))
+	var reach := float(m.get("length", 140.0)) if id == "sm_chain" else float(m.get("radius", 70.0))
+	## Only grow (reach upgrades); never shrink pixel art below 1 texel.
+	var k := clampf(reach / base, 1.0, 1.6) if reach > base * 1.12 else 1.0
+	Juice.fx(id, global_position + Vector2(0, -4), {"dir": dir, "follow": self, "k": k})
+
 
 ## One hero projectile with the run's Piercing / Ricochet / special ammo.
 func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: float = -1.0) -> Area2D:
@@ -1512,7 +1480,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 				float(GameState.up("bulwark", "damage", 25.0)) * damage_mult, Color(0.95, 0.85, 0.55), "blast", 420.0)
 		_iframes = HURT_IFRAMES * 0.6
 		Juice.float_text(global_position + Vector2(0, -36), "BLOCKED", Color(0.9, 0.85, 0.6), 16)
-		Juice.burst(global_position, Color(0.95, 0.85, 0.55), 18, 160.0, 0.35)
+		Juice.fx("fx_shield_hit", global_position + Vector2(0, -6), {"follow": self})
 		Juice.sfx("shield_block")
 		return
 	var dmg := float(amount) * resist_mult
@@ -1611,7 +1579,6 @@ func _go_down() -> void:
 	set_physics_process(false)
 	_dead = true
 	_swing_hits_left = 0
-	_muzzle_flash.visible = false
 	body.modulate = Color.WHITE
 	_anim.play("death")
 	collision_layer = 0

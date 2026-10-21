@@ -71,6 +71,10 @@ func _ready() -> void:
 		_icon.scale = Vector2.ONE * (ICON_WORLD / float(maxi(_icon.texture.get_width(), _icon.texture.get_height())))
 	add_child(_icon)
 	Juice.burst(global_position, col, 12, 140.0, 0.4)
+	## Rarity sparkle (4-frame loop, rarity colour; bible §6.3).
+	var sp := Juice.px_loop(self, "sp_" + rar if rar in ["rare", "epic", "legendary"] else "sp_common", Vector2(ICON_WORLD * 0.42, -ICON_WORLD * 0.42))
+	if sp:
+		sp.set("z_index", 3)
 
 
 func _physics_process(delta: float) -> void:

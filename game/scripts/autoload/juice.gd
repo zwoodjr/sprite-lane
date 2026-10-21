@@ -5,6 +5,7 @@ extends Node
 ## from any scene (no-ops when there's no camera / scene).
 
 const SoundScript = preload("res://scripts/autoload/sound.gd")
+const PxFxScript = preload("res://scripts/fx/px_fx.gd")
 
 ## Legacy one-word ids (pre sound pass) -> new ids. "@x" = per-hero lookup.
 const LEGACY := {
@@ -27,6 +28,8 @@ const HERO_SFX := {
 
 ## Audio director (buses, pools, music, ambience). See sound.gd.
 var snd: Node
+## Pixel VFX player (pooled strips, decals, status overlays). See px_fx.gd.
+var px: Node
 
 var _trauma: float = 0.0
 var _shake_t: float = 0.0
@@ -40,7 +43,12 @@ func _ready() -> void:
 	snd = SoundScript.new()
 	snd.name = "Sound"
 	add_child(snd)
+	px = PxFxScript.new()
+	px.name = "PxFx"
+	add_child(px)
 	_spark_tex = _make_spark_texture()
+	if not GameState.run_level_up.is_connected(_on_run_level_up):
+		GameState.run_level_up.connect(_on_run_level_up)
 	if ResourceLoader.exists("res://assets/fonts/PressStart2P.ttf"):
 		_pixel_font = load("res://assets/fonts/PressStart2P.ttf")
 
@@ -162,29 +170,39 @@ func _camera() -> Camera2D:
 
 ## --- Particles / floating text -------------------------------------------
 
+## Pixel debris: hard 2x2-texel squares in the nearest palette colour, fading
+## in 4 alpha steps (bible §5; replaces the old soft tinted spark).
+const BURST_CAP := 10
 func burst(pos: Vector2, color: Color, amount: int = 10, speed: float = 160.0, life: float = 0.4, scale: float = 1.0) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
+	var col := pal(color)
 	var p := CPUParticles2D.new()
 	p.texture = _spark_tex
 	p.emitting = false
 	p.one_shot = true
 	p.explosiveness = 1.0
-	p.amount = maxi(1, amount)
+	p.amount = clampi(amount, 1, BURST_CAP)
 	p.lifetime = life
 	p.direction = Vector2.UP
 	p.spread = 180.0
-	p.gravity = Vector2.ZERO
+	p.gravity = Vector2(0, 120)
 	p.initial_velocity_min = speed * 0.4
 	p.initial_velocity_max = speed
 	p.damping_min = speed * 1.2
 	p.damping_max = speed * 2.0
-	p.scale_amount_min = 0.5 * scale
-	p.scale_amount_max = 1.2 * scale
+	var tx := UnitAnim.TEXEL * (2.0 if scale >= 1.4 else 1.0)
+	p.scale_amount_min = tx
+	p.scale_amount_max = tx
 	var ramp := Gradient.new()
-	ramp.set_color(0, color)
-	ramp.set_color(1, Color(color.r, color.g, color.b, 0.0))
+	ramp.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	var a := 1.0 if color.a > 0.85 else (0.75 if color.a > 0.6 else 0.5)
+	ramp.set_color(0, Color(col, a))
+	ramp.set_offset(1, 0.4)
+	ramp.set_color(1, Color(col, a * 0.75))
+	ramp.add_point(0.65, Color(col, a * 0.5))
+	ramp.add_point(0.85, Color(col, a * 0.25))
 	p.color_ramp = ramp
 	p.global_position = pos
 	p.z_index = 20
@@ -193,8 +211,93 @@ func burst(pos: Vector2, color: Color, amount: int = 10, speed: float = 160.0, l
 	get_tree().create_timer(life + 0.2).timeout.connect(p.queue_free)
 
 
+## Master palette (style bible §2) for snapping code colours to it.
+const PAL := [
+	"140c0e", "1f1a1d", "3a3436", "5d5654", "8f877e", "e9dfc9", "3a2d27", "5a4636", "7c6550", "a08669", "c8b08a",
+	"3e1a12", "763420", "ad5a2a", "d98a45", "3e2a10", "7a5520", "b88a33", "e8c972", "1b222c", "36424f", "5e6d7a",
+	"9aa8ad", "2a2a1c", "59563a", "8f8a5e", "4a2420", "8e4c3b", "c98060", "eeb48c", "142a18", "2b5a2c", "57932f",
+	"9ccf3e", "dcf58a", "2e1830", "5a3254", "8a5474", "c08aa0", "5e260c", "a8520f", "e88a1c", "ffc040", "fff2c0",
+	"9a1e26", "1f5a58", "5cd2c0", "ff4836",
+]
+var _pal: Array[Color] = []
+var _pal_cache: Dictionary = {}
+
+
+func pal(c: Color) -> Color:
+	var key := c.to_html(false)
+	if _pal_cache.has(key):
+		return _pal_cache[key]
+	if _pal.is_empty():
+		for hx in PAL:
+			_pal.append(Color.html(hx))
+	var cc := Color(minf(c.r, 1.0), minf(c.g, 1.0), minf(c.b, 1.0))
+	var best := _pal[0]
+	var bd := INF
+	for q in _pal:
+		var d := (q.r - cc.r) * (q.r - cc.r) * 0.3 + (q.g - cc.g) * (q.g - cc.g) * 0.59 + (q.b - cc.b) * (q.b - cc.b) * 0.11
+		if d < bd:
+			bd = d
+			best = q
+	_pal_cache[key] = best
+	return best
+
+
+## --- Pixel VFX (px_fx.gd) ---------------------------------------------------
+
+## Play a pixel strip once. opts: dir, follow, k, z, tint, speed.
+func fx(id: String, pos: Vector2, opts: Dictionary = {}) -> Node:
+	return px.call("play", id, pos, opts) if px else null
+
+
+func fx_impact(pos: Vector2, material: String) -> void:
+	if px:
+		px.call("impact", pos, material)
+
+
+func fx_explosion(pos: Vector2, radius: float, scorch: bool = true) -> void:
+	if px:
+		px.call("explosion", pos, radius, scorch)
+
+
+func fx_slam(pos: Vector2) -> void:
+	if px:
+		px.call("slam", pos)
+
+
+func fx_death(pos: Vector2, faction: String, big: bool = false) -> void:
+	if px:
+		px.call("death", pos, faction, big)
+
+
+func decal(id: String, pos: Vector2, life: float = 5.0) -> void:
+	if px:
+		px.call("decal", id, pos, life)
+
+
+func status_fx(unit: Node2D, ids: Dictionary, head_y: float) -> void:
+	if px:
+		px.call("status", unit, ids, head_y)
+
+
+## Looping strip attached to a node (sparkles, beams).
+func px_loop(parent: Node, id: String, local_pos: Vector2 = Vector2.ZERO) -> Node:
+	return px.call("loop_on", parent, id, local_pos) if px else null
+
+
+func _on_run_level_up(_lvl: int, _choices: Array) -> void:
+	var pl := get_tree().get_first_node_in_group("player") as Node2D if get_tree() else null
+	if pl:
+		fx("fx_levelup", pl.global_position + Vector2(0, 30), {"follow": pl})
+
+
 func dust_puff(pos: Vector2, amount: int = 4) -> void:
-	burst(pos, Color(0.78, 0.64, 0.45, 0.55), amount, 50.0, 0.45, 1.3)
+	## Bigger puffs (landings, slams, spawns) get the lit pixel kick-up strip.
+	if amount >= 6:
+		fx("fx_kickup", pos + Vector2(0, 4))
+		if amount >= 12:
+			fx("fx_kickup", pos + Vector2(-14, 6))
+			fx("fx_kickup", pos + Vector2(14, 6))
+	burst(pos, Color(0.63, 0.53, 0.41), mini(amount, 6), 50.0, 0.45, 1.0)
 
 
 func float_text(pos: Vector2, text: String, color: Color = Color.WHITE, size: int = 18) -> void:
@@ -372,10 +475,7 @@ func flash(node: CanvasItem, color: Color = Color(3, 3, 3), dur: float = 0.07) -
 
 
 func _make_spark_texture() -> Texture2D:
-	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
-	for x in range(8):
-		for y in range(8):
-			var d := Vector2(x - 3.5, y - 3.5).length() / 4.0
-			var a := clampf(1.0 - d, 0.0, 1.0)
-			img.set_pixel(x, y, Color(1, 1, 1, a * a))
+	## One hard 2x2 white square (tinted per burst; no soft falloff).
+	var img := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
 	return ImageTexture.create_from_image(img)

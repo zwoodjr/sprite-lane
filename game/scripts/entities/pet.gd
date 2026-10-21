@@ -494,7 +494,6 @@ func _bite(enemy: Node2D) -> void:
 	if enemy.has_method("take_damage"):
 		enemy.call("take_damage", dmg, (enemy.global_position - global_position).normalized(), float(_def.get("bite_knock", 30.0)))
 	Juice.sfx_at("hit_flesh", enemy.global_position, -4.0)
-	Juice.burst(enemy.global_position, Color(0.95, 0.75, 0.45), 6, 90.0, 0.25)
 
 func _nearest_enemy(max_d: float) -> Node2D:
 	var best: Node2D = null

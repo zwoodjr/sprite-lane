@@ -629,6 +629,7 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 			Juice.crit_stop()
 		Juice.sfx_at("hit_metal" if faction == EnemyDefs.MACHINE else "hit_flesh", global_position, -3.0)
 		Juice.mob_sfx("hurt", self, -5.0)
+		Juice.fx_impact(global_position + Vector2(0, -6.0 * body_scale) - from_dir.normalized() * 8.0, faction)
 	if from_dir.length() > 0.01:
 		var resist := 0.35 if _archetype() == "brute" else 1.0
 		var k := 220.0 if knock < 0.0 else knock
@@ -726,8 +727,7 @@ func _die() -> void:
 	if pl != null and pl.has_method("on_kill"):
 		pl.call("on_kill", self)
 	Juice.mob_sfx("die", self)
-	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
-	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
+	Juice.fx_death(global_position + Vector2(0, (FEET_Y - 10.0) * body_scale), faction, _archetype() == "brute" or role != "")
 	Juice.shake(0.12 if _archetype() != "brute" else 0.3)
 	## Kill hitstop for every hero (light; heavy for brutes / elites / bosses).
 	Juice.kill_stop(_archetype() == "brute" or role != "")
@@ -828,6 +828,7 @@ func _apply_status_tint() -> void:
 			c = STATUS_TINT[id]
 			break
 	body.modulate = c
+	Juice.status_fx(self, _status, FEET_Y * body_scale - _anim.world_frame_px() * 0.62 - 6.0)
 
 ## Rubble Wall: a mob flying from a big knockback smashes the ones it meets.
 func _tick_rubble(delta: float) -> void:
@@ -988,7 +989,8 @@ func _bloat_burst(params: Dictionary = {}) -> void:
 	var bd: Dictionary = params if not params.is_empty() else FactionDefs.TRAITS["bloated"]
 	var r := float(bd["radius"])
 	RunFx.ring(get_parent(), global_position + Vector2(0, 8), r, Color(0.75, 0.9, 0.35), 0.45, 6.0)
-	Juice.burst(global_position, Color(0.7, 0.85, 0.3), 30, r * 2.2, 0.6, 1.6)
+	Juice.fx("ex_plague", global_position + Vector2(0, -8))
+	Juice.burst(global_position, Color(0.7, 0.85, 0.3), 10, r * 2.2, 0.6, 1.6)
 	Juice.shake(0.25)
 	var p := get_tree().get_first_node_in_group("player") as Node2D
 	if p != null and p.global_position.distance_to(global_position) <= r and p.has_method("take_damage"):

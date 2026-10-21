@@ -184,3 +184,4 @@ func _fire() -> void:
 		bullet.set("ammo", str(_player.call("special_ammo")))
 	get_tree().current_scene.add_child(bullet)
 	Juice.sfx_at("drone_fire", global_position, -3.0)
+	Juice.fx("mz_drone", global_position + aim * 12.0, {"dir": aim, "follow": self})

@@ -68,7 +68,8 @@ static func nearest_enemy(tree: SceneTree, pos: Vector2, radius: float, skip: Ar
 
 ## Damage every enemy in radius through the hero's hit pipeline (on-hit
 ## upgrades / ammo apply). `src` "blast" never re-triggers explosive ammo.
-static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, color: Color, src: String = "blast", knock: float = 260.0, stun: float = 0.0) -> int:
+## look: "fire" (pixel blast + scorch) or "slam" (dust shockwave + cracks).
+static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, color: Color, src: String = "blast", knock: float = 260.0, stun: float = 0.0, look: String = "fire") -> int:
 	if player == null or not is_instance_valid(player):
 		return 0
 	var tree := player.get_tree()
@@ -83,62 +84,71 @@ static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, c
 		hits += 1
 	damage_breakables(tree, pos, radius, dmg)
 	ring(player.get_parent(), pos, radius, color, 0.32)
-	LightFx.flash(player.get_parent(), pos, radius * 2.4, Color(1.0, 0.6, 0.25, 0.7), 0.35)
-	Juice.burst(pos, color, 18, radius * 2.6, 0.35, 1.5)
-	Juice.burst(pos, Color(0.5, 0.45, 0.4, 0.7), 8, radius, 0.6, 2.0)
+	if look == "slam":
+		Juice.fx_slam(pos)
+		Juice.dust_puff(pos, 12)
+	else:
+		LightFx.flash(player.get_parent(), pos, radius * 2.4, Color(1.0, 0.6, 0.25, 0.7), 0.35)
+		Juice.fx_explosion(pos, radius)
 	return hits
 
 
-## Expanding ground ring (squashed for the 3/4 view).
+## Expanding ground ring (squashed for the 3/4 view): a 1-texel palette line
+## that steps down in alpha (no additive glow, bible §5).
 static func ring(parent: Node, pos: Vector2, radius: float, color: Color, life: float = 0.3, width: float = 5.0) -> void:
 	if parent == null:
 		return
 	var l := Line2D.new()
 	var pts := PackedVector2Array()
-	for i in range(33):
-		var a := TAU * i / 32.0
+	for i in range(41):
+		var a := TAU * i / 40.0
 		pts.append(Vector2(cos(a), sin(a) * 0.6) * radius)
 	l.points = pts
-	l.width = width
-	l.default_color = color
+	l.width = UnitAnim.TEXEL * (2.0 if width >= 4.0 else 1.0)
+	l.default_color = Juice.pal(color)
 	l.global_position = pos
 	l.z_index = 3
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	l.material = add
 	l.scale = Vector2(0.35, 0.35)
 	parent.add_child(l)
 	var tw := l.create_tween()
-	tw.set_parallel(true)
 	tw.tween_property(l, "scale", Vector2.ONE, life).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	tw.tween_property(l, "modulate:a", 0.0, life).set_delay(life * 0.4)
-	tw.chain().tween_callback(l.queue_free)
+	tw.tween_callback(func() -> void: l.modulate.a = 0.5)
+	tw.tween_interval(0.06)
+	tw.tween_callback(func() -> void: l.modulate.a = 0.25)
+	tw.tween_interval(0.06)
+	tw.tween_callback(l.queue_free)
 
 
-## Jagged electric arc between two points.
+## Jagged electric arc between two points: teal body + bone core, 1-2 texels,
+## snapped to whole texels, blinks out in alpha steps.
 static func zap(parent: Node, a: Vector2, b: Vector2, color: Color = Color(0.55, 0.85, 1.0), life: float = 0.22, width: float = 3.0) -> void:
 	if parent == null:
 		return
-	var l := Line2D.new()
 	var pts := PackedVector2Array()
-	var seg := 7
+	var seg := maxi(4, int(a.distance_to(b) / 18.0))
 	var nrm := (b - a).orthogonal().normalized()
 	for i in range(seg + 1):
 		var t := float(i) / seg
-		var jitter := 0.0 if i == 0 or i == seg else randf_range(-10.0, 10.0)
-		pts.append(a.lerp(b, t) + nrm * jitter)
-	l.points = pts
-	l.width = width
-	l.default_color = color * 1.4
-	l.z_index = 6
-	l.top_level = true
-	var add := CanvasItemMaterial.new()
-	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	l.material = add
-	parent.add_child(l)
-	var tw := l.create_tween()
-	tw.tween_property(l, "modulate:a", 0.0, life)
-	tw.tween_callback(l.queue_free)
+		var jitter := 0.0 if i == 0 or i == seg else randf_range(-9.0, 9.0)
+		pts.append(((a.lerp(b, t) + nrm * jitter) / UnitAnim.TEXEL).round() * UnitAnim.TEXEL)
+	var root := Node2D.new()
+	root.top_level = true
+	root.z_index = 6
+	parent.add_child(root)
+	var cols := [Juice.pal(color), Color("e9dfc9")]
+	var widths := [UnitAnim.TEXEL * (3.0 if width >= 3.0 else 2.0), UnitAnim.TEXEL]
+	for k in range(2):
+		var l := Line2D.new()
+		l.points = pts
+		l.width = widths[k]
+		l.default_color = cols[k]
+		l.joint_mode = Line2D.LINE_JOINT_SHARP
+		root.add_child(l)
+	var tw := root.create_tween()
+	tw.tween_interval(life * 0.6)
+	tw.tween_callback(func() -> void: root.modulate.a = 0.5)
+	tw.tween_interval(life * 0.4)
+	tw.tween_callback(root.queue_free)
 
 
 ## Play a sprite strip once at pos (world_size = on-screen frame width).
