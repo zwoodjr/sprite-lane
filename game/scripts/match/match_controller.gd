@@ -35,6 +35,21 @@ var _next_boss_at: float = INF
 ## In-run events (Part 8) + Pad Heat guards for the next window.
 var events: Node
 var _pad_guards: int = 0
+## Cold open (audit #9): the first-ever run starts with no enemies and a frozen
+## clock until the tutorial's move lesson is done.
+var quiet: bool = false
+## Early threat ramp (audit #7): small pincer packs in the first minute so
+## tier 1 actually lands a hit in ~30 s. [match time, mob count].
+const OPENING_WAVES := [[9.0, 6], [20.0, 7], [32.0, 8]]
+## Waves mix fast lungers with spitters: a kiting ranged hero can outrun one
+## side, not both, and spitters reach past the hero's comfort range.
+const WAVE_KINDS := ["scrap_hound", "rad_gator", "toxic_scorp", "glow_moth", "coil_spider", "dune_stalker"]
+const COLD_OPEN_MOBS := 3
+const AMBUSH_PER_WAVE := 2
+const AMBUSH_TELL := 0.7
+const AMBUSH_HP := 2.2
+const AMBUSH_KINDS := ["rad_gator", "dune_stalker"]
+var _wave_i: int = 0
 ## Depth Update E1: medicine crates, plague fog, exposure.
 var plague: Node
 ## E2: raider crews on the tier's schedule; elites alternate plague / machine.
@@ -131,6 +146,76 @@ func _ready() -> void:
 	_radio_ping_at = 18.0 * GameState.timer_scale()
 	if GameState.fast_timers:
 		_radio_ping_at = 1.2
+	if not GameState.tutorial_done and not GameState.fast_timers:
+		quiet = true
+		for e in get_tree().get_nodes_in_group("enemies"):
+			e.queue_free()
+
+
+## Tutorial move lesson done: the clock starts and three weak mobs walk in.
+func release_cold_open() -> void:
+	if not quiet:
+		return
+	quiet = false
+	_wave_i = OPENING_WAVES.size()
+	for i in range(COLD_OPEN_MOBS):
+		var e := _spawn_pack_mob(Vector2.RIGHT.rotated(-PI * 0.5 + (i - 1) * 0.5), 0.5)
+		if e:
+			e.set("damage", float(e.get("damage")) * 0.5)
+
+
+func _tick_opening_waves() -> void:
+	if _wave_i >= OPENING_WAVES.size() or GameState.fast_timers:
+		return
+	var w: Array = OPENING_WAVES[_wave_i]
+	if _match_time < float(w[0]) * GameState.timer_scale():
+		return
+	_wave_i += 1
+	## Three groups from three sides, a little quicker on the approach, so a
+	## kiting ranged hero can't clear every lane before contact. T1 mobs hit
+	## for ~8% of hero HP: a scare, not a wipe.
+	var base := randf() * TAU
+	var n := int(w[1])
+	for i in range(n):
+		var side := base + TAU / 3.0 * float(i % 3) + randf_range(-0.3, 0.3)
+		var e := _spawn_pack_mob(Vector2.RIGHT.rotated(side + randf_range(-0.25, 0.25)), 1.0, str(WAVE_KINDS[(i + _wave_i) % WAVE_KINDS.size()]))
+		if e:
+			e.set("speed", float(e.get("speed")) * 1.25)
+	## Plus a two-spitter ambush that burrows up close (dust telegraph first),
+	## so even a hero who out-ranges every lane has to dodge something.
+	for j in range(AMBUSH_PER_WAVE):
+		var at := player.global_position + Vector2.RIGHT.rotated(base + PI / 3.0 + PI * float(j)) * randf_range(200.0, 240.0)
+		if not _spot_free(at, 26.0):
+			continue
+		Juice.dust_puff(at, 12)
+		Juice.burst(at, Color(0.85, 0.7, 0.45, 0.7), 10, 70.0, 0.6, 1.4)
+		get_tree().create_timer(AMBUSH_TELL, false).timeout.connect(_ambush_pop.bind(at, str(AMBUSH_KINDS[j % AMBUSH_KINDS.size()])))
+
+
+func _ambush_pop(at: Vector2, kind: String) -> void:
+	if _ended or not is_instance_valid(player):
+		return
+	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	## Tough enough to survive one volley, so the spitter gets its shot off.
+	enemy.setup(at, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * AMBUSH_HP, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, kind)
+	enemy.set_meta("ambush", true)
+	world.add_child(enemy)
+	enemy.set("_spawn_in", maxf(float(enemy.get("_spawn_in")), 0.5))
+	enemy.set("_fire_cd", 0.2)
+	Juice.dust_puff(at, 8)
+
+
+func _spawn_pack_mob(dir: Vector2, hp_k: float, kind: String = "") -> Node:
+	if not is_instance_valid(player):
+		return null
+	var spot := _spawn_point_outside_view(dir)
+	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	var k := kind if kind != "" and not EnemyDefs.get_kind(kind).is_empty() else _roll_enemy_kind()
+	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * hp_k, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, k)
+	world.add_child(enemy)
+	return enemy
 
 func _spawn_pet() -> void:
 	if not is_instance_valid(player):
@@ -235,8 +320,13 @@ func _process(delta: float) -> void:
 		## Banked elsewhere (e.g. Abandon from the pause menu) — stop the sim here.
 		_ended = true
 		return
+	if quiet:
+		hud.update_match(_phases[_phase_index], _phase_time_left, GameState.threat_level, GameState.loot_mult, player)
+		hud.set_schedule_clock(_elapsed_in_phases)
+		return
 	_match_time += delta
 	_update_spawns(delta)
+	_tick_opening_waves()
 	_tick_specials()
 	if _storm_left >= 0.0:
 		_tick_storm(delta)

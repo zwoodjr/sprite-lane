@@ -42,6 +42,7 @@ var _player: Node = null
 
 func _ready() -> void:
 	layer = 20
+	add_to_group("touch_controls")
 	## ALWAYS so finger-up events that happen while a menu has the tree paused
 	## still release the stick / buttons (otherwise they stay "held" on resume).
 	process_mode = Node.PROCESS_MODE_ALWAYS

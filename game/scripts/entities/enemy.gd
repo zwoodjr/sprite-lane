@@ -592,6 +592,9 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 	## Phased Ash-Wraiths: hits pass straight through.
 	if phased:
 		return
+	## Burrow ambushers (opening waves) can't be hit while still emerging.
+	if _spawn_in > 0.0 and has_meta("ambush"):
+		return
 	## Downed (Crater City): any hit finishes it for good.
 	if _downed_left > 0.0:
 		_downed_left = 0.0

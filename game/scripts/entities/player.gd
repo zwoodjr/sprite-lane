@@ -1466,13 +1466,29 @@ func _spawn_bullet(origin: Vector2, aim: Vector2, dmg: float, crit: bool, spd: f
 func _start_reload() -> void:
 	if _reload_left > 0.0 or is_melee() or GameState.quirk_fx("no_reload") > 0.0:
 		return
-	_reload_left = float(_weapon.get("reload_time", 1.4))
+	_reload_total = _reload_time()
+	_reload_left = _reload_total
 	Juice.sfx("reload")
 	ammo_changed.emit(0, _mag_size(), true)
 
 func get_reload_ratio() -> float:
-	var t := float(_weapon.get("reload_time", 1.4))
+	var t := _reload_total
 	return 1.0 - _reload_left / t if _reload_left > 0.0 and t > 0.0 else 1.0
+
+
+## Reload tuning (audit #7): ranged heroes spent 50-65% of a run reloading.
+## Every reload is 40% shorter; reloading while on the move with nothing in
+## range (the auto top-up) is quicker still, so fights start loaded.
+var _reload_total: float = 1.0
+const RELOAD_TUNE := 0.6
+const RELOAD_MOVING_TUNE := 0.75
+
+
+func _reload_time() -> float:
+	var t := float(_weapon.get("reload_time", 1.4)) * RELOAD_TUNE
+	if _target == null and velocity.length() > 40.0:
+		t *= RELOAD_MOVING_TUNE
+	return t
 
 ## =============================================================================
 ## Damage

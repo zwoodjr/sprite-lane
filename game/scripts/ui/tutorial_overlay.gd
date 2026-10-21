@@ -4,14 +4,17 @@ extends Control
 ## actually do the thing (move, shoot, dash…) and points at where to do it.
 ## Marks GameState.tutorial_done when finished or when the run ends.
 
+## Cold open (audit #9): the run starts quiet — no enemies and a frozen clock —
+## until the player has moved; then a few weak mobs walk in for the attack
+## lesson (MatchController.release_cold_open). One prompt at a time, short.
 const STEPS := [
-	{"id": "move", "text": "Drag anywhere on the left side to MOVE. The stick appears under your thumb.", "target": "left"},
-	{"id": "shoot", "text": "Attacks are automatic: your hero hits the closest enemy in range. Just steer into range.", "target": "left"},
-	{"id": "dash", "text": "Tap DASH to dodge. You're invincible for a split second — dash through bullets!", "target": "dash"},
-	{"id": "fight", "text": "A red wedge means an enemy is about to attack. Take one down!", "target": ""},
-	{"id": "nav", "text": "Gold arrows at the screen edge point to extract pads. They open when the top timer hits 0.", "target": "timer"},
-	{"id": "wait_open", "text": "Survive and loot crates until the extract opens. Tap pause any time for help.", "target": ""},
-	{"id": "extract", "text": "EXTRACT OPEN! Walk onto a gold pad to leave — or stay longer to raise Threat for a bigger payout.", "target": ""},
+	{"id": "move", "text": "Drag on the left side to move.", "target": "left"},
+	{"id": "shoot", "text": "Enemies incoming! You attack on your own — just steer close.", "target": ""},
+	{"id": "dash", "text": "Tap DASH to dodge. You can't be hurt mid-dash.", "target": "dash"},
+	{"id": "fight", "text": "Red marks on the ground = an attack is coming. Step out!", "target": ""},
+	{"id": "nav", "text": "Arrows on the screen edge point to the extract pads.", "target": "timer"},
+	{"id": "wait_open", "text": "Survive and loot until the pads open.", "target": ""},
+	{"id": "extract", "text": "Pads are open! Stand on one to get out with your loot.", "target": ""},
 ]
 
 var _hud: Node
@@ -38,16 +41,16 @@ func setup(hud: Node) -> void:
 	var v := VBoxContainer.new()
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.add_child(v)
-	_counter = UiTheme.body_label("", 12, UiTheme.AMBER)
+	_counter = UiTheme.body_label("", 15, UiTheme.AMBER)
 	_counter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(_counter)
-	_text = UiTheme.body_label("", 17)
+	_text = UiTheme.body_label("", 21)
 	_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_text.custom_minimum_size = Vector2(320, 0)
+	_text.custom_minimum_size = Vector2(400, 0)
 	v.add_child(_text)
 	_bar = ProgressBar.new()
 	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bar.custom_minimum_size = Vector2(440, 6)
+	_bar.custom_minimum_size = Vector2(400, 6)
 	_bar.show_percentage = false
 	_bar.max_value = 1.0
 	UiTheme.skin_bar(_bar, UiTheme.AMBER)
@@ -62,6 +65,8 @@ func event(id: String) -> void:
 		_enter(STEPS.size() - 1)
 
 func _enter(i: int) -> void:
+	if i == 1 and _hud and _hud.get_parent() and _hud.get_parent().has_method("release_cold_open"):
+		_hud.get_parent().call("release_cold_open")
 	_step = i
 	_progress = 0.0
 	_step_t = 0.0
@@ -72,7 +77,7 @@ func _enter(i: int) -> void:
 		_start_pos = p.global_position
 	var s: Dictionary = STEPS[_step]
 	_text.text = str(s["text"])
-	_counter.text = "TUTORIAL  %d / %d" % [mini(_step + 1, STEPS.size()), STEPS.size()]
+	_counter.text = "%d / %d" % [mini(_step + 1, STEPS.size()), STEPS.size()]
 	Juice.sfx("ui_tap")
 	_panel.modulate.a = 0.0
 	_panel.create_tween().tween_property(_panel, "modulate:a", 1.0, 0.25)
@@ -142,9 +147,14 @@ func _draw() -> void:
 	var r := 70.0
 	match target:
 		"left":
-			## Single-stick ghost lives bottom-center (matches touch_controls).
-			pos = Vector2(vp.x * 0.5, vp.y * 0.78)
-			r = 100.0
+			## Point at the ghost MOVE stick itself: a finger dot sweeps inside
+			## it (no second stick / ring drawn — audit #9).
+			var tc := get_tree().get_first_node_in_group("touch_controls")
+			pos = tc.call("_ghost_pos") if tc and tc.has_method("_ghost_pos") else Vector2(vp.x * 0.26, vp.y * 0.8)
+			var swipe := Vector2(cos(_t * 1.6), sin(_t * 1.6) * 0.6) * 34.0
+			draw_circle(pos + swipe, 15.0, Color(1, 0.9, 0.7, 0.6))
+			draw_arc(pos + swipe, 15.0, 0.0, TAU, 24, Color(1, 1, 1, 0.8), 2.0, true)
+			return
 		"right":
 			pos = Vector2(vp.x * 0.72, vp.y * 0.72)
 			r = 100.0
