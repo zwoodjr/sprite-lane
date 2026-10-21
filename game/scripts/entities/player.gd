@@ -1397,9 +1397,14 @@ func _spawn_smear(shape: String, m: Dictionary, dir: Vector2) -> void:
 	var id := str(m.get("px", def[0]))
 	var base := float(m.get("px_base", def[1]))
 	var reach := float(m.get("length", 140.0)) if id == "sm_chain" else float(m.get("radius", 70.0))
-	## Only grow (reach upgrades); never shrink pixel art below 1 texel.
-	var k := clampf(reach / base, 1.0, 1.6) if reach > base * 1.12 else 1.0
-	Juice.fx(id, global_position + Vector2(0, -10), {"dir": dir, "follow": self, "k": k})
+	## Reach upgrades never scale the pixel art: pick the strip drawn
+	## pixel-exact at the nearest longer reach (gen_fx_px.py "_r125"/"_r150").
+	var ratio := reach / base
+	if ratio >= 1.38 and Juice.px and Juice.px.call("has", id + "_r150"):
+		id += "_r150"
+	elif ratio >= 1.12 and Juice.px and Juice.px.call("has", id + "_r125"):
+		id += "_r125"
+	Juice.fx(id, global_position + Vector2(0, -10), {"dir": dir, "follow": self})
 
 
 ## One hero projectile with the run's Piercing / Ricochet / special ammo.

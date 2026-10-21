@@ -12,7 +12,7 @@ extends RefCounted
 ##     time, attack 12, hit 12, death 10), looping vs one-shot vs hold-last
 ##   - feet anchored: frame bottom − 10 px sits on `feet_y` of the unit
 ##   - frame size → world size via world_frame_px (per-unit scale)
-##   - facing flip, white hit flash (shared shader, so batching survives)
+##   - facing flip, BONE hit flash (shared shader, so batching survives)
 ## `frame_event(state, frame)` fires whenever a frame is shown (frame 0
 ## included), which is how weapon/attack JSON hit frames trigger damage.
 ##
@@ -233,7 +233,7 @@ void fragment() {
 static func flash_material() -> ShaderMaterial:
 	if _flash_mat == null:
 		var sh := Shader.new()
-		sh.code = "shader_type canvas_item;\nvoid fragment() {\n\tvec4 t = texture(TEXTURE, UV);\n\tCOLOR = vec4(mix(t.rgb, vec3(1.0), 0.9), t.a * COLOR.a);\n}\n"
+		sh.code = "shader_type canvas_item;\nvoid fragment() {\n\tvec4 t = texture(TEXTURE, UV);\n\tCOLOR = vec4(0.914, 0.875, 0.788, t.a * COLOR.a);\n}\n"
 		_flash_mat = ShaderMaterial.new()
 		_flash_mat.shader = sh
 	return _flash_mat

@@ -236,7 +236,7 @@ def muzzle_fn(L, W, petals=True, core=BONE, mid=DUST[3], outer=DUST[2], smoke=Fa
             # side petals (brake / star points), 45 degrees back
             for s in (-1, 1):
                 pv = s * (Wf * 0.55 + (u - 1) * 0.55)
-                pm = (u >= 1) & (u <= 2 + Wf * 0.9) & (np.abs(v - pv) < 0.75)
+                pm = (u >= 1) & (u <= 2 + Wf * 0.9) & (np.abs(v - pv) < 1.1)
                 paint(col, al, pm, mid, 255)
         if smoke and f >= 1:
             # launcher back-blast puffs behind the muzzle (fade)
@@ -251,17 +251,19 @@ def muzzle_fn(L, W, petals=True, core=BONE, mid=DUST[3], outer=DUST[2], smoke=Fa
 
 
 def gen_muzzles():
+    # Polish pass 2: redrawn ~1.6x longer / wider (2-px brake petals) so the
+    # flash reads on iPhone at 1x instead of a 3-px flicker.
     # Rook: launcher blast — fat flash + back-blast smoke
-    emit_dir("mz_launcher", muzzle_fn(14, 6.5, True, smoke=True), 3, 30, (-11, 16, -9, 9))
-    # Vesper: heavy rifle — long, narrow, brake petals; plague-tinted outer for the coated slug
-    emit_dir("mz_rifle", muzzle_fn(19, 4.0, True), 3, 30, (-2, 21, -7, 7))
+    emit_dir("mz_launcher", muzzle_fn(22, 10.0, True, smoke=True), 3, 30, (-16, 25, -14, 14))
+    # Vesper: heavy rifle — long, narrow, brake petals
+    emit_dir("mz_rifle", muzzle_fn(28, 6.5, True), 3, 30, (-2, 31, -10, 10))
     # Cinder: suppressor AR — compact, hotter core
-    emit_dir("mz_ar", muzzle_fn(12, 3.5, True), 3, 30, (-2, 14, -6, 6))
-    # Helm: pilot sidearm — small bone-white pop
-    emit_dir("mz_pistol", muzzle_fn(8, 3.0, False, core=BONE, mid=DUST[4], outer=DUST[3]), 3, 30, (-2, 10, -5, 5))
+    emit_dir("mz_ar", muzzle_fn(20, 6.0, True), 3, 30, (-2, 23, -9, 9))
+    # Helm: pilot sidearm — bone-white pop
+    emit_dir("mz_pistol", muzzle_fn(14, 5.0, True, core=BONE, mid=DUST[4], outer=DUST[3]), 3, 30, (-2, 17, -8, 8))
     # Helm's drones + SMG-class: 2 frames
-    emit_dir("mz_drone", muzzle_fn(6, 2.5, False, core=BONE, mid=TEAL[1], outer=TEAL[0], frames=2), 2, 30, (-2, 8, -4, 4))
-    emit_dir("mz_smg", muzzle_fn(9, 3.0, True, frames=2), 2, 30, (-2, 11, -5, 5))
+    emit_dir("mz_drone", muzzle_fn(10, 4.0, False, core=BONE, mid=TEAL[1], outer=TEAL[0], frames=2), 2, 30, (-2, 13, -6, 6))
+    emit_dir("mz_smg", muzzle_fn(15, 5.0, True, frames=2), 2, 30, (-2, 18, -8, 8))
 
 
 # ---------------------------------------------------------------- projectiles
@@ -378,27 +380,49 @@ def gen_projectiles():
     emit("smoke_puff", fr, 12, z=4)
 
 
-# ---------------------------------------------------------------- impacts (16)
+# ---------------------------------------------------------------- impacts (24)
+def dot(a, x, y, c, al=255, s=2):
+    """Chunky s x s pixel (sparks / drops stay readable on iPhone at 1x)."""
+    for j in range(s):
+        for i in range(s):
+            put(a, x + i - s // 2, y + j - s // 2, c, al)
+
+
+def thick(a, x0, y0, x1, y1, c, al=255):
+    """2-px line (1 px reads as noise on a phone)."""
+    line(a, x0, y0, x1, y1, c, al)
+    line(a, x0 + 1, y0, x1 + 1, y1, c, al)
+
+
 def gen_impacts():
-    S, c = 16, 8.0
+    # Polish pass 2: 24-px frames, redrawn bigger (1.5x geometry, 2-px sparks and
+    # drops) so hits read on iPhone at 1x. Frame 0 (the BONE flash) is held for
+    # 2 ticks per the bible ("hold the brightest frame").
+    S, c, Q = 24, 12.0, 1.5
+    A = [255, 255, 128]
+
+    def hold(fr):
+        return [fr[0]] + fr
+
     # generic spark: bone cross -> amber ring -> ash
     fr = []
     for f in range(4):
         a = canvas(S, S)
         if f == 0:
-            for d in range(-3, 4):
+            for d in range(-5, 6):
                 put(a, c + d, c, BONE); put(a, c, c + d, BONE)
-            disc(a, c, c, 1.6, BONE)
-            for k in (-2, 2):
-                put(a, c + k, c + k, DUST[3]); put(a, c + k, c - k, DUST[3])
+                put(a, c + d, c - 1, BONE); put(a, c - 1, c + d, BONE)
+            disc(a, c - 0.5, c - 0.5, 2.6, BONE)
+            for k in (-3, 3):
+                dot(a, c + k, c + k, DUST[3]); dot(a, c + k, c - k, DUST[3])
         else:
-            r = 2 + f * 2
+            r = int((2 + f * 2) * Q)
             for k in range(8):
                 t = k * math.pi / 4 + 0.3
-                for dd in range(r - 1, r + 1):
-                    put(a, c + dd * math.cos(t), c + dd * math.sin(t), [DUST[3], DUST[2], ASH[2]][f - 1], [255, 255, 128][f - 1])
+                for dd in range(r - 2, r + 1):
+                    put(a, c + dd * math.cos(t), c + dd * math.sin(t), [DUST[3], DUST[2], ASH[2]][f - 1], A[f - 1])
         fr.append(a)
-    emit("hit_spark", fr, 24)
+    emit("hit_spark", hold(fr), 24)
 
     # flesh / plague: purple-green splatter
     rnd = random.Random(3)
@@ -407,19 +431,18 @@ def gen_impacts():
     for f in range(4):
         a = canvas(S, S)
         if f == 0:
-            disc(a, c, c, 3.5, FLESH[2]); disc(a, c - 0.5, c - 0.5, 2.0, FLESH[3]); put(a, c, c, BONE)
+            disc(a, c, c, 5.2, FLESH[2]); disc(a, c - 1, c - 1, 3.0, FLESH[3]); dot(a, c - 1, c - 1, BONE)
         else:
-            disc(a, c, c + f * 0.5, [3.0, 2.0, 1.0][f - 1], FLESH[[2, 1, 1][f - 1]], [255, 255, 128][f - 1])
+            disc(a, c, c + f * 0.7, [4.5, 3.0, 1.6][f - 1], FLESH[[2, 1, 1][f - 1]], A[f - 1])
             for i, (t, sp) in enumerate(drops):
-                d = (2.5 + f * 1.8) * sp
-                x, y = c + math.cos(t) * d, c + math.sin(t) * d + f * f * 0.3
+                d = (2.5 + f * 1.8) * sp * Q
+                x, y = c + math.cos(t) * d, c + math.sin(t) * d + f * f * 0.45
                 col = PLAGUE[3] if i % 3 == 0 else (FLESH[3] if i % 3 == 1 else FLESH[2])
-                al = [255, 255, 128][f - 1]
-                put(a, x, y, col, al)
+                dot(a, x, y, col, A[f - 1], 2 if f < 3 else 1)
                 if f == 1:
-                    put(a, x - math.cos(t), y - math.sin(t), FLESH[1], al)
+                    dot(a, x - math.cos(t) * 2, y - math.sin(t) * 2, FLESH[1], A[f - 1], 1)
         fr.append(a)
-    emit("hit_flesh", fr, 24)
+    emit("hit_flesh", hold(fr), 24)
 
     # machine: sparks + scrap bits
     rnd = random.Random(7)
@@ -429,22 +452,23 @@ def gen_impacts():
     for f in range(4):
         a = canvas(S, S)
         if f == 0:
-            disc(a, c, c, 2.5, DUST[4]); disc(a, c, c, 1.3, BONE)
+            disc(a, c - 0.5, c - 0.5, 3.8, DUST[4]); disc(a, c - 0.5, c - 0.5, 2.0, BONE)
             for k in range(4):
                 t = k * math.pi / 2 + 0.78
-                line(a, c + math.cos(t) * 2, c + math.sin(t) * 2, c + math.cos(t) * 5, c + math.sin(t) * 5, DUST[3])
+                thick(a, c + math.cos(t) * 3, c + math.sin(t) * 3, c + math.cos(t) * 8, c + math.sin(t) * 8, DUST[3])
         else:
-            for i, (t, s) in enumerate(sp):
-                d = (2 + f * 2.2) * s
-                x, y = c + math.cos(t) * d, c + math.sin(t) * d + (f - 1) * 0.8
+            for i, (t, s_) in enumerate(sp):
+                d = (2 + f * 2.2) * s_ * Q
+                x, y = c + math.cos(t) * d, c + math.sin(t) * d + (f - 1) * 1.2
                 if i < 5:
-                    streak(a, x, y, t, 3 if f == 1 else 2, DUST[4] if f < 3 else DUST[2], DUST[2] if f < 3 else DUST[1])
+                    for o in (0, 1):
+                        streak(a, x + o, y, t, 4 if f == 1 else 3, DUST[4] if f < 3 else DUST[2], DUST[2] if f < 3 else DUST[1])
                 else:
-                    chunk(a, x, y, 2, 2, STEEL[3], STEEL[1])
+                    chunk(a, x, y, 3, 3, STEEL[3], STEEL[1])
             if f == 3:
                 fade(a, A50)
         fr.append(a)
-    emit("hit_machine", fr, 24)
+    emit("hit_machine", hold(fr), 24)
 
     # raider: blood drops + cloth puff
     rnd = random.Random(11)
@@ -453,16 +477,17 @@ def gen_impacts():
     for f in range(4):
         a = canvas(S, S)
         if f == 0:
-            disc(a, c, c, 2.6, BLOOD); put(a, c - 1, c - 1, BONE)
+            disc(a, c, c, 4.0, BLOOD); dot(a, c - 1, c - 1, BONE)
         else:
-            puff(a, c + 1, c - f * 0.5, 1.5 + f, [191, 128, 64][f - 1], (CLOTH[0], CLOTH[1], CLOTH[2]))
-            for (t, s) in drops:
-                d = (2 + f * 1.8) * s
-                put(a, c + math.cos(t) * d, c + math.sin(t) * d + f * f * 0.4, BLOOD, [255, 255, 128][f - 1])
+            puff(a, c + 1, c - f * 0.7, (1.5 + f) * Q, [191, 128, 64][f - 1], (CLOTH[0], CLOTH[1], CLOTH[2]))
+            for (t, s_) in drops:
+                d = (2 + f * 1.8) * s_ * Q
+                x, y = c + math.cos(t) * d, c + math.sin(t) * d + f * f * 0.6
+                dot(a, x, y, BLOOD, A[f - 1], 2 if f < 3 else 1)
                 if f == 1:
-                    put(a, c + math.cos(t) * d, c + math.sin(t) * d + 1, RUST[0])
+                    put(a, x, y + 1, RUST[0])
         fr.append(a)
-    emit("hit_raider", fr, 24)
+    emit("hit_raider", hold(fr), 24)
 
     # ground / props: dust chips + earth puff
     rnd = random.Random(5)
@@ -471,66 +496,66 @@ def gen_impacts():
     for f in range(4):
         a = canvas(S, S)
         if f == 0:
-            disc(a, c, c + 2, 2.4, EARTH[4]); put(a, c, c + 2, BONE)
+            disc(a, c, c + 3, 3.6, EARTH[4]); dot(a, c - 1, c + 2, BONE)
         else:
-            puff(a, c, c + 2 - f * 0.6, 1.8 + f * 1.1, [255, 191, 128][f - 1], (EARTH[1], EARTH[2], EARTH[3]))
-            for (t, s) in chips:
-                d = (2.5 + f * 2) * s
-                x, y = c + math.cos(t) * d, c + 2 + math.sin(t) * d + f * f * 0.6
-                chunk(a, x, y, 2 if s > 0.85 else 1, 1 if s > 0.85 else 1, EARTH[3], EARTH[1], [255, 255, 191][f - 1])
+            puff(a, c, c + 3 - f * 0.9, (1.8 + f * 1.1) * Q, [255, 191, 128][f - 1], (EARTH[1], EARTH[2], EARTH[3]))
+            for (t, s_) in chips:
+                d = (2.5 + f * 2) * s_ * Q
+                x, y = c + math.cos(t) * d, c + 3 + math.sin(t) * d + f * f * 0.9
+                chunk(a, x, y, 3 if s_ > 0.85 else 2, 2, EARTH[3], EARTH[1], [255, 255, 191][f - 1])
         fr.append(a)
-    emit("hit_dust", fr, 24)
+    emit("hit_dust", hold(fr), 24)
 
     # special-ammo hits
-    def elem_hit(name, core, mid, outer, kind):
+    def elem_hit(name, kind):
         rnd = random.Random(sum(map(ord, name)))
         fr = []
         for f in range(4):
             a = canvas(S, S)
             if kind == "fire":
                 if f == 0:
-                    disc(a, c, c, 3.5, DUST[2]); disc(a, c, c, 2.2, DUST[3]); disc(a, c, c - 0.5, 1.2, BONE)
+                    disc(a, c, c, 5.2, DUST[2]); disc(a, c, c, 3.3, DUST[3]); disc(a, c, c - 0.7, 1.8, BONE)
                 else:
                     for k in range(5):
-                        x = c - 4 + k * 2 + (f % 2)
-                        hgt = [5, 7, 4, 6, 3][k] - f
+                        x = c - 6 + k * 3 + (f % 2)
+                        hgt = int(([5, 7, 4, 6, 3][k] - f) * Q)
                         for y in range(max(0, hgt)):
-                            col = DUST[1] if y < 1 else (DUST[2] if y < hgt * 0.6 else DUST[3])
-                            put(a, x, c + 3 - y - f, col, 255 if f < 3 else 128)
-                    put(a, c + rnd.randint(-3, 3), c - 4 - f, DUST[4])
+                            col = DUST[1] if y < 2 else (DUST[2] if y < hgt * 0.6 else DUST[3])
+                            for o in (0, 1):
+                                put(a, x + o, c + 5 - y - f, col, 255 if f < 3 else 128)
+                    dot(a, c + rnd.randint(-4, 4), c - 6 - f, DUST[4])
             elif kind == "shock":
                 if f == 0:
-                    disc(a, c, c, 2, BONE)
+                    disc(a, c - 0.5, c - 0.5, 3.0, BONE)
                     for k in range(4):
                         t = k * math.pi / 2 + 0.4
-                        line(a, c, c, c + math.cos(t) * 6, c + math.sin(t) * 6, TEAL[1])
+                        thick(a, c, c, c + math.cos(t) * 9, c + math.sin(t) * 9, TEAL[1])
                 else:
-                    pts = [(c, c)]
                     for k in range(3):
                         t = rnd.uniform(0, 2 * math.pi)
                         x, y = c, c
-                        for s in range(3 + f):
-                            nx, ny = x + math.cos(t) * 2, y + math.sin(t) * 2
+                        for s_ in range(3 + f):
+                            nx, ny = x + math.cos(t) * 3, y + math.sin(t) * 3
                             t += rnd.uniform(-0.9, 0.9)
-                            line(a, x, y, nx, ny, TEAL[1] if s < 2 else TEAL[0], 255 if f < 3 else 128)
+                            thick(a, x, y, nx, ny, TEAL[1] if s_ < 2 else TEAL[0], 255 if f < 3 else 128)
                             x, y = nx, ny
-                        put(a, x, y, BONE)
+                        dot(a, x, y, BONE)
             elif kind == "frost":
                 if f == 0:
-                    disc(a, c, c, 2.5, BONE)
-                r = 2 + f * 1.6
+                    disc(a, c - 0.5, c - 0.5, 3.8, BONE)
+                r = (2 + f * 1.6) * Q
                 for k in range(6):
                     t = k * math.pi / 3
                     x, y = c + math.cos(t) * r, c + math.sin(t) * r
-                    line(a, c + math.cos(t) * (r - 2), c + math.sin(t) * (r - 2), x, y, STEEL[3] if f < 3 else TEAL[0], 255 if f < 3 else 128)
-                    put(a, x, y, BONE if f < 2 else TEAL[1])
+                    thick(a, c + math.cos(t) * (r - 3), c + math.sin(t) * (r - 3), x, y, STEEL[3] if f < 3 else TEAL[0], 255 if f < 3 else 128)
+                    dot(a, x, y, BONE if f < 2 else TEAL[1])
                 if f == 1:
-                    disc(a, c, c, 1.5, TEAL[1])
+                    disc(a, c - 0.5, c - 0.5, 2.2, TEAL[1])
             fr.append(a)
-        emit(name, fr, 24)
-    elem_hit("hit_fire", None, None, None, "fire")
-    elem_hit("hit_shock", None, None, None, "shock")
-    elem_hit("hit_frost", None, None, None, "frost")
+        emit(name, hold(fr), 24)
+    elem_hit("hit_fire", "fire")
+    elem_hit("hit_shock", "shock")
+    elem_hit("hit_frost", "frost")
 
 
 # ---------------------------------------------------------------- explosions
@@ -771,13 +796,75 @@ def gen_smears():
     TX = 1.35 * 1.25  # world px * MELEE_K -> texels
     # Drawn inside the hitbox where the weapon head actually travels (the full
     # hitbox radius read as detached from the hero).
-    R = 80 * TX * 0.78
-    emit_dir("sm_maul", arc_smear(R, R * 0.64, 70, BONE, ASH[3], ASH[2], chips=EARTH[3]), 3, 18, (0, R + 18, -R - 6, R + 6), z=3)
-    R = 72 * TX * 0.66
-    emit_dir("sm_blade", arc_smear(R, R * 0.72, 55, BONE, DUST[3], DUST[2], sparkle=DUST[4]), 3, 24, (0, R + 4, -R * 0.85, R * 0.85), z=3)
-    emit_dir("sm_bayonet", arc_smear(R, R * 0.7, 50, BONE, STEEL[3], STEEL[2], sparkle=BONE), 3, 24, (0, R + 4, -R * 0.8, R * 0.8), z=3)
-    L = 140 * TX
-    emit_dir("sm_chain", line_smear(L, 34 * TX), 3, 20, (0, L + 12, -16, 16), z=3)
+    # Reach upgrades never scale a smear: each one is also drawn pixel-exact at
+    # the longer reaches ("_r125" / "_r150", Piercing ranks), and the player
+    # picks the nearest one (polish pass 2).
+    for suf, k in (("", 1.0), ("_r125", 1.25), ("_r150", 1.5)):
+        R = 80 * TX * 0.78 * k
+        emit_dir("sm_maul" + suf, arc_smear(R, R - R * 0.36 / k, 70, BONE, ASH[3], ASH[2], chips=EARTH[3]), 3, 18, (0, R + 18, -R - 6, R + 6), z=3)
+        R = 72 * TX * 0.66 * k
+        emit_dir("sm_blade" + suf, arc_smear(R, R - R * 0.28 / k, 55, BONE, DUST[3], DUST[2], sparkle=DUST[4]), 3, 24, (0, R + 4, -R * 0.85, R * 0.85), z=3)
+        emit_dir("sm_bayonet" + suf, arc_smear(R, R - R * 0.3 / k, 50, BONE, STEEL[3], STEEL[2], sparkle=BONE), 3, 24, (0, R + 4, -R * 0.8, R * 0.8), z=3)
+        L = 140 * TX * k
+        emit_dir("sm_chain" + suf, line_smear(L, 34 * TX), 3, 20, (0, L + 12, -16, 16), z=3)
+
+
+# ---------------------------------------------------------------- fog clouds
+def fog_cloud(R_world, ramp, seed, n=4):
+    """Pixel fog patch (polish pass 2): a lumpy cloud of chunky 2x2 cells in
+    4-step alpha (25 / 50 %), lit top-left, with a 2-px checker dither band on
+    the rim instead of a soft gradient. Squashed onto the ground (0.62) and
+    drawn at its world size (1 texel = 1 design px), never scaled. Loops n
+    frames as the lumps drift on small circles."""
+    Z = 1.35
+    W = int(R_world * 2.3 * Z) // 2 * 2
+    H = int(W * 0.62) // 2 * 2
+    rnd = random.Random(seed)
+    blobs = []
+    for i in range(16):
+        ang = rnd.uniform(0, 2 * math.pi)
+        d = rnd.uniform(0.0, 0.62) ** 0.8
+        blobs.append((math.cos(ang) * d * 0.5, math.sin(ang) * d * 0.5, rnd.uniform(0.16, 0.3), rnd.uniform(0, 2 * math.pi)))
+    cw, ch = W // 2, H // 2
+    yy, xx = np.mgrid[0:ch, 0:cw]
+    u = (xx + 0.5) / cw - 0.5
+    v = (yy + 0.5) / ch - 0.5
+    frames = []
+    for f in range(n):
+        ph = f / n * 2 * math.pi
+        fld = np.zeros(u.shape)
+        lit = np.zeros(u.shape)
+        for (bx, by, br, bp) in blobs:
+            cx = bx + math.cos(ph + bp) * 0.018
+            cy = by + math.sin(ph + bp) * 0.018
+            dd = ((u - cx) ** 2 + (v - cy) ** 2) / (br * br)
+            fld = np.maximum(fld, 1.0 - dd)
+            # highlight: the blob's top-left cap
+            dl = ((u - cx + br * 0.28) ** 2 + (v - cy + br * 0.3) ** 2) / (br * br * 0.42)
+            lit = np.maximum(lit, (1.0 - dl) * (dd < 1.0))
+        a = np.zeros((ch, cw, 4), np.uint8)
+        rim = (fld > -0.14) & (fld <= 0.1)
+        body = fld > 0.1
+        core = fld > 0.55
+        chk = ((xx + yy + f) % 2) == 0
+        a[rim & chk, :3] = ramp[1]; a[rim & chk, 3] = A25
+        a[body, :3] = ramp[1]; a[body, 3] = A25
+        a[core, :3] = ramp[1]; a[core, 3] = A50
+        hl = core & (lit > 0.8)
+        a[hl, :3] = ramp[2]; a[hl, 3] = A50
+        # drifting spores: sparse bright cells inside the cloud
+        hz = (np.floor(u * 97 + f * 0.0) * 31 + np.floor(v * 61 + f * 3) * 17).astype(np.int64) % 53
+        sp = body & (hz == 0) & ((xx * 7 + yy * 13 + f * 5) % 9 == 0)
+        a[sp, :3] = ramp[2]; a[sp, 3] = A75
+        frames.append(np.repeat(np.repeat(a, 2, 0), 2, 1))
+    return frames
+
+
+def gen_fog():
+    for suf, r in (("_s", 120), ("_m", 145), ("_l", 170)):
+        emit("fog_plague" + suf, fog_cloud(r, (PLAGUE[1], PLAGUE[2], PLAGUE[3]), 41), 3, loop=True, z=-3)
+    for suf, r in (("_s", 160), ("_m", 195), ("_l", 230)):
+        emit("fog_smog" + suf, fog_cloud(r, (ASH[1], ASH[2], ASH[3]), 77), 3, loop=True, z=8)
 
 
 # ---------------------------------------------------------------- deaths + decals
@@ -1206,6 +1293,7 @@ if __name__ == "__main__":
     gen_shock_burst()
     gen_slam()
     gen_smears()
+    gen_fog()
     gen_deaths()
     gen_decals()
     gen_ability()

@@ -627,7 +627,7 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 	if hp_bar:
 		_bar_left = BAR_SHOW
 		hp_bar.value = hp
-	_anim.flash(0.08)
+	_anim.flash(0.05) ## bible: a 1-2 frame BONE flash
 	if _hit_anim_cd <= 0.0 and _anim.has_state("hit") and not (_anim.is_busy() or _windup_left > 0.0 or _lunge_left > 0.0):
 		_anim.play("hit")
 		_hit_anim_cd = 0.35

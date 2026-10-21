@@ -5,7 +5,7 @@ extends Node
 ## (phasing, revive, enraged machines, infected bursts) lives in enemy.gd and
 ## the dead pads in extract_pad.gd.
 
-const FOG_TEX := "res://assets/sprites/depth/world/plague_fog.png"
+const PlagueZoneScript := preload("res://scripts/entities/plague_zone.gd")
 const ZONE_DIR := "res://assets/sprites/depth/zone/%s.png"
 const PickupScript := preload("res://scripts/entities/zone_pickup.gd")
 const BunkerScript := preload("res://scripts/entities/zone_bunker.gd")
@@ -235,15 +235,20 @@ func _toast(t: String) -> void:
 func _spawn_smog() -> void:
 	var sm: Dictionary = ZoneDefs.SMOG
 	var r := rng.randf_range(sm["radius"].x, sm["radius"].y)
-	var sp := Sprite2D.new()
-	if ResourceLoader.exists(FOG_TEX):
-		sp.texture = load(FOG_TEX)
-		sp.scale = Vector2(1.0, 0.62) * (r * 2.2 / float(sp.texture.get_width()))
-	sp.modulate = Color(0.55, 0.52, 0.48, 0.0)
+	## Pixel smog (polish pass 2): ASH-ramp cloud strip at world size.
+	var sp := AnimatedSprite2D.new()
+	var fid: String = PlagueZoneScript.fog_id("fog_smog", r, [["_s", 160.0], ["_m", 195.0], ["_l", 230.0]])
+	if Juice.px:
+		Juice.px.call("dress", sp, fid)
+	sp.modulate = Color(1, 1, 1, 0.0)
 	sp.z_index = 8
 	sp.position = _ring_spot(sm["dist"])
 	world.add_child(sp)
-	sp.create_tween().tween_property(sp, "modulate:a", 0.78, 2.0)
+	sp.play("default")
+	var tw := sp.create_tween()
+	for a in [0.25, 0.5, 0.75, 1.0]:
+		tw.tween_interval(0.5)
+		tw.tween_property(sp, "modulate:a", a, 0.0)
 	smog.append({"node": sp, "r": r, "life": float(sm["life"]) * rng.randf_range(0.8, 1.2)})
 
 
@@ -267,7 +272,9 @@ func _tick_smog(delta: float) -> void:
 		if float(s["life"]) <= 0.0 or not is_instance_valid(n) or n.global_position.distance_to(player.global_position) > 1600.0:
 			if is_instance_valid(n):
 				var tw := n.create_tween()
-				tw.tween_property(n, "modulate:a", 0.0, 1.5)
+				for a in [0.75, 0.5, 0.25, 0.0]:
+					tw.tween_property(n, "modulate:a", a, 0.0)
+					tw.tween_interval(0.375)
 				tw.tween_callback(n.queue_free)
 			smog.erase(s)
 			_spawn_smog()
