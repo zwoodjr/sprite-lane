@@ -704,12 +704,13 @@ def arc_smear(R, r_in, half_deg, edge, body, tail, chips=None, sparkle=None):
         thick = np.sin(np.clip(t, 0, 1) * math.pi) ** 0.6
         inner = R - (R - r_in) * thick
         band = (d <= R) & (d >= inner) & (t >= lo) & (t <= prog)
-        lead = t > prog - 0.18
+        lead = (t > prog - 0.1) & (d > (R + inner) * 0.5)
         outer_edge = d > R - 2.2
         if f < 2:
             paint(col, al, band, tail, A50)
             paint(col, al, band & (t > prog * 0.3), tail, A75)
             paint(col, al, band & (t > prog * 0.55), body, 255)
+            paint(col, al, band & (t > prog * 0.55) & (d < inner + 1.6), tail, 255)
             paint(col, al, band & ((outer_edge & (t > prog * 0.3)) | lead), edge, 255)
         else:
             paint(col, al, band & (d > (R + inner) * 0.5), tail, A50)
@@ -771,7 +772,7 @@ def gen_smears():
     # Drawn inside the hitbox where the weapon head actually travels (the full
     # hitbox radius read as detached from the hero).
     R = 80 * TX * 0.78
-    emit_dir("sm_maul", arc_smear(R, R * 0.5, 70, BONE, ASH[3], ASH[2], chips=EARTH[3]), 3, 18, (0, R + 18, -R - 6, R + 6), z=3)
+    emit_dir("sm_maul", arc_smear(R, R * 0.64, 70, BONE, ASH[3], ASH[2], chips=EARTH[3]), 3, 18, (0, R + 18, -R - 6, R + 6), z=3)
     R = 72 * TX * 0.66
     emit_dir("sm_blade", arc_smear(R, R * 0.72, 55, BONE, DUST[3], DUST[2], sparkle=DUST[4]), 3, 24, (0, R + 4, -R * 0.85, R * 0.85), z=3)
     emit_dir("sm_bayonet", arc_smear(R, R * 0.7, 50, BONE, STEEL[3], STEEL[2], sparkle=BONE), 3, 24, (0, R + 4, -R * 0.8, R * 0.8), z=3)
