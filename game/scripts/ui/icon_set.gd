@@ -111,3 +111,17 @@ static func stuff(id: String) -> String:
 		if has(pre + id):
 			return pre + id
 	return "cur_scrap"
+
+
+## Icon for a pack / pouch / tonic id: the set icon when one exists, else the
+## item's own art (MedicineDefs). Always nearest-filtered at `px`.
+static func stuff_rect(id: String, px: int = 48) -> TextureRect:
+	for pre in ["ing_", "tonic_", "mat_", "ammo_", "cur_"]:
+		if has(pre + id):
+			return rect(pre + id, px)
+	var r := rect("", px)
+	var p := MedicineDefs.icon_path(id)
+	if ResourceLoader.exists(p):
+		r.texture = load(p)
+		r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return r

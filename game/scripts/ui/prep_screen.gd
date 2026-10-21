@@ -79,7 +79,7 @@ func _rebuild() -> void:
 		var st: Dictionary = styles[i]
 		var sid := str(st["id"])
 		var unlocked := KitDefs.style_unlocked(_hero, sid, rank)
-		var lock := "" if unlocked else "R%d" % int(KitDefs.STYLE_UNLOCK[i])
+		var lock := "" if unlocked else "RANK %d" % int(KitDefs.STYLE_UNLOCK[i])
 		row.add_child(_tile(IconSet.style(_hero, sid), sid == cur_style, lock, pick_style.bind(sid)))
 		if sid == cur_style:
 			sel = st
@@ -92,7 +92,7 @@ func _rebuild() -> void:
 	row.add_child(_tile(IconSet.ability(_hero, "a"), cur_ab == "a", "", pick_ability.bind("a")))
 	var b: Dictionary = KitDefs.ABILITIES.get(_hero, {})
 	if not b.is_empty():
-		var lk := "" if rank >= KitDefs.ABILITY_B_RANK else "R%d" % KitDefs.ABILITY_B_RANK
+		var lk := "" if rank >= KitDefs.ABILITY_B_RANK else "RANK %d" % KitDefs.ABILITY_B_RANK
 		row.add_child(_tile(IconSet.ability(_hero, "b"), cur_ab == "b", lk, pick_ability.bind("b")))
 	var ad: Dictionary = b if cur_ab == "b" and not b.is_empty() else base
 	_detail(str(ad.get("name", "")), str(ad.get("desc", "")))
@@ -162,7 +162,10 @@ func _detail(title: String, desc: String) -> void:
 	if title != "":
 		v.add_child(UiTheme.head_label(title, UiTheme.T_H2, UiTheme.TEXT))
 	if desc != "":
-		var d := UiTheme.body_label(desc, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+		## Sits on the sunset backdrop: BONE with an INK edge (dim grey read as mud).
+		var d := UiTheme.body_label(desc, UiTheme.T_SMALL, UiTheme.TEXT)
+		d.add_theme_color_override("font_outline_color", UiTheme.INK)
+		d.add_theme_constant_override("outline_size", 4)
 		d.max_lines_visible = 2
 		v.add_child(d)
 	var gap := Control.new()

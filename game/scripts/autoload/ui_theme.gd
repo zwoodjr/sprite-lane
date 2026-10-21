@@ -595,21 +595,83 @@ func _on_btn_up(b: BaseButton) -> void:
 	tw.tween_property(c, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
+## Scene transition (polish pass 2): an interlaced CRT scanline wipe in the
+## worn amber-readout look instead of a plain fade. 8-px INK bands with a dim
+## scanline drop away top-to-bottom (even rows, then odd), each led by a 2-px
+## DUST-amber line; time is stepped (12 steps) so it reads pixel, not tweened.
+## 0.24 s, never blocks input (mouse_filter IGNORE), hidden when done.
+const WIPE_TIME := 0.24
+const WIPE_SHADER := """
+shader_type canvas_item;
+uniform float t = 1.0;
+uniform float rows = 195.0;
+void fragment() {
+	float ts = floor(t * 12.0) / 12.0;
+	float r = floor(UV.y * rows);
+	float odd = mod(r, 2.0);
+	float d = (r / rows) * 0.5 + odd * 0.3;
+	float open_at = d + 0.18;
+	float inrow = fract(UV.y * rows);
+	vec4 ink = vec4(0.078, 0.047, 0.055, 1.0);
+	vec4 scan = vec4(0.122, 0.102, 0.114, 1.0);
+	vec4 amber = vec4(1.0, 0.753, 0.251, 1.0);
+	vec4 ember = vec4(0.659, 0.322, 0.059, 1.0);
+	if (ts >= open_at) {
+		COLOR = vec4(0.0);
+	} else if (ts >= open_at - 0.1) {
+		// the band is collapsing: amber line on top, ember under it
+		float k = (ts - (open_at - 0.1)) / 0.1;
+		float lim = 1.0 - k;
+		if (inrow > lim) { COLOR = vec4(0.0); }
+		else if (inrow > lim - 0.25) { COLOR = amber; }
+		else if (inrow > lim - 0.5) { COLOR = ember; }
+		else { COLOR = ink; }
+	} else {
+		COLOR = inrow < 0.25 ? scan : ink;
+	}
+}
+"""
+var _wipe_mat: ShaderMaterial
+
+
 func _build_fade() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 120
 	add_child(layer)
 	_fade = ColorRect.new()
-	_fade.color = Color(0.05, 0.035, 0.025, 0.0)
+	_fade.color = Color.WHITE
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var sh := Shader.new()
+	sh.code = WIPE_SHADER
+	_wipe_mat = ShaderMaterial.new()
+	_wipe_mat.shader = sh
+	_fade.material = _wipe_mat
+	_fade.visible = false
 	layer.add_child(_fade)
 
 
-## New scene: fade up from dust-dark so screen changes never hard-cut.
+var _wipe_tw: Tween
+
+
+## New scene: scanline wipe up from INK so screen changes never hard-cut.
 func _fade_in() -> void:
 	if _fade == null:
 		return
-	_fade.color.a = 1.0
-	var tw := _fade.create_tween()
-	tw.tween_property(_fade, "color:a", 0.0, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if _wipe_tw and _wipe_tw.is_valid():
+		_wipe_tw.kill()
+	var h := maxf(get_viewport().get_visible_rect().size.y, 8.0)
+	_wipe_mat.set_shader_parameter("rows", floorf(h / 8.0))
+	_wipe_mat.set_shader_parameter("t", 0.0)
+	_fade.visible = true
+	_wipe_tw = _fade.create_tween()
+	_wipe_tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_wipe_tw.tween_method(func(v: float) -> void: _wipe_mat.set_shader_parameter("t", v), 0.0, 1.0, WIPE_TIME)
+	_wipe_tw.tween_callback(func() -> void: _fade.visible = false)
+
+
+## Progress of the current wipe (0..1; 1 = done). For tests / capture tools.
+func wipe_t() -> float:
+	if _fade == null or not _fade.visible:
+		return 1.0
+	return float(_wipe_mat.get_shader_parameter("t"))

@@ -3,7 +3,9 @@ extends CanvasLayer
 ## Visual tier colour grade for the match world (under the HUD, which lives on
 ## layer 10): per-zone cool shadows / warm highlights, stronger value contrast,
 ## a slight desaturation so loot / telegraph / hero accents pop, a soft
-## vignette and optional film grain (Settings → Film grain).
+## vignette, or (Settings → Edge dither, default off) a static pixel-checker
+## dither vignette instead. The bible bans noise, so there is no film grain:
+## the old "film_grain" setting key now drives the dither.
 ## One full-screen pass over the screen texture — fine on iPhone.
 
 const SHADER := """
@@ -15,14 +17,8 @@ uniform float contrast = 1.16;
 uniform float pivot = 0.46;
 uniform float sat = 0.88;
 uniform float vignette = 0.62;
-uniform float grain = 0.0;
+uniform float dither = 0.0;
 uniform float lift = 0.0;
-
-float h21(vec2 p) {
-	p = fract(p * vec2(123.34, 456.21));
-	p += dot(p, p + 45.32);
-	return fract(p.x * p.y);
-}
 
 void fragment() {
 	vec3 c = texture(screen_tex, SCREEN_UV).rgb;
@@ -32,10 +28,17 @@ void fragment() {
 	c = (c - pivot) * contrast + pivot + lift;
 	vec2 d = (SCREEN_UV - vec2(0.5, 0.46)) * vec2(1.25, 1.0);
 	float v = smoothstep(0.30, 0.82, length(d));
-	c *= 1.0 - vignette * v * v;
-	if (grain > 0.0) {
-		float n = h21(floor(FRAGCOORD.xy) + floor(TIME * 24.0) * 17.0);
-		c += (n - 0.5) * grain;
+	if (dither > 0.0) {
+		// Static 2-design-px checker cells, 2 hard steps toward the corners
+		// (no noise, no animation, no soft gradient).
+		float cell = max(1.0, floor((1.0 / SCREEN_PIXEL_SIZE.x) / 360.0));
+		vec2 q = floor(FRAGCOORD.xy / cell);
+		bool chk = mod(q.x + q.y, 2.0) < 1.0;
+		float dk = 0.0;
+		if (v > 0.82) { dk = 1.0; } else if (v > 0.5 && chk) { dk = 1.0; }
+		c *= 1.0 - dither * dk;
+	} else {
+		c *= 1.0 - vignette * v * v;
 	}
 	COLOR = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
@@ -54,7 +57,8 @@ const ZONE_LOOK := {
 	"deadfall": {"cool": Vector3(0.80, 0.82, 0.94), "warm": Vector3(1.06, 0.96, 0.88), "sat": 0.8},
 	"dustfall": {"cool": Vector3(0.84, 0.80, 0.92), "warm": Vector3(1.10, 0.96, 0.80), "contrast": 1.12},
 }
-const GRAIN := 0.035
+## Edge dither darkening per dithered cell (INK-ward, ~15%).
+const DITHER := 0.16
 ## Share of the per-zone split-tone kept (1 = full wash). Style bible 2.1:
 ## zone tint <= 10%, no full-screen washes; the ground is authored in each
 ## zone's own palette and mood comes from light pools.
@@ -62,7 +66,7 @@ const WASH := 0.1
 const PIVOT := 0.36
 
 var _mat: ShaderMaterial
-var _grain_on: bool = true
+var _grain_on: bool = false
 
 
 func _ready() -> void:
@@ -98,10 +102,10 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if bool(GameState.settings.get("film_grain", true)) != _grain_on:
+	if bool(GameState.settings.get("film_grain", false)) != _grain_on:
 		_apply_grain()
 
 
 func _apply_grain() -> void:
-	_grain_on = bool(GameState.settings.get("film_grain", true))
-	_mat.set_shader_parameter("grain", GRAIN if _grain_on else 0.0)
+	_grain_on = bool(GameState.settings.get("film_grain", false))
+	_mat.set_shader_parameter("dither", DITHER if _grain_on else 0.0)

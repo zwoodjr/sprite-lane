@@ -128,7 +128,9 @@ var settings: Dictionary = {
 	"left_handed": false,
 	"show_hints": true,
 	"heat_shimmer": false,
-	"film_grain": true,
+	## Edge dither vignette (bible: no noise / film grain). Off by default.
+	"film_grain": false,
+	"dither_v1": true,
 }
 var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.
@@ -268,6 +270,11 @@ func apply_save(d: Dictionary) -> void:
 	if typeof(saved_settings) == TYPE_DICTIONARY:
 		for k in (saved_settings as Dictionary).keys():
 			settings[k] = saved_settings[k]
+		## The old film grain (default on) became the bible's edge dither,
+		## default off: older saves start with it off once.
+		if not (saved_settings as Dictionary).has("dither_v1"):
+			settings["film_grain"] = false
+	settings["dither_v1"] = true
 	tutorial_done = bool(d.get("tutorial_done", false))
 	account_scrap = int(d.get("account_scrap", 0))
 	## Migrate v1/v2: old saves had account_xp as pseudo-power; keep XP, prefer scrap.

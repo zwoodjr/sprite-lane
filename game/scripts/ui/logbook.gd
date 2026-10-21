@@ -65,7 +65,7 @@ func _rebuild() -> void:
 	_scrap.text = "%d" % GameState.account_scrap
 	match _tab:
 		"daily":
-			_list.add_child(_note("Three jobs a day. New ones tomorrow (%s)." % GameState.today()))
+			_list.add_child(_note("Three jobs a day. New ones tomorrow."))
 			var qs := GameState.daily_quests()
 			for i in range(qs.size()):
 				_list.add_child(_daily_row(qs[i], i))

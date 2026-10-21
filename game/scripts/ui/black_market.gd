@@ -16,56 +16,80 @@ func open(jobs: Node) -> void:
 	get_tree().paused = true
 	TouchInput.clear_sticks()
 	var dim := ColorRect.new()
-	dim.color = Color(0.04, 0.03, 0.02, 0.8)
+	dim.color = Color(UiTheme.INK, 0.85)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	## Style bible + Track D: worn plate, icon-led rows, value in DUST amber
+	## (pixel readout), amber primary price buttons, steel secondary LEAVE.
 	var plate := PanelContainer.new()
 	plate.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi", 24.0))
 	var vp := get_viewport().get_visible_rect().size
-	plate.custom_minimum_size = Vector2(minf(620.0, vp.x - 40.0), 0)
+	plate.custom_minimum_size = Vector2(floorf(minf(624.0, vp.x - 48.0) / 8.0) * 8.0, 0)
 	center.add_child(plate)
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 16)
 	plate.add_child(v)
-	v.add_child(UiTheme.title_label("NYX'S BLACK MARKET", 36))
-	var sub := UiTheme.body_label("\"Scrap up front. No refunds, no questions.\"", 15, UiTheme.TEXT_DIM)
+	var head := VBoxContainer.new()
+	head.add_theme_constant_override("separation", 0)
+	v.add_child(head)
+	head.add_child(UiTheme.title_label("BLACK MARKET", 40))
+	var sub := UiTheme.body_label("Nyx: \"Scrap up front. No refunds, no questions.\"", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(sub)
-	_scrap = UiTheme.body_label("", 18, UiTheme.AMBER)
-	_scrap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(_scrap)
+	head.add_child(sub)
+	var bag := HBoxContainer.new()
+	bag.alignment = BoxContainer.ALIGNMENT_CENTER
+	bag.add_theme_constant_override("separation", 8)
+	v.add_child(bag)
+	bag.add_child(UiTheme.head_label("BAG", UiTheme.T_H3, UiTheme.TEXT_DIM))
+	bag.add_child(IconSet.rect("cur_scrap", 48))
+	_scrap = UiTheme.pixel_label("", UiTheme.PX_L, UiTheme.AMBER)
+	_scrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bag.add_child(_scrap)
 	_list = VBoxContainer.new()
 	_list.add_theme_constant_override("separation", 8)
 	v.add_child(_list)
-	var leave := UiTheme.big_button("LEAVE", UiTheme.TEAL, 64, 22)
+	var leave := UiTheme.big_button("LEAVE", UiTheme.LINE, 64, 24)
 	leave.pressed.connect(close)
 	v.add_child(leave)
 	_rebuild()
 
 
+const ICONS := {"medkit": "ing_medicine", "ammo": "ammo_explosive", "lock": "hud_pack", "reroll": "up_lucky_vial"}
+
+
 func _rebuild() -> void:
 	for c in _list.get_children():
 		c.queue_free()
-	_scrap.text = "Bag scrap: %d" % GameState.scrap_found
+	_scrap.text = "%d" % GameState.scrap_found
 	for it in RadioDefs.MARKET:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 10)
+		var row := PanelContainer.new()
+		row.add_theme_stylebox_override("panel", UiTheme.plate("inset", 8.0))
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 16)
+		row.add_child(h)
+		h.add_child(UiTheme.icon_well(str(ICONS.get(str(it["id"]), "cur_scrap")), "common", 64))
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(UiTheme.body_label(str(it["name"]), 19, UiTheme.AMBER, false))
-		info.add_child(UiTheme.body_label(str(it["desc"]), 14, UiTheme.TEXT))
-		row.add_child(info)
+		info.alignment = BoxContainer.ALIGNMENT_CENTER
+		info.add_theme_constant_override("separation", 0)
+		info.add_child(UiTheme.head_label(str(it["name"]).to_upper(), UiTheme.T_H2, UiTheme.TEXT))
+		info.add_child(UiTheme.body_label(str(it["desc"]), UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		h.add_child(info)
 		var owned := str(it["id"]) == "lock" and GameState.run_pack_locked
 		var can := GameState.scrap_found >= int(it["cost"]) and not owned
-		var b := UiTheme.big_button("OWNED" if owned else "%d" % int(it["cost"]), UiTheme.TEAL if can else UiTheme.RUST, 56, 19)
-		b.custom_minimum_size.x = 110
+		var b := UiTheme.big_button("OWNED" if owned else "%d" % int(it["cost"]), UiTheme.AMBER, 64, 24)
+		if not owned:
+			b.icon = IconSet.tex("cur_scrap", false)
+			b.add_theme_constant_override("h_separation", 8)
+		b.custom_minimum_size.x = 136
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		b.disabled = not can
 		b.pressed.connect(buy.bind(str(it["id"])))
-		row.add_child(b)
+		h.add_child(b)
 		_list.add_child(row)
 
 

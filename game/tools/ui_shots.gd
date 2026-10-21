@@ -87,6 +87,29 @@ func _run() -> void:
 		var m := _scene("res://scenes/match/match.tscn")
 		await _wait(90)
 		await _snap("11_match_hud")
+		## In-run pack chip + tutorial prompt + Nyx's market.
+		GameState.run_pack = {"medicine": 3, "herb": 2, "dust_shard": 4, "machine_oil": 1}
+		var hud: Node = m.get_node("HUD")
+		hud.call("set_pack", 7, 8, 3)
+		var tut := Control.new()
+		tut.set_script(load("res://scripts/ui/tutorial_overlay.gd"))
+		(hud.get("root") as Control).add_child(tut)
+		tut.call("setup", hud)
+		await _wait(30)
+		await _snap("11b_tutorial")
+		tut.call("_enter", 2)
+		await _wait(30)
+		await _snap("11c_tutorial_dash")
+		tut.queue_free()
+		GameState.scrap_found = 60
+		var mk := CanvasLayer.new()
+		mk.set_script(load("res://scripts/ui/black_market.gd"))
+		get_tree().root.add_child(mk)
+		mk.call("open", null)
+		await _wait(20)
+		await _snap("11d_black_market")
+		mk.call("close")
+		await _wait(3)
 		var pk: Node = null
 		for n in get_tree().root.find_children("*", "CanvasLayer", true, false):
 			if n.has_method("pick_index"):
@@ -106,6 +129,11 @@ func _run() -> void:
 		m.get_node("HUD").call("_open_pause")
 		await _wait(15)
 		await _snap("13_pause")
+		var pm: Node = m.get_node("HUD").get("_pause")
+		if pm:
+			pm.call("show_pack")
+			await _wait(15)
+			await _snap("13b_backpack")
 		get_tree().paused = false
 		m.queue_free()
 		await _wait(3)

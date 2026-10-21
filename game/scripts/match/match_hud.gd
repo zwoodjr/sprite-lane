@@ -511,16 +511,16 @@ func _build_depth(vb: VBoxContainer) -> void:
 	_pack_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_pack_row)
 	## PACK only shows once the pack is nearly full (it's the only time it matters).
-	_pack_label = _label("PACK 0/8", 18, Color(0.86, 0.75, 0.52))
-	_pack_label.add_theme_font_override("font", UiTheme.font_button)
-	_pack_label.add_theme_constant_override("outline_size", 5)
-	_pack_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
+	## PACK is a short readout: pixel font (bible §6.2); set icons at 24 px.
+	_pack_label = _px("PACK 0/8", 16, UiTheme.AMBER)
 	_pack_label.visible = false
+	_pack_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_pack_row.add_child(_pack_label)
-	_med_icon = _icon(MedicineDefs.icon_path("medicine"), 18)
+	_med_icon = IconSet.stuff_rect("medicine", 24)
 	_med_icon.visible = false
 	_pack_row.add_child(_med_icon)
-	_med_label = _px("", 8, Color(1.0, 0.55, 0.5))
+	_med_label = _px("", 8, UiTheme.TEXT)
+	_med_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_pack_row.add_child(_med_label)
 	_tonic_row = HBoxContainer.new()
 	_tonic_row.add_theme_constant_override("separation", 2)
@@ -528,16 +528,16 @@ func _build_depth(vb: VBoxContainer) -> void:
 	_pack_row.add_child(_tonic_row)
 	## Weightless ingredient pouch: icon + count per ingredient (hidden until found).
 	_pouch_row = HBoxContainer.new()
-	_pouch_row.add_theme_constant_override("separation", 3)
+	_pouch_row.add_theme_constant_override("separation", 4)
 	_pouch_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pouch_row.visible = false
 	vb.add_child(_pouch_row)
 	for id in MedicineDefs.INGREDIENT_IDS:
-		var ic := _icon(MedicineDefs.icon_path(str(id)), 18)
+		var ic := IconSet.stuff_rect(str(id), 24)
 		ic.visible = false
 		_pouch_row.add_child(ic)
-		var l := _label("", 13, UiTheme.TEXT)
-		l.add_theme_font_override("font", UiTheme.font_button)
+		var l := _px("", 8, UiTheme.TEXT)
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		l.visible = false
 		_pouch_row.add_child(l)
 		_pouch_labels[id] = [ic, l]
@@ -604,10 +604,10 @@ func set_pack(weight: int, cap: int, medicine: int) -> void:
 	_pack_label.visible = cap > 0 and float(weight) >= float(cap) * 0.75
 	if _pack_label.text != txt:
 		_pack_label.text = txt
-		_pack_label.add_theme_color_override("font_color", UiTheme.RUST if weight >= cap else Color(0.86, 0.75, 0.52))
+		_pack_label.add_theme_color_override("font_color", UiTheme.DANGER if weight >= cap else UiTheme.AMBER)
 		_pack_label.set_meta("pack", Vector2i(weight, cap))
 	_med_icon.visible = medicine > 0
-	_med_label.text = "×%d" % medicine if medicine > 0 else ""
+	_med_label.text = "x%d" % medicine if medicine > 0 else ""
 	var pouch := GameState.pouch()
 	_pouch_row.visible = not pouch.is_empty()
 	for id in _pouch_labels.keys():
