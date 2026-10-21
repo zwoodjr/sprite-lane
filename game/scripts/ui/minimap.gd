@@ -499,9 +499,11 @@ func _draw_icons() -> void:
 			var txt := _dist_text(_c_dist[j])
 			var fs := 8
 			var tw := _font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			## On the bezel ring, clear of the map icons; kept inside the box.
-			var lc := center + dir * (map_r + 7.0)
-			var lp := Vector2(clampf(lc.x - tw * 0.5, 0.0, r.x - tw), clampf(lc.y + 4.0, 9.0, r.y - 20.0)).round()
+			## Inside the ring, just past the rim icon: the whole text box stays
+			## within the map circle (audit #10: labels poked outside the bezel).
+			var hd := Vector2(tw * 0.5 + 2.0, 6.0).length()
+			var lc := center + dir * minf(map_r - 26.0, map_r - 3.0 - hd)
+			var lp := (lc + Vector2(-tw * 0.5, 4.0)).round()
 			ci.draw_string_outline(_font, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, MapIcons.DARK)
 			ci.draw_string(_font, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	## Hero: facing arrow.

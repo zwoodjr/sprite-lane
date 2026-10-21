@@ -111,8 +111,10 @@ func _process(delta: float) -> void:
 	var bc := Color(1.0, 0.35, 0.3) if last_chance else Color(1.0, 0.82, 0.4)
 	if open and not powered:
 		bc = Color(0.5, 0.8, 1.0)
-	_beam.color = Color(bc, (0.42 + 0.12 * sin(_t * 3.0)) if open else 0.0)
-	_core.color = Color(bc.lerp(Color.WHITE, 0.6), (0.6 + 0.2 * sin(_t * 5.0)) if open else 0.0)
+	## Vertex colours carry the upward fade; modulate carries hue + pulse
+	## (Polygon2D ignores .color once vertex_colors are set).
+	_beam.modulate = Color(bc, (0.26 + 0.08 * sin(_t * 3.0)) if open else 0.0)
+	_core.modulate = Color(bc.lerp(Color.WHITE, 0.4), (0.32 + 0.12 * sin(_t * 5.0)) if open else 0.0)
 	_beam.visible = open
 	_core.visible = open
 	if open and player_inside and not powered and GameState.run_has_cell:

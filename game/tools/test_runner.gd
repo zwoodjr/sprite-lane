@@ -144,6 +144,7 @@ func _run() -> void:
 	await _test_minimap()
 	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
 	await _test_depth_e6()
+	await _test_quickwins()
 	var keep_e7 := [GameState.tier_clears.duplicate(true), GameState.plane_parts.duplicate(), GameState.pacts.duplicate(), GameState.best_tier_extracted]
 	await _test_depth_e7()
 	GameState.tier_clears = keep_e7[0]
@@ -1417,6 +1418,80 @@ func _depth_match(mode: String, hero: String, camp_set: Dictionary = {}) -> Node
 	return m
 
 
+## Audit quick wins: cold open, opening waves, reload tuning, damage-number
+## aggregation, boss bar, pet scale, HUD text purge.
+func _test_quickwins() -> void:
+	var keep_tut := GameState.tutorial_done
+	## Cold open: first run is quiet (no mobs, frozen clock) until released.
+	GameState.selected_mode_id = "haze"
+	GameState.selected_character_id = "ash_rook"
+	GameState.fast_timers = false
+	GameState.tutorial_done = false
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(30):
+		await get_tree().physics_frame
+	_check(bool(m.get("quiet")) and get_tree().get_nodes_in_group("enemies").is_empty(), "qw cold open is quiet")
+	_check(float(m.get("_match_time")) == 0.0, "qw cold open clock frozen")
+	m.call("release_cold_open")
+	await get_tree().physics_frame
+	_check(not bool(m.get("quiet")) and get_tree().get_nodes_in_group("enemies").size() == int(m.get_script().get_script_constant_map()["COLD_OPEN_MOBS"]), "qw cold open mobs walk in")
+	m.queue_free()
+	GameState.tutorial_done = true
+	for k in range(3):
+		await get_tree().process_frame
+	## Opening wave lands at its time on a normal run.
+	GameState.begin_run()
+	m = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	await get_tree().physics_frame
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await get_tree().physics_frame
+	var waves: Array = m.get_script().get_script_constant_map()["OPENING_WAVES"]
+	m.set("_match_time", float(waves[0][0]) + 0.01)
+	m.call("_tick_opening_waves")
+	await get_tree().physics_frame
+	_check(get_tree().get_nodes_in_group("enemies").size() >= int(waves[0][1]), "qw opening wave spawns")
+	## Reload is shorter than the weapon's listed time.
+	var player: Node2D = m.get_node("World/Player")
+	player.set("_ammo", 0)
+	player.call("_start_reload")
+	_check(float(player.get("_reload_left")) < float((player.get("_weapon") as Dictionary).get("reload_time", 1.4)) * 0.7, "qw reload tuned")
+	## Damage numbers: rapid hits on one target merge into one number.
+	var foe := _mob(m, "rad_gator", player.global_position + Vector2(900, 0))
+	foe.set("speed", 0.0)
+	foe.set("max_hp", 9999.0)
+	foe.set("hp", 9999.0)
+	var live0: int = (Juice.get("_dn_live") as Array).size()
+	for i in range(4):
+		foe.call("take_damage", 15.0)
+	var live: Array = Juice.get("_dn_live")
+	_check(live.size() == live0 + 1 and int(round(float(live[live.size() - 1]["total"]))) == 60, "qw damage numbers aggregate")
+	## Mob HP bars: hidden on normal mobs once the hit is old.
+	for k in range(140):
+		await get_tree().physics_frame
+	_check(not (foe.get("hp_bar") as Control).visible, "qw mob bar hides after a while")
+	## Boss bar appears for a boss.
+	var boss: Node = m.call("spawn_special", "boss")
+	for k in range(30):
+		await get_tree().process_frame
+	var bb: Control = m.get_node("HUD").get("_boss_bar")
+	_check(bb != null and bb.visible and is_instance_valid(boss), "qw boss bar shows")
+	## Pets are drawn smaller than the hero.
+	var pet := get_tree().get_first_node_in_group("pets")
+	if pet:
+		_check(int((pet as Node2D).z_index) < 0, "qw pet sorted behind hero")
+	m.queue_free()
+	GameState.tutorial_done = keep_tut
+	for k in range(3):
+		await get_tree().process_frame
+	print("QUICKWINS_OK")
+
+
 func _end_depth_match(m: Node) -> void:
 	if is_instance_valid(m):
 		m.queue_free()
@@ -1647,11 +1722,21 @@ func _test_depth_e3() -> void:
 	b.queue_free()
 	GameState.run_ranks["orbit_blades"] = 1
 	GameState.run_ranks["blade_storm"] = 1
-	var before := m.get_child_count()
+	## Count the NEW bullets (not the scene's child count: other nodes — the
+	## dying gator, freed mobs — leave in the same frames, which made this flaky).
+	var seen := {}
+	for c in m.get_children():
+		seen[c.get_instance_id()] = true
+	var bullet_script: Script = load("res://scripts/entities/bullet.gd")
+	var shards := 0
 	player.set("_shard_t", 0.0)
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	_check(m.get_child_count() >= before + 8, "e3 blade storm shards %d" % (m.get_child_count() - before))
+	for f in range(2):
+		await get_tree().physics_frame
+		for c in m.get_children():
+			if not seen.has(c.get_instance_id()) and c.get_script() == bullet_script:
+				seen[c.get_instance_id()] = true
+				shards += 1
+	_check(shards >= 8, "e3 blade storm shards %d" % shards)
 	GameState.run_ranks.erase("blade_storm")
 	GameState.run_ranks["lead_rain"] = 1
 	await get_tree().physics_frame

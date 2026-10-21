@@ -229,6 +229,7 @@ func float_text(pos: Vector2, text: String, color: Color = Color.WHITE, size: in
 const AGG_WINDOW := 0.3
 const DN_POOL := 48
 const DN_LIFE := 0.75
+const DN_SOFT_CAP := 14
 var _dn_layer: CanvasLayer
 var _dn_pool: Array[Label] = []
 var _dn_live: Array[Dictionary] = []
@@ -250,6 +251,10 @@ func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color
 		e["t"] = minf(float(e["t"]), 0.12)
 		e["pop"] = 1.0
 		_dn_style(e)
+		return
+	## A horde under a blade storm would paint the screen with numbers:
+	## past DN_SOFT_CAP live numbers only crits start new ones.
+	if _dn_live.size() >= DN_SOFT_CAP and not crit:
 		return
 	var l := _dn_take()
 	e = {"label": l, "target": weakref(target) if target else null, "pos": pos,
