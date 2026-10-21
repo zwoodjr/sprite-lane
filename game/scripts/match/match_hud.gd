@@ -197,10 +197,11 @@ func _caption(text: String) -> Label:
 ## Only for numbers / short caps, and only at multiples of 8 px (the face's grid)
 ## so its pixels stay square: 8 for small tags, 16 for the readouts.
 func _px(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
-	size = maxi(8, int(round(float(size) / 8.0)) * 8)
+	size = UiTheme.px_size(size)
 	var l := _label(text, size, color)
-	if _pixel == null and ResourceLoader.exists(PIXEL_FONT):
-		_pixel = load(PIXEL_FONT)
+	l.add_theme_font_size_override("font_size", size)
+	if _pixel == null:
+		_pixel = UiTheme.font_pixel if UiTheme.font_pixel else (load(PIXEL_FONT) if ResourceLoader.exists(PIXEL_FONT) else null)
 	if _pixel:
 		l.add_theme_font_override("font", _pixel)
 	l.add_theme_constant_override("outline_size", 4)
@@ -211,7 +212,8 @@ func _label(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", size)
+	## Bible type scale only (16 minimum on iPhone).
+	l.add_theme_font_size_override("font_size", UiTheme.ui_size(size))
 	l.add_theme_color_override("font_color", color)
 	return l
 
@@ -277,7 +279,7 @@ func _build() -> void:
 	xp_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(xp_line)
 	_run_level_label = _caption("LV 1")
-	_run_level_label.add_theme_font_size_override("font_size", 11)
+	_run_level_label.add_theme_font_size_override("font_size", UiTheme.T_SMALL)
 	_run_level_label.custom_minimum_size = Vector2(34, 0)
 	xp_line.add_child(_run_level_label)
 	var xp_row := Control.new()
@@ -334,7 +336,7 @@ func _build() -> void:
 	pc.add_child(row)
 	row.add_theme_constant_override("separation", 10)
 	_phase_label = _label("EXTRACT IN", 24, UiTheme.AMBER)
-	_phase_label.add_theme_font_override("font", UiTheme.font_display)
+	_phase_label.add_theme_font_override("font", UiTheme.font_button)
 	_phase_label.add_theme_constant_override("outline_size", 6)
 	_phase_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
 	row.add_child(_phase_label)
@@ -374,10 +376,8 @@ func _build() -> void:
 	tv.add_theme_constant_override("separation", 2)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
-	_threat_label = _label("LOOT ×1.0", 28, UiTheme.AMBER)
-	_threat_label.add_theme_font_override("font", UiTheme.font_display)
-	_threat_label.add_theme_constant_override("outline_size", 6)
-	_threat_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
+	## Pixel readout (bible §6.2): LOOT x1.0 at 16.
+	_threat_label = _px("LOOT x1.0", 16, UiTheme.AMBER)
 	_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_label)
 	## Threat / bag / kills moved off the combat HUD (pause menu + results);
@@ -785,7 +785,7 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	else:
 		_timer_label.scale = Vector2.ONE
 	## Loot multiplier (big) + Threat (rises with it)
-	_threat_label.text = "LOOT ×%.1f" % loot
+	_threat_label.text = "LOOT x%.1f" % loot
 	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
 	_threat_label.add_theme_color_override("font_color", tl_col)
 	_threat_sub.text = "THREAT %d +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
