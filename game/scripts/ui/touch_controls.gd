@@ -55,7 +55,7 @@ func _ready() -> void:
 
 	btn_dash = _make_button("DASH", 58.0, UiTheme.TEAL)
 	btn_ability = _make_button("ABILITY", 40.0, UiTheme.AMBER,
-		CharacterDefs.ability_icon_path(GameState.selected_character_id))
+		IconSet.path(IconSet.ability(GameState.selected_character_id, GameState.kit_ability(GameState.selected_character_id))))
 	btn_pause = _make_button("II", 20.0, Color(0.75, 0.68, 0.58))
 	for b in [btn_dash, btn_ability, btn_pause]:
 		b.set("slim", true)

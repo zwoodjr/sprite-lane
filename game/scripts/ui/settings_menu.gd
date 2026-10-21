@@ -13,7 +13,7 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(scroll)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 16)
 	scroll.add_child(v)
 	var panel: VBoxContainer = VBoxContainer.new()
 	panel.set_script(SettingsPanel)
@@ -21,27 +21,31 @@ func build(c: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	v.add_child(row)
-	var tut := UiTheme.big_button("REPLAY TUTORIAL", UiTheme.TEAL, 56, 18)
+	var tut := UiTheme.big_button("REPLAY TUTORIAL", UiTheme.TEAL, 64, 20)
 	tut.pressed.connect(func() -> void:
 		GameState.tutorial_done = false
 		GameState.save_profile()
-		tut.text = "TUTORIAL ON FOR NEXT RUN ✓"
+		tut.text = "TUTORIAL NEXT RUN"
 	)
+	tut.icon = IconSet.tex("set_tutorial", false)
+	tut.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(tut)
-	var reset := UiTheme.big_button("RESET PROGRESS", UiTheme.RUST, 56, 18)
+	var reset := UiTheme.big_button("RESET PROGRESS", UiTheme.RUST, 64, 20)
 	reset.pressed.connect(func() -> void:
 		if not _reset_confirm:
 			_reset_confirm = true
 			reset.text = "TAP AGAIN TO WIPE SAVE"
 			return
 		GameState.reset_profile()
-		reset.text = "PROGRESS RESET ✓"
+		reset.text = "PROGRESS RESET"
 	)
+	reset.icon = IconSet.tex("set_reset", false)
+	reset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(reset)
 	if MobileLayout.is_desktop():
-		var fill := UiTheme.big_button("FULLSCREEN", UiTheme.LINE, 56, 18)
+		var fill := UiTheme.big_button("FULLSCREEN", UiTheme.LINE, 64, 20)
 		fill.pressed.connect(func() -> void:
 			DisplayFit.toggle_fill_screen()
-			fill.text = "FULLSCREEN ✓" if DisplayFit.is_filled() else "FULLSCREEN"
+			fill.text = "FULLSCREEN ON" if DisplayFit.is_filled() else "FULLSCREEN"
 		)
 		row.add_child(fill)

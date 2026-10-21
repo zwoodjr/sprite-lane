@@ -135,9 +135,10 @@ func _draw_slim(c: Vector2, r: float, a: float, cdr: float) -> void:
 		draw_arc(c, r - 1.5, a0, a1, 8, Color(col.r, col.g, col.b, 0.9 * a), 3.0, true)
 	draw_arc(c, r - 5.0, 0.0, TAU, 40, Color(0, 0, 0, 0.35 * a), 1.0, true)
 	if icon != null:
-		var d := r * 1.25
+		## Pixel icon at an integer size (48-px art x1, or x2 on big buttons).
+		var d := 96.0 if r * 1.25 >= 90.0 else 48.0
 		var mod := Color(1, 1, 1, 0.9 * a) if cdr <= 0.01 else Color(0.5, 0.5, 0.5, 0.8 * a)
-		draw_texture_rect(icon, Rect2(c - Vector2(d, d) * 0.5, Vector2(d, d)), false, mod)
+		draw_texture_rect(icon, Rect2((c - Vector2(d, d) * 0.5).floor(), Vector2(d, d)), false, mod)
 	if cdr >= 0.995:
 		draw_circle(c, r - 3.0, Color(0, 0, 0, 0.45))
 	elif cdr > 0.02:
@@ -155,7 +156,7 @@ func _draw_slim(c: Vector2, r: float, a: float, cdr: float) -> void:
 	if _pixel == null and ResourceLoader.exists("res://assets/fonts/PressStart2P.ttf"):
 		_pixel = load("res://assets/fonts/PressStart2P.ttf")
 	var font: Font = _pixel if _pixel else ThemeDB.fallback_font
-	var fs := 12 if r > 40.0 else 10
+	var fs := 16 if r > 40.0 else 8
 	var tw := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var p := Vector2(c.x - tw * 0.5, c.y + fs * 0.5)
 	draw_string_outline(font, p, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.8 * a))

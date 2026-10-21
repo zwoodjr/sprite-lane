@@ -68,32 +68,41 @@ func _show_main() -> void:
 	var tw := plate.create_tween().set_parallel(true)
 	tw.tween_property(plate, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(plate, "modulate:a", 1.0, 0.12)
-	v.add_child(UiTheme.title_label("PAUSED", 48))
-	var info := UiTheme.body_label("%s · %s · Threat %d · Scrap %d" % [
-		GameState.get_character().get("display_name", ""),
-		GameState.get_mode().get("display_name", ""),
-		GameState.threat_level,
-		GameState.scrap_found,
-	], 15, UiTheme.TEXT_DIM)
-	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(UiTheme.title_label("PAUSED", UiTheme.T_TITLE_XL))
+	## Run so far: three icon + pixel-number chips (no sentence).
+	var info := HBoxContainer.new()
+	info.alignment = BoxContainer.ALIGNMENT_CENTER
+	info.add_theme_constant_override("separation", 16)
 	v.add_child(info)
-	var resume := UiTheme.big_button("RESUME", UiTheme.TEAL, 70, 26)
+	for pair in [["hud_threat", str(GameState.threat_level), UiTheme.DANGER], ["cur_scrap", str(GameState.scrap_found), UiTheme.AMBER],
+			["hud_kills", str(GameState.kills), UiTheme.TEXT]]:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 4)
+		h.add_child(IconSet.rect(str(pair[0]), 48))
+		var l := UiTheme.pixel_label(str(pair[1]), UiTheme.PX_M, pair[2])
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(l)
+		info.add_child(h)
+	var resume := UiTheme.big_button("RESUME", UiTheme.AMBER, 80, 32)
 	resume.pressed.connect(close)
 	v.add_child(resume)
-	var pack := UiTheme.big_button("BACKPACK  %d/%d" % [GameState.pack_weight(), GameState.pack_capacity()], UiTheme.TEAL, 58, 20)
+	var pack := UiTheme.big_button("BACKPACK  %d/%d" % [GameState.pack_weight(), GameState.pack_capacity()], UiTheme.TEAL, 64, 20)
+	pack.icon = IconSet.tex("camp_backpack", false)
 	pack.pressed.connect(show_pack)
 	v.add_child(pack)
-	var help := UiTheme.big_button("HOW TO PLAY", UiTheme.AMBER, 58, 20)
+	var help := UiTheme.big_button("HOW TO PLAY", UiTheme.LINE, 64, 20)
+	help.icon = IconSet.tex("set_hints", false)
 	help.pressed.connect(_show_help)
 	v.add_child(help)
-	var settings := UiTheme.big_button("SETTINGS", UiTheme.AMBER, 58, 20)
+	var settings := UiTheme.big_button("SETTINGS", UiTheme.LINE, 64, 20)
+	settings.icon = IconSet.tex("tab_workshop", false)
 	settings.pressed.connect(_show_settings)
 	v.add_child(settings)
-	var quit := UiTheme.big_button("ABANDON RUN", UiTheme.RUST, 58, 20)
+	var quit := UiTheme.big_button("ABANDON RUN", UiTheme.RUST, 64, 20)
 	quit.pressed.connect(func() -> void:
 		if not _confirm_abandon:
 			_confirm_abandon = true
-			quit.text = "TAP AGAIN — counts as a wipe"
+			quit.text = "TAP AGAIN: COUNTS AS A WIPE"
 			return
 		if not GameState.run_finished:
 			GameState.on_wipe()

@@ -30,15 +30,15 @@ func _ready() -> void:
 	_card.add_child(v)
 	var stage := PanelContainer.new()
 	stage.add_theme_stylebox_override("panel", UiTheme.plate("inset", 8.0))
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(stage)
 	_art_box = CenterContainer.new()
-	_art_box.custom_minimum_size = Vector2(0, 200)
+	_art_box.custom_minimum_size = Vector2(0, 256)
 	stage.add_child(_art_box)
 	_title = UiTheme.title_label("", 34, UiTheme.AMBER)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	v.add_child(_title)
-	_body = UiTheme.body_label("", 19)
-	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body = UiTheme.body_label("", 20)
 	v.add_child(_body)
 
 	var nav := HBoxContainer.new()
@@ -91,10 +91,10 @@ func _art_for(p: Dictionary) -> Control:
 		var l := UiTheme.title_label(str(p.get("icon", "")), 88, UiTheme.AMBER)
 		return l
 	if strip:
-		return StripAnim.make(path, 196, 8.0)
+		return StripAnim.make(path, 256, 8.0)
 	var t := TextureRect.new()
 	t.texture = load(path)
-	t.custom_minimum_size = Vector2(170, 170)
+	t.custom_minimum_size = Vector2(256, 256)
 	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

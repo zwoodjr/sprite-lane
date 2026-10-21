@@ -22,32 +22,37 @@ const ROWS := [
 ]
 
 
+const ICON := {"stick_scale": "set_stick", "left_handed": "set_lefty", "show_hints": "set_hints", "mute": "set_mute",
+	"vol_master": "set_volume", "vol_music": "set_music", "vol_sfx": "set_sfx", "vol_ambience": "set_ambience",
+	"vol_ui": "set_ui", "haptics": "set_vibration", "screen_shake": "set_shake", "heat_shimmer": "set_shimmer",
+	"film_grain": "set_grain"}
+
+
 func _ready() -> void:
-	add_theme_constant_override("separation", 10)
+	add_theme_constant_override("separation", 8)
 	for row in ROWS:
 		add_child(_make_row(row))
 
 
 func _make_row(row: Dictionary) -> Control:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UiTheme.plate("inset", 14.0))
+	panel.add_theme_stylebox_override("panel", UiTheme.plate("inset", 8.0))
+	panel.tooltip_text = str(row.get("desc", ""))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 16)
 	panel.add_child(h)
-	var text := VBoxContainer.new()
+	h.add_child(IconSet.rect(str(ICON.get(str(row["key"]), "set_ui")), 48))
+	var text := UiTheme.head_label(str(row["label"]), UiTheme.T_H3, UiTheme.TEXT)
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text.add_theme_constant_override("separation", 0)
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	h.add_child(text)
-	text.add_child(UiTheme.body_label(str(row["label"]), 19))
-	if str(row.get("desc", "")) != "":
-		text.add_child(UiTheme.body_label(str(row["desc"]), 13, UiTheme.TEXT_DIM))
 	var key := str(row["key"])
 	match str(row["type"]):
 		"toggle":
 			var b := Button.new()
 			b.toggle_mode = true
 			b.focus_mode = Control.FOCUS_NONE
-			b.custom_minimum_size = Vector2(110, 52)
+			b.custom_minimum_size = Vector2(112, 64)
 			b.button_pressed = bool(GameState.settings.get(key, false))
 			_style_toggle(b)
 			b.toggled.connect(func(on: bool) -> void:
@@ -66,10 +71,12 @@ func _make_row(row: Dictionary) -> Control:
 			s.max_value = float(row["max"])
 			s.step = float(row["step"])
 			s.value = float(GameState.settings.get(key, row["min"]))
-			s.custom_minimum_size = Vector2(200, 52)
+			s.custom_minimum_size = Vector2(200, 64)
 			s.focus_mode = Control.FOCUS_NONE
-			var val := UiTheme.body_label("", 16, UiTheme.AMBER)
-			val.custom_minimum_size = Vector2(52, 0)
+			var val := UiTheme.pixel_label("", UiTheme.PX_M, UiTheme.AMBER)
+			val.custom_minimum_size = Vector2(72, 0)
+			val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			val.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			val.text = _fmt(key, s.value)
 			s.value_changed.connect(func(v: float) -> void:
 				val.text = _fmt(key, v)

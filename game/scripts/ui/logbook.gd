@@ -4,7 +4,8 @@ extends "res://scripts/ui/menu_base.gd"
 ## (5 chapters each, ending in their named Legendary), camp MILESTONES.
 
 const TABS := ["daily", "stories", "milestones", "notes"]
-const TAB_LABEL := {"daily": "DAILY", "stories": "STORIES", "milestones": "GOALS", "notes": "FIELD NOTES"}
+const TAB_LABEL := {"daily": "DAILY", "stories": "STORIES", "milestones": "GOALS", "notes": "NOTES"}
+const TAB_ICON := {"daily": "tab_daily", "stories": "tab_stories", "milestones": "tab_goals", "notes": "tab_notes"}
 
 var _tab: String = "daily"
 var _tab_btns: Dictionary = {}
@@ -14,17 +15,19 @@ var _scrap: Label
 
 
 func build(c: VBoxContainer) -> void:
-	c.add_theme_constant_override("separation", 10)
+	c.add_theme_constant_override("separation", 16)
 	var top := header("LOGBOOK", GameState.go_hangar)
-	_scrap = UiTheme.title_label("", 28, UiTheme.AMBER)
-	_scrap.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	top.add_child(IconSet.rect("cur_scrap", 48))
+	_scrap = UiTheme.pixel_label("", UiTheme.PX_M, UiTheme.AMBER)
+	_scrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_scrap)
 	c.add_child(top)
 	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 6)
+	tabs.add_theme_constant_override("separation", 8)
 	c.add_child(tabs)
 	for t in TABS:
-		var b := UiTheme.big_button(TAB_LABEL[t], UiTheme.LINE, 54, 17)
+		var b := UiTheme.big_button(TAB_LABEL[t], UiTheme.LINE, 64, 20)
+		b.icon = IconSet.tex(str(TAB_ICON[t]), false)
 		b.custom_minimum_size.x = 0
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(show_tab.bind(t))
@@ -59,7 +62,7 @@ func _rebuild() -> void:
 	for ch in _list.get_children():
 		_list.remove_child(ch)
 		ch.queue_free()
-	_scrap.text = "%d SCRAP" % GameState.account_scrap
+	_scrap.text = "%d" % GameState.account_scrap
 	match _tab:
 		"daily":
 			_list.add_child(_note("Three jobs a day. New ones tomorrow (%s)." % GameState.today()))
@@ -86,7 +89,7 @@ func _rebuild() -> void:
 
 
 func _note(t: String) -> Label:
-	return UiTheme.body_label(t, 14, UiTheme.TEXT_DIM)
+	return UiTheme.body_label(t, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 
 
 func _bar(have: int, need: int) -> ProgressBar:
