@@ -1,6 +1,6 @@
 extends Camera2D
 
-## Follow camera: zoomed in (1.35), hero sits ~45% down the screen, and the
+## Follow camera: zoomed in (1.35 at 720 wide; integer texel scale on devices), hero sits ~45% down the screen, and the
 ## view leads 15% of the screen in the move direction. Plus Juice shake.
 
 const SURVIVOR_ZOOM := UnitAnim.SCREEN_ZOOM
@@ -10,6 +10,10 @@ const HERO_SCREEN_Y := 0.45
 const LEAD_FRAC := 0.15
 
 var shake_offset: Vector2 = Vector2.ZERO
+## Extra zoom multiplier for short punch-ins (boss spawn); eased back to 1.
+var punch: float = 1.0
+## Integer texel scale in use (1 art texel = pixel_scale x pixel_scale device px).
+var pixel_scale: int = 1
 var _look: Vector2 = Vector2.ZERO
 var _target: Node2D = null
 
@@ -19,7 +23,7 @@ func set_target(t: Node2D) -> void:
 
 
 func _ready() -> void:
-	zoom = Vector2(SURVIVOR_ZOOM, SURVIVOR_ZOOM)
+	_apply_pixel_zoom()
 	make_current()
 	var grade := CanvasLayer.new()
 	grade.name = "ScreenGrade"
@@ -58,7 +62,7 @@ func _add_ambient_dust() -> void:
 	p.z_index = 30
 	add_child(p)
 	var cm := CanvasModulate.new()
-	cm.color = Color(1.0, 0.95, 0.88)
+	cm.color = Color(1.0, 0.975, 0.94)
 	add_child(cm)
 
 
@@ -107,7 +111,37 @@ func view_world_size() -> Vector2:
 	return get_viewport_rect().size / zoom
 
 
+## Integer pixel scaling. The UI canvas stretches by a fractional factor s
+## (e.g. 1179 / 720 = 1.64 on an iPhone 15), which made each art texel 1-2 px
+## wide and shimmer. The world camera instead picks N = round(s) and zooms so
+## one texel (UnitAnim.TEXEL world px) lands on exactly N x N device px.
+static func stretch_factor(vp: Viewport) -> float:
+	var win := vp.get_window() if vp else null
+	## Headless (tests / bots) reports a 64 px window: keep the design scale.
+	if win == null or DisplayServer.get_name() == "headless":
+		return 1.0
+	var design := win.get_visible_rect().size
+	if design.x <= 0.0:
+		return 1.0
+	return maxf(float(win.size.x) / design.x, 0.01)
+
+
+static func pixel_zoom_for(s: float) -> float:
+	var n := maxi(1, roundi(s))
+	return float(n) / (s * UnitAnim.TEXEL)
+
+
+func _apply_pixel_zoom() -> void:
+	var s := stretch_factor(get_viewport())
+	pixel_scale = maxi(1, roundi(s))
+	var z := pixel_zoom_for(s) * punch
+	zoom = Vector2(z, z)
+
+
 func _process(delta: float) -> void:
+	if punch != 1.0:
+		punch = move_toward(punch, 1.0, delta * 0.35)
+	_apply_pixel_zoom()
 	var view := view_world_size()
 	var want := Vector2.ZERO
 	if _target and is_instance_valid(_target):
