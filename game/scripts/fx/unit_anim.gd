@@ -357,13 +357,21 @@ func _alive_tick(delta: float) -> void:
 		_lean_target = 0.0
 	_lean = lerpf(_lean, _lean_target, clampf(delta * float(_alive["lean_rate"]), 0.0, 1.0))
 	var w := TAU * float(_alive["squash_freq"])
+	## The spring is integrated explicitly: a long frame (hitch, slow device,
+	## software GL) made it diverge to NaN and the unit vanished for good.
+	var dt := minf(delta, 1.0 / 30.0)
 	var steps := 4
-	var h := delta / float(steps)
+	var h := dt / float(steps)
 	for _i in steps:
 		var a := -w * w * _sq - 2.0 * float(_alive["squash_damp"]) * w * _sq_v
 		_sq_v += a * h
 		_sq += _sq_v * h
 	_sq = clampf(_sq, -0.3, 0.3)
+	if is_nan(_sq) or is_nan(_sq_v) or is_nan(_lean):
+		_sq = 0.0
+		_sq_v = 0.0
+		_lean = 0.0
+	_sq_v = clampf(_sq_v, -40.0, 40.0)
 	sprite.rotation = _lean
 	## Volume-preserving squash about the feet (sprite origin = feet).
 	sprite.scale = Vector2(_px_scale * (1.0 - _sq), _px_scale * (1.0 + _sq))
