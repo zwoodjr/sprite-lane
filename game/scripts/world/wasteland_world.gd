@@ -14,103 +14,159 @@ const LANDMARK_NAMES := ["Scrapyard", "Flood Garage", "Signal Tower", "Neon Mark
 @export var player_path: NodePath
 
 var run_seed: int = 1
-var _decor: Array[Texture2D] = []
 var landmarks: Array[Dictionary] = [] ## {name, position, kind}
 var _loaded: Dictionary = {} ## Vector2i -> Node2D
 var _player: Node2D
-var _prop_wreck: Texture2D
 var _prop_crate: Texture2D
-var _prop_tower: Texture2D
-var _prop_scrap: Texture2D
 var _prop_drum: Texture2D
 var _prop_chest: Texture2D
 var _prop_vial: Texture2D
-var _prop_wall: Texture2D
-var _prop_pillar: Texture2D
 var _chunks_root: Node2D
 var _props_root: Node2D
 const BreakableScene := preload("res://scenes/entities/breakable.tscn")
 const DecalAtlas := preload("res://scripts/world/decal_atlas.gd")
 const GroundShader := preload("res://scripts/world/ground.gdshader")
 
-## Mid-scale road props. Collision footprints come from PropMeta (generated
-## with the art by tools/art_world/build.py; most props stay walk-through).
-const MID_PROPS := {
-	"wreck_car": {},
-	"wreck_truck": {},
-	"wreck_bus": {},
-	"wall_collapsed": {},
-	"sandbags": {},
-	"fence_broken": {},
-	"pole_down": {},
-	"barrels_rust": {},
+## World-scale pass: hand-designed SET PIECES (junkyards, pile-ups, ruined
+## building footprints, camps, crater fields, barricade lines, bone fields and
+## each zone's own flavour) on a jittered one-per-chunk grid, with clearings
+## round them for combat. Entries: [kind, dx, dy] in WORLD px from the anchor
+## (sprite centres); kind is a prop name (assets/sprites/props or depth/zone),
+## "?kind" = placed ~55% of the time, "@decal" = floor decal, "crate" = a
+## breakable slot, "fire" = camp fire. Offsets are authored for the bible-size
+## art (car ~176 world px long, hero ~74), and blockers either overlap into one
+## mass or leave >= 60 px gaps, so there are no stuck slots.
+const SETS := {
+	"junkyard": [["wreck_pile", -40, -50], ["wreck_car_blue", 110, 50], ["tire_stack", -150, -30], ["?tire", -120, 60],
+		["scrap_pile", 30, 90], ["barrels_rust", 160, -60], ["@oil", 60, 10], ["@debris", -60, 40], ["@scrap", -130, 30],
+		["@tracksh", 0, 120], ["@rubble", 100, -20], ["crate", -20, 45]],
+	"pileup": [["wreck_truck", 20, -120], ["wreck_car_red", -100, -30], ["wreck_car", 60, -20], ["?tire", -190, 40],
+		["scrap_pile", 160, 60], ["@oil", -20, 30], ["@debris", 80, 50], ["@tracksh", -40, 80], ["@scrap", -150, 0], ["crate", -40, 70]],
+	"ruin_house": [["wall_ruin_b", 0, -90], ["wall_ruin", -140, -80], ["ruin_pillar", 110, -60], ["wall_collapsed", 90, 70],
+		["rubble_chunk", -70, 60], ["?scrap_pile", -150, 80], ["@rubble", 0, -10], ["@rubble", -60, 20], ["@debris", 40, 20],
+		["@rubble", 120, 110], ["@crack", -20, 40], ["crate", 10, 15]],
+	"campsite": [["sandbags", -60, -60], ["wall_ruin", 110, -110], ["barrels_rust", 120, -30], ["fire", 20, 0], ["crate_stack", -150, 10],
+		["?tire", 100, 50], ["scrap_pile", -80, 80], ["@stain", 20, 12], ["@tufts", -30, 40], ["@debris", 80, 70], ["crate", 150, 20]],
+	"crater_field": [["@crater", -90, -40], ["@crater", 80, 10], ["@crater", -20, 100], ["rock_huge", 140, -80], ["rock_large", -150, 60],
+		["rock_small", 30, -90], ["?rock_small", -60, 30], ["@rubble", -100, 0], ["@pebbles", 60, 60], ["@debris", 150, 50], ["?bones", 90, 100]],
+	"barricade": [["sandbags", -130, 0], ["sandbags", 60, 0], ["barrier_scrap", 170, -10], ["barrels_rust", -20, -50],
+		["?tire_stack", -210, 10], ["@debris", -30, 30], ["@pebbles", 100, 30], ["@scrap", -120, 40], ["crate", -20, 50]],
+	"bone_field": [["beast_ribs", 0, -30], ["bones", -150, 40], ["bones", 120, 60], ["rock_small", -110, -70], ["dead_bush", 150, -40],
+		["@bones", -60, 50], ["@bones", 60, 40], ["@bones", -170, -10], ["@tufts", 20, 80], ["@pebbles", 140, 10]],
+	"rock_garden": [["rock_huge", 0, -20], ["rock_large", -100, 30], ["rock_small", 80, 40], ["rock_small", -60, -70], ["dead_bush", 110, -30],
+		["@pebbles", -20, 40], ["@tufts", 60, 70], ["@pebbles", -120, -20], ["@crack", 40, -60], ["crate", -150, -10]],
+	"junk_heap": [["scrap_pile", 0, 0], ["tire_stack", -70, -20], ["barrels_rust", 70, -10], ["?crate_stack", 10, -70],
+		["@debris", -30, 40], ["@scrap", 50, 40], ["@oil", 0, 20], ["crate", -90, 40]],
+	"fence_run": [["fence_broken", -90, -20], ["fence_broken", 90, -10], ["dead_bush", -200, 30], ["?tire", 180, 50],
+		["@tufts", -40, 40], ["@pebbles", 60, 50], ["@debris", 150, 30]],
+	## ---- zone flavour
+	"pole_line": [["power_pole", -160, -40], ["power_pole", 0, -60], ["power_pole", 160, -80], ["wreck_car_olive", -40, 80],
+		["?tire", 130, 60], ["@tracksh", 0, 30], ["@scrap", -110, 70], ["@debris", 90, 100]],
+	"dune_wreck": [["buried_wreck", 0, -30], ["rock_large", -150, 40], ["bones", 120, 60], ["?dead_bush", 140, -60],
+		["@tufts", -60, 60], ["@pebbles", 60, 50], ["@bones", -120, -10], ["crate", -60, 40]],
+	"tank_farm": [["oil_tank", -100, -80], ["oil_tank", 80, -100], ["pipe_rack", 20, 70], ["barrels_rust", 180, 20],
+		["@oil", 0, 10], ["@oil", -70, 110], ["@stain", 110, 50], ["@debris", -160, 40], ["crate", -170, 30]],
+	"pipe_run": [["pipe_rack", -110, -20], ["pipe_rack", 130, -40], ["barrels_rust", 20, 60], ["?scrap_drum", -170, 70],
+		["@oil", 10, 30], ["@stain", -80, 70], ["@debris", 120, 60], ["crate", 60, 70]],
+	"street_block": [["shop_ruin", 0, -80], ["street_lamp", -170, -20], ["street_lamp", 170, 30], ["wreck_car", 20, 100],
+		["@rubble", -80, 30], ["@rubble", 100, 20], ["@debris", -40, 60], ["@crack", 120, 70], ["crate", -110, 50]],
+	"q_camp": [["quarantine_tent", -60, -70], ["hazard_barrier", 110, 60], ["fence_broken", -170, 70], ["crate_stack", 140, -60],
+		["@toxic", 30, 20], ["@debris", -40, 40], ["@stain", 130, 0], ["crate", 20, 20]],
+	"raider_camp": [["spike_barricade", -50, -90], ["raider_totem", 140, -60], ["raider_totem", -170, 40], ["fire", 0, 0],
+		["barrels_rust", 90, 40], ["tire_stack", -80, 50], ["?spike_barricade", 60, 130], ["@stain", 0, 12], ["@bones", -40, 40],
+		["@debris", 120, 80], ["crate", 30, 60]],
+	"vat_bank": [["chem_vat", -90, -60], ["chem_vat", 60, -80], ["pipe_rack", 0, 60], ["barrels_rust", 170, 10],
+		["@toxic", -20, 10], ["@toxic", 100, 40], ["@oil", -120, 50], ["@debris", 160, 70], ["crate", -160, 20]],
+	"base_post": [["tank_wreck", -60, -60], ["guard_post", 150, -40], ["sandbags", -120, 70], ["sandbags", 50, 100],
+		["?crate_stack", 170, 100], ["@tracksh", -40, 20], ["@debris", 60, 40], ["@rubble", -160, 10], ["crate", -10, 45]],
+	"slab_field": [["slab_ruin", -40, -60], ["rubble_chunk", 130, 0], ["rubble_chunk", -160, 50], ["?wall_ruin", 120, -110],
+		["@crater", 60, 80], ["@rubble", -60, 40], ["@rubble", 40, 20], ["@debris", -130, 100], ["crate", 0, 50]],
+	"spire_field": [["dust_spire", 0, -80], ["slab_ruin", -150, 70], ["?rubble_chunk", 140, 40], ["@crater", 80, 90],
+		["@rubble", -40, 20], ["@pebbles", 60, 20], ["@debris", 160, -20], ["crate", 50, 60]],
+	## ---- small zone pieces (second piece in a chunk corner)
+	"vat_single": [["chem_vat", 0, -30], ["barrels_rust", 80, 20], ["@toxic", -20, 40], ["@debris", 60, 50]],
+	"drum_dump": [["barrels_rust", -40, 0], ["barrels_rust", 50, -20], ["?scrap_drum", 10, 40], ["@oil", 0, 30], ["@stain", -60, 30]],
+	"lamp_car": [["street_lamp", -90, -40], ["wreck_car_blue", 60, 20], ["@rubble", -20, 50], ["@debris", 120, 60]],
+	"tent_post": [["quarantine_tent", 0, -30], ["?crate_stack", 130, 20], ["@debris", -60, 60], ["@toxic", 60, 60]],
+	"totem_post": [["raider_totem", 0, -40], ["spike_barricade", 30, 50], ["?tire_stack", -90, 10], ["@bones", -40, 70]],
+	"sandbag_nest": [["sandbags", 0, 0], ["barrels_rust", 100, -30], ["?crate_stack", -100, -20], ["@debris", 20, 40], ["crate", 60, 40]],
+	"pole_pair": [["power_pole", -60, -40], ["power_pole", 80, -60], ["?tire", 0, 40], ["@tracksh", 0, 20]],
+	"dune_buried": [["buried_wreck", 0, -20], ["?rock_small", 100, 30], ["@tufts", -70, 40]],
+	"rubble_heap": [["rubble_chunk", -40, 0], ["rubble_chunk", 50, 20], ["?rock_small", 0, -50], ["@rubble", 0, 40], ["@rubble", -70, 30]],
+	"spire_small": [["dust_spire", 0, -40], ["@rubble", -50, 50], ["@pebbles", 60, 40]],
+	"tank_hulk": [["tank_wreck", 0, -40], ["sandbags", -150, 60], ["?barrels_rust", 140, 50], ["@tracksh", 0, 40],
+		["@debris", -60, 70], ["@rubble", 100, 0], ["crate", 60, 70]],
 }
-## Biome → [prop, weight] (rolled 0-2 times per chunk).
-const BIOME_PROPS := {
-	0: [["crater", 25], ["barrels_rust", 20], ["fence_broken", 15], ["wreck_car", 10]],
-	1: [["crater", 20], ["barrels_rust", 10], ["wreck_car", 12]],
-	2: [["fence_broken", 40], ["barrels_rust", 15], ["sandbags", 10]],
-	3: [["wall_collapsed", 45], ["sandbags", 25], ["barrels_rust", 25], ["fence_broken", 15]],
+## Generic set pieces per biome: [set, weight].
+const BIOME_SETS := {
+	0: [["junkyard", 12], ["pileup", 8], ["ruin_house", 10], ["campsite", 12], ["crater_field", 10], ["barricade", 8],
+		["rock_garden", 10], ["junk_heap", 12], ["fence_run", 8]],
+	1: [["bone_field", 16], ["rock_garden", 14], ["crater_field", 10], ["junk_heap", 8], ["campsite", 8], ["pileup", 6]],
+	2: [["fence_run", 14], ["rock_garden", 14], ["campsite", 12], ["bone_field", 8], ["junk_heap", 10], ["barricade", 8]],
+	3: [["ruin_house", 22], ["barricade", 14], ["crater_field", 12], ["campsite", 10], ["junkyard", 10], ["pileup", 8]],
 }
-## Visual tier: hand-designed debris CLUSTERS with clearings between them
-## (replaces the uniform scatter). Each entry: [kind, dx, dy] in world px from
-## the cluster anchor; kind is a prop texture name, "@decal" for a floor decal,
-## or "crate" for a breakable slot (filled ~55% of the time).
-const CLUSTERS := {
-	"camp": [["wall_ruin", 0, 0], ["barrels_rust", 92, 22], ["fire", 96, -6], ["scrap_pile", -84, 44], ["tire", 34, 64],
-		["@stain", 8, 46], ["@scrap", -30, 70], ["@scrap", 70, 60], ["crate", -10, 96]],
-	"sandbag_nest": [["sandbags", 0, 0], ["barrier_scrap", 110, -30], ["scrap_drum", -96, -14], ["bones", 44, 58],
-		["@pebbles", -40, 46], ["@stain", 20, 30], ["crate", 120, 40]],
-	"boneyard": [["bones", 0, 0], ["rock_large", -72, -14], ["rock_small", 58, 18], ["dead_bush", -26, -60],
-		["bones", 70, -40], ["@bones", -40, 40], ["@grass", 30, -20], ["@pebbles", 90, 30]],
-	"rock_garden": [["rock_large", 0, 0], ["rock_small", 64, 30], ["rock_small", -54, 34], ["dead_bush", 30, -56],
-		["@pebbles", -10, 50], ["@pebbles", 70, 60], ["@grass", -70, -10], ["crate", -110, 20]],
-	"ruins": [["ruin_pillar", -50, -12], ["wall_collapsed", 56, 0], ["rock_small", 0, 56], ["scrap_pile", 120, 50],
-		["@crack", 10, 70], ["@stain", 40, 40], ["@pebbles", -60, 50], ["crate", -20, 110]],
-	"wreck_site": [["wreck_car", 0, 0], ["tire", -96, 40], ["scrap_pile", 92, 46], ["@oil", 10, 40], ["@oil", 60, 70],
-		["@tracks", -40, 80], ["@scrap", -50, 60], ["crate", 140, -10]],
-	"signpost": [["sign_post", 0, 0], ["tire", 46, 24], ["dead_bush", -50, 12], ["@tracks", 0, 46], ["@grass", 30, -30]],
-	"fence_line": [["fence_broken", 0, 0], ["dead_bush", 130, 10], ["rock_small", -120, 16], ["@grass", 60, 30], ["@pebbles", -60, 30]],
-	"cactus_patch": [["cactus", 0, 0], ["cactus", 54, 26], ["rock_small", -40, 30], ["@grass", 20, 40], ["@pebbles", 70, 50]],
+## Zone flavour set pieces (by zone grade) and how often they win over generics.
+const ZONE_SETS := {
+	"haze": ["pole_line", "junkyard"], "drift": ["dune_wreck", "bone_field"], "refinery": ["tank_farm", "pipe_run"],
+	"city": ["street_block", "ruin_house"], "quarantine": ["q_camp", "fence_run"], "raider": ["raider_camp", "barricade"],
+	"chemical": ["vat_bank", "vat_bank", "pipe_run"], "military": ["base_post", "tank_hulk"], "crater": ["slab_field", "ruin_house"],
+	"dustfall": ["spire_field", "slab_field", "tank_hulk"],
 }
-## Biome → [cluster, weight].
-const BIOME_CLUSTERS := {
-	0: [["camp", 18], ["boneyard", 14], ["rock_garden", 18], ["wreck_site", 10], ["signpost", 10], ["fence_line", 10], ["ruins", 10]],
-	1: [["rock_garden", 20], ["boneyard", 20], ["cactus_patch", 25], ["signpost", 10], ["wreck_site", 8]],
-	2: [["fence_line", 25], ["rock_garden", 20], ["boneyard", 15], ["camp", 15], ["signpost", 10]],
-	3: [["ruins", 30], ["sandbag_nest", 25], ["camp", 25], ["wreck_site", 10]],
+const ZONE_SET_CHANCE := 0.62
+## Small zone pieces for the second (corner) slot.
+const ZONE_SMALL := {
+	"haze": ["pole_pair", "junk_heap"], "drift": ["dune_buried", "rock_garden"], "refinery": ["drum_dump", "junk_heap"],
+	"city": ["lamp_car", "rubble_heap"], "quarantine": ["tent_post", "junk_heap"], "raider": ["totem_post", "drum_dump"],
+	"chemical": ["vat_single", "drum_dump"], "military": ["sandbag_nest", "junk_heap"], "crater": ["rubble_heap", "rock_garden"],
+	"dustfall": ["spire_small", "rubble_heap"],
 }
-## Cluster layout scale for the native-size art (see _populate_clusters).
-const CLUSTER_K := 0.72
-## Chance a chunk is a clearing (no cluster), else 1-2 clusters.
-const CLEARING_CHANCE := 0.26
+## Chance a chunk holds a set piece (else an open clearing with scatter).
+const SET_CHANCE := 0.72
+## Small walk-through fill per biome (mid detail between set pieces).
+const BIOME_FILL := {
+	0: ["rock_small", "dead_bush", "tire", "bones", "scrap_pile", "rock_large", "scrap_drum"],
+	1: ["rock_small", "bones", "cactus", "rock_large", "dead_bush", "bones"],
+	2: ["dead_bush", "dead_bush", "rock_small", "tire", "bones", "cactus"],
+	3: ["rock_small", "scrap_pile", "rubble_chunk", "tire", "scrap_drum", "rock_large"],
+}
 ## Rare foreground occluder (dead bush / grass drawn OVER units), per chunk.
 const OCCLUDER_CHANCE := 0.12
-## Biome → decal kinds for clusters (repeats = weight).
+## Ground detail layer: decal kinds per biome (repeats = weight). Every chunk is
+## covered on a jittered 4x4 grid so no screen is bare ground.
 const BIOME_DECALS := {
-	0: ["crack", "crack", "pebbles", "pebbles", "scrap", "stain", "grass"],
-	1: ["bones", "pebbles", "pebbles", "pebbles", "grass", "stain"],
-	2: ["grass", "grass", "grass", "grass", "pebbles", "bones"],
-	3: ["scrap", "scrap", "pebbles", "pebbles", "crack", "oil", "toxic"],
+	0: ["crack", "crack", "pebbles", "scrap", "stain", "grass", "debris", "debris", "rubble", "tufts", "tufts"],
+	1: ["bones", "pebbles", "pebbles", "grass", "stain", "tufts", "tufts", "crack", "rubble"],
+	2: ["grass", "grass", "tufts", "tufts", "tufts", "pebbles", "bones", "crack", "debris"],
+	3: ["scrap", "rubble", "rubble", "pebbles", "pebbles", "crack", "oil", "debris", "stain"],
 }
-const RIVER_DECALS := ["crack", "pebbles", "pebbles", "toxic", "toxic", "bones"]
+const RIVER_DECALS := ["crack", "pebbles", "pebbles", "stain", "toxic", "bones"]
+## Decals round the base of each big prop (anchor it into the ground).
+const SKIRT_DECALS := ["rubble", "debris", "pebbles", "stain", "rubble", "scrap"]
 ## Keep blockers off the drop point and landmark/extract spots.
 const BLOCK_CLEAR_ORIGIN := 420.0
-const BLOCK_CLEAR_LANDMARK := 200.0
+const BLOCK_CLEAR_LANDMARK := 260.0
 ## Landmark rooms keep other dressing out (their own set-piece fills them).
-const LANDMARK_ROOM := 300.0
+const LANDMARK_ROOM := 360.0
 
 var field: GroundField
-var _mid_tex: Dictionary = {}
 var _atlas: Texture2D
 var _ground_tex: Dictionary = {}
 ## Depth E7: the tier's zone (ground set, props, tint — ZoneDefs).
 var zone: Dictionary = {}
-var _zone_tex: Dictionary = {}
 ## Zone grade (ground / decal set suffix) and its 4 ground colours.
 var _grade: String = "haze"
 ## Chunks waiting for their one-off floor bake (one per frame, nearest first).
 var _bake_queue: Array[WastelandChunk] = []
+## Prop textures by name (props/ or depth/zone/), loaded once per run.
+var _tex_cache: Dictionary = {}
+## Placed prop footprints per chunk (world Rect2): spacing for fill and the
+## pad / spawn clear-spot check (clear_at).
+var _occ: Dictionary = {}
+## Collision blocks per chunk: [world Rect2, group id]. Blockers from different
+## groups never sit closer than BLOCK_GAP (no slots to wedge in).
+var _blk: Dictionary = {}
+var _gid: int = 0
+const BLOCK_GAP := 64.0
 
 
 func setup(p_seed: int, player: Node2D) -> void:
@@ -149,30 +205,27 @@ func _load_textures() -> void:
 			_ground_tex[k] = load(zp) as Texture2D
 		else:
 			_ground_tex[k] = load("res://assets/sprites/tiles/ground_%s.png" % k) as Texture2D
-	for zk in zone.get("props", []):
-		var zpath := ZoneDefs.PROP_DIR % str(zk)
-		if ResourceLoader.exists(zpath):
-			_zone_tex[str(zk)] = load(zpath) as Texture2D
-	for k in MID_PROPS.keys():
-		_mid_tex[k] = prop_tex(str(k))
 	var ap := "res://assets/sprites/decals/decal_atlas_%s.png" % _grade
 	_atlas = load(ap if ResourceLoader.exists(ap) else "res://assets/sprites/decals/decal_atlas.png") as Texture2D
-	_decor.clear()
-	for n in [
-		"rock_small", "rock_small", "rock_large", "dead_bush", "dead_bush",
-		"bones", "tire", "cactus", "sign_post", "scrap_pile",
-		"wall_ruin", "barrier_scrap", "ruin_pillar",
-	]:
-		_decor.append(prop_tex(n))
-	_prop_wreck = prop_tex("wreck")
 	_prop_crate = prop_tex("herb_crate")
-	_prop_tower = prop_tex("signal_tower")
-	_prop_scrap = prop_tex("scrap_pile")
 	_prop_drum = prop_tex("scrap_drum")
 	_prop_chest = prop_tex("apothecary_chest")
 	_prop_vial = prop_tex("vial_crate")
-	_prop_wall = prop_tex("wall_ruin")
-	_prop_pillar = prop_tex("ruin_pillar")
+
+
+## Any world prop by name: chunk dressing (props/) or zone art (depth/zone/).
+func _tex(kind: String) -> Texture2D:
+	if _tex_cache.has(kind):
+		return _tex_cache[kind]
+	var t: Texture2D = null
+	var p1 := "res://assets/sprites/props/%s.png" % kind
+	var p2 := ZoneDefs.PROP_DIR % kind
+	if ResourceLoader.exists(p1):
+		t = load(p1) as Texture2D
+	elif ResourceLoader.exists(p2):
+		t = load(p2) as Texture2D
+	_tex_cache[kind] = t
+	return t
 
 
 ## Style-bible prop art (tools/art_world/build.py), one density for everything.
@@ -322,12 +375,16 @@ func _spawn_chunk(coord: Vector2i) -> Node2D:
 	var decals: Array = []
 	chunk.configure(coord, _ground_material(segs, chunk.position), _atlas, decals)
 	_chunks_root.add_child(chunk)
-	var taken: Array[Vector2] = [] ## world positions of mid props (spacing)
-	_populate_road(chunk, coord, segs, decals, taken)
-	_populate_clusters(chunk, coord, segs, decals, taken)
-	_populate_zone_props(chunk, coord, segs, taken)
-	_populate_decals(chunk, coord, segs, decals)
+	_occ[coord] = []
+	_blk[coord] = []
+	chunk.tree_exiting.connect(func() -> void:
+		_occ.erase(coord)
+		_blk.erase(coord))
 	_maybe_landmark_sprite(chunk, coord)
+	_populate_road(chunk, coord, segs, decals)
+	_populate_sets(chunk, coord, segs, decals)
+	_populate_fill(chunk, coord, segs)
+	_populate_decals(chunk, coord, segs, decals)
 	_bake_queue.append(chunk)
 	return chunk
 
@@ -373,6 +430,8 @@ func _rng_for(coord: Vector2i, salt: int) -> RandomNumberGenerator:
 
 func _decal(kind: String, rng: RandomNumberGenerator) -> Rect2:
 	var n := 2 if kind in ["oil", "toxic", "stain", "crater"] or kind.begins_with("tracks") else 3
+	if not DecalAtlas.REGIONS.has("%s_0" % kind):
+		kind = "pebbles"
 	return DecalAtlas.REGIONS["%s_%d" % [kind, rng.randi() % n]]
 
 
@@ -389,41 +448,57 @@ func _tracks_kind(dir: Vector2) -> String:
 	return "tracksa"
 
 
-## Wrecks and downed power poles along roads, tyre tracks and oil on the asphalt.
-func _populate_road(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], decals: Array, taken: Array[Vector2]) -> void:
+## Roads: abandoned convoys (2-3 vehicles nose to tail), downed power poles on
+## the verge, road blocks; tyre tracks and oil on the asphalt.
+func _populate_road(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], decals: Array) -> void:
 	if segs.is_empty():
 		return
 	var rng := _rng_for(coord, 41)
 	var rect := Rect2(chunk.position, Vector2(CHUNK_SIZE, CHUNK_SIZE)).grow(-30.0)
+	var did_convoy := false
 	for s in segs:
 		var a: Vector2 = s["a"]
 		var b: Vector2 = s["b"]
 		var dir := (b - a).normalized()
 		var nrm := Vector2(-dir.y, dir.x)
-		for i in range(3):
+		for i in range(5):
 			var p := _point_on_seg(a, b, rect, rng)
 			if p.x == INF:
 				break
 			var lat := rng.randf_range(-0.6, 0.6) * GroundField.ROAD_HALF
 			decals.append([_decal(_tracks_kind(dir), rng), (p + nrm * lat - chunk.position).floor(), 0.0, false, Color.WHITE])
-			if rng.randf() < 0.3:
+			if rng.randf() < 0.45:
 				var q := p + dir * rng.randf_range(-60, 60) + nrm * rng.randf_range(-20, 20)
-				decals.append([_decal("oil", rng), (q - chunk.position).floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
-			if rng.randf() < 0.5:
-				var q2 := p + nrm * (GroundField.ROAD_HALF + rng.randf_range(4, 22)) * (1.0 if rng.randf() < 0.5 else -1.0)
-				decals.append([_decal("scrap" if rng.randf() < 0.6 else "pebbles", rng), q2 - chunk.position, 0.0, rng.randf() < 0.5, Color.WHITE])
-		## Abandoned vehicle on the road (sometimes).
-		if rng.randf() < 0.42:
-			var p := _point_on_seg(a, b, rect.grow(-40.0), rng)
-			if p.x != INF:
-				var roll := rng.randf()
-				var kind := "wreck_bus" if roll < 0.2 else ("wreck_truck" if roll < 0.5 else "wreck_car")
-				_place_mid(chunk, kind, p + nrm * rng.randf_range(-0.5, 0.5) * GroundField.ROAD_HALF, rng, taken)
+				decals.append([_decal("oil", rng), (q - chunk.position).floor(), 0.0, false, Color.WHITE])
+			## Verge: debris, rubble, dead grass both sides.
+			for side: float in [-1.0, 1.0]:
+				if rng.randf() < 0.7:
+					var q2: Vector2 = p + dir * rng.randf_range(-40, 40) + nrm * (GroundField.ROAD_HALF + rng.randf_range(8, 40)) * side
+					var vk: String = ["debris", "pebbles", "tufts", "scrap", "rubble"][rng.randi() % 5]
+					decals.append([_decal(vk, rng), q2 - chunk.position, 0.0, false, Color.WHITE])
+		## Abandoned convoy: vehicles nose to tail along the road.
+		if not did_convoy and rng.randf() < 0.55:
+			var p0 := _point_on_seg(a, b, rect.grow(-90.0), rng)
+			if p0.x != INF and _room_ok(p0, 120.0):
+				did_convoy = true
+				_gid += 1
+				var n := 2 + rng.randi() % 2
+				var step := 235.0 if absf(dir.x) > 0.7 else 125.0
+				for k in range(n):
+					var roll := rng.randf()
+					var cars: Array[String] = ["wreck_car", "wreck_car_red", "wreck_car_blue", "wreck_car_olive", "wreck"]
+					var kind: String = "wreck_bus" if roll < 0.15 else ("wreck_truck" if roll < 0.4 else cars[rng.randi() % 5])
+					var vp := p0 + dir * (float(k) - float(n - 1) * 0.5) * step + nrm * rng.randf_range(-0.4, 0.4) * GroundField.ROAD_HALF
+					_put(chunk, kind, vp, true)
+					decals.append([_decal("oil", rng), (vp + Vector2(rng.randf_range(-30, 30), 24) - chunk.position).floor(), 0.0, false, Color.WHITE])
+					if rng.randf() < 0.6:
+						var junk: Array[String] = ["tire", "scrap_pile", "scrap_drum"]
+						_put(chunk, junk[rng.randi() % 3], vp + nrm * (GroundField.ROAD_HALF + 50.0) * (1.0 if rng.randf() < 0.5 else -1.0), false)
 		## Toppled power pole on the verge, lines sagging toward the road.
 		if rng.randf() < 0.3:
 			var p2 := _point_on_seg(a, b, rect.grow(-60.0), rng)
 			if p2.x != INF:
-				_place_mid(chunk, "pole_down", p2 + nrm * (GroundField.ROAD_HALF + 46.0) * (1.0 if rng.randf() < 0.5 else -1.0), rng, taken)
+				_put(chunk, "pole_down", p2 + nrm * (GroundField.ROAD_HALF + 60.0) * (1.0 if rng.randf() < 0.5 else -1.0), false)
 
 
 func _point_on_seg(a: Vector2, b: Vector2, rect: Rect2, rng: RandomNumberGenerator) -> Vector2:
@@ -434,69 +509,142 @@ func _point_on_seg(a: Vector2, b: Vector2, rect: Rect2, rng: RandomNumberGenerat
 	return Vector2(INF, INF)
 
 
-## Debris clusters with clearings between them; crates live inside clusters.
-func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], decals: Array, taken: Array[Vector2]) -> void:
+static func rect_gap(a: Rect2, b: Rect2) -> float:
+	var dx := maxf(0.0, maxf(a.position.x - b.end.x, b.position.x - a.end.x))
+	var dy := maxf(0.0, maxf(a.position.y - b.end.y, b.position.y - a.end.y))
+	return sqrt(dx * dx + dy * dy)
+
+
+## Would a block here leave a slot (or overlap) against another group's block?
+func _block_ok(r: Rect2, gid: int) -> bool:
+	var c := _chunk_coord(r.get_center())
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			for e in _blk.get(Vector2i(c.x + dx, c.y + dy), []):
+				if int(e[1]) != gid and rect_gap(r, e[0]) < BLOCK_GAP:
+					return false
+	return true
+
+
+func _register(chunk: Node2D, kind: String, local: Vector2, tex: Texture2D, gid: int) -> void:
+	var wp := chunk.position + local
+	var sz := Vector2(tex.get_width(), tex.get_height()) * UnitAnim.TEXEL
+	var fh := minf(sz.y, maxf(24.0, sz.y * 0.35))
+	var cc := _chunk_coord(chunk.position + Vector2(1, 1))
+	if _occ.has(cc):
+		(_occ[cc] as Array).append(Rect2(wp + Vector2(-sz.x * 0.5, sz.y * 0.5 - fh), Vector2(sz.x, fh)))
+	var br := PropMeta.block_rect(kind)
+	if br.size != Vector2.ZERO and _blk.has(cc):
+		(_blk[cc] as Array).append([Rect2(br.position + wp, br.size), gid])
+
+
+## Is there room for a set piece here (no landmark room, no other footprint)?
+func _room_ok(p: Vector2, r: float) -> bool:
+	for lm in landmarks:
+		if (lm["position"] as Vector2).distance_to(p) < LANDMARK_ROOM + r:
+			return false
+	return clear_at(p, r)
+
+
+## True when no prop footprint lies within r world px of p (pads, spawns).
+func clear_at(p: Vector2, r: float) -> bool:
+	var c := _chunk_coord(p)
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			for rc in _occ.get(Vector2i(c.x + dx, c.y + dy), []):
+				var rr: Rect2 = rc
+				var q := p.clamp(rr.position, rr.end)
+				if q.distance_to(p) < r:
+					return false
+	return true
+
+
+## One hand-designed set piece per chunk (jittered off the grid so it never
+## reads as tiles), or an open clearing. Zone flavour pieces win half the time.
+func _populate_sets(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], decals: Array) -> void:
 	var rng := _rng_for(coord, 57)
-	var n := 0 if rng.randf() < CLEARING_CHANCE else (1 if rng.randf() < 0.62 else 2)
-	for c in range(n):
-		var anchor := chunk.position + Vector2(rng.randf_range(130, CHUNK_SIZE - 130), rng.randf_range(110, CHUNK_SIZE - 110))
-		var biome: int = field.biome_at(anchor)
-		var name := _weighted(BIOME_CLUSTERS[biome], rng)
-		var near_road := GroundField.road_dist(anchor, segs) < GroundField.ROAD_HALF + 150.0
-		if near_road and name != "wreck_site" and name != "signpost":
-			continue
-		if near_road and GroundField.road_dist(anchor, segs) < GroundField.ROAD_HALF + 70.0:
-			continue
-		var clash := false
-		for t in taken:
-			if t.distance_to(anchor) < 260.0:
-				clash = true
-		for lm in landmarks:
-			if (lm["position"] as Vector2).distance_to(anchor) < LANDMARK_ROOM + 120.0:
-				clash = true
-		if clash:
-			continue
-		taken.append(anchor)
-		var flip := rng.randf() < 0.5
-		for e in CLUSTERS[name]:
-			var kind := str(e[0])
-			## Offsets were laid out for the old 2x props; the bible-size art sits
-			## tighter so a cluster still reads as one group with open ground round it.
-			var off := Vector2(float(e[1]) * (-1.0 if flip else 1.0), float(e[2])) * CLUSTER_K + Vector2(rng.randf_range(-6, 6), rng.randf_range(-4, 4))
-			var wp := anchor + off
-			if kind.begins_with("@"):
-				var dk := kind.substr(1)
-				if dk == "tracks":
-					dk = ["tracksh", "tracksd", "tracksa"][rng.randi() % 3]
-				decals.append([_decal(dk, rng), (wp - chunk.position).floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
-			elif kind == "crate":
-				if rng.randf() < 0.75 and wp.length() > 160.0:
-					_place_crate(chunk, wp - chunk.position, rng)
-			elif kind == "fire":
-				if rng.randf() < 0.7:
-					LightFx.fire(chunk, (wp - chunk.position).floor(), 0.9)
+	var biome_c: int = field.biome_at(chunk.position + Vector2(256, 256))
+	if rng.randf() < SET_CHANCE:
+		var anchor := chunk.position + Vector2(256, 256) + Vector2(rng.randf_range(-70, 70), rng.randf_range(-70, 70))
+		## Near a road: slide the piece off the verge instead of dropping it.
+		for s in segs:
+			var rd := GroundField.road_dist(anchor, segs)
+			if rd >= GroundField.ROAD_HALF + 150.0:
+				break
+			var a: Vector2 = s["a"]
+			var b: Vector2 = s["b"]
+			var q := Geometry2D.get_closest_point_to_segment(anchor, a, b)
+			var away := (anchor - q).normalized() if anchor.distance_to(q) > 1.0 else Vector2(-(b - a).normalized().y, (b - a).normalized().x)
+			anchor = q + away * (GroundField.ROAD_HALF + 160.0)
+		if anchor.length() >= 260.0 and GroundField.road_dist(anchor, segs) >= GroundField.ROAD_HALF + 140.0 and _room_ok(anchor, 150.0):
+			var biome: int = field.biome_at(anchor)
+			var name := ""
+			var zs: Array = ZONE_SETS.get(_grade, [])
+			if not zs.is_empty() and rng.randf() < ZONE_SET_CHANCE:
+				name = str(zs[rng.randi() % zs.size()])
 			else:
-				## Never mirrored: every sprite is lit from the top-left (bible 1.4).
-				_place_cluster_prop(chunk, kind, wp, rng.randf() < 0.0)
-	## A lone crate out in the open now and then (clearings keep some loot).
-	if n == 0 and rng.randf() < 0.6:
-		var lp := Vector2(rng.randf_range(60, CHUNK_SIZE - 60), rng.randf_range(60, CHUNK_SIZE - 60))
-		if (chunk.position + lp).length() > 160.0:
-			_place_crate(chunk, lp, rng)
-	## Sparse singles so clearings aren't sterile (no blockers).
-	for i in range(rng.randi() % 2):
-		var p := Vector2(rng.randf_range(30, CHUNK_SIZE - 30), rng.randf_range(30, CHUNK_SIZE - 30))
-		if GroundField.road_dist(chunk.position + p, segs) < GroundField.ROAD_HALF + 20.0:
+				name = _weighted(BIOME_SETS[biome], rng)
+			_build_set(chunk, name, anchor, rng, decals)
+	## A second, smaller piece in a free corner (mid detail between the big ones).
+	if rng.randf() < 0.55:
+		var corners: Array[Vector2] = [Vector2(110, 110), Vector2(402, 110), Vector2(110, 402), Vector2(402, 402)]
+		var c0 := rng.randi() % 4
+		for i in range(4):
+			var ap := chunk.position + corners[(c0 + i) % 4] + Vector2(rng.randf_range(-20, 20), rng.randf_range(-20, 20))
+			if ap.length() < 300.0 or GroundField.road_dist(ap, segs) < GroundField.ROAD_HALF + 110.0 or not _room_ok(ap, 110.0):
+				continue
+			var small: Array = ["junk_heap", "rock_garden", "junk_heap", "fence_run", "barricade"]
+			if biome_c == 1:
+				small = ["rock_garden", "junk_heap", "bone_field"]
+			if ZONE_SMALL.has(_grade) and rng.randf() < 0.6:
+				small = ZONE_SMALL[_grade]
+			_build_set(chunk, str(small[rng.randi() % small.size()]), ap, rng, decals)
+			break
+
+
+func _build_set(chunk: Node2D, name: String, anchor: Vector2, rng: RandomNumberGenerator, decals: Array) -> void:
+	_gid += 1
+	## Mirror the layout half the time (positions only: sprites are never
+	## flipped, they are lit from the top-left).
+	var mx := -1.0 if rng.randf() < 0.5 else 1.0
+	for e in SETS[name]:
+		var kind := str(e[0])
+		var wp := anchor + Vector2(float(e[1]) * mx, float(e[2])) + Vector2(rng.randf_range(-5, 5), rng.randf_range(-4, 4))
+		if kind.begins_with("?"):
+			if rng.randf() > 0.55:
+				continue
+			kind = kind.substr(1)
+		if kind.begins_with("@"):
+			var dk := kind.substr(1)
+			if dk == "tracksh":
+				dk = ["tracksh", "tracksd", "tracksa"][rng.randi() % 3]
+			decals.append([_decal(dk, rng), (wp - chunk.position).floor(), 0.0, false, Color.WHITE])
+		elif kind == "crate":
+			if rng.randf() < 0.75 and wp.length() > 160.0:
+				_place_crate(chunk, wp - chunk.position, rng)
+		elif kind == "fire":
+			LightFx.fire(chunk, (wp - chunk.position).floor(), 0.9)
+		else:
+			_put(chunk, kind, wp, true, decals, rng)
+
+
+## Mid detail between set pieces: small walk-through props, kept clear of
+## footprints (combat lanes stay open).
+func _populate_fill(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary]) -> void:
+	var rng := _rng_for(coord, 59)
+	var n := 6 + rng.randi() % 5
+	for i in range(n):
+		var p := chunk.position + Vector2(rng.randf_range(30, CHUNK_SIZE - 30), rng.randf_range(30, CHUNK_SIZE - 30))
+		if GroundField.road_dist(p, segs) < GroundField.ROAD_HALF + 20.0 or not clear_at(p, 60.0):
 			continue
-		var sk: String = ["rock_small", "dead_bush", "tire", "bones"][rng.randi() % 4]
-		var sp := Sprite2D.new()
-		sp.texture = prop_tex(sk)
-		sp.scale = Vector2.ONE * prop_scale(sp.texture)
-		sp.position = snap(p)
-		sp.flip_h = rng.randf() < 0.0 ## lit top-left: never mirrored
-		sp.z_index = 2
-		add_prop_shadow(chunk, sk, sp.position, sp.flip_h)
-		chunk.add_child(sp)
+		var pool: Array = BIOME_FILL[field.biome_at(p)]
+		_gid += 1
+		_put(chunk, str(pool[rng.randi() % pool.size()]), p, false)
+	## A lone crate out in the open now and then (clearings keep some loot).
+	if rng.randf() < 0.35:
+		var lp := chunk.position + Vector2(rng.randf_range(60, CHUNK_SIZE - 60), rng.randf_range(60, CHUNK_SIZE - 60))
+		if lp.length() > 160.0 and clear_at(lp, 40.0):
+			_place_crate(chunk, lp - chunk.position, rng)
 	## Rare foreground occluder: a dead bush drawn over the units, slightly see-through.
 	if rng.randf() < OCCLUDER_CHANCE:
 		var p2 := Vector2(rng.randf_range(40, CHUNK_SIZE - 40), rng.randf_range(40, CHUNK_SIZE - 40))
@@ -512,8 +660,11 @@ func _populate_clusters(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary],
 			chunk.add_child(oc)
 
 
-func _place_cluster_prop(chunk: Node2D, kind: String, world_pos: Vector2, flip: bool) -> void:
-	var tex := prop_tex(kind)
+## Place one prop sprite (centre at world_pos): contact shadow, collision from
+## PropMeta, zone light pool, footprint registered. Blockers stay off the drop
+## point and landmark rooms. `big` props get a skirt of floor decals.
+func _put(chunk: Node2D, kind: String, world_pos: Vector2, big: bool, decals: Array = [], rng: RandomNumberGenerator = null) -> void:
+	var tex := _tex(kind)
 	if tex == null:
 		return
 	var is_block := blocks(kind)
@@ -523,16 +674,31 @@ func _place_cluster_prop(chunk: Node2D, kind: String, world_pos: Vector2, flip: 
 		for lm in landmarks:
 			if (lm["position"] as Vector2).distance_to(world_pos) < BLOCK_CLEAR_LANDMARK:
 				return
+	var local := snap(world_pos - chunk.position)
+	if is_block and not _block_ok(Rect2(PropMeta.block_rect(kind).position + chunk.position + local, PropMeta.block_rect(kind).size), _gid):
+		return
 	var sp := Sprite2D.new()
 	sp.texture = tex
-	sp.scale = Vector2.ONE * prop_scale(tex)
-	sp.position = snap(world_pos - chunk.position)
-	sp.flip_h = flip
+	sp.scale = Vector2.ONE * UnitAnim.TEXEL
+	sp.position = local
 	sp.z_index = 2
-	add_prop_shadow(chunk, kind, sp.position, flip)
-	chunk.add_child(sp)
+	var m := PropMeta.info(kind)
+	if m.has("light"):
+		var lp: Vector2 = m["light"]
+		if kind == "street_lamp":
+			LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
+		elif kind == "chem_vat":
+			LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 130.0, Color(0.61, 0.81, 0.24, 0.26), 0.1)
+	add_prop_shadow(chunk, kind, sp.position)
 	if is_block:
-		add_prop_block(chunk, kind, sp.position, flip)
+		add_prop_block(chunk, kind, sp.position)
+	chunk.add_child(sp)
+	_register(chunk, kind, local, tex, _gid)
+	var sz := Vector2(tex.get_width(), tex.get_height()) * UnitAnim.TEXEL
+	if big and rng != null and sz.x > 70.0:
+		for k in range(2 + rng.randi() % 2):
+			var dp := world_pos + Vector2(rng.randf_range(-0.5, 0.5) * sz.x, sz.y * 0.5 + rng.randf_range(-6, 14))
+			decals.append([_decal(SKIRT_DECALS[rng.randi() % SKIRT_DECALS.size()], rng), (dp - chunk.position).floor(), 0.0, false, Color.WHITE])
 
 
 func _place_crate(chunk: Node2D, local: Vector2, rng: RandomNumberGenerator) -> void:
@@ -552,51 +718,6 @@ func _place_crate(chunk: Node2D, local: Vector2, rng: RandomNumberGenerator) -> 
 	add_prop_shadow(chunk, br.kind, br.position)
 
 
-## Depth E7: this zone's own props (refinery tanks, city lamps, chem vats...).
-func _populate_zone_props(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], taken: Array[Vector2]) -> void:
-	if _zone_tex.is_empty():
-		return
-	var rng := _rng_for(coord, 71)
-	var keys: Array = _zone_tex.keys()
-	var count := rng.randi_range(ZoneDefs.PROPS_PER_CHUNK.x, ZoneDefs.PROPS_PER_CHUNK.y)
-	for i in range(count):
-		var p := chunk.position + Vector2(rng.randf_range(70, CHUNK_SIZE - 70), rng.randf_range(60, CHUNK_SIZE - 60))
-		var kind := str(keys[rng.randi() % keys.size()])
-		if GroundField.road_dist(p, segs) < GroundField.ROAD_HALF + 70.0 or p.length() < BLOCK_CLEAR_ORIGIN:
-			continue
-		var near := false
-		for t in taken:
-			if t.distance_to(p) < 190.0:
-				near = true
-		for lm in landmarks:
-			if (lm["position"] as Vector2).distance_to(p) < LANDMARK_ROOM:
-				near = true
-		if near:
-			continue
-		taken.append(p)
-		var tex: Texture2D = _zone_tex[kind]
-		var sp := Sprite2D.new()
-		sp.texture = tex
-		## Native density: the art is drawn at its size class (no fit-to-height).
-		sp.scale = Vector2.ONE * UnitAnim.TEXEL
-		sp.position = snap(p - chunk.position)
-		sp.flip_h = rng.randf() < 0.0 ## lit top-left: never mirrored
-		sp.z_index = 2
-		## Lit zone props cast a pool of light (the one soft gradient allowed).
-		var m := PropMeta.info(kind)
-		if m.has("light"):
-			var lp: Vector2 = m["light"]
-			if sp.flip_h:
-				lp.x = -lp.x
-			if kind == "street_lamp":
-				LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
-			elif kind == "chem_vat":
-				LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 130.0, Color(0.61, 0.81, 0.24, 0.26), 0.1)
-		add_prop_shadow(chunk, kind, sp.position, sp.flip_h)
-		add_prop_block(chunk, kind, sp.position, sp.flip_h)
-		chunk.add_child(sp)
-
-
 func _weighted(table: Array, rng: RandomNumberGenerator) -> String:
 	var total := 0
 	for e in table:
@@ -609,60 +730,34 @@ func _weighted(table: Array, rng: RandomNumberGenerator) -> String:
 	return table[0][0]
 
 
-func _place_mid(chunk: Node2D, kind: String, world_pos: Vector2, rng: RandomNumberGenerator, taken: Array[Vector2]) -> void:
-	for t in taken:
-		if t.distance_to(world_pos) < 150.0:
-			return
-	for lm in landmarks:
-		if (lm["position"] as Vector2).distance_to(world_pos) < LANDMARK_ROOM:
-			return
-	if blocks(kind):
-		if world_pos.length() < BLOCK_CLEAR_ORIGIN:
-			return
-		for lm in landmarks:
-			if (lm["position"] as Vector2).distance_to(world_pos) < BLOCK_CLEAR_LANDMARK:
-				return
-	taken.append(world_pos)
-	var sp := Sprite2D.new()
-	sp.texture = _mid_tex[kind]
-	sp.scale = Vector2.ONE * prop_scale(sp.texture)
-	sp.position = snap(world_pos - chunk.position)
-	sp.flip_h = rng.randf() < 0.0 ## lit top-left: never mirrored
-	sp.z_index = 2
-	add_prop_shadow(chunk, kind, sp.position, sp.flip_h)
-	add_prop_block(chunk, kind, sp.position, sp.flip_h)
-	chunk.add_child(sp)
-
-
-## Small decals in clusters (2-4 per chunk) flavoured by biome / riverbed,
-## plus a light sprinkle of singles. All inside the floor's value range.
+## Ground detail layer: a jittered 4x4 grid of decals over every chunk (cracks,
+## debris, dead grass, oil, rubble...) flavoured by biome / riverbed / road, so
+## no screen is bare ground. All inside the floor's value range.
 func _populate_decals(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], decals: Array) -> void:
 	var rng := _rng_for(coord, 63)
-	var clusters := 1 + rng.randi() % 2
-	for c in range(clusters):
-		var center := Vector2(rng.randf_range(30, CHUNK_SIZE - 30), rng.randf_range(30, CHUNK_SIZE - 30))
-		var wc := chunk.position + center
-		var pool: Array = RIVER_DECALS if field.is_riverbed(wc) else BIOME_DECALS[field.biome_at(wc)]
-		if GroundField.road_dist(wc, segs) < GroundField.ROAD_HALF:
-			pool = ["oil", "scrap", "pebbles", "crack"]
-		var n := 2 + rng.randi() % 4
-		var spread := rng.randf_range(18.0, 40.0)
-		## Cluster has a dominant kind, with a few mixed in.
-		var main_kind: String = pool[rng.randi() % pool.size()]
-		for i in range(n):
-			var kind: String = main_kind if rng.randf() < 0.6 else pool[rng.randi() % pool.size()]
-			if kind == "toxic" and rng.randf() < 0.5:
-				kind = "pebbles"
-			var off := Vector2(rng.randfn(0.0, spread), rng.randfn(0.0, spread * 0.7))
-			decals.append([_decal(kind, rng), (center + off).floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
-	for i in range(rng.randi() % 3):
-		var p := Vector2(rng.randf_range(10, CHUNK_SIZE - 10), rng.randf_range(10, CHUNK_SIZE - 10))
-		decals.append([_decal(["pebbles", "grass", "crack"][rng.randi() % 3], rng), p.floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
+	var cell := CHUNK_SIZE / 4.0
+	for gx in range(4):
+		for gy in range(4):
+			for k in range(2 + int(rng.randf() < 0.5)):
+				var lp := Vector2((gx + rng.randf_range(0.15, 0.85)) * cell, (gy + rng.randf_range(0.15, 0.85)) * cell)
+				var wc := chunk.position + lp
+				var pool: Array = RIVER_DECALS if field.is_riverbed(wc) else BIOME_DECALS[field.biome_at(wc)]
+				if GroundField.road_dist(wc, segs) < GroundField.ROAD_HALF:
+					pool = ["oil", "scrap", "pebbles", "crack"]
+				var kind: String = pool[rng.randi() % pool.size()]
+				if kind == "toxic" and rng.randf() < 0.5:
+					kind = "pebbles"
+				decals.append([_decal(kind, rng), lp.floor(), 0.0, false, Color.WHITE])
+	## Old off-road tyre tracks wandering across the ground.
+	if rng.randf() < 0.4:
+		var tp := Vector2(rng.randf_range(100, CHUNK_SIZE - 100), rng.randf_range(100, CHUNK_SIZE - 100))
+		if GroundField.road_dist(chunk.position + tp, segs) > GroundField.ROAD_HALF + 80.0:
+			decals.append([_decal(["tracksh", "tracksd", "tracksa", "tracksv"][rng.randi() % 4], rng), tp.floor(), 0.0, false, Color.WHITE])
 	## Old shell craters (they used to be a prop): a flat ground decal now.
-	if rng.randf() < 0.22 and field.biome_at(chunk.position + Vector2(256, 256)) != 2:
+	if rng.randf() < 0.45 and field.biome_at(chunk.position + Vector2(256, 256)) != 2:
 		var cp := Vector2(rng.randf_range(70, CHUNK_SIZE - 70), rng.randf_range(50, CHUNK_SIZE - 50))
 		if GroundField.road_dist(chunk.position + cp, segs) > GroundField.ROAD_HALF + 60.0:
-			decals.append([_decal("crater", rng), cp.floor(), 0.0, rng.randf() < 0.5, Color.WHITE])
+			decals.append([_decal("crater", rng), cp.floor(), 0.0, false, Color.WHITE])
 
 
 ## Landmark set-pieces (bible: max 1 per screen; the world composed as rooms
@@ -672,19 +767,22 @@ func _populate_decals(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], d
 ## "@x" = floor decal. The first entry is the hero prop (label anchor).
 const LANDMARK_SETS := [
 	## 0 wreck field (Scrapyard, Convoy Wreck)
-	[["wreck", 0, -190], ["wreck_car", -200, -90], ["barrels_rust", 190, -120], ["scrap_pile", 210, 60], ["tire", -180, 90],
-		["tire", 120, -190], ["scrap_pile", -150, 170], ["@oil", 20, -130], ["@oil", -110, -40], ["@tracksh", -40, 40],
-		["@scrap", 80, 100], ["@scrap", -60, -60], ["@stain", 0, -150]],
+	[["wreck_bus", 0, -215], ["wreck_car", -235, -60], ["wreck", 225, -70], ["barrels_rust", 240, 100], ["tire_stack", -290, 50],
+		["scrap_pile", 160, 200], ["wreck_car_red", -200, 190], ["tire", 110, -300], ["@oil", 20, -140], ["@oil", -110, -20],
+		["@tracksh", -40, 40], ["@debris", 80, 100], ["@scrap", -60, -60], ["@stain", 0, -150], ["@rubble", 200, 20],
+		["@debris", -180, 110]],
 	## 1 garage / wall ruin (Flood Garage)
-	[["wall_collapsed", 0, -190], ["wall_ruin", -190, -120], ["ruin_pillar", 190, -150], ["scrap_pile", 200, 70],
-		["barrels_rust", -200, 60], ["rock_small", -110, 170], ["@stain", -20, -110], ["@pebbles", 60, 40], ["@pebbles", -90, 30],
-		["@crack", 30, 110]],
+	[["wall_ruin_b", 0, -210], ["wall_ruin", -125, -200], ["ruin_pillar", 130, -200], ["wall_collapsed", 230, 60],
+		["barrels_rust", -240, 60], ["rubble_chunk", -150, 180], ["crate_stack", 220, -140], ["@stain", -20, -110],
+		["@rubble", 60, 40], ["@rubble", -90, 30], ["@crack", 30, 110], ["@debris", -200, -60], ["@rubble", 120, -120]],
 	## 2 signal tower
-	[["signal_tower", 0, -200], ["fence_broken", -190, -110], ["barrels_rust", 170, -110], ["sign_post", -170, 90],
-		["scrap_pile", 190, 80], ["@tracksv", 30, 40], ["@pebbles", -30, -100], ["@scrap", 70, 90], ["@crack", -110, 120]],
-	## 3 ruined arcade pillars (Neon Market, Herb Cache)
-	[["wall_ruin", 0, -190], ["ruin_pillar", -170, -110], ["ruin_pillar", 170, -120], ["sandbags", -150, 150], ["bones", 60, -100],
-		["rock_large", 190, 90], ["dead_bush", -200, 20], ["@pebbles", 0, 30], ["@bones", 60, 50], ["@grass", -80, 110]],
+	[["signal_tower", 0, -235], ["fence_broken", -210, -150], ["fence_broken", 210, -140], ["barrels_rust", 200, 80],
+		["sign_post", -190, 90], ["crate_stack", -250, -20], ["scrap_pile", 150, 200], ["@tracksv", 30, 40], ["@pebbles", -30, -100],
+		["@debris", 70, 90], ["@crack", -110, 120], ["@rubble", 20, -130]],
+	## 3 ruined arcade (Neon Market, Herb Cache)
+	[["shop_ruin", 0, -225], ["street_lamp", -200, -120], ["street_lamp", 205, -110], ["ruin_pillar", -240, 100],
+		["sandbags", -150, 190], ["rock_large", 230, 130], ["dead_bush", -260, -10], ["@rubble", 0, -100], ["@pebbles", 0, 30],
+		["@bones", 60, 50], ["@tufts", -80, 110], ["@debris", 120, -40], ["@rubble", -120, -60]],
 ]
 
 
@@ -695,6 +793,7 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 		if lc == coord:
 			var k := int(lm["kind"])
 			var set_rng := _rng_for(coord, 97)
+			_gid += 1
 			for e in LANDMARK_SETS[k]:
 				var kind := str(e[0])
 				var wp := lp + Vector2(float(e[1]), float(e[2]))
@@ -702,16 +801,20 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 					(chunk as WastelandChunk).add_decal([_decal(kind.substr(1), set_rng), (wp - chunk.position).floor(), 0.0, false, Color.WHITE])
 					continue
 				var sp := Sprite2D.new()
-				sp.texture = prop_tex(kind)
-				sp.scale = Vector2.ONE * prop_scale(sp.texture)
+				sp.texture = _tex(kind)
+				sp.scale = Vector2.ONE * UnitAnim.TEXEL
 				sp.position = snap(wp - chunk.position)
 				sp.z_index = 2
+				var m := PropMeta.info(kind)
+				if kind == "street_lamp" and m.has("light"):
+					LightFx.lamp(chunk, sp.position + (m["light"] as Vector2) * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
 				add_prop_shadow(chunk, kind, sp.position)
 				add_prop_block(chunk, kind, sp.position)
 				chunk.add_child(sp)
+				_register(chunk, kind, sp.position, sp.texture, _gid)
 			var hero: Array = LANDMARK_SETS[k][0]
 			var sp_pos := snap(lp + Vector2(float(hero[1]), float(hero[2])) - chunk.position)
-			var sp_tex := prop_tex(str(hero[0]))
+			var sp_tex := _tex(str(hero[0]))
 			var label := Label.new()
 			label.text = str(lm["name"])
 			label.position = sp_pos + Vector2(-40, -sp_tex.get_height() * 0.5 * UnitAnim.TEXEL - 18.0)

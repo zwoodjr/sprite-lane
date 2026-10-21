@@ -257,6 +257,9 @@ func _place_window_pads(phase_index: int) -> void:
 			## behind a long ruin wall is effectively unreachable). Relax the
 			## line-of-sight need on the last attempts.
 			var ok := _spot_clear(p) and (attempt >= 6 or _clear_line(player.global_position, p))
+			## Prefer an open clearing (no set-piece art over the pad).
+			if ok and attempt < 7 and wasteland.has_method("clear_at") and not bool(wasteland.call("clear_at", p, 110.0)):
+				ok = false
 			for u in used:
 				if u.distance_to(p) < 450.0:
 					ok = false

@@ -505,7 +505,7 @@ def paste(dst, src, x, y):
 
 
 # ---------------------------------------------------------------- validator
-CAP = {"prop": 24, "decal": 24, "tile": 4}
+CAP = {"prop": 24, "decal": 24, "atlas": 32, "tile": 4}
 
 
 def validate(cv_or_arr, kind="prop", zone_cols=(), size_max=None, name="", glints=0):

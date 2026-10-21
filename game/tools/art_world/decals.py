@@ -10,7 +10,7 @@ from pk import *
 SIZES = {"crack": (92, 60, 3), "pebbles": (42, 28, 3), "bones": (46, 28, 3), "grass": (34, 26, 3),
          "oil": (64, 34, 2), "scrap": (30, 22, 3), "stain": (96, 56, 2), "toxic": (54, 34, 2),
          "tracksh": (196, 34, 2), "tracksv": (34, 196, 2), "tracksd": (150, 150, 2), "tracksa": (150, 150, 2),
-         "crater": (92, 62, 2)}
+         "crater": (92, 62, 2), "rubble": (84, 46, 3), "debris": (64, 40, 3), "tufts": (70, 40, 3)}
 
 
 def zc(zone):
@@ -259,7 +259,78 @@ def sinkhole(z, W, seed=4):
     return cv
 
 
-MAKERS = {"crack": crack, "pebbles": pebbles, "bones": bones_d, "grass": grass, "oil": oil, "scrap": scrap,
+def _chunk(cv, x, y, w, hh, ramp, c0):
+    """Small lit rubble chunk: top-left lit, bottom-right shade, ground shadow."""
+    for j in range(hh):
+        for i in range(w):
+            c = ramp[2]
+            if i == 0 or j == 0:
+                c = ramp[3]
+            if i == w - 1 or j == hh - 1:
+                c = ramp[1]
+            cv.px(x + i, y + j, c)
+    for i in range(w):
+        if not cv.get(x + i + 1, y + hh):
+            cv.px(x + i + 1, y + hh, c0)
+    for j in range(hh):
+        if not cv.get(x + w, y + j + 1):
+            cv.px(x + w, y + j + 1, c0)
+
+
+def rubble(z, seed):
+    """Spread of broken concrete / brick / stone (rubble edges round ruins)."""
+    c0 = zc(z)[0]
+    W, H_ = SIZES["rubble"][:2]
+    cv = Cv(W, H_)
+    rnd = random.Random(seed)
+    for _ in range(16):
+        ramp = rnd.choice(([A[0], A[1], A[2], A[3]], [A[0], A[1], A[2], A[3]], [RU[0], RU[1], RU[2], RU[3]], [E[0], E[1], E[2], E[3]]))
+        # denser in the middle
+        x = int(W / 2 + rnd.gauss(0, W / 5)); y = int(H_ / 2 + rnd.gauss(0, H_ / 5))
+        w, hh = rnd.randint(2, 7), rnd.randint(2, 5)
+        x = max(1, min(W - w - 2, x)); y = max(1, min(H_ - hh - 2, y))
+        _chunk(cv, x, y, w, hh, ramp, c0)
+    return cv
+
+
+def debris(z, seed):
+    """Mixed junk: a plank, scrap bits, pebbles."""
+    c0, c1, c2, c3 = zc(z)
+    W, H_ = SIZES["debris"][:2]
+    cv = Cv(W, H_)
+    rnd = random.Random(seed)
+    x, y = rnd.randint(4, 16), rnd.randint(8, H_ - 12)
+    L = rnd.randint(22, 34)
+    for i in range(L):
+        yy = y + i // 9
+        cv.px(x + i, yy, E[3]); cv.px(x + i, yy + 1, E[2]); cv.px(x + i, yy + 2, E[1])
+        if not cv.get(x + i + 1, yy + 3):
+            cv.px(x + i + 1, yy + 3, c0)
+    for _ in range(7):
+        ramp = rnd.choice((RU, ST, [A[0], A[1], A[2], A[3]], [E[0], E[1], E[2], E[3]]))
+        _chunk(cv, rnd.randint(1, W - 8), rnd.randint(1, H_ - 6), rnd.randint(2, 5), rnd.randint(2, 3), ramp, c0)
+    return cv
+
+
+def tufts(z, seed):
+    """Dead-grass patch: several tufts."""
+    W, H_ = SIZES["tufts"][:2]
+    cv = Cv(W, H_)
+    rnd = random.Random(seed)
+    c0 = zc(z)[0]
+    for _ in range(rnd.randint(4, 6)):
+        bx, by = rnd.randint(6, W - 8), rnd.randint(12, H_ - 3)
+        for k in range(6):
+            ang = -math.pi / 2 + (k - 2.5) * 0.3 + rnd.uniform(-0.1, 0.1)
+            L = rnd.randint(4, 9)
+            for i in range(L):
+                x = bx + math.cos(ang) * i
+                y = by + math.sin(ang) * i
+                cv.px(x, y, E[2] if (i > L - 3 and k < 3) else (CL[1] if i > 2 else c0))
+    return cv
+
+
+MAKERS = {"rubble": rubble, "debris": debris, "tufts": tufts, "crack": crack, "pebbles": pebbles, "bones": bones_d, "grass": grass, "oil": oil, "scrap": scrap,
           "stain": stain, "toxic": toxic, "crater": crater}
 
 

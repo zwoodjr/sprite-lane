@@ -25,49 +25,56 @@ SPR = GAME + "/assets/sprites/"
 GRADES = ["haze", "drift", "refinery", "city", "quarantine", "raider", "chemical", "military", "crater", "dustfall"]
 
 # name -> (maker, folder, size class (max h, max w))
-PS, PM, PL_, LM = (40, 400), (100, 400), (160, 400), (260, 300)
+# World-scale pass: real proportions against the hero (body ~100 tx): props
+# S <= 0.6x hero, M <= 1.7x, L <= 2.6x, landmark set pieces up to 3.6x tall.
+PS, PM, PL_, LM = (60, 140), (170, 320), (260, 440), (360, 520)
+import props_big as B
 PROPS = {
     # assets/sprites/props (chunk dressing, breakables, extract pads)
     "rock_small": (S.rock_small, "props", PS), "rock_large": (S.rock_large, "props", PS),
+    "rock_huge": (B.rock_huge, "props", PM),
     "bones": (S.bones, "props", PS), "dead_bush": (S.dead_bush, "props", PS), "cactus": (S.cactus, "props", PM),
-    "tire": (S.tire, "props", PS), "sign_post": (S.sign_post, "props", PM), "scrap_pile": (S.scrap_pile, "props", PS),
+    "tire": (S.tire, "props", PS), "tire_stack": (B.tire_stack, "props", PM), "sign_post": (S.sign_post, "props", PM),
+    "scrap_pile": (S.scrap_pile, "props", PS), "crate_stack": (B.crate_stack, "props", PM),
     "barrier_scrap": (S.barrier_scrap, "props", PM), "scrap_drum": (S.scrap_drum, "props", PS),
     "herb_crate": (S.herb_crate, "props", PS), "vial_crate": (S.vial_crate, "props", PS),
-    "apothecary_chest": (S.apothecary_chest, "props", PS), "barrels_rust": (S.barrels_rust, "props", PM),
-    "sandbags": (S.sandbags, "props", PS),
-    "wreck_car": (L.wreck_car, "props", PM), "wreck_truck": (L.wreck_truck, "props", PM),
-    "wreck_bus": (L.wreck_bus, "props", PM), "wreck": (L.wreck, "props", PM), "pole_down": (L.pole_down, "props", PM),
-    "fence_broken": (L.fence_broken, "props", PM), "wall_ruin": (L.wall_ruin, "props", PM),
-    "wall_collapsed": (L.wall_collapsed, "props", PM), "ruin_pillar": (L.ruin_pillar, "props", PM),
-    "signal_tower": (L.signal_tower, "props", LM),
+    "apothecary_chest": (S.apothecary_chest, "props", PS), "barrels_rust": (B.drum_pair, "props", PM),
+    "sandbags": (B.sandbags_big, "props", PM),
+    "wreck_car": (B.wreck_car, "props", PM), "wreck_car_red": (B.wreck_car_red, "props", PM),
+    "wreck_car_blue": (B.wreck_car_blue, "props", PM), "wreck_car_olive": (B.wreck_car_olive, "props", PM),
+    "wreck_truck": (B.wreck_truck, "props", PM), "wreck_bus": (B.wreck_bus, "props", PL_), "wreck": (B.wreck, "props", PM),
+    "pole_down": (lambda: B.big("pole_down"), "props", PM),
+    "fence_broken": (B.fence_big, "props", PM), "wall_ruin": (B.wall_ruin_big, "props", PM),
+    "wall_ruin_b": (B.wall_ruin_b, "props", PM),
+    "wall_collapsed": (lambda: B.big("wall_collapsed"), "props", PM), "ruin_pillar": (B.ruin_pillar_big, "props", PM),
+    "signal_tower": (lambda: B.big("signal_tower"), "props", LM),
     "extract_sealed": (L.extract_sealed, "props", PL_), "extract_open": (L.extract_open, "props", PL_),
     # assets/sprites/depth/zone
-    "chem_vat": (Z.chem_vat, "depth/zone", PM), "pipe_rack": (Z.pipe_rack, "depth/zone", PL_),
-    "oil_tank": (Z.oil_tank, "depth/zone", PL_), "street_lamp": (Z.street_lamp, "depth/zone", PL_),
-    "shop_ruin": (Z.shop_ruin, "depth/zone", PL_), "quarantine_tent": (Z.quarantine_tent, "depth/zone", PL_),
-    "hazard_barrier": (Z.hazard_barrier, "depth/zone", PM), "spike_barricade": (Z.spike_barricade, "depth/zone", PM),
-    "raider_totem": (Z.raider_totem, "depth/zone", PL_), "tank_wreck": (Z.tank_wreck, "depth/zone", PL_),
-    "guard_post": (Z.guard_post, "depth/zone", PL_), "bunker": (Z.bunker, "depth/zone", PL_),
-    "bunker_open": (Z.bunker_open, "depth/zone", PL_), "slab_ruin": (Z.slab_ruin, "depth/zone", PL_),
-    "rubble_chunk": (Z.rubble_chunk, "depth/zone", PM), "dust_spire": (Z.dust_spire, "depth/zone", LM),
-    "power_pole": (Z.power_pole, "depth/zone", PL_), "wreck_pile": (Z.wreck_pile, "depth/zone", PM),
-    "beast_ribs": (Z.beast_ribs, "depth/zone", PM), "buried_wreck": (Z.buried_wreck, "depth/zone", PM),
+    "chem_vat": (B.chem_vat_big, "depth/zone", PM), "bunker": (B.bunker_big, "depth/zone", PL_),
+    "bunker_open": (B.bunker_open_big, "depth/zone", PL_), "rubble_chunk": (lambda: B.big("rubble_chunk"), "depth/zone", PM),
+    "wreck_pile": (B.wreck_pile_big, "depth/zone", PM), "buried_wreck": (B.buried_wreck_big, "depth/zone", PM),
     # assets/sprites/depth/world (radio jobs, landmarks, haul crate)
-    "field_tent": (Z.field_tent, "depth/world", PL_), "market_stall": (Z.market_stall, "depth/world", PL_),
-    "medicine_crate": (Z.medicine_crate, "depth/world", PM), "plane_wreck": (Z.plane_wreck, "depth/world", PL_),
-    "relay": (Z.relay, "depth/world", PL_), "vault": (Z.vault, "depth/world", PL_),
-    "watch_tower": (Z.watch_tower, "depth/world", LM),
+    "medicine_crate": (Z.medicine_crate, "depth/world", PM),
 }
-# Collision footprints in texels: (w, h, centre x offset from sprite centre).
-# They sit on the sprite's base line. Props not listed are walk-through.
+for _n, _f in (("pipe_rack", "zone"), ("oil_tank", "zone"), ("street_lamp", "zone"), ("shop_ruin", "zone"),
+               ("quarantine_tent", "zone"), ("hazard_barrier", "zone"), ("spike_barricade", "zone"), ("raider_totem", "zone"),
+               ("tank_wreck", "zone"), ("guard_post", "zone"), ("slab_ruin", "zone"), ("dust_spire", "zone"),
+               ("power_pole", "zone"), ("beast_ribs", "zone"), ("field_tent", "world"), ("market_stall", "world"),
+               ("plane_wreck", "world"), ("relay", "world"), ("vault", "world"), ("watch_tower", "world")):
+    PROPS[_n] = ((lambda n=_n: B.big(n)), "depth/" + _f, LM if _f == "world" or _n in ("dust_spire",) else PL_)
+# Collision from the art: name -> (depth in texels, width fraction of the
+# opaque base band). The block sits on the sprite's base line, centred on the
+# base band. Props not listed are walk-through.
 BLOCK = {
-    "wall_ruin": (62, 12, 0), "sandbags": (88, 14, 0), "wall_collapsed": (44, 14, -31), "rock_large": (40, 12, 0),
-    "wreck_truck": (128, 16, 0), "wreck_bus": (196, 18, 0),
-    "oil_tank": (118, 22, -2), "shop_ruin": (196, 18, 0), "quarantine_tent": (176, 18, 4), "hazard_barrier": (166, 12, 0),
-    "spike_barricade": (150, 12, 0), "chem_vat": (82, 16, -4), "tank_wreck": (174, 20, -4), "guard_post": (100, 16, 0),
-    "slab_ruin": (150, 16, 0), "dust_spire": (100, 16, 0), "bunker": (200, 30, 0), "bunker_open": (200, 30, 0),
-    "vault": (206, 28, 0), "plane_wreck": (180, 20, 0), "market_stall": (190, 18, 0), "field_tent": (150, 18, -10),
-    "relay": (136, 20, 0), "watch_tower": (130, 16, 0), "wreck_pile": (100, 18, 0), "buried_wreck": (80, 16, 0),
+    "wall_ruin": (16, 0.95), "wall_ruin_b": (16, 0.95), "sandbags": (14, 0.92), "wall_collapsed": (18, 0.5),
+    "rock_large": (12, 0.8), "rock_huge": (18, 0.8),
+    "wreck_car": (24, 0.9), "wreck_car_red": (24, 0.9), "wreck_car_blue": (24, 0.9), "wreck_car_olive": (24, 0.9), "wreck": (24, 0.9),
+    "wreck_truck": (26, 0.92), "wreck_bus": (28, 0.95),
+    "oil_tank": (30, 0.86), "shop_ruin": (24, 0.95), "quarantine_tent": (24, 0.86), "hazard_barrier": (16, 0.97),
+    "spike_barricade": (14, 0.9), "chem_vat": (16, 0.9), "tank_wreck": (30, 0.92), "guard_post": (18, 0.86),
+    "slab_ruin": (20, 0.6), "dust_spire": (22, 0.8), "bunker": (44, 0.62), "bunker_open": (44, 0.62),
+    "vault": (36, 0.95), "plane_wreck": (26, 0.6), "market_stall": (22, 0.95), "field_tent": (24, 0.8),
+    "relay": (26, 0.9), "watch_tower": (18, 0.86), "wreck_pile": (26, 0.9), "buried_wreck": (24, 0.8),
 }
 # Flat ground-level pieces: no contact shadow.
 FLAT = {"extract_sealed", "extract_open"}
@@ -101,7 +108,12 @@ def main(check_only=False):
         f0, f1 = foot(cv)
         m = {"size": [cv.w, cv.h], "foot": [f0 - cv.w / 2, f1 - cv.w / 2]}
         if name in BLOCK:
-            bw, bh, ox = BLOCK[name]
+            bh, frac = BLOCK[name]
+            op = cv.opaque()
+            band = op[max(0, cv.h - int(bh * 1.6)):, :].any(0)
+            xs = np.nonzero(band)[0]
+            bw = int((xs.max() - xs.min() + 1) * frac)
+            ox = (xs.min() + xs.max() + 1) / 2 - cv.w / 2
             m["block"] = [bw, bh, ox, cv.h / 2 - bh / 2 - 1]
         if name in FLAT:
             m["flat"] = True
@@ -111,7 +123,7 @@ def main(check_only=False):
             ys, xs = np.nonzero((cv.a[:, :, 0] == 255) & (cv.a[:, :, 1] == 192))
             m["light"] = [float(xs.mean() - cv.w / 2), float(cv.h / 2 - 2)]
         if name == "chem_vat":
-            m["light"] = [-4.0, -cv.h / 2 + 14.0]
+            m["light"] = [-6.0, -cv.h / 2 + 21.0]
         meta[name] = m
         if not check_only:
             save(cv, SPR + folder + "/" + name + ".png")
@@ -138,7 +150,7 @@ def main(check_only=False):
     regions = None
     for gi, z in enumerate(ZONES):
         a, regions = DC.atlas(z)
-        report.append(validate(a, "decal", zone_cols=z[2], name="decals_%s" % GRADES[gi]))
+        report.append(validate(a, "atlas", zone_cols=z[2], name="decals_%s" % GRADES[gi]))
         if not check_only:
             Image.fromarray(a, "RGBA").save(SPR + "decals/decal_atlas_%s.png" % GRADES[gi])
             if gi == 0:

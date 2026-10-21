@@ -27,6 +27,10 @@ var _pet_far := 0.0
 var _min_hp := 9999.0
 var _reload_s := 0.0
 var _stuck_s := 0.0
+## Longest unbroken stuck streak (s): pushing the stick, not moving.
+var _stuck_run := 0.0
+var _stuck_max := 0.0
+var _stuck_at := Vector2.ZERO
 var _last_pos := Vector2.ZERO
 ## Optional stress / showcase: keep `_horde` enemies alive (arg 6), drawn from
 ## `_kinds` (arg 7, comma list; empty = whole roster).
@@ -323,27 +327,27 @@ func _drive(delta: float) -> void:
 	if ztw != null and float(ztw.get("storm_radius")) < INF:
 		var oc: Vector2 = ztw.call("storm_origin")
 		if _p.global_position.distance_to(oc) > float(ztw.get("storm_radius")) - 220.0:
-			TouchInput.move_vector = (oc - _p.global_position).normalized()
+			TouchInput.move_vector = _steer((oc - _p.global_position).normalized(), delta)
 			return
 	## Zone pickups (Depth E7: keys, flares, air filters) are worth a short detour.
 	var zp := _nearest("zone_pickups")
 	if zp and str(zp.get("kind")) != "power_cell" and zp.global_position.distance_to(_p.global_position) < 520.0:
 		var nz := _nearest("enemies")
 		if nz == null or nz.global_position.distance_to(_p.global_position) > 140.0 or GameState.run_filter < 25.0:
-			TouchInput.move_vector = (zp.global_position - _p.global_position).normalized()
+			TouchInput.move_vector = _steer((zp.global_position - _p.global_position).normalized(), delta)
 			return
 	## Medicine crates are worth a detour when the pack has room.
 	var med := _nearest("medicine_crates")
 	if med and GameState.pack_has_room("medicine") and med.global_position.distance_to(_p.global_position) < 650.0 and not low_hp:
 		var ne := _nearest("enemies")
 		if ne == null or ne.global_position.distance_to(_p.global_position) > 160.0:
-			TouchInput.move_vector = (med.global_position - _p.global_position).normalized()
+			TouchInput.move_vector = _steer((med.global_position - _p.global_position).normalized(), delta)
 			return
 	## Like a player: sweep up nearby XP / scrap when nothing is in reach.
 	var loot := _nearest("loot")
 	var ed: float = e.global_position.distance_to(_p.global_position) if e else INF
 	if loot and loot.global_position.distance_to(_p.global_position) < 420.0 and ed > (rng * 1.05 if not melee else 200.0):
-		TouchInput.move_vector = (loot.global_position - _p.global_position).normalized()
+		TouchInput.move_vector = _steer((loot.global_position - _p.global_position).normalized(), delta)
 		return
 	if e:
 		var to: Vector2 = e.global_position - _p.global_position
@@ -380,7 +384,22 @@ func _drive(delta: float) -> void:
 			mv = to.normalized() if not low_hp else _wander_dir(delta)
 	else:
 		mv = _wander_dir(delta)
-	TouchInput.move_vector = mv
+	TouchInput.move_vector = _steer(mv, delta)
+
+
+## Like a player: when pushing into a prop and not moving, slide round it for
+## a moment (alternating sides) instead of grinding against it.
+func _steer(v: Vector2, delta: float) -> Vector2:
+	if _unstick_t > 0.0:
+		_unstick_t -= delta
+		return v.rotated(1.3 * _unstick_side)
+	if _stuck_frames > 20:
+		_unstick_t = 0.6
+		_unstick_side = -_unstick_side
+		_stuck_frames = 0
+		_wander_t = 0.0
+		return v.rotated(1.3 * _unstick_side)
+	return v
 
 
 func _winding_up_near(r: float) -> Node2D:
@@ -418,8 +437,13 @@ func _extra(delta: float) -> void:
 	if TouchInput.move_vector.length() > 0.5 and _p.global_position.distance_to(_last_pos) < 0.3:
 		_stuck_s += delta
 		_stuck_frames += 1
+		_stuck_run += delta
+		if _stuck_run > _stuck_max:
+			_stuck_max = _stuck_run
+			_stuck_at = _p.global_position
 	else:
 		_stuck_frames = 0
+		_stuck_run = 0.0
 	_last_pos = _p.global_position
 	_abil_t -= delta
 	if _abil_t <= 0.0 and bool(_p.call("ability_ready")) and _want_ability():
@@ -568,6 +592,7 @@ func _summary() -> void:
 		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
+	print("STUCK total=%.1f max_streak=%.2f at=(%.0f,%.0f)" % [_stuck_s, _stuck_max, _stuck_at.x, _stuck_at.y])
 	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])
 	var evos: PackedStringArray = []

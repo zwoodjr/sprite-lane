@@ -187,7 +187,7 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 				_mob(s["pos"] + Vector2.RIGHT.rotated(TAU * i / float(j["guards"])) * 110.0)
 		"defend_relay":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
-			s["npc"] = _npc(giver, s["pos"], "relay", 92.0, Vector2(-46, 0), "Juno — hold the relay")
+			s["npc"] = _npc(giver, s["pos"], "relay", 92.0, Vector2(-80, 0), "Juno — hold the relay")
 			s["hold"] = 0.0
 			s["wave_t"] = 0.0
 		"rescue":
@@ -205,10 +205,10 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 						active["black_box"]["channel"] = 0.0)
 		"field_tent":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
-			s["npc"] = _npc(giver, s["pos"], "field_tent", 110.0, Vector2(-62, 0), "Cinder's field tent")
+			s["npc"] = _npc(giver, s["pos"], "field_tent", 110.0, Vector2(-104, 0), "Cinder's field tent")
 		"overwatch":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
-			s["npc"] = _npc(giver, s["pos"], "watch_tower", 150.0, Vector2(0, 0), "Vesper — overwatch", 87.0)
+			s["npc"] = _npc(giver, s["pos"], "watch_tower", 150.0, Vector2(0, 0), "Vesper — overwatch", 118.0)
 			s["fire_t"] = 1.0
 		"vault":
 			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
@@ -220,7 +220,7 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 			_complete(id)
 		"black_market":
 			s["pos"] = at
-			s["npc"] = _npc(giver, at, "market_stall", 110.0, Vector2(-58, 0), "Nyx's black market")
+			s["npc"] = _npc(giver, at, "market_stall", 110.0, Vector2(-104, 0), "Nyx's black market")
 			s["inside"] = false
 	return s
 
