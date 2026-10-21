@@ -46,6 +46,18 @@ func _ready() -> void:
 	add_child(_sprite)
 	if mode == "burn":
 		LightFx.lamp(self, Vector2.ZERO, radius * 2.6, Color(1.0, 0.5, 0.2, 0.35), 0.25)
+	## Pixel layer (bible §5): flame tongues on a fire patch, bubbles in a cloud.
+	var px_id: String = str({"burn": "st_burn", "poison": "st_poison", "spore": "st_poison"}.get(mode, ""))
+	if px_id != "":
+		if mode == "burn":
+			_sprite.visible = false
+		var n := clampi(int(radius / 12.0), 2, 7)
+		for i in range(n):
+			var a := TAU * (float(i) + randf() * 0.5) / float(n)
+			var r := radius * (0.25 + randf() * 0.55)
+			var s := Juice.px_loop(self, px_id, Vector2(cos(a) * r, sin(a) * r * 0.55)) as Node2D
+			if s:
+				s.set("frame", randi() % 4)
 	_sprite.modulate.a = 0.0
 	var tw := _sprite.create_tween()
 	tw.tween_property(_sprite, "modulate:a", float((art["tint"] as Color).a), 0.12)
@@ -57,6 +69,8 @@ func _physics_process(delta: float) -> void:
 		_sprite.texture = _frames[int(_age * _fps) % _frames.size()]
 	if _age > life - 0.3:
 		_sprite.modulate.a = maxf(0.0, (life - _age) / 0.3)
+		## Pixel children step out in alpha (75 / 50 / 25 %).
+		modulate.a = [0.25, 0.5, 0.75][clampi(int((life - _age) / 0.1), 0, 2)]
 	if _age >= life:
 		queue_free()
 		return

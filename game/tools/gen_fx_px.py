@@ -726,46 +726,55 @@ def arc_smear(R, r_in, half_deg, edge, body, tail, chips=None, sparkle=None):
 
 
 def line_smear(L, Wd):
-    """Juno's chain-gauntlet lash: steel/brass links whipping out, teal-bone spark at the tip."""
+    """Juno's chain-gauntlet lash: steel/brass links whipping out, a bone whoosh band,
+    teal sparks crawling the chain, teal-bone burst at the tip."""
     def fn(f, u, v):
         col = np.zeros(u.shape + (3,), np.uint8)
         al = np.zeros(u.shape, np.uint8)
-        ext = [0.6, 1.0, 0.75][f] * L
+        ext = [0.62, 1.0, 0.8][f] * L
         wave = np.sin(u / L * math.pi * 2.0 + f) * (Wd * 0.12) * (u / L)
-        on = (u >= 10) & (u <= ext) & (np.abs(v - wave) <= 1.6)
-        link = (np.floor(u / 4) % 2 == 0)
+        dv = v - wave
         a_ = 255 if f < 2 else A50
+        # whoosh: the lash's sweep, a broad band above the chain in alpha steps
+        if f < 2:
+            band = (u >= 22) & (u <= ext - 6) & (dv < -2.5) & (dv > -2.5 - Wd * 0.28 * (u / L))
+            paint(col, al, band, BONE, A25)
+            paint(col, al, band & (dv > -5.0), BONE, A50)
+        on = (u >= 20) & (u <= ext) & (np.abs(dv) <= 2.2)
+        link = (np.floor(u / 5) % 2 == 0)
         paint(col, al, on & link, STEEL[3], a_)
         paint(col, al, on & ~link, BRASS[2], a_)
-        paint(col, al, on & (v - wave > 0.5), STEEL[1], a_)
-        # motion smear beside the chain (bone, thin, alpha)
-        sm = (u >= 14) & (u <= ext - 4) & (np.abs(v - wave - Wd * 0.22) <= 0.6)
-        if f < 2:
-            paint(col, al, sm & (al == 0), BONE, A50)
-        # tip: gauntlet spark burst
+        paint(col, al, on & (dv > 0.8), STEEL[1], a_)
+        paint(col, al, on & link & (np.abs(dv) < 0.8) & (np.floor(u) % 5 == 2), STEEL[1], a_)
+        if f == 1:
+            sp = (u >= 24) & (u <= ext - 10) & (np.floor(u) % 17 == 0) & (np.abs(dv + 4) < 1.0)
+            paint(col, al, sp, TEAL[1], 255)
         tu, tv = ext, np.sin(ext / L * math.pi * 2.0 + f) * (Wd * 0.12) * (ext / L)
         dd = np.sqrt((u - tu) ** 2 + (v - tv) ** 2)
         if f == 1:
-            paint(col, al, dd <= 6, TEAL[1], 255)
-            paint(col, al, dd <= 3, BONE, 255)
+            paint(col, al, dd <= 7, TEAL[1], 255)
+            paint(col, al, dd <= 3.5, BONE, 255)
             ang = np.arctan2(v - tv, u - tu)
-            rays = (dd > 6) & (dd < 11) & (np.abs(((ang * 4 / math.pi) % 1) - 0.5) < 0.09)
+            rays = (dd > 7) & (dd < 13) & (np.abs(((ang * 4 / math.pi) % 1) - 0.5) < 0.08)
             paint(col, al, rays, TEAL[1], 255)
         elif f == 0:
-            paint(col, al, dd <= 3, BONE, 255)
+            paint(col, al, dd <= 4, STEEL[3], 255)
+            paint(col, al, dd <= 2, BONE, 255)
         else:
-            paint(col, al, (dd <= 4) & (dd > 2.5), TEAL[0], A50)
+            paint(col, al, (dd <= 5) & (dd > 3), TEAL[0], A50)
         return col, al
     return fn
 
 
 def gen_smears():
     TX = 1.35 * 1.25  # world px * MELEE_K -> texels
-    R = 80 * TX
-    emit_dir("sm_maul", arc_smear(R, R * 0.55, 70, BONE, ASH[3], ASH[2], chips=EARTH[3]), 3, 18, (0, R + 18, -R - 6, R + 6), z=3)
-    R = 72 * TX
-    emit_dir("sm_blade", arc_smear(R, R * 0.8, 50, BONE, DUST[3], DUST[2], sparkle=DUST[4]), 3, 24, (0, R + 4, -R * 0.8, R * 0.8), z=3)
-    emit_dir("sm_bayonet", arc_smear(R, R * 0.78, 50, BONE, STEEL[3], STEEL[2], sparkle=BONE), 3, 24, (0, R + 4, -R * 0.8, R * 0.8), z=3)
+    # Drawn inside the hitbox where the weapon head actually travels (the full
+    # hitbox radius read as detached from the hero).
+    R = 80 * TX * 0.78
+    emit_dir("sm_maul", arc_smear(R, R * 0.5, 70, BONE, ASH[3], ASH[2], chips=EARTH[3]), 3, 18, (0, R + 18, -R - 6, R + 6), z=3)
+    R = 72 * TX * 0.66
+    emit_dir("sm_blade", arc_smear(R, R * 0.72, 55, BONE, DUST[3], DUST[2], sparkle=DUST[4]), 3, 24, (0, R + 4, -R * 0.85, R * 0.85), z=3)
+    emit_dir("sm_bayonet", arc_smear(R, R * 0.7, 50, BONE, STEEL[3], STEEL[2], sparkle=BONE), 3, 24, (0, R + 4, -R * 0.8, R * 0.8), z=3)
     L = 140 * TX
     emit_dir("sm_chain", line_smear(L, 34 * TX), 3, 20, (0, L + 12, -16, 16), z=3)
 
