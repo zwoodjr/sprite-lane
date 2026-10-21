@@ -7,9 +7,9 @@ signal rampage_ended
 
 ## One 128 px pet frame spans this many world px (same px density as heroes,
 ## so the dogs read dog-sized next to their human).
-## Audit #6: pets draw at 0.7x so they read as companions, not a second hero
-## (the dogs were as tall as the heroes). Visual only: bodies are unchanged.
-const PET_VISUAL := 0.7
+## Style bible: pets are drawn at their size (52-64 px, chibi heads), so they
+## draw at the shared texel density like everything else (no 0.7x scale).
+const PET_VISUAL := 1.0
 const PET_FRAME_WORLD := 128.0 * UnitAnim.TEXEL * PET_VISUAL
 const FEET_Y := 20.0
 ## Standing still this long → sit down.

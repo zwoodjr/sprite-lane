@@ -218,6 +218,78 @@ static func flash_material() -> ShaderMaterial:
 	return _flash_mat
 
 
+## Pack variants (style bible §4): clone packs differ by a palette swap inside
+## their faction ramp. Exact-colour swaps on the palette-locked art, one shared
+## material per (faction, variant) so batching survives. Variant 0 = no swap.
+const _PAL := {
+	"flesh": ["2e1830", "5a3254", "8a5474", "c08aa0"],
+	"plague": ["142a18", "2b5a2c", "57932f", "9ccf3e", "dcf58a"],
+	"steel": ["1b222c", "36424f", "5e6d7a", "9aa8ad"],
+	"rust": ["3e1a12", "763420", "ad5a2a", "d98a45"],
+	"cloth": ["2a2a1c", "59563a", "8f8a5e"],
+	"earth": ["3a2d27", "5a4636", "7c6550", "a08669", "c8b08a"],
+}
+## faction -> list of variants; each variant = [[ramp, tone_from, ramp, tone_to], ...]
+const VARIANTS := {
+	"plague": [
+		[["flesh", 1, "flesh", 0], ["flesh", 2, "flesh", 1]],
+		[["flesh", 1, "flesh", 2], ["flesh", 2, "flesh", 3], ["plague", 3, "plague", 4]],
+	],
+	"machine": [
+		[["steel", 1, "rust", 1], ["steel", 2, "rust", 2], ["steel", 3, "rust", 3], ["rust", 1, "steel", 1], ["rust", 2, "steel", 2], ["rust", 3, "steel", 3]],
+		[["steel", 2, "steel", 1], ["steel", 3, "steel", 2]],
+	],
+	"raider": [
+		[["cloth", 1, "earth", 1], ["cloth", 2, "earth", 3]],
+		[["cloth", 2, "cloth", 1], ["cloth", 1, "cloth", 0]],
+	],
+}
+static var _variant_mats: Dictionary = {}
+
+
+static func variant_count(faction: String) -> int:
+	return 1 + (VARIANTS[faction] as Array).size() if VARIANTS.has(faction) else 1
+
+
+## Shared palette-swap material for `faction` variant `v` (null for v = 0).
+static func variant_material(faction: String, v: int) -> ShaderMaterial:
+	if v <= 0 or not VARIANTS.has(faction) or v > (VARIANTS[faction] as Array).size():
+		return null
+	var key := "%s_%d" % [faction, v]
+	if _variant_mats.has(key):
+		return _variant_mats[key]
+	var pairs: Array = VARIANTS[faction][v - 1]
+	var src := PackedVector3Array()
+	var dst := PackedVector3Array()
+	for p in pairs:
+		var a := Color("#" + str(_PAL[p[0]][int(p[1])]))
+		var b := Color("#" + str(_PAL[p[2]][int(p[3])]))
+		src.append(Vector3(a.r, a.g, a.b))
+		dst.append(Vector3(b.r, b.g, b.b))
+	while src.size() < 8:
+		src.append(Vector3(-1, -1, -1))
+		dst.append(Vector3(0, 0, 0))
+	var sh := Shader.new()
+	sh.code = """shader_type canvas_item;
+uniform vec3 src[8];
+uniform vec3 dst[8];
+void fragment() {
+	vec4 t = texture(TEXTURE, UV);
+	vec3 c = t.rgb;
+	for (int i = 0; i < 8; i++) {
+		if (distance(t.rgb, src[i]) < 0.012) { c = dst[i]; }
+	}
+	COLOR = vec4(c, t.a) * COLOR;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("src", src)
+	m.set_shader_parameter("dst", dst)
+	_variant_mats[key] = m
+	return m
+
+
 ## world_frame_px: how many world px one full frame spans on screen.
 ## feet: local y (unit space) where the feet should stand.
 func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0) -> bool:

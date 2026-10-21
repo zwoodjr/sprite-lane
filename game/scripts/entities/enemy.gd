@@ -245,6 +245,9 @@ func _show_telegraph(where: Vector2, r: float, k: float) -> void:
 	_tele.texture = _tele_frames[mini(_tele_frames.size() - 1, int(k * _tele_frames.size()))]
 	_tele.modulate = Color(1.0, 0.25, 0.2, 0.45 + 0.5 * k)
 
+var _variant: int = -1
+var _variant_mat: ShaderMaterial = null
+
 func _apply_look() -> void:
 	if body:
 		var prefix := str(_def.get("anim", "res://assets/sprites/enemies/rad_gator/rad_gator"))
@@ -264,6 +267,13 @@ func _apply_look() -> void:
 		body_scale *= UnitAnim.BODY_K
 		body.self_modulate = _def.get("tint", Color.WHITE)
 		_anim.setup(body, prefix, UnitAnim.native(fs), FEET_Y * body_scale)
+		## Pack variety: normal mobs pick a faction palette variant once.
+		if _variant < 0:
+			var fac := EnemyDefs.faction(kind)
+			_variant = randi() % UnitAnim.variant_count(fac) if fs < 192 else 0
+			_variant_mat = UnitAnim.variant_material(fac, _variant)
+		_anim.base_material = _variant_mat
+		body.material = _variant_mat
 		_atk = UnitAnim.load_json(prefix + "_attack.json")
 		var sh := get_node_or_null("ContactShadow") as Sprite2D
 		if sh:
