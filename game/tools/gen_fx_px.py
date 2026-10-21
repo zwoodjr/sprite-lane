@@ -483,7 +483,7 @@ def gen_impacts():
 
     # special-ammo hits
     def elem_hit(name, core, mid, outer, kind):
-        rnd = random.Random(hash(name) & 0xffff)
+        rnd = random.Random(sum(map(ord, name)))
         fr = []
         for f in range(4):
             a = canvas(S, S)
