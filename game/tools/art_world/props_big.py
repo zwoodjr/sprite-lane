@@ -180,7 +180,7 @@ def _car(paint, seed, burnt=False, door_open=True, hood_up=False):
     W, H_ = 244, 128
     cv = Cv(W, H_)
     # lower body: deck (hood + boot) on top, side below
-    body_ramp = paint if not burnt else CONC
+    body_ramp = paint
     # hood slopes down to the nose on the left: draw the deck as a polygon
     face(cv, [(10, 58), (60, 50), (178, 50), (232, 56), (232, 76), (10, 78)], body_ramp[3], edge_hi=body_ramp[min(3, len(body_ramp) - 1)])
     cv.rect(10, 58, 59, 58, body_ramp[3])
@@ -237,8 +237,8 @@ def _car(paint, seed, burnt=False, door_open=True, hood_up=False):
         cv.rect(112, 84, 116, 104, CL[1]); cv.rect(112, 84, 116, 84, CL[2])
     body = cv.opaque()
     if burnt:
-        blotch(cv, body, [RU[0], RU[1], RU[1], RU[2]], seed, 3.0, 0.02)
-        blotch(cv, body, [A[0], A[0], A[1], A[1]], seed + 4, 2.2, 0.38)
+        blotch(cv, body, [RU[0], RU[0], RU[1], RU[1]], seed, 3.0, 0.15)
+        blotch(cv, body, [A[0], A[0], A[1], A[1]], seed + 4, 2.6, 0.3)
     else:
         rust(cv, mask_of(cv, body_ramp) & (cv.grid()[0] > 77), seed, 0.1, 2.4)
         rust(cv, mask_of(cv, body_ramp) & (cv.grid()[0] <= 77), seed + 7, 0.3, 2.0)
@@ -251,7 +251,7 @@ def _car(paint, seed, burnt=False, door_open=True, hood_up=False):
 
 
 FADED = [E[0], E[1], E[2], E[3]]
-RED = [RU[0], RU[0], RU[1], RU[2]]
+RED = [RU[0], RU[0], RU[1], E[2]]
 
 
 def wreck_car():
@@ -272,7 +272,7 @@ def wreck_car_olive():
 
 def wreck():
     """Burnt-out car hulk on its rims (wreck-field core)."""
-    return _car(CONC, 5, burnt=True)
+    return _car([A[0], A[1], A[1], A[2]], 5, burnt=True)
 
 
 def wreck_truck():
