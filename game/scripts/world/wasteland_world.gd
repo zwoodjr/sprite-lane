@@ -120,7 +120,8 @@ func setup(p_seed: int, player: Node2D) -> void:
 	_chunks_root = Node2D.new()
 	_chunks_root.name = "Chunks"
 	_chunks_root.z_index = -10
-	_chunks_root.modulate = zone.get("tint", Color.WHITE)
+	## Half-strength zone tint (audit value pass: no full colour wash).
+	_chunks_root.modulate = Color.WHITE.lerp(zone.get("tint", Color.WHITE), 0.5)
 	add_child(_chunks_root)
 	_props_root = Node2D.new()
 	_props_root.name = "Props"

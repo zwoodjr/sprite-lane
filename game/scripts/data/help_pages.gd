@@ -57,7 +57,7 @@ static func pages() -> Array[Dictionary]:
 		},
 		{
 			"title": "Your pet",
-			"icon": "🐾",
+			"icon": "✦",
 			"art": "pet",
 			"body": "Equip a pet on the character screen (default: Noel).\n\nNoel — territorial: when you're hit, she AOE-rampages until THAT attacker dies.\nBentley — bark distracts foes; periodically finds scrap/crates/pickups.\nLillie — tank ram: charge with wake damage, then AOE on impact.",
 		},
@@ -65,6 +65,6 @@ static func pages() -> Array[Dictionary]:
 			"title": "Two progress tracks",
 			"icon": "◆",
 			"art": "res://assets/sprites/pickups/salvage_core.png",
-			"body": "IN-RUN: kills and staying near open extracts fill your RUN level bar. Each level lets you pick a temporary boost (damage, HP, speed…). Gone when the run ends.\n\nMETA: extracted scrap banks permanently. Spend it in the Hangar for HP, endurance, scrap find, loot quality, damage, crits, AoE, dodge/block, speed, pickup reach, pet power, dash, extract grace, and payout. Account level soft-gates higher tiers. (Loadout insurance UI comes later — no fake insurance buy in the Hangar yet.)",
+			"body": "IN THE RUN: kills fill your level bar. Each level, pick a boost. Boosts end with the run.\n\nFOR KEEPS: scrap you extract with is banked. Spend it in the Hangar on permanent upgrades. Higher tiers open as your account levels up.",
 		},
 	]

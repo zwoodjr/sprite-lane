@@ -14,6 +14,7 @@ const PauseMenuScript = preload("res://scripts/ui/pause_menu.gd")
 const TutorialScript = preload("res://scripts/ui/tutorial_overlay.gd")
 const EnemyArrowsScript = preload("res://scripts/ui/enemy_arrows.gd")
 const ExtractBarScript = preload("res://scripts/ui/extract_bar.gd")
+const BossBarScript = preload("res://scripts/ui/boss_bar.gd")
 ## Top-left bar art (HD pack): frame 360×36, fills 348×24 inset 6 px.
 const BAR_FRAME := "res://assets/sprites/ui/hud_bar_frame.png"
 const BAR_HP := "res://assets/sprites/ui/hud_bar_fill_health.png"
@@ -29,9 +30,10 @@ const PIXEL_FONT := "res://assets/fonts/PressStart2P.ttf"
 const XpLineScript := preload("res://scripts/ui/xp_line.gd")
 const PANEL_ALPHA := 0.5
 const HINT_SHOW := 4.0
+const SHOW_COMBAT_TIPS := false
 ## Locked "smashed readout" bars (scripts/ui/readout_bar.gd).
 const ReadoutScript := preload("res://scripts/ui/readout_bar.gd")
-const HP_READOUT := Vector2(250, 36)
+const HP_READOUT := Vector2(300, 48)
 const XP_READOUT := Vector2(232, 24)
 var root: Control
 var _match: Node = null
@@ -64,6 +66,8 @@ var _run_xp_bar: TextureProgressBar
 var _enemy_arrows: Control = null
 var _extract_bar: Control = null
 var _hit_flash: TextureRect
+var _boss_bar: Control
+var _white_flash: ColorRect
 ## center
 var _banner: Label
 var _banner_sub: Label
@@ -190,7 +194,10 @@ func _caption(text: String) -> Label:
 	return l
 
 ## Pixel-font HUD text (PressStart2P) with a dark outline so it reads on any ground.
+## Only for numbers / short caps, and only at multiples of 8 px (the face's grid)
+## so its pixels stay square: 8 for small tags, 16 for the readouts.
 func _px(text: String, size: int, color: Color = UiTheme.TEXT) -> Label:
+	size = maxi(8, int(round(float(size) / 8.0)) * 8)
 	var l := _label(text, size, color)
 	if _pixel == null and ResourceLoader.exists(PIXEL_FONT):
 		_pixel = load(PIXEL_FONT)
@@ -247,7 +254,7 @@ func _build() -> void:
 	vb.add_child(_xp_readout)
 	_xp_line = Control.new()
 	_xp_line.set_script(XpLineScript)
-	_xp_line.custom_minimum_size = Vector2(HP_READOUT.x - 20.0, 5)
+	_xp_line.custom_minimum_size = Vector2(HP_READOUT.x - 20.0, 10)
 	vb.add_child(_xp_line)
 	var hp_row := Control.new()
 	hp_row.visible = false
@@ -283,7 +290,10 @@ func _build() -> void:
 	_run_xp_bar.max_value = 1.0
 	_run_xp_bar.step = 0.0
 	xp_row.add_child(_run_xp_bar)
-	_ammo_label = _px("24 / 24", 8, UiTheme.TEXT_DIM)
+	## Ammo / reload now live on the arc beside the hero (player.gd AmmoArc);
+	## this line only appears for the Hot Barrel heat gauge.
+	_ammo_label = _px("", 8, UiTheme.TEXT_DIM)
+	_ammo_label.visible = false
 	vb.add_child(_ammo_label)
 	_reload_bar = ProgressBar.new()
 	_reload_bar.custom_minimum_size = Vector2(BAR_W, 5)
@@ -323,9 +333,12 @@ func _build() -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(row)
 	row.add_theme_constant_override("separation", 10)
-	_phase_label = _px("EXTRACT IN", 12, UiTheme.AMBER)
+	_phase_label = _label("EXTRACT IN", 24, UiTheme.AMBER)
+	_phase_label.add_theme_font_override("font", UiTheme.font_display)
+	_phase_label.add_theme_constant_override("outline_size", 6)
+	_phase_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
 	row.add_child(_phase_label)
-	_timer_label = _px("1:30", 12, Color(0.94, 0.8, 0.5))
+	_timer_label = _px("1:30", 16, Color(0.94, 0.8, 0.5))
 	row.add_child(_timer_label)
 	_phase_bar = ProgressBar.new()
 	_phase_bar.visible = false
@@ -336,15 +349,18 @@ func _build() -> void:
 	_phase_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(_phase_bar)
 	var tick_gap := Control.new()
-	tick_gap.custom_minimum_size = Vector2(0, 12)
+	tick_gap.custom_minimum_size = Vector2(0, 16)
 	tick_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(tick_gap)
-	_phase_hint = _px("", 7, Color(0.8, 0.74, 0.62, 0.85))
+	_phase_hint = _label("", 16, Color(0.86, 0.8, 0.68))
+	_phase_hint.visible = false
 	_phase_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_phase_hint.clip_text = true
 	_phase_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pc.add_child(_phase_hint)
-	_jobs_label = _px("", 7, RadioDefs.MAP_COLOR)
+	_jobs_label = _label("", 16, RadioDefs.MAP_COLOR)
+	_jobs_label.add_theme_constant_override("outline_size", 5)
+	_jobs_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
 	_jobs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_jobs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_jobs_label.visible = false
@@ -358,13 +374,20 @@ func _build() -> void:
 	tv.add_theme_constant_override("separation", 2)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_threat_panel.add_child(tv)
-	_threat_label = _px("LOOT x1.0", 12, UiTheme.AMBER)
+	_threat_label = _label("LOOT ×1.0", 28, UiTheme.AMBER)
+	_threat_label.add_theme_font_override("font", UiTheme.font_display)
+	_threat_label.add_theme_constant_override("outline_size", 6)
+	_threat_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
 	_threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_label)
-	_threat_sub = _px("THREAT 0", 7, UiTheme.TEXT_DIM)
+	## Threat / bag / kills moved off the combat HUD (pause menu + results);
+	## the LOOT colour already warms with Threat.
+	_threat_sub = _px("", 8, UiTheme.TEXT_DIM)
+	_threat_sub.visible = false
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_sub)
-	_counter_label = _px("", 7, Color(0.86, 0.75, 0.52, 0.85))
+	_counter_label = _px("", 8, Color(0.86, 0.75, 0.52, 0.85))
+	_counter_label.visible = false
 	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_counter_label)
 
@@ -402,6 +425,14 @@ func _build() -> void:
 	_hit_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hit_flash.modulate = Color(1.3, 1, 1, 0)
 	root.add_child(_hit_flash)
+	_boss_bar = Control.new()
+	_boss_bar.name = "BossBar"
+	_boss_bar.set_script(BossBarScript)
+	root.add_child(_boss_bar)
+	_white_flash = ColorRect.new()
+	_white_flash.color = Color(1.0, 0.95, 0.88, 0.0)
+	_white_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_white_flash)
 
 func _layout() -> void:
 	if root == null:
@@ -414,6 +445,8 @@ func _layout() -> void:
 	_vignette.size = vp
 	_hit_flash.position = Vector2.ZERO
 	_hit_flash.size = vp
+	_white_flash.position = Vector2.ZERO
+	_white_flash.size = vp
 	## Top-left: slim vitals, the pack chip right under it.
 	var vit := root.get_node("Vitals") as Control
 	vit.position = m.position
@@ -450,8 +483,15 @@ func _layout() -> void:
 	if _extract_bar:
 		var tw := minf(220.0, phase_w - 20.0)
 		_extract_bar.size = Vector2(tw, 8)
-		_extract_bar.position = Vector2(phase_cx - tw * 0.5, m.position.y + 22.0)
+		## Under the "EXTRACT IN 0:53" row (it used to cut through the words).
+		_extract_bar.position = Vector2(phase_cx - tw * 0.5, m.position.y + 36.0)
+	if _boss_bar:
+		## Under the extract strip, between the vitals and the minimap columns.
+		var bw := clampf(vp.x - 2.0 * (map_s + m.position.x + 12.0), 220.0, 420.0)
+		_boss_bar.size = Vector2(bw, 44)
+		_boss_bar.position = Vector2(vp.x * 0.5 - bw * 0.5, m.position.y + 74.0)
 	var below := maxf(_threat_panel.position.y + _threat_panel.size.y, m.position.y + vit.size.y + 60.0) + 10.0
+	below = maxf(below, _phase_card.position.y + _phase_card.size.y + 54.0)
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)
@@ -470,12 +510,17 @@ func _build_depth(vb: VBoxContainer) -> void:
 	_pack_row.add_theme_constant_override("separation", 4)
 	_pack_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_pack_row)
-	_pack_label = _px("PACK 0/8   LV 1", 10, Color(0.86, 0.75, 0.52))
+	## PACK only shows once the pack is nearly full (it's the only time it matters).
+	_pack_label = _label("PACK 0/8", 18, Color(0.86, 0.75, 0.52))
+	_pack_label.add_theme_font_override("font", UiTheme.font_button)
+	_pack_label.add_theme_constant_override("outline_size", 5)
+	_pack_label.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
+	_pack_label.visible = false
 	_pack_row.add_child(_pack_label)
 	_med_icon = _icon(MedicineDefs.icon_path("medicine"), 18)
 	_med_icon.visible = false
 	_pack_row.add_child(_med_icon)
-	_med_label = _px("", 9, Color(1.0, 0.55, 0.5))
+	_med_label = _px("", 8, Color(1.0, 0.55, 0.5))
 	_pack_row.add_child(_med_label)
 	_tonic_row = HBoxContainer.new()
 	_tonic_row.add_theme_constant_override("separation", 2)
@@ -544,7 +589,9 @@ func _icon(path: String, px: float) -> TextureRect:
 func set_jobs(lines: PackedStringArray) -> void:
 	if _jobs_label == null:
 		return
-	var txt := "\n".join(lines)
+	## One objective line at a time (the most urgent comes first); the rest
+	## live on the minimap and in the pause menu.
+	var txt := lines[0] if lines.size() > 0 else ""
 	if _jobs_label.text != txt:
 		_jobs_label.text = txt
 		_jobs_label.visible = txt != ""
@@ -553,7 +600,8 @@ func set_jobs(lines: PackedStringArray) -> void:
 func set_pack(weight: int, cap: int, medicine: int) -> void:
 	if _pack_label == null:
 		return
-	var txt := "PACK %d/%d   LV %d" % [weight, cap, _run_lv]
+	var txt := ("PACK FULL" if weight >= cap else "PACK %d/%d") % ([] if weight >= cap else [weight, cap])
+	_pack_label.visible = cap > 0 and float(weight) >= float(cap) * 0.75
 	if _pack_label.text != txt:
 		_pack_label.text = txt
 		_pack_label.add_theme_color_override("font_color", UiTheme.RUST if weight >= cap else Color(0.86, 0.75, 0.52))
@@ -645,24 +693,28 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("pause_menu"):
 		_open_pause()
 	## Vignette pulses harder the lower you are.
-	var low := clampf((0.45 - _hp_ratio) / 0.45, 0.0, 1.0)
-	_vignette.modulate.a = low * (0.55 + 0.25 * sin(_t * (4.0 + low * 4.0)))
+	## Low HP is an edge pulse only (audit: the full-screen red flood hid the fight).
+	var low := clampf((0.4 - _hp_ratio) / 0.4, 0.0, 1.0)
+	_vignette.modulate.a = low * (0.5 + 0.5 * sin(_t * (4.0 + low * 4.0))) * 0.6
 	if _player and is_instance_valid(_player) and _player.has_method("is_reloading"):
 		var rel: bool = _player.call("is_reloading")
 		if rel:
-			_ammo_label.text = "RELOADING %d%%" % int(float(_player.call("get_reload_ratio")) * 100.0)
+			_ammo_label.text = ""
 		## Hot Barrel quirk: no magazine — the ammo line becomes a heat gauge.
 		if GameState.quirk_fx("no_reload") > 0.0 and _player.has_method("heat_ratio") and not bool(_player.call("is_melee")):
 			var hr := float(_player.call("heat_ratio"))
 			var over: bool = _player.get("_overheat_left") > 0.0
 			var cells := int(round(hr * 10.0))
 			_ammo_label.text = ("OVERHEAT " if over else "HEAT ") + "|".repeat(cells) + ".".repeat(10 - cells)
+			_ammo_label.visible = true
 			_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if over or hr > 0.8 else (UiTheme.AMBER if hr > 0.5 else UiTheme.TEXT))
 	_phase_shown_t += delta
 	if _phase_hint:
 		_phase_hint.modulate.a = clampf((6.0 - _phase_shown_t) / 0.8, 0.0, 1.0)
 	## Rotating tips (when the tutorial isn't talking)
-	if GameState.settings.get("show_hints", true) and (tutorial == null or not is_instance_valid(tutorial)):
+	## Rotating tip bar removed from combat (audit: text wall); tips live in
+	## the tutorial and How to Play.
+	if SHOW_COMBAT_TIPS:
 		_hint_cycle_t += delta
 		if _hint_cycle_t > 14.0 or _hint_label.text == "":
 			_hint_cycle_t = 0.0
@@ -733,7 +785,7 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	else:
 		_timer_label.scale = Vector2.ONE
 	## Loot multiplier (big) + Threat (rises with it)
-	_threat_label.text = "LOOT x%.1f" % loot
+	_threat_label.text = "LOOT ×%.1f" % loot
 	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
 	_threat_label.add_theme_color_override("font_color", tl_col)
 	_threat_sub.text = "THREAT %d +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
@@ -751,8 +803,8 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 		_xp_line.call("set_ratio", float(rp["ratio"]))
 	if int(rp["level"]) != _run_lv and _pack_label:
 		_run_lv = int(rp["level"])
-		var pk: Vector2i = _pack_label.get_meta("pack", Vector2i(0, 0))
-		_pack_label.text = "PACK %d/%d   LV %d" % [pk.x, pk.y, _run_lv]
+		if _xp_line:
+			_xp_line.call("set_level", _run_lv)
 	if _xp_readout:
 		_xp_readout.call("set_value", float(rp["ratio"]), 1.0, "%d" % int(rp["level"]))
 	if player and is_instance_valid(player) and not bool(player.call("is_reloading")):
@@ -765,7 +817,7 @@ func _refresh_ammo() -> void:
 		return
 	var a: int = _player.call("get_ammo")
 	var m: int = _player.call("get_mag_size")
-	_ammo_label.text = "AMMO %d / %d" % [a, m]
+	_ammo_label.text = ""
 	_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if a <= m / 5 else UiTheme.TEXT)
 
 func set_extract_open(is_open: bool) -> void:
@@ -848,6 +900,19 @@ func show_banner(title: String, sub: String = "", color: Color = UiTheme.AMBER) 
 	tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
 	tw.tween_property(_banner_sub, "modulate:a", 0.0, 0.4)
 
+## Boss arrival: white pop, camera punch-in, name title. The top bar appears
+## by itself (BossBar polls the "bosses" group).
+func boss_intro(boss_name: String) -> void:
+	if _white_flash:
+		_white_flash.color.a = 0.55
+		var tw := _white_flash.create_tween()
+		tw.tween_property(_white_flash, "color:a", 0.0, 0.35).set_ease(Tween.EASE_OUT)
+	show_banner(boss_name.to_upper(), "BOSS INBOUND", UiTheme.DANGER)
+	var cam := get_viewport().get_camera_2d()
+	if cam and "punch" in cam:
+		cam.set("punch", 1.14)
+
+
 func show_toast(msg: String, color: Color = UiTheme.TEXT) -> void:
 	var l := _label(msg, 17, color)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -875,15 +940,16 @@ func _fmt_time(seconds: float) -> String:
 	return "%d:%02d" % [s / 60, s % 60]
 
 func _make_vignette() -> Texture2D:
+	## Thin red rim hugging the screen edges; the play area stays clear.
 	var g := Gradient.new()
-	g.set_color(0, Color(0.7, 0.05, 0.03, 0.0))
-	g.set_color(1, Color(0.7, 0.05, 0.03, 0.85))
-	g.add_point(0.55, Color(0.7, 0.05, 0.03, 0.0))
+	g.set_color(0, Color(0.8, 0.06, 0.03, 0.0))
+	g.set_color(1, Color(0.8, 0.06, 0.03, 0.75))
+	g.add_point(0.78, Color(0.8, 0.06, 0.03, 0.0))
 	var tex := GradientTexture2D.new()
 	tex.gradient = g
 	tex.fill = GradientTexture2D.FILL_RADIAL
 	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(1.0, 1.0)
+	tex.fill_to = Vector2(1.0, 0.5)
 	tex.width = 256
 	tex.height = 256
 	return tex

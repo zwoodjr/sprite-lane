@@ -133,6 +133,8 @@ func hitstop(seconds: float) -> void:
 
 
 func _process(delta: float) -> void:
+	_stop_cd -= delta / maxf(Engine.time_scale, 0.01)
+	_tick_damage_numbers(delta)
 	## Hitstop: briefly slow time on big hits for weight.
 	if _hitstop_left > 0.0:
 		_hitstop_left -= delta / maxf(Engine.time_scale, 0.01)
@@ -220,33 +222,140 @@ func float_text(pos: Vector2, text: String, color: Color = Color.WHITE, size: in
 	tw.chain().tween_callback(l.queue_free)
 
 
-## Pixel-font damage number. Crits are amber and bigger.
-func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color = Color(1, 0.97, 0.9)) -> void:
-	var scene := get_tree().current_scene
-	if scene == null:
+## Damage numbers (audit quick win #4): ONE number per target that sums every
+## hit landing inside AGG_WINDOW (no more "1515 15" stacks), drawn in screen
+## space on a pooled set of labels, in the pixel face at 16 / 24 px (its 8 px
+## grid, so glyph pixels stay square and the device oversamples them crisply).
+const AGG_WINDOW := 0.3
+const DN_POOL := 48
+const DN_LIFE := 0.75
+var _dn_layer: CanvasLayer
+var _dn_pool: Array[Label] = []
+var _dn_live: Array[Dictionary] = []
+var _dn_by_key: Dictionary = {}
+
+
+func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color = Color(1, 0.97, 0.9), target: Node2D = null) -> void:
+	if get_tree().current_scene == null:
 		return
-	var l := Label.new()
-	l.text = str(maxi(1, int(round(amount))))
-	l.z_index = 50
-	if _pixel_font:
-		l.add_theme_font_override("font", _pixel_font)
-	var size := 15 if crit else 10
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", Color(1.0, 0.72, 0.2) if crit else color)
-	l.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02))
-	l.add_theme_constant_override("outline_size", 6 if crit else 4)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.size = Vector2(80, 24)
-	l.pivot_offset = Vector2(40, 12)
-	l.position = pos - Vector2(40, 12) + Vector2(randf_range(-12, 12), randf_range(-4, 4))
-	l.scale = Vector2(1.6, 1.6) if crit else Vector2(1.2, 1.2)
-	scene.add_child(l)
-	var tw := l.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(l, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(l, "position:y", l.position.y - (34.0 if crit else 24.0), 0.6).set_ease(Tween.EASE_OUT)
-	tw.tween_property(l, "modulate:a", 0.0, 0.25).set_delay(0.4)
-	tw.chain().tween_callback(l.queue_free)
+	_ensure_dn_layer()
+	var key: Variant = null
+	if target != null and is_instance_valid(target):
+		key = "%d:%s" % [target.get_instance_id(), color.to_html()]
+	var e: Dictionary = _dn_by_key.get(key, {}) if key != null else {}
+	if not e.is_empty() and float(e["since_add"]) < AGG_WINDOW and is_instance_valid(e["label"]):
+		e["total"] = float(e["total"]) + amount
+		e["crit"] = bool(e["crit"]) or crit
+		e["since_add"] = 0.0
+		e["t"] = minf(float(e["t"]), 0.12)
+		e["pop"] = 1.0
+		_dn_style(e)
+		return
+	var l := _dn_take()
+	e = {"label": l, "target": weakref(target) if target else null, "pos": pos,
+		"off": pos - (target.global_position if target and is_instance_valid(target) else pos) + Vector2(randf_range(-8, 8), 0),
+		"total": amount, "crit": crit, "color": color, "t": 0.0, "since_add": 0.0, "pop": 1.0, "key": key}
+	_dn_live.append(e)
+	if key != null:
+		_dn_by_key[key] = e
+	_dn_style(e)
+
+
+func _ensure_dn_layer() -> void:
+	if _dn_layer and is_instance_valid(_dn_layer):
+		return
+	_dn_layer = CanvasLayer.new()
+	_dn_layer.name = "DamageNumbers"
+	_dn_layer.layer = 5
+	add_child(_dn_layer)
+	_dn_pool.clear()
+	for i in DN_POOL:
+		var l := Label.new()
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.visible = false
+		var f: Font = UiTheme.font_pixel if UiTheme.font_pixel else _pixel_font
+		if f:
+			l.add_theme_font_override("font", f)
+		l.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.02))
+		_dn_layer.add_child(l)
+		_dn_pool.append(l)
+
+
+func _dn_take() -> Label:
+	for l in _dn_pool:
+		if not l.visible:
+			l.visible = true
+			return l
+	## Pool exhausted: recycle the oldest live number.
+	var old: Dictionary = _dn_live.pop_front()
+	_dn_by_key.erase(old.get("key"))
+	return old["label"]
+
+
+func _dn_style(e: Dictionary) -> void:
+	var l: Label = e["label"]
+	var crit: bool = e["crit"]
+	l.text = str(maxi(1, int(round(float(e["total"])))))
+	l.add_theme_font_size_override("font_size", 24 if crit else 16)
+	l.add_theme_constant_override("outline_size", 8 if crit else 6)
+	l.add_theme_color_override("font_color", Color(1.0, 0.72, 0.2) if crit else (e["color"] as Color))
+	l.size = Vector2(160, 32)
+	l.pivot_offset = l.size * 0.5
+
+
+func _tick_damage_numbers(delta: float) -> void:
+	if _dn_live.is_empty():
+		return
+	var scene := get_tree().current_scene
+	var xf: Transform2D = get_viewport().get_canvas_transform() if scene else Transform2D.IDENTITY
+	var i := 0
+	while i < _dn_live.size():
+		var e: Dictionary = _dn_live[i]
+		e["t"] = float(e["t"]) + delta
+		e["since_add"] = float(e["since_add"]) + delta
+		e["pop"] = maxf(0.0, float(e["pop"]) - delta * 7.0)
+		var l: Label = e["label"]
+		var t := float(e["t"])
+		if t >= DN_LIFE or scene == null or not is_instance_valid(l):
+			if is_instance_valid(l):
+				l.visible = false
+			if e.get("key") != null and is_same(_dn_by_key.get(e["key"]), e):
+				_dn_by_key.erase(e["key"])
+			_dn_live.remove_at(i)
+			continue
+		var wr: WeakRef = e["target"]
+		var tgt: Node2D = wr.get_ref() if wr else null
+		if tgt and is_instance_valid(tgt) and tgt.is_inside_tree():
+			e["pos"] = tgt.global_position + (e["off"] as Vector2)
+		var rise := 26.0 * (1.0 - pow(1.0 - minf(t / DN_LIFE, 1.0), 2.0))
+		var sp: Vector2 = xf * (e["pos"] as Vector2)
+		l.position = (sp - l.size * 0.5 + Vector2(0, -rise)).round()
+		var s := 1.0 + 0.35 * float(e["pop"]) * (1.4 if bool(e["crit"]) else 1.0)
+		l.scale = Vector2(s, s)
+		l.modulate.a = clampf((DN_LIFE - t) / 0.25, 0.0, 1.0)
+		i += 1
+
+
+## Light hitstop for kills / crits on every weapon (audit #4), throttled so a
+## horde wipe doesn't turn into slow motion.
+var _stop_cd: float = 0.0
+
+
+func kill_stop(big: bool = false) -> void:
+	if big:
+		hitstop(0.07)
+		_stop_cd = 0.3
+	elif _stop_cd <= 0.0:
+		hitstop(0.03)
+		_stop_cd = 0.22
+
+
+func crit_stop() -> void:
+	if _stop_cd <= 0.0:
+		hitstop(0.025)
+		_stop_cd = 0.3
 
 
 func flash(node: CanvasItem, color: Color = Color(3, 3, 3), dur: float = 0.07) -> void:

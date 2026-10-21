@@ -28,6 +28,13 @@ var font_display: Font
 var font_button: Font
 var font_body: Font
 var font_body_bold: Font
+## Bundled symbol fallback (DejaVu Sans Bold subset: arrows, ×, ✓, ★, ◆ …).
+## The web build and iOS have no system font fallback, so these were tofu.
+var font_symbols: Font
+## The one pixel face (HUD numbers / damage numbers), with the symbol fallback.
+var font_pixel: Font
+const FONT_SYMBOLS_PATH := "res://assets/fonts/Symbols-DejaVuSansBold.ttf"
+const FONT_PIXEL_PATH := "res://assets/fonts/PressStart2P.ttf"
 var _tex_cache: Dictionary = {}
 var _fade: ColorRect
 
@@ -44,6 +51,8 @@ func _ready() -> void:
 
 func _load_fonts() -> void:
 	var fb: Font = ThemeDB.fallback_font
+	if ResourceLoader.exists(FONT_SYMBOLS_PATH):
+		font_symbols = load(FONT_SYMBOLS_PATH) as Font
 	font_display = _font(FONT_DISPLAY_PATH, fb)
 	font_button = _font(FONT_BUTTON_PATH, fb)
 	font_body = _font(FONT_BODY_PATH, fb)
@@ -52,6 +61,7 @@ func _load_fonts() -> void:
 	## make the engine fallback the UI body font too.
 	if font_body != fb:
 		ThemeDB.fallback_font = font_body
+	font_pixel = _font(FONT_PIXEL_PATH, fb)
 
 
 func _font(path: String, fb: Font) -> Font:
@@ -62,8 +72,13 @@ func _font(path: String, fb: Font) -> Font:
 		return fb
 	## Arrows, check marks etc. aren't in Barlow's latin set: fall back to the
 	## engine font for those glyphs.
-	if fb and f.fallbacks.is_empty():
-		f.fallbacks = [fb]
+	if f.fallbacks.is_empty():
+		var fbs: Array[Font] = []
+		if font_symbols:
+			fbs.append(font_symbols)
+		if fb:
+			fbs.append(fb)
+		f.fallbacks = fbs
 	return f
 
 

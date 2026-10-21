@@ -26,6 +26,11 @@ uniform float road_half = 26.0;
 // World px per baked pixel (UnitAnim.TEXEL): the chunk bakes at native
 // density, so one tile texel = one bake pixel = one screen pixel.
 uniform float texel = 0.7407407;
+// Value pass (audit): the floor sits in a mid, low-saturation band so actors,
+// loot and VFX own the bright / saturated end.
+uniform float ground_sat = 0.72;
+uniform float ground_gain = 1.32;
+uniform float ground_lift = 0.07;
 
 varying vec2 world;
 varying vec2 bpx;
@@ -158,5 +163,7 @@ void fragment() {
 	// gentle large-scale value drift (±4%)
 	float drift = vnoise(p / 380.0 + seed_off * 1.3 + 7.0);
 	col.rgb *= 0.96 + drift * 0.08;
+	float gl = dot(col.rgb, vec3(0.299, 0.587, 0.114));
+	col.rgb = mix(vec3(gl), col.rgb, ground_sat) * ground_gain + ground_lift;
 	COLOR = vec4(col.rgb, 1.0);
 }

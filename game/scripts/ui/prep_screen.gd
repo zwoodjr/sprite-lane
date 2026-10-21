@@ -66,8 +66,7 @@ func _rebuild() -> void:
 	var nm := UiTheme.title_label(str(c.get("display_name", _hero)), 30, c.get("accent", UiTheme.AMBER))
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	tv.add_child(nm)
-	tv.add_child(UiTheme.body_label("%s · station rank %d/5 · %s" % [str(HangarDefs.display_name(HangarDefs.station_id(_hero))), rank,
-		str(GameState.get_mode().get("display_name", ""))], 14, UiTheme.TEXT_DIM))
+	tv.add_child(UiTheme.body_label(str(GameState.get_mode().get("display_name", "")), 16, UiTheme.TEXT_DIM))
 	## Weapon style.
 	_list.add_child(_section("WEAPON STYLE"))
 	var cur_style := GameState.kit_style(_hero)
@@ -76,7 +75,7 @@ func _rebuild() -> void:
 		var st: Dictionary = styles[i]
 		var sid := str(st["id"])
 		var unlocked := KitDefs.style_unlocked(_hero, sid, rank)
-		var lock := "" if unlocked else "Unlocks at station rank %d" % int(KitDefs.STYLE_UNLOCK[i])
+		var lock := "" if unlocked else "Unlock in the Hangar (rank %d)" % int(KitDefs.STYLE_UNLOCK[i])
 		_list.add_child(_option(load(KitDefs.icon_path(_hero, sid)) if ResourceLoader.exists(KitDefs.icon_path(_hero, sid)) else null,
 			str(st["name"]), str(st["desc"]), lock, sid == cur_style, pick_style.bind(sid)))
 	## Ability version.
@@ -87,7 +86,7 @@ func _rebuild() -> void:
 	_list.add_child(_option(aicon, str(base.get("name", "")), str(base.get("desc", "")), "", cur_ab == "a", pick_ability.bind("a")))
 	var b: Dictionary = KitDefs.ABILITIES.get(_hero, {})
 	if not b.is_empty():
-		var lk := "" if rank >= KitDefs.ABILITY_B_RANK else "Unlocks at station rank %d" % KitDefs.ABILITY_B_RANK
+		var lk := "" if rank >= KitDefs.ABILITY_B_RANK else "Unlock in the Hangar (rank %d)" % KitDefs.ABILITY_B_RANK
 		_list.add_child(_option(aicon, str(b["name"]), str(b["desc"]), lk, cur_ab == "b", pick_ability.bind("b"), true))
 	## Quirk.
 	_list.add_child(_section("QUIRK  ·  pick one rule to bend"))

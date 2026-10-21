@@ -445,7 +445,7 @@ func spawn_special(role: String, kind: String = "") -> Node:
 		if tn != "":
 			nm = tn + " " + nm
 	if role == "boss":
-		hud.show_banner("BOSS", "%s is hunting you" % nm, UiTheme.DANGER)
+		hud.boss_intro(nm)
 		Juice.sfx("threat_up")
 		Juice.mob_sfx("roar", enemy)
 		Juice.shake(0.3)

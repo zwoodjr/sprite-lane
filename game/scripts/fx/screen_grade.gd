@@ -54,7 +54,10 @@ const ZONE_LOOK := {
 	"deadfall": {"cool": Vector3(0.80, 0.82, 0.94), "warm": Vector3(1.06, 0.96, 0.88), "sat": 0.8},
 	"dustfall": {"cool": Vector3(0.84, 0.80, 0.92), "warm": Vector3(1.10, 0.96, 0.80), "contrast": 1.12},
 }
-const GRAIN := 0.045
+const GRAIN := 0.035
+## Share of the per-zone split-tone kept (1 = full wash).
+const WASH := 0.5
+const PIVOT := 0.36
 
 var _mat: ShaderMaterial
 var _grain_on: bool = true
@@ -75,6 +78,14 @@ func _ready() -> void:
 	var look := LOOK.duplicate()
 	var zid := str(ZoneDefs.zone(GameState.zone_tier()).get("id", "haze"))
 	look.merge(ZONE_LOOK.get(zid, {}), true)
+	## Audit value pass: the zone colour wash and vignette are cut ~50% (hue on
+	## accents, not as a full-screen soup) and contrast pivots lower so the
+	## mid-value ground isn't crushed toward black.
+	for k in ["cool", "warm"]:
+		look[k] = Vector3.ONE.lerp(look[k], WASH)
+	look["vignette"] = float(look["vignette"]) * 0.5
+	look["contrast"] = 1.0 + (float(look["contrast"]) - 1.0) * 0.6
+	look["pivot"] = PIVOT
 	for k in look:
 		var v: Variant = look[k]
 		_mat.set_shader_parameter(k, v)

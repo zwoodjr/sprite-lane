@@ -7,7 +7,10 @@ signal rampage_ended
 
 ## One 128 px pet frame spans this many world px (same px density as heroes,
 ## so the dogs read dog-sized next to their human).
-const PET_FRAME_WORLD := 128.0 * UnitAnim.TEXEL
+## Audit #6: pets draw at 0.7x so they read as companions, not a second hero
+## (the dogs were as tall as the heroes). Visual only: bodies are unchanged.
+const PET_VISUAL := 0.7
+const PET_FRAME_WORLD := 128.0 * UnitAnim.TEXEL * PET_VISUAL
 const FEET_Y := 20.0
 ## Standing still this long → sit down.
 const SIT_AFTER := 2.0
@@ -79,6 +82,8 @@ func _apply_look() -> void:
 		_anim_prefix = prefix
 		## Native density for every pet (mech frame_world sizes predate the visual tier).
 		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y)
+		## Always sorted behind the hero (and mobs), above the props.
+		z_index = -1
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
 		name_label.add_theme_font_size_override("font_size", 10)

@@ -28,6 +28,8 @@ var _ping_t: float = 0.0 ## >0 while the "new pad" ping ring expands
 
 var _ring: Node2D
 var _beam: Polygon2D
+var _core: Polygon2D
+const BEAM_H := 1500.0
 
 
 func _ready() -> void:
@@ -40,11 +42,25 @@ func _ready() -> void:
 	label.offset_bottom = 100.0
 	if sprite:
 		sprite.scale = Vector2.ONE * UnitAnim.prop_scale(sprite.texture)
+	## Sky-beam (audit #5): a tall additive light pillar, bright at the pad and
+	## fading upward, so an open pad reads from well off-screen.
 	_beam = Polygon2D.new()
-	_beam.polygon = PackedVector2Array([Vector2(-38, 0), Vector2(38, 0), Vector2(20, -560), Vector2(-20, -560)])
+	_beam.polygon = PackedVector2Array([Vector2(-44, 0), Vector2(44, 0), Vector2(26, -BEAM_H), Vector2(-26, -BEAM_H)])
+	_beam.vertex_colors = PackedColorArray([Color.WHITE, Color.WHITE, Color(1, 1, 1, 0), Color(1, 1, 1, 0)])
 	_beam.color = Color(1.0, 0.85, 0.4, 0.0)
-	_beam.z_index = 5
+	var add := CanvasItemMaterial.new()
+	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_beam.material = add
+	_beam.z_as_relative = false
+	_beam.z_index = 24
 	add_child(_beam)
+	_core = Polygon2D.new()
+	_core.polygon = PackedVector2Array([Vector2(-12, 0), Vector2(12, 0), Vector2(6, -BEAM_H), Vector2(-6, -BEAM_H)])
+	_core.vertex_colors = _beam.vertex_colors
+	_core.material = add
+	_core.z_as_relative = false
+	_core.z_index = 24
+	add_child(_core)
 	_ring = Node2D.new()
 	_ring.z_index = 6
 	_ring.draw.connect(_draw_ring)
@@ -92,8 +108,13 @@ func set_open(is_open: bool) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	_beam.color = (Color(1.0, 0.35, 0.3) if last_chance else Color(1.0, 0.85, 0.4))
-	_beam.color.a = (0.22 + 0.1 * sin(_t * 3.0)) if open else 0.06
+	var bc := Color(1.0, 0.35, 0.3) if last_chance else Color(1.0, 0.82, 0.4)
+	if open and not powered:
+		bc = Color(0.5, 0.8, 1.0)
+	_beam.color = Color(bc, (0.42 + 0.12 * sin(_t * 3.0)) if open else 0.0)
+	_core.color = Color(bc.lerp(Color.WHITE, 0.6), (0.6 + 0.2 * sin(_t * 5.0)) if open else 0.0)
+	_beam.visible = open
+	_core.visible = open
 	if open and player_inside and not powered and GameState.run_has_cell:
 		set_powered(true)
 		GameState.run_has_cell = false
@@ -132,6 +153,10 @@ func _cancel_channel_sound() -> void:
 func _draw_ring() -> void:
 	var r := 70.0
 	if open:
+		## Ground light pooled on the pad.
+		var gc := Color(1, 0.4, 0.3) if last_chance else Color(1, 0.85, 0.45)
+		for i in 4:
+			_ring.draw_circle(Vector2.ZERO, r * (1.0 - i * 0.2), Color(gc, 0.07))
 		var pulse := 0.5 + 0.5 * sin(_t * 4.0)
 		var rc := Color(1, 0.4, 0.3) if last_chance else Color(1, 0.85, 0.35)
 		_ring.draw_arc(Vector2.ZERO, r + pulse * 6.0, 0.0, TAU, 48, Color(rc.r, rc.g, rc.b, 0.35 + 0.3 * pulse), 3.0, true)

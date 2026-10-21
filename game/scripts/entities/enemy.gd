@@ -177,6 +177,7 @@ func set_role(r: String) -> void:
 	if is_inside_tree() and hp_bar:
 		hp_bar.max_value = max_hp
 		hp_bar.value = hp
+		_style_bar()
 
 func _ready() -> void:
 	add_to_group("enemies")
@@ -276,7 +277,7 @@ func _apply_look() -> void:
 		hp_bar.value = hp
 		var top := FEET_Y * body_scale - _anim.world_frame_px() * 0.66
 		hp_bar.offset_top = top
-		hp_bar.offset_bottom = top + 6.0
+		hp_bar.offset_bottom = top + 4.0
 		hp_bar.offset_left = -16.0 * sqrt(body_scale)
 		hp_bar.offset_right = 16.0 * sqrt(body_scale)
 
@@ -322,17 +323,37 @@ func _style_bar() -> void:
 		return
 	var bg := StyleBoxFlat.new()
 	bg.bg_color = Color(0.05, 0.03, 0.02, 0.8)
-	bg.set_corner_radius_all(3)
 	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.92, 0.35, 0.25)
-	fill.set_corner_radius_all(3)
+	fill.bg_color = Color(0.92, 0.35, 0.25) if role != "elite" else Color(1.0, 0.7, 0.25)
 	hp_bar.add_theme_stylebox_override("background", bg)
 	hp_bar.add_theme_stylebox_override("fill", fill)
 	hp_bar.visible = false  ## only shown once damaged
 
+## Per-mob HP bars (audit #6): elites always, bosses use the top-of-screen
+## bar instead, everyone else only for a moment after being hit.
+const BAR_SHOW := 1.8
+var _bar_left: float = 0.0
+
+
+func _tick_bar(delta: float) -> void:
+	if hp_bar == null or _dead:
+		return
+	_bar_left = maxf(0.0, _bar_left - delta)
+	var want := false
+	if role == "elite":
+		want = true
+	elif role != "boss":
+		want = _bar_left > 0.0
+	if hp_bar.visible != want:
+		hp_bar.visible = want
+	if want and role == "":
+		hp_bar.modulate.a = clampf(_bar_left / 0.4, 0.0, 1.0)
+
+
 func _process(delta: float) -> void:
 	_anim.set_motion(velocity, speed)
 	_anim.tick(delta)
+	_tick_bar(delta)
 
 func _physics_process(delta: float) -> void:
 	if _dead:
@@ -591,16 +612,18 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, knock: float =
 		amount *= float(FactionDefs.TRAITS["overclocked"]["overheat_taken"])
 	hp -= amount
 	if hp_bar:
-		hp_bar.visible = true
+		_bar_left = BAR_SHOW
 		hp_bar.value = hp
 	_anim.flash(0.08)
 	if _hit_anim_cd <= 0.0 and _anim.has_state("hit") and not (_anim.is_busy() or _windup_left > 0.0 or _lunge_left > 0.0):
 		_anim.play("hit")
 		_hit_anim_cd = 0.35
 	if num_color.a > 0.0:
-		Juice.damage_number(global_position + Vector2(0, -26), amount, false, num_color)
+		Juice.damage_number(global_position + Vector2(0, -26), amount, false, num_color, self)
 	else:
-		Juice.damage_number(global_position + Vector2(0, -26), amount, crit)
+		Juice.damage_number(global_position + Vector2(0, -26), amount, crit, Color(1, 0.97, 0.9), self)
+		if crit:
+			Juice.crit_stop()
 		Juice.sfx_at("hit_metal" if faction == EnemyDefs.MACHINE else "hit_flesh", global_position, -3.0)
 		Juice.mob_sfx("hurt", self, -5.0)
 	if from_dir.length() > 0.01:
@@ -703,8 +726,8 @@ func _die() -> void:
 	Juice.burst(global_position, Color(0.95, 0.55, 0.3), 18, 220.0, 0.5)
 	Juice.burst(global_position, Color(0.6, 0.5, 0.4, 0.8), 10, 90.0, 0.7, 1.6)
 	Juice.shake(0.12 if _archetype() != "brute" else 0.3)
-	if _archetype() == "brute":
-		Juice.hitstop(0.06)
+	## Kill hitstop for every hero (light; heavy for brutes / elites / bosses).
+	Juice.kill_stop(_archetype() == "brute" or role != "")
 	died.emit()
 	collision_layer = 0
 	_warn.visible = false

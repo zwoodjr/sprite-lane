@@ -129,6 +129,8 @@ var _done: bool = false
 var _loco: String = "idle"
 var _loco_fps_mult: float = 1.0
 var _flash_left: float = 0.0
+## Material restored after a hit flash (the hero's rim outline; null for mobs).
+var base_material: Material = null
 var _px_scale: float = 1.0
 var _alive: Dictionary = ALIVE
 var _rate: float = 1.0
@@ -172,6 +174,39 @@ static func load_json(path: String) -> Dictionary:
 		return {}
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	return parsed if parsed is Dictionary else {}
+
+
+static var _rim_mat: ShaderMaterial = null
+
+
+## Hero readability (audit value pass): a 1-texel outline drawn just outside
+## the silhouette, warm-light on the top / left edges (key light) and dark ink
+## on the bottom / right, so the hero always separates from the ground.
+static func rim_material() -> ShaderMaterial:
+	if _rim_mat == null:
+		var sh := Shader.new()
+		sh.code = """shader_type canvas_item;
+uniform vec4 rim_light : source_color = vec4(1.0, 0.92, 0.72, 0.6);
+uniform vec4 rim_dark : source_color = vec4(0.06, 0.04, 0.03, 0.75);
+varying vec4 vcol;
+void vertex() { vcol = COLOR; }
+float solid(sampler2D t, vec2 uv) { return step(0.6, texture(t, uv).a); }
+void fragment() {
+	// COLOR already holds texture * modulate here.
+	if (COLOR.a < 0.6 * vcol.a) {
+		vec2 px = TEXTURE_PIXEL_SIZE;
+		float lit = max(solid(TEXTURE, UV + vec2(0.0, px.y)), solid(TEXTURE, UV + vec2(px.x, 0.0)));
+		float ink = max(solid(TEXTURE, UV - vec2(0.0, px.y)), solid(TEXTURE, UV - vec2(px.x, 0.0)));
+		vec4 edge = lit > 0.5 ? rim_light : (ink > 0.5 ? rim_dark : vec4(0.0));
+		edge.a *= vcol.a;
+		vec4 base = COLOR;
+		COLOR = vec4(mix(base.rgb, edge.rgb, edge.a), max(base.a, edge.a));
+	}
+}
+"""
+		_rim_mat = ShaderMaterial.new()
+		_rim_mat.shader = sh
+	return _rim_mat
 
 
 static func flash_material() -> ShaderMaterial:
@@ -341,7 +376,7 @@ func tick(delta: float) -> void:
 	if _flash_left > 0.0:
 		_flash_left -= delta
 		if _flash_left <= 0.0:
-			sprite.material = null
+			sprite.material = base_material
 	if _done:
 		return
 	var n := frame_count(state)

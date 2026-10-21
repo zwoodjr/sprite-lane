@@ -9,6 +9,16 @@ static func is_touch_ui() -> bool:
 	return TouchInput.touch_primary
 
 
+## A real desktop build (mouse, OS window). QUIT / FULLSCREEN only exist here:
+## iOS, Xogot Play and the web build never show them.
+static func is_desktop() -> bool:
+	if OS.has_feature("web") or OS.has_feature("mobile"):
+		return false
+	if not (OS.get_name() in ["Windows", "Linux", "macOS", "FreeBSD"]):
+		return false
+	return not TouchInput.touch_primary
+
+
 static func is_portrait() -> bool:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree and tree.root:

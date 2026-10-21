@@ -38,10 +38,10 @@ func build(c: VBoxContainer) -> void:
 		reset.text = "PROGRESS RESET ✓"
 	)
 	row.add_child(reset)
-	var fill := UiTheme.big_button("FULLSCREEN", UiTheme.LINE, 56, 18)
-	fill.pressed.connect(func() -> void:
-		DisplayFit.toggle_fill_screen()
-		fill.text = "FULLSCREEN ✓" if DisplayFit.is_filled() else "FULLSCREEN"
-	)
-	row.add_child(fill)
-	v.add_child(UiTheme.body_label("Xogot Play keeps its own toolbar — true fullscreen needs an installed build.", 13, UiTheme.TEXT_DIM))
+	if MobileLayout.is_desktop():
+		var fill := UiTheme.big_button("FULLSCREEN", UiTheme.LINE, 56, 18)
+		fill.pressed.connect(func() -> void:
+			DisplayFit.toggle_fill_screen()
+			fill.text = "FULLSCREEN ✓" if DisplayFit.is_filled() else "FULLSCREEN"
+		)
+		row.add_child(fill)

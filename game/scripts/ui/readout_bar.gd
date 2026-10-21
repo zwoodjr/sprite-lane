@@ -38,8 +38,7 @@ func _ready() -> void:
 		_housing = load(h)
 	if ResourceLoader.exists(g):
 		_glass = load(g)
-	if ResourceLoader.exists(FONT):
-		_font = load(FONT)
+	_font = UiTheme.font_pixel if UiTheme.font_pixel else (load(FONT) if ResourceLoader.exists(FONT) else null)
 	if not hp:
 		on_color = Color(0.42, 0.86, 0.46)
 		off_color = Color(0.05, 0.14, 0.06)
@@ -97,7 +96,8 @@ func _draw() -> void:
 		draw_line(Vector2(SCREEN.position.x * k, sy), Vector2(SCREEN.end.x * k, sy), Color(0, 0, 0, 0.32), 1.0)
 		sy += 3.0
 	if _font:
-		var fs := int(maxf(6.0, (y1 - y0) * 1.05))
+		## PressStart2P only at multiples of its 8 px grid (square pixels).
+		var fs := maxi(8, int(floor((y1 - y0) * 1.2 / 8.0)) * 8)
 		var base_y := (y0 + y1) * 0.5 + fs * 0.5
 		var tc := on_color.lightened(0.08)
 		draw_string(_font, Vector2((SCREEN.position.x + 9.0) * k, base_y), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, tc)
@@ -106,5 +106,4 @@ func _draw() -> void:
 			num = num.substr(0, _glitch_i) + "I" + num.substr(_glitch_i + 1)
 		var nw := _font.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		draw_string(_font, Vector2((SCREEN.end.x - 8.0) * k - nw, base_y), num, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, tc)
-	if _glass:
-		draw_texture_rect(_glass, Rect2(Vector2.ZERO, size), false)
+	## (The cracked-glass overlay is gone: on a phone it read as dirt.)

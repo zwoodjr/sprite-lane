@@ -87,7 +87,7 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(sub)
 	var items: Array = [["HANGAR", UiTheme.TEAL, GameState.go_hangar], ["HOW TO PLAY", UiTheme.LINE, GameState.go_how_to_play],
 		["SETTINGS", UiTheme.LINE, GameState.go_settings]]
-	if not OS.has_feature("mobile"):
+	if MobileLayout.is_desktop():
 		items.append(["QUIT", UiTheme.RUST, func() -> void: get_tree().quit()])
 	for it in items:
 		var b := UiTheme.big_button(str(it[0]), it[1], 62, 18)

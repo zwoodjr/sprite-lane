@@ -55,10 +55,8 @@ func build(c: VBoxContainer) -> void:
 	_scrap_label = UiTheme.title_label("%d" % GameState.result_scrap_before, 48, UiTheme.AMBER)
 	sv.add_child(_scrap_label)
 	var soft := UiTheme.body_label(
-		"Account prestige Lv %d  ·  +%d XP (gates Hangar tiers only)" % [
-			GameState.account_level, GameState.account_xp_this_run,
-		],
-		13, UiTheme.TEXT_DIM
+		"Account Lv %d  ·  +%d XP" % [GameState.account_level, GameState.account_xp_this_run],
+		16, UiTheme.TEXT_DIM
 	)
 	soft.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sv.add_child(soft)
@@ -66,21 +64,22 @@ func build(c: VBoxContainer) -> void:
 	## Wipe kept/lost
 	var note := ""
 	if won:
-		note = "In-run loadout picks are gone. Spend scrap on permanent Hangar upgrades."
+		note = "Spend scrap in the Hangar."
 		if GameState.payout_this_run >= GameState.best_payout and GameState.payout_this_run > 0:
 			note = "NEW BEST PAYOUT ·  " + note
 	else:
-		var kept := "scrap %d, Hangar ranks, Account Lv %d, insured: %s" % [
-			GameState.account_scrap,
-			GameState.account_level,
-			", ".join(GameState.result_kept_keys) if GameState.result_kept_keys.size() else "(none)",
-		]
-		var lost := "bag scrap %d, run Lv %d picks, uninsured: %s" % [
-			GameState.result_scrap_lost,
-			GameState.result_run_level_reached,
-			", ".join(GameState.result_lost_keys) if GameState.result_lost_keys.size() else "(none)",
-		]
-		note = "KEPT: %s\nLOST: %s" % [kept, lost]
+		## Plain words only: what survived and what the dust took.
+		var kept_bits: Array[String] = ["%d banked scrap" % GameState.account_scrap]
+		if GameState.result_kept_keys.size():
+			kept_bits.append(", ".join(GameState.result_kept_keys))
+		var lost_bits: Array[String] = []
+		if GameState.result_scrap_lost > 0:
+			lost_bits.append("%d scrap in your bag" % GameState.result_scrap_lost)
+		if GameState.result_lost_keys.size():
+			lost_bits.append(", ".join(GameState.result_lost_keys))
+		note = "You kept %s." % " and ".join(kept_bits)
+		if not lost_bits.is_empty():
+			note += "\nLost: %s." % " and ".join(lost_bits)
 	## Everything below the scrap card scrolls, so long unlock lists can never
 	## push the action buttons off-screen.
 	var scroll := ScrollContainer.new()
@@ -92,7 +91,7 @@ func build(c: VBoxContainer) -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 8)
 	scroll.add_child(mid)
-	var nl := UiTheme.body_label(note, 14, UiTheme.TEXT_DIM)
+	var nl := UiTheme.body_label(note, 17, UiTheme.TEXT_DIM)
 	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mid.add_child(nl)
 

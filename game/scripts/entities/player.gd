@@ -185,6 +185,8 @@ func _apply_loadout() -> void:
 	_last_rites = GameState.has_set("cathedral_vestments", 3)
 	var prefix := str(_char.get("anim", "res://assets/sprites/characters/ash_rook/ash_rook"))
 	_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y)
+	_anim.base_material = UnitAnim.rim_material()
+	body.material = _anim.base_material
 	_wpn_art = UnitAnim.load_json(prefix + "_weapon.json")
 	if not _anim.frame_event.is_connected(_on_anim_frame):
 		_anim.frame_event.connect(_on_anim_frame)
@@ -250,7 +252,93 @@ func _build_visuals() -> void:
 	_muzzle_flash.visible = false
 	gun.add_child(_muzzle_flash)
 	UnitAnim.add_contact_shadow(self, 58.0, FEET_Y, 0.55)
+	_add_ground_ring()
+	_add_ammo_arc()
 	gun.z_index = 2
+
+
+var _ammo_arc: Node2D
+var _ammo_arc_a: float = 0.0
+
+
+## Ammo pips on a short arc beside the hero; while reloading the arc fills
+## amber. Replaces the "RELOADING %" HUD text (audit: read it where you look).
+func _add_ammo_arc() -> void:
+	_ammo_arc = Node2D.new()
+	_ammo_arc.name = "AmmoArc"
+	_ammo_arc.z_index = 6
+	_ammo_arc.position = Vector2(0.0, FEET_Y - 34.0)
+	_ammo_arc.modulate.a = 0.0
+	_ammo_arc.draw.connect(_draw_ammo_arc)
+	add_child(_ammo_arc)
+
+
+func _tick_ammo_arc(delta: float) -> void:
+	if _ammo_arc == null or is_melee() or GameState.quirk_fx("no_reload") > 0.0:
+		if _ammo_arc:
+			_ammo_arc.visible = false
+		return
+	var want := 1.0 if (_reload_left > 0.0 or _ammo < _mag_size()) else 0.0
+	_ammo_arc_a = move_toward(_ammo_arc_a, want, delta * (6.0 if want > 0.0 else 1.5))
+	_ammo_arc.visible = _ammo_arc_a > 0.01
+	_ammo_arc.modulate.a = _ammo_arc_a
+	if _ammo_arc.visible:
+		_ammo_arc.queue_redraw()
+
+
+func _draw_ammo_arc() -> void:
+	## Arc on the side away from the facing direction, 100 degrees tall.
+	var centre := 0.0 if _facing_left else PI
+	var r := 30.0
+	## Fills bottom -> top on either side.
+	var a0 := centre + deg_to_rad(50.0) * (1.0 if _facing_left else -1.0)
+	var span := deg_to_rad(100.0) * (-1.0 if _facing_left else 1.0)
+	var mag := maxi(1, _mag_size())
+	var shade := Color(0.04, 0.03, 0.02, 0.7)
+	if _reload_left > 0.0:
+		var t := get_reload_ratio()
+		_arc_seg(a0, a0 + span, r, 4.0, shade)
+		_arc_seg(a0, a0 + span * t, r, 2.5, Color(1.0, 0.72, 0.25))
+		return
+	if mag <= 16:
+		var gap := 0.18
+		for i in mag:
+			var s0 := a0 + span * (float(i) + gap * 0.5) / float(mag)
+			var s1 := a0 + span * (float(i) + 1.0 - gap * 0.5) / float(mag)
+			var on := i < _ammo
+			_arc_seg(s0, s1, r, 4.0, shade)
+			if on:
+				_arc_seg(s0, s1, r, 2.5, Color(1.0, 0.93, 0.7) if _ammo > mag / 4 else Color(1.0, 0.45, 0.35))
+	else:
+		var f := float(_ammo) / float(mag)
+		_arc_seg(a0, a0 + span, r, 4.0, shade)
+		_arc_seg(a0, a0 + span * f, r, 2.5, Color(1.0, 0.93, 0.7) if f > 0.25 else Color(1.0, 0.45, 0.35))
+
+
+func _arc_seg(a: float, b: float, r: float, w: float, c: Color) -> void:
+	if absf(b - a) < 0.001:
+		return
+	_ammo_arc.draw_arc(Vector2.ZERO, r, minf(a, b), maxf(a, b), 10, c, w)
+
+
+## Team-colour ground ring under the hero (audit value pass): the hero is
+## findable in any crowd at a glance. Drawn under the body, over the ground.
+func _add_ground_ring() -> void:
+	var ring := Node2D.new()
+	ring.name = "HeroRing"
+	ring.z_index = -1
+	ring.position = Vector2(2.0, FEET_Y - 1.0)
+	var col: Color = _char.get("accent", Color(1.0, 0.82, 0.4)) if _char else Color(1.0, 0.82, 0.4)
+	col = col.lerp(Color(1.0, 0.86, 0.5), 0.35)
+	ring.draw.connect(func() -> void:
+		var pts := PackedVector2Array()
+		for i in 33:
+			var a := TAU * float(i) / 32.0
+			pts.append(Vector2(cos(a) * 24.0, sin(a) * 9.0))
+		ring.draw_polyline(pts, Color(0, 0, 0, 0.35), 3.0)
+		ring.draw_polyline(pts, Color(col, 0.75), 1.5))
+	add_child(ring)
+	move_child(ring, 1)
 
 ## Drones: Helm = weapon base + Squadron + Scrap Drone ranks (max 4).
 ## Everyone else: Scrap Drone ranks, with the card's own drone stats.
@@ -446,6 +534,7 @@ func _facing_dir() -> Vector2:
 func _process(delta: float) -> void:
 	_anim.set_motion(velocity)
 	_anim.tick(delta)
+	_tick_ammo_arc(delta)
 	## A swing interrupted (hit / dash) before its hit frames still lands.
 	if _swing_hits_left > 0 and not (_anim.state == "windup" or _anim.state == "attack"):
 		while _swing_hits_left > 0:
@@ -1457,7 +1546,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	_anim.squash(0.12)
 	if not (_anim.is_playing("dash") or _anim.is_playing("ability")):
 		_anim.play("hit")
-	Juice.damage_number(global_position + Vector2(0, -30), dmg, false, UiTheme.DANGER)
+	Juice.damage_number(global_position + Vector2(0, -30), dmg, false, UiTheme.DANGER, self)
 	if hp <= 0.0 and _last_rites:
 		_last_rites = false
 		hp = max_hp * float(GearDefs.SURVIVOR_SETS["cathedral_vestments"]["revive_frac"])

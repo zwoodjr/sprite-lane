@@ -77,7 +77,13 @@ func _draw() -> void:
 		var ang: float = dir.angle() + PI * 0.5
 		if _arrow_tex:
 			## Painted brass chevron (64 px art) — tinted only for sealed / last chance.
-			var k := 40.0 / float(_arrow_tex.get_width())
+			## Open pads get a bigger, pulsing marker with a light flare behind it.
+			var big := 56.0 + 6.0 * sin(Time.get_ticks_msec() * 0.008) if _extract_open else 40.0
+			var k := big / float(_arrow_tex.get_width())
+			if _extract_open:
+				var glow := col
+				for gi in 3:
+					draw_circle(edge, 30.0 - gi * 8.0, Color(glow, 0.12 + gi * 0.06))
 			draw_set_transform(edge, ang, Vector2(k, k))
 			var tint := Color(0.6, 1.0, 0.6) if _extract_open else Color(0.75, 0.7, 0.62, 0.85)
 			if bool(pad.get("last_chance")):
@@ -95,7 +101,7 @@ func _draw() -> void:
 		else:
 			label = "SOON " + label
 		var f: Font = UiTheme.font_button
-		var fs := 14
+		var fs := 20 if _extract_open else 15
 		var tw := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var lp := edge + Vector2(-tw * 0.5 + 9.0, 34)
 		if _g_n < _g_pos.size():
