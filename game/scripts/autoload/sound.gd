@@ -85,7 +85,17 @@ var _streams: Dictionary = {}       ## id -> Array[AudioStream]
 var _last_variant: Dictionary = {}
 var _last_ms: Dictionary = {}
 var _flat: Array[AudioStreamPlayer] = []
-var _pos: Array[AudioStreamPlayer2D] = []
+## Positional voices are plain players too (see play()): AudioStreamPlayer2D
+## re-sends its panning to the mixer every physics frame, which in Godot 4.3
+## swaps the playback's bus details under the audio thread.
+var _pos: Array[AudioStreamPlayer] = []
+## Fade buses: looping beds fade by BUS volume (a plain float the mixer reads)
+## instead of player.volume_db, which reallocates the playback's bus details
+## on every write — the audio-thread SIGSEGV seen in 2/40 bot runs
+## (StringName copy inside AudioServer::_mix_step).
+const FADE_BUSES := {"MusMenu": "Music", "MusStem0": "Music", "MusStem1": "Music", "MusStem2": "Music",
+	"MusStem3": "Music", "AmbA": "Ambience", "AmbB": "Ambience", "Storm": "Ambience", "LowHP": "SFX"}
+var _bus_db: Dictionary = {}
 var _flat_i: int = 0
 var _pos_i: int = 0
 
@@ -130,27 +140,25 @@ func _ready() -> void:
 		add_child(a)
 		_flat.append(a)
 	for i in range(POOL_2D):
-		var b := AudioStreamPlayer2D.new()
+		var b := AudioStreamPlayer.new()
 		b.bus = "SFX"
-		b.max_distance = 1500.0
-		b.attenuation = 1.6
-		b.panning_strength = 0.55
 		add_child(b)
 		_pos.append(b)
-	_menu_player = _loop_player("Music", MUS_DIR + "mus_menu.ogg")
-	for s in STEMS:
-		_stem_players.append(_loop_player("Music", MUS_DIR + s + ".ogg"))
-	_amb_a = _loop_player("Ambience", "")
-	_amb_b = _loop_player("Ambience", "")
-	_storm_player = _loop_player("Ambience", AMB_DIR + "amb_storm.ogg")
-	_lowhp_player = _loop_player("SFX", SFX_DIR + "lowhp_loop_1.ogg")
+	_menu_player = _loop_player("MusMenu", MUS_DIR + "mus_menu.ogg")
+	for si in range(STEMS.size()):
+		_stem_players.append(_loop_player("MusStem%d" % si, MUS_DIR + STEMS[si] + ".ogg"))
+	_amb_a = _loop_player("AmbA", "")
+	_amb_b = _loop_player("AmbB", "")
+	_storm_player = _loop_player("Storm", AMB_DIR + "amb_storm.ogg")
+	_lowhp_player = _loop_player("LowHP", SFX_DIR + "lowhp_loop_1.ogg")
 	apply_settings()
 
 
 func _loop_player(bus: String, path: String) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.bus = bus
-	p.volume_db = -80.0
+	p.volume_db = 0.0
+	_fade(bus, -80.0)
 	if path != "" and ResourceLoader.exists(path):
 		p.stream = _looped(load(path))
 	add_child(p)
@@ -172,6 +180,12 @@ func _ensure_buses() -> void:
 			var idx := AudioServer.bus_count - 1
 			AudioServer.set_bus_name(idx, b)
 			AudioServer.set_bus_send(idx, "Master")
+	for fb in FADE_BUSES:
+		if AudioServer.get_bus_index(fb) == -1:
+			AudioServer.add_bus()
+			var fi := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(fi, fb)
+			AudioServer.set_bus_send(fi, FADE_BUSES[fb])
 	## Glue + safety: gentle compression on SFX, a limiter on Master so hordes never clip.
 	var sfx_i := AudioServer.get_bus_index("SFX")
 	if AudioServer.get_bus_effect_count(sfx_i) == 0:
@@ -204,9 +218,26 @@ func _set_bus(name: String, lin: float, muted: bool) -> void:
 	var i := AudioServer.get_bus_index(name)
 	if i < 0:
 		return
-	AudioServer.set_bus_mute(i, muted or lin <= 0.001)
+	var m := muted or lin <= 0.001
+	if AudioServer.is_bus_mute(i) != m:
+		AudioServer.set_bus_mute(i, m)
 	var extra := _duck_db if name == "Music" else 0.0
-	AudioServer.set_bus_volume_db(i, linear_to_db(maxf(lin, 0.001)) + extra)
+	_fade(name, linear_to_db(maxf(lin, 0.001)) + extra)
+
+
+## Bus volume write, skipped when it wouldn't be audible (no per-frame churn).
+func _fade(bus: String, db: float) -> void:
+	if absf(float(_bus_db.get(bus, 999.0)) - db) < 0.05:
+		return
+	var i := AudioServer.get_bus_index(bus)
+	if i < 0:
+		return
+	_bus_db[bus] = db
+	AudioServer.set_bus_volume_db(i, db)
+
+
+func _fade_db(bus: String) -> float:
+	return float(_bus_db.get(bus, -80.0))
 
 
 ## --- one-shots -----------------------------------------------------------------
@@ -262,11 +293,16 @@ func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Ve
 	var vol := volume_db + randf_range(-1.2, 0.6)
 	var player: Node
 	if at != Vector2.INF:
-		var b := _next_pos()
-		b.global_position = at
-		player = b
+		## Distance falloff from the view centre, decided once at start.
+		var d := _listener_dist(at)
+		if d >= POS_MAX_DIST:
+			return null
+		vol += POS_ATTEN_DB * pow(d / POS_MAX_DIST, 1.6)
+		player = _next_pos()
 	else:
 		player = _next_flat()
+	if player == null:
+		return null
 	player.set("bus", str(c["bus"]))
 	player.set("stream", arr[vi])
 	player.set("volume_db", vol)
@@ -279,27 +315,35 @@ func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Ve
 	return player
 
 
+const POS_MAX_DIST := 1500.0
+const POS_ATTEN_DB := -18.0
+
+
+func _listener_dist(at: Vector2) -> float:
+	var cam := get_viewport().get_camera_2d() if get_viewport() else null
+	if cam == null:
+		return 0.0
+	return cam.get_screen_center_position().distance_to(at)
+
+
+## Idle voices only: a full pool drops the new sound rather than restarting a
+## voice the mixer is still reading (fewer cross-thread stop/start swaps).
 func _next_flat() -> AudioStreamPlayer:
-	## Prefer an idle voice; otherwise steal round-robin.
 	for k in range(_flat.size()):
 		var i := (_flat_i + k) % _flat.size()
 		if not _flat[i].playing:
 			_flat_i = (i + 1) % _flat.size()
 			return _flat[i]
-	var p := _flat[_flat_i]
-	_flat_i = (_flat_i + 1) % _flat.size()
-	return p
+	return null
 
 
-func _next_pos() -> AudioStreamPlayer2D:
+func _next_pos() -> AudioStreamPlayer:
 	for k in range(_pos.size()):
 		var i := (_pos_i + k) % _pos.size()
 		if not _pos[i].playing:
 			_pos_i = (i + 1) % _pos.size()
 			return _pos[i]
-	var p := _pos[_pos_i]
-	_pos_i = (_pos_i + 1) % _pos.size()
-	return p
+	return null
 
 
 func stop(handle: Node) -> void:
@@ -349,7 +393,7 @@ func set_ambience(id: String) -> void:
 	var path := AMB_DIR + id + ".ogg"
 	if id != "" and ResourceLoader.exists(path):
 		_amb_a.stream = _looped(load(path))
-		_amb_a.volume_db = -60.0
+		_fade(_amb_a.bus, -60.0)
 		_amb_a.play(randf() * 20.0)
 	else:
 		_amb_a.stop()
@@ -382,27 +426,27 @@ func _process(delta: float) -> void:
 		_ctx_t = 0.25
 		_auto_context()
 	_menu_level = move_toward(_menu_level, _menu_target, delta * 0.5)
-	_menu_player.volume_db = _lin_db(_menu_level) + MUSIC_DB
+	_fade("MusMenu", _lin_db(_menu_level) + MUSIC_DB)
 	if _menu_level <= 0.001 and _menu_player.playing and _menu_target == 0.0:
 		_menu_player.stop()
 	for i in range(_stem_players.size()):
 		_stem_level[i] = move_toward(_stem_level[i], _stem_target[i], delta * (0.6 if _stem_target[i] > _stem_level[i] else 0.35))
-		_stem_players[i].volume_db = _lin_db(_stem_level[i]) + MUSIC_DB
+		_fade("MusStem%d" % i, _lin_db(_stem_level[i]) + MUSIC_DB)
 	if _music_state != "run" and _stem_players.size() > 0 and _stem_level.max() <= 0.001:
 		for p in _stem_players:
 			if p.playing:
 				p.stop()
 	## Ambience crossfade (2 s).
-	_amb_a.volume_db = move_toward(_amb_a.volume_db, AMB_DB if _amb_current != "" else -60.0, delta * 30.0)
-	_amb_b.volume_db = move_toward(_amb_b.volume_db, -60.0, delta * 30.0)
-	if _amb_b.playing and _amb_b.volume_db <= -59.0:
+	_fade(_amb_a.bus, move_toward(_fade_db(_amb_a.bus), AMB_DB if _amb_current != "" else -60.0, delta * 30.0))
+	_fade(_amb_b.bus, move_toward(_fade_db(_amb_b.bus), -60.0, delta * 30.0))
+	if _amb_b.playing and _fade_db(_amb_b.bus) <= -59.0:
 		_amb_b.stop()
 	_storm_level = move_toward(_storm_level, _storm_target, delta * 0.4)
-	_storm_player.volume_db = _lin_db(_storm_level)
+	_fade("Storm", _lin_db(_storm_level))
 	if _storm_level <= 0.001 and _storm_player.playing:
 		_storm_player.stop()
 	_lowhp_level = move_toward(_lowhp_level, _lowhp_target, delta * 1.5)
-	_lowhp_player.volume_db = _lin_db(_lowhp_level) - 4.0
+	_fade("LowHP", _lin_db(_lowhp_level) - 4.0)
 	if _lowhp_level <= 0.001 and _lowhp_player.playing:
 		_lowhp_player.stop()
 	## Ducking recovers after its hold.
