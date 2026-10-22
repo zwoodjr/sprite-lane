@@ -141,6 +141,24 @@ class Vox:
         dist2 = (X - p0[0] - t * d[0]) ** 2 + (Y - p0[1] - t * d[1]) ** 2 + (Z - p0[2] - t * d[2]) ** 2
         self._apply(sl, dist2 <= r * r, mat, only, carve)
 
+    def region(self, bbox, fn, mat, only=None, carve=False):
+        """Generic shape: fn(X, Y, Z) -> bool mask over bbox (x0,x1,y0,y1,z0,z1)."""
+        sl, X, Y, Z = self.sub(*bbox)
+        self._apply(sl, np.broadcast_to(fn(X, Y, Z), self.m[sl].shape), mat, only, carve)
+
+    def obox(self, c, size, R, mat, only=None, carve=False):
+        """Oriented box: centre c, full size (sx, sy, sz), rotation matrix R
+        (box axes -> model axes)."""
+        c = np.array(c, float); hs = np.array(size, float) / 2
+        ext = np.abs(R) @ hs
+        sl, X, Y, Z = self.sub(c[0] - ext[0], c[0] + ext[0], c[1] - ext[1], c[1] + ext[1], c[2] - ext[2], c[2] + ext[2])
+        dx, dy, dz = X - c[0], Y - c[1], Z - c[2]
+        m = np.ones(self.m[sl].shape, bool)
+        for k in range(3):
+            u = R[0, k] * dx + R[1, k] * dy + R[2, k] * dz
+            m &= np.abs(u) <= hs[k]
+        self._apply(sl, m, mat, only, carve)
+
     def paint_poly(self, pts, y0, y1, mat, only="solid"):
         """Paint the side-profile polygon region (x, z) for y0 <= y <= y1."""
         xs = [p[0] for p in pts]; zs = [p[1] for p in pts]
@@ -269,6 +287,11 @@ def _top_z(xs, zs, prof):
 
 
 # ================================================================ render
+def rmat(yaw=0.0, roll=0.0, pitch=0.0):
+    """Rotation (degrees) for Vox.obox: yaw about z, roll about x, pitch about y."""
+    return _rot(math.radians(yaw), math.radians(roll), math.radians(pitch)).T
+
+
 def _rot(yaw, roll=0.0, pitch=0.0):
     cy, sy = math.cos(yaw), math.sin(yaw)
     Rz = np.array([[cy, sy, 0], [-sy, cy, 0], [0, 0, 1]])   # front (-x) swings toward +y
@@ -279,14 +302,14 @@ def _rot(yaw, roll=0.0, pitch=0.0):
     return Rz @ Rx @ Ry
 
 
-def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0, thr=(-0.12, 0.22, 0.6, 0.92), squash=1.0, ground=False):
+def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0, thr=(-0.12, 0.22, 0.6, 0.92), squash=1.0, ground=False, smooth=1.25):
     """Render to a pk.Cv (uncropped, unoutlined) + footprint polygon in
     canvas px. mirror: front at +x (vehicle faces right). roll/pitch tilt the
     body (missing wheel, sunk in sand); lift raises it (m)."""
     solid = vx.m > 0
     surf = solid & ~ndi.binary_erosion(solid, ndi.generate_binary_structure(3, 1), border_value=0)
     idx = np.nonzero(surf)
-    sm = ndi.gaussian_filter(solid.astype(np.float32), 1.25)
+    sm = ndi.gaussian_filter(solid.astype(np.float32), smooth)
     occ = ndi.gaussian_filter(solid.astype(np.float32), 3.2)
     i, j, k = idx
     def at(a, di, dj, dk):
@@ -351,11 +374,16 @@ def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0
         tl = tones[mid]
         tl5 = list(tl) + [tl[-1]] * (5 - len(tl))
         rgb[sel] = np.array(tl5, np.uint8)[t[sel]]
-    o = order
-    col[iy[o], ix[o]] = rgb[o]
-    alpha[iy[o], ix[o]] = 255
-    dbuf[iy[o], ix[o]] = depth[o]
-    mbuf[iy[o], ix[o]] = mat[o]
+    # half-pixel duplicate splat (down): slopes facing the camera stretch
+    # past 1 px per voxel step and would leave see-through gaps
+    iy2 = np.floor(sy + 0.5).astype(int) - oy
+    IX = np.concatenate([ix, ix]); IY = np.concatenate([iy2, iy])
+    D = np.concatenate([depth, depth]); RGB = np.concatenate([rgb, rgb]); MT = np.concatenate([mat, mat])
+    o = np.argsort(D, kind="stable")
+    col[IY[o], IX[o]] = RGB[o]
+    alpha[IY[o], IX[o]] = 255
+    dbuf[IY[o], IX[o]] = D[o]
+    mbuf[IY[o], IX[o]] = MT[o]
     # inner silhouette lines: a surface far behind its neighbour gets that
     # neighbour's deep tone (the crevice / overhang edge), 1 px.
     jump = 0.09
@@ -364,7 +392,8 @@ def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0
         nb_d = np.roll(np.roll(dbuf, dy, 0), dx, 1)
         nb_m = np.roll(np.roll(mbuf, dy, 0), dx, 1)
         nb_a = np.roll(np.roll(alpha, dy, 0), dx, 1)
-        edge = (alpha > 0) & (nb_a > 0) & (nb_d - dbuf > jump)
+        dj = nb_d - dbuf
+        edge = (alpha > 0) & (nb_a > 0) & (((dj > jump) & (nb_m != mbuf)) | (dj > jump * 3.5))
         if edge.any():
             ys, xs = np.nonzero(edge)
             for y, x in zip(ys, xs):

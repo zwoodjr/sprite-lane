@@ -10,7 +10,9 @@ from pk import *
 SIZES = {"crack": (92, 60, 3), "pebbles": (42, 28, 3), "bones": (46, 28, 3), "grass": (34, 26, 3),
          "oil": (64, 34, 2), "scrap": (30, 22, 3), "stain": (96, 56, 2), "toxic": (54, 34, 2),
          "tracksh": (196, 34, 2), "tracksv": (34, 196, 2), "tracksd": (150, 150, 2), "tracksa": (150, 150, 2),
-         "crater": (92, 62, 2), "rubble": (84, 46, 3), "debris": (64, 40, 3), "tufts": (70, 40, 3)}
+         "crater": (92, 62, 2), "rubble": (84, 46, 3), "debris": (64, 40, 3), "tufts": (70, 40, 3),
+         # cleanup P3: bigger, denser ground detail so no screen reads as bare
+         "drift": (136, 52, 3), "gravel": (96, 56, 3), "litter": (100, 62, 3), "mudcrack": (140, 90, 2), "patch": (120, 70, 3)}
 
 
 def zc(zone):
@@ -330,7 +332,127 @@ def tufts(z, seed):
     return cv
 
 
-MAKERS = {"rubble": rubble, "debris": debris, "tufts": tufts, "crack": crack, "pebbles": pebbles, "bones": bones_d, "grass": grass, "oil": oil, "scrap": scrap,
+def drift(z, seed):
+    """Wind-blown sand drift: a long crescent with a lit crest, a shaded lee
+    edge (bottom-right) and 2-3 ripple lines."""
+    c0, c1, c2, c3 = zc(z)
+    W, H_ = SIZES["drift"][:2]
+    cv = Cv(W, H_)
+    rnd = random.Random(seed)
+    ph = rnd.uniform(0, 6)
+    yy, xx = cv.grid()
+    u = (xx + 0.5) / W
+    top = H_ * (0.55 - 0.38 * np.sin(np.pi * u) ** 0.8 + 0.05 * np.sin(u * 11 + ph))
+    bot = H_ * (0.62 + 0.25 * np.sin(np.pi * u) ** 1.5)
+    body = (yy >= top) & (yy <= bot) & (u > 0.03) & (u < 0.97)
+    body = ndi.binary_opening(body, iterations=1)
+    cv.fill(body, c2)
+    crest = body & ~np.roll(body, 1, 0)
+    cv.fill(crest | (np.roll(crest, 1, 0) & body), c3)
+    cv.fill(crest & (u > 0.25) & (u < 0.7), E[2])
+    lee = body & ~np.roll(body, -1, 0)
+    cv.fill(lee, c1)
+    cv.fill(ndi.binary_dilation(lee, iterations=1) & ~body & (yy > H_ * 0.5), c0)
+    for k in range(rnd.randint(2, 3)):
+        off = rnd.uniform(0.25, 0.75)
+        rip = body & (np.abs(yy - (top + (bot - top) * off) - 2 * np.sin(u * 14 + k)) < 0.6) & (u > 0.15 + 0.1 * k) & (u < 0.8 - 0.05 * k)
+        cv.fill(rip, c1)
+        cv.fill(np.roll(rip, -1, 0) & body & ~rip, c3)
+    return cv
+
+
+def gravel(z, seed):
+    """Dense pebble field (bigger than `pebbles`): 20-30 lit stones."""
+    c0, c1, c2, c3 = zc(z)
+    W, H_ = SIZES["gravel"][:2]
+    cv = Cv(W, H_)
+    rnd = random.Random(seed)
+    for _ in range(rnd.randint(22, 30)):
+        x = int(W / 2 + rnd.gauss(0, W / 4.5)); y = int(H_ / 2 + rnd.gauss(0, H_ / 4.5))
+        w, hh = rnd.randint(2, 5), rnd.randint(2, 4)
+        x = max(1, min(W - w - 2, x)); y = max(1, min(H_ - hh - 2, y))
+        ramp = rnd.choice(([c0, c1, c2, c3], [c0, c1, c2, c3], [A[0], A[1], A[2], A[3]], [E[0], E[1], E[2], E[3]]))
+        _chunk(cv, x, y, w, hh, ramp, c0)
+    return cv
+
+
+def litter(z, seed):
+    """Scattered junk: planks, a rusted sheet, cans, bricks, a tyre strip."""
+    c0, c1, c2, c3 = zc(z)
+    W, H_ = SIZES["litter"][:2]
+    cv = Cv(W, H_)
+    rnd = random.Random(seed)
+    for _ in range(2):
+        x, y = rnd.randint(4, W - 40), rnd.randint(6, H_ - 12)
+        L = rnd.randint(18, 30); sl = rnd.choice((7, 9, -9, 12))
+        for i in range(L):
+            yy = y + i // sl if sl > 0 else y - i // -sl
+            cv.px(x + i, yy, E[3]); cv.px(x + i, yy + 1, E[2]); cv.px(x + i, yy + 2, E[1])
+            if not cv.get(x + i + 1, yy + 3):
+                cv.px(x + i + 1, yy + 3, c0)
+    x, y = rnd.randint(8, W - 30), rnd.randint(8, H_ - 20)
+    w, hh = rnd.randint(14, 22), rnd.randint(8, 12)
+    for j in range(hh):
+        for i in range(w - j // 3):
+            c = RU[2] if (i + j * 2) % 9 < 6 else RU[1]
+            if j == 0 or i == 0:
+                c = RU[3]
+            cv.px(x + i + j // 3, y + j, c)
+    for i in range(w):
+        cv.px(x + i + hh // 3 + 1, y + hh, c0)
+    for _ in range(rnd.randint(6, 9)):
+        ramp = rnd.choice((RU, ST, [A[0], A[1], A[2], A[3]], [RU[0], RU[1], RU[2], RU[3]], BR))
+        _chunk(cv, rnd.randint(1, W - 8), rnd.randint(1, H_ - 6), rnd.randint(2, 5), rnd.randint(2, 3), ramp, c0)
+    return cv
+
+
+def mudcrack(z, seed):
+    """Dried-mud crazing: polygon cells of 1 px crack with lit lower lips."""
+    c0, c1, c2, c3 = zc(z)
+    W, H_ = SIZES["mudcrack"][:2]
+    cv = Cv(W, H_)
+    rnd = np.random.RandomState(seed)
+    yy, xx = cv.grid()
+    pts = rnd.rand(26, 2) * [W, H_]
+    d = np.full((H_, W), 1e9); d2 = np.full((H_, W), 1e9)
+    for px_, py_ in pts:
+        dd = np.hypot(xx - px_, (yy - py_) * 1.4)
+        d2 = np.where(dd < d, d, np.minimum(d2, dd)); d = np.minimum(d, dd)
+    edge = (d2 - d) < 1.1
+    ell = ((xx - W / 2) / (W / 2)) ** 2 + ((yy - H_ / 2) / (H_ / 2)) ** 2
+    keep = ell < 0.85 + 0.15 * rnd.rand()
+    m = edge & keep
+    cv.fill(m, c0)
+    lip = np.roll(np.roll(m, 1, 0), 1, 1) & ~m & keep
+    cv.fill(lip, c3)
+    return cv
+
+
+def patch(z, seed):
+    """Discoloured ground patch (damp / burnt / ash) with a ragged rim."""
+    c0, c1, c2, c3 = zc(z)
+    W, H_ = SIZES["patch"][:2]
+    cv = Cv(W, H_)
+    n = blob_noise((H_, W), 5.0, seed)
+    yy, xx = cv.grid()
+    ell = ((xx - W / 2) / (W / 2.1)) ** 2 + ((yy - H_ / 2) / (H_ / 2.1)) ** 2
+    m = clean_mask((ell + n * 0.8) < 0.75)
+    core = clean_mask((ell + n * 0.8) < 0.35)
+    cv.fill(m, c2)
+    cv.fill(core, c3 if seed % 2 else c2)
+    rim = m & ~ndi.binary_erosion(m)
+    cv.fill(rim & (yy > H_ / 2), c0)
+    cv.fill(rim & (yy <= H_ / 2), c3)
+    # a few embedded stones
+    rs = random.Random(seed)
+    for _ in range(6):
+        x, y = rs.randint(W // 4, 3 * W // 4), rs.randint(H_ // 4, 3 * H_ // 4)
+        if m[y, x]:
+            _chunk(cv, x, y, rs.randint(2, 4), 2, [c0, c1, c2, c3], c0)
+    return cv
+
+
+MAKERS = {"drift": drift, "gravel": gravel, "litter": litter, "mudcrack": mudcrack, "patch": patch, "rubble": rubble, "debris": debris, "tufts": tufts, "crack": crack, "pebbles": pebbles, "bones": bones_d, "grass": grass, "oil": oil, "scrap": scrap,
           "stain": stain, "toxic": toxic, "crater": crater}
 
 

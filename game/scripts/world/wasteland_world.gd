@@ -156,12 +156,20 @@ const BIOME_FILL := {
 ## Rare foreground occluder (dead bush / grass drawn OVER units), per chunk.
 const OCCLUDER_CHANCE := 0.12
 ## Ground detail layer: decal kinds per biome (repeats = weight). Every chunk is
-## covered on a jittered 4x4 grid so no screen is bare ground.
+## covered on a jittered 8x8 grid (cleanup P3: was 4x4) so no screen is bare.
 const BIOME_DECALS := {
-	0: ["crack", "crack", "pebbles", "scrap", "stain", "grass", "debris", "debris", "rubble", "tufts", "tufts"],
-	1: ["bones", "pebbles", "pebbles", "grass", "stain", "tufts", "tufts", "crack", "rubble"],
-	2: ["grass", "grass", "tufts", "tufts", "tufts", "pebbles", "bones", "crack", "debris"],
-	3: ["scrap", "rubble", "rubble", "pebbles", "pebbles", "crack", "oil", "debris", "stain"],
+	0: ["crack", "crack", "pebbles", "scrap", "stain", "grass", "debris", "debris", "rubble", "tufts", "tufts", "gravel", "litter"],
+	1: ["bones", "pebbles", "pebbles", "grass", "stain", "tufts", "tufts", "crack", "rubble", "gravel", "litter"],
+	2: ["grass", "grass", "tufts", "tufts", "tufts", "pebbles", "bones", "crack", "debris", "gravel"],
+	3: ["scrap", "rubble", "rubble", "pebbles", "pebbles", "crack", "oil", "debris", "stain", "litter", "gravel"],
+}
+## Big ground pieces (sand drifts, dust patches, dried-mud crazing, gravel and
+## junk fields), 3-5 per chunk: they break up the open stretches between sets.
+const BIOME_BIG := {
+	0: ["drift", "patch", "mudcrack", "gravel", "litter", "drift"],
+	1: ["drift", "drift", "patch", "mudcrack", "gravel", "litter"],
+	2: ["patch", "gravel", "drift", "mudcrack"],
+	3: ["mudcrack", "patch", "litter", "gravel", "litter"],
 }
 const RIVER_DECALS := ["crack", "pebbles", "pebbles", "stain", "toxic", "bones"]
 ## Decals round the base of each big prop (anchor it into the ground).
@@ -480,7 +488,7 @@ func _rng_for(coord: Vector2i, salt: int) -> RandomNumberGenerator:
 
 
 func _decal(kind: String, rng: RandomNumberGenerator) -> Rect2:
-	var n := 2 if kind in ["oil", "toxic", "stain", "crater"] or kind.begins_with("tracks") else 3
+	var n := 2 if kind in ["oil", "toxic", "stain", "crater", "mudcrack"] or kind.begins_with("tracks") else 3
 	if not DecalAtlas.REGIONS.has("%s_0" % kind):
 		kind = "pebbles"
 	return DecalAtlas.REGIONS["%s_%d" % [kind, rng.randi() % n]]
@@ -544,7 +552,7 @@ func _populate_road(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], dec
 					var t := _tex(kind)
 					var ext := 120.0
 					if t:
-						ext = (absf(dir.x) * t.get_width() + absf(dir.y) * t.get_height() * 0.8) * UnitAnim.TEXEL + 24.0
+						ext = (absf(dir.x) * t.get_width() + absf(dir.y) * t.get_height() * 0.8) * UnitAnim.TEXEL + 52.0
 					kinds.append(kind)
 					exts.append(ext)
 					total += ext
@@ -829,9 +837,9 @@ func _weighted(table: Array, rng: RandomNumberGenerator) -> String:
 ## no screen is bare ground. All inside the floor's value range.
 func _populate_decals(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], decals: Array) -> void:
 	var rng := _rng_for(coord, 63)
-	var cell := CHUNK_SIZE / 4.0
-	for gx in range(4):
-		for gy in range(4):
+	var cell := CHUNK_SIZE / 8.0
+	for gx in range(8):
+		for gy in range(8):
 			for k in range(2 + int(rng.randf() < 0.5)):
 				var lp := Vector2((gx + rng.randf_range(0.15, 0.85)) * cell, (gy + rng.randf_range(0.15, 0.85)) * cell)
 				var wc := chunk.position + lp
@@ -842,6 +850,15 @@ func _populate_decals(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], d
 				if kind == "toxic" and rng.randf() < 0.5:
 					kind = "pebbles"
 				decals.append([_decal(kind, rng), lp.floor(), 0.0, false, Color.WHITE])
+	## Big ground pieces between the set pieces.
+	for k in range(7 + rng.randi() % 3):
+		var bp := Vector2(rng.randf_range(80, CHUNK_SIZE - 80), rng.randf_range(50, CHUNK_SIZE - 50))
+		var bw := chunk.position + bp
+		if GroundField.road_dist(bw, segs) < GroundField.ROAD_HALF + 50.0:
+			continue
+		var bpool: Array = RIVER_DECALS if field.is_riverbed(bw) else BIOME_BIG[field.biome_at(bw)]
+		## under the small detail (drawn first)
+		decals.insert(0, [_decal(str(bpool[rng.randi() % bpool.size()]), rng), bp.floor(), 0.0, false, Color.WHITE])
 	## Old off-road tyre tracks wandering across the ground.
 	if rng.randf() < 0.4:
 		var tp := Vector2(rng.randf_range(100, CHUNK_SIZE - 100), rng.randf_range(100, CHUNK_SIZE - 100))

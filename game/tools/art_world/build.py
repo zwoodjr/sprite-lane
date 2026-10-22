@@ -60,17 +60,21 @@ for _n, _f in (("pipe_rack", "zone"), ("oil_tank", "zone"), ("street_lamp", "zon
                ("power_pole", "zone"), ("beast_ribs", "zone"), ("field_tent", "world"), ("market_stall", "world"),
                ("plane_wreck", "world"), ("relay", "world"), ("vault", "world"), ("watch_tower", "world")):
     PROPS[_n] = ((lambda n=_n: B.big(n)), "depth/" + _f, LM if _f == "world" or _n in ("dust_spire",) else PL_)
+# Cleanup P3: landmarks rebuilt as real volumes (landmarks.py)
+import landmarks as LMK
+for _n in ("slab_ruin", "quarantine_tent", "beast_ribs", "guard_post", "vault", "field_tent", "watch_tower", "plane_wreck"):
+    PROPS[_n] = (getattr(LMK, _n), PROPS[_n][1], PROPS[_n][2])
 # Collision from the art: name -> (depth in texels, width fraction of the
 # opaque base band). The block sits on the sprite's base line, centred on the
 # base band. Props not listed are walk-through.
 BLOCK = {
     "wall_ruin": (16, 0.95), "wall_ruin_b": (16, 0.95), "sandbags": (14, 0.92), "wall_collapsed": (18, 0.5),
     "rock_large": (12, 0.8), "rock_huge": (18, 0.8),
-    "oil_tank": (30, 0.86), "shop_ruin": (24, 0.95), "quarantine_tent": (24, 0.86), "hazard_barrier": (16, 0.97),
-    "spike_barricade": (14, 0.9), "chem_vat": (16, 0.9), "guard_post": (18, 0.86),
+    "oil_tank": (30, 0.86), "shop_ruin": (24, 0.95), "quarantine_tent": (40, 0.86), "hazard_barrier": (16, 0.97),
+    "spike_barricade": (14, 0.9), "chem_vat": (16, 0.9), "guard_post": (30, 0.86),
     "slab_ruin": (20, 0.6), "dust_spire": (22, 0.8), "bunker": (44, 0.62), "bunker_open": (44, 0.62),
-    "vault": (36, 0.95), "plane_wreck": (26, 0.6), "market_stall": (22, 0.95), "field_tent": (24, 0.8),
-    "relay": (26, 0.9), "watch_tower": (18, 0.86), "wreck_pile": (26, 0.9), "buried_wreck": (24, 0.8),
+    "vault": (36, 0.95), "plane_wreck": (30, 0.6), "market_stall": (22, 0.95), "field_tent": (40, 0.8),
+    "relay": (26, 0.9), "watch_tower": (30, 0.86), "wreck_pile": (26, 0.9), "buried_wreck": (24, 0.8),
 }
 # Flat ground-level pieces: no contact shadow.
 FLAT = {"extract_sealed", "extract_open"}
