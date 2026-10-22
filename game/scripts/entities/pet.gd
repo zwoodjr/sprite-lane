@@ -82,8 +82,8 @@ func _apply_look() -> void:
 		_anim_prefix = prefix
 		## Native density for every pet (mech frame_world sizes predate the visual tier).
 		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y)
-		## Always sorted behind the hero (and mobs), above the props.
-		z_index = -1
+		## Y-sorted with the hero, mobs and standing props (World y-sort).
+		z_index = 0
 	if name_label:
 		name_label.text = str(_def.get("name", "Pet"))
 		name_label.add_theme_font_size_override("font_size", 10)

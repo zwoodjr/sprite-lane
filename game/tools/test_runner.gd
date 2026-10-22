@@ -1484,7 +1484,9 @@ func _test_quickwins() -> void:
 	## Pets are drawn smaller than the hero.
 	var pet := get_tree().get_first_node_in_group("pets")
 	if pet:
-		_check(int((pet as Node2D).z_index) < 0, "qw pet sorted behind hero")
+		## Cleanup P2: pets y-sort with the hero, mobs and standing props (a pet
+		## in front of a wreck must not vanish behind it), never above units.
+		_check(int((pet as Node2D).z_index) <= 0, "qw pet sorted behind hero")
 	m.queue_free()
 	GameState.tutorial_done = keep_tut
 	for k in range(3):

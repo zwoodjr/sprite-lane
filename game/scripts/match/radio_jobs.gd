@@ -126,9 +126,10 @@ func _prop(name: String, at: Vector2, size: float) -> Sprite2D:
 		s.texture = load(PROP % name)
 		## Native density (style bible): the art is drawn at its size class.
 		s.scale = Vector2.ONE * UnitAnim.TEXEL
-		s.offset = Vector2(0, -float(s.texture.get_height()) * 0.5)
-	s.position = at + Vector2(0, 10)
-	s.z_index = -1
+		## Y-sorted with the units: node SORT_FEET above the base line.
+		s.offset = Vector2(0, -float(s.texture.get_height()) * 0.5 + 30.0 / UnitAnim.TEXEL)
+	s.position = at + Vector2(0, 10 - 30.0)
+	s.z_index = 0
 	s.add_to_group("map_markers")
 	s.set_meta("map_color", RadioDefs.MAP_COLOR)
 	world.add_child(s)

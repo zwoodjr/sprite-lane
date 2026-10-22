@@ -9,6 +9,7 @@
 script = ExtResource("1_match")
 
 [node name="World" type="Node2D" parent="."]
+y_sort_enabled = true
 
 [node name="Wasteland" type="Node2D" parent="World"]
 script = ExtResource("2_waste")
@@ -17,6 +18,7 @@ script = ExtResource("2_waste")
 position = Vector2(0, 0)
 
 [node name="ExtractPads" type="Node2D" parent="World"]
+z_index = -1
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("5_hud")

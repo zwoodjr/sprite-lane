@@ -37,10 +37,10 @@ const GroundShader := preload("res://scripts/world/ground.gdshader")
 ## art (car ~176 world px long, hero ~74), and blockers either overlap into one
 ## mass or leave >= 60 px gaps, so there are no stuck slots.
 const SETS := {
-	"junkyard": [["wreck_pile", -40, -50], ["wreck_car_blue", 110, 50], ["tire_stack", -150, -30], ["?tire", -120, 60],
+	"junkyard": [["wreck_pile", -40, -50], ["%car", 110, 50], ["tire_stack", -150, -30], ["?tire", -120, 60],
 		["scrap_pile", 30, 90], ["barrels_rust", 160, -60], ["@oil", 60, 10], ["@debris", -60, 40], ["@scrap", -130, 30],
 		["@tracksh", 0, 120], ["@rubble", 100, -20], ["crate", -20, 45]],
-	"pileup": [["wreck_truck", 20, -120], ["wreck_car_red", -100, -30], ["wreck_car", 60, -20], ["?tire", -190, 40],
+	"pileup": [["%big", 20, -130], ["%car", -110, -10], ["%car", 90, 10], ["?tire", -190, 40],
 		["scrap_pile", 160, 60], ["@oil", -20, 30], ["@debris", 80, 50], ["@tracksh", -40, 80], ["@scrap", -150, 0], ["crate", -40, 70]],
 	"ruin_house": [["wall_ruin_b", 0, -90], ["wall_ruin", -140, -80], ["ruin_pillar", 110, -60], ["wall_collapsed", 90, 70],
 		["rubble_chunk", -70, 60], ["?scrap_pile", -150, 80], ["@rubble", 0, -10], ["@rubble", -60, 20], ["@debris", 40, 20],
@@ -60,7 +60,7 @@ const SETS := {
 	"fence_run": [["fence_broken", -90, -20], ["fence_broken", 90, -10], ["dead_bush", -200, 30], ["?tire", 180, 50],
 		["@tufts", -40, 40], ["@pebbles", 60, 50], ["@debris", 150, 30]],
 	## ---- zone flavour
-	"pole_line": [["power_pole", -160, -40], ["power_pole", 0, -60], ["power_pole", 160, -80], ["wreck_car_olive", -40, 80],
+	"pole_line": [["power_pole", -160, -40], ["power_pole", 0, -60], ["power_pole", 160, -80], ["%car", -40, 80],
 		["?tire", 130, 60], ["@tracksh", 0, 30], ["@scrap", -110, 70], ["@debris", 90, 100]],
 	"dune_wreck": [["buried_wreck", 0, -30], ["rock_large", -150, 40], ["bones", 120, 60], ["?dead_bush", 140, -60],
 		["@tufts", -60, 60], ["@pebbles", 60, 50], ["@bones", -120, -10], ["crate", -60, 40]],
@@ -68,16 +68,16 @@ const SETS := {
 		["@oil", 0, 10], ["@oil", -70, 110], ["@stain", 110, 50], ["@debris", -160, 40], ["crate", -170, 30]],
 	"pipe_run": [["pipe_rack", -110, -20], ["pipe_rack", 130, -40], ["barrels_rust", 20, 60], ["?scrap_drum", -170, 70],
 		["@oil", 10, 30], ["@stain", -80, 70], ["@debris", 120, 60], ["crate", 60, 70]],
-	"street_block": [["shop_ruin", 0, -80], ["street_lamp", -170, -20], ["street_lamp", 170, 30], ["wreck_car", 20, 100],
+	"street_block": [["shop_ruin", 0, -80], ["street_lamp", -170, -20], ["street_lamp", 170, 30], ["%car", 20, 100],
 		["@rubble", -80, 30], ["@rubble", 100, 20], ["@debris", -40, 60], ["@crack", 120, 70], ["crate", -110, 50]],
-	"q_camp": [["quarantine_tent", -60, -70], ["hazard_barrier", 110, 60], ["fence_broken", -170, 70], ["crate_stack", 140, -60],
+	"q_camp": [["quarantine_tent", -60, -70], ["hazard_barrier", 110, 60], ["?%car", 150, -150], ["fence_broken", -170, 70], ["crate_stack", 140, -60],
 		["@toxic", 30, 20], ["@debris", -40, 40], ["@stain", 130, 0], ["crate", 20, 20]],
-	"raider_camp": [["spike_barricade", -50, -90], ["raider_totem", 140, -60], ["raider_totem", -170, 40], ["fire", 0, 0],
+	"raider_camp": [["spike_barricade", -50, -90], ["raider_totem", 140, -60], ["%moto", -110, -20], ["?%moto", 80, 90], ["raider_totem", -170, 40], ["fire", 0, 0],
 		["barrels_rust", 90, 40], ["tire_stack", -80, 50], ["?spike_barricade", 60, 130], ["@stain", 0, 12], ["@bones", -40, 40],
 		["@debris", 120, 80], ["crate", 30, 60]],
 	"vat_bank": [["chem_vat", -90, -60], ["chem_vat", 60, -80], ["pipe_rack", 0, 60], ["barrels_rust", 170, 10],
 		["@toxic", -20, 10], ["@toxic", 100, 40], ["@oil", -120, 50], ["@debris", 160, 70], ["crate", -160, 20]],
-	"base_post": [["tank_wreck", -60, -60], ["guard_post", 150, -40], ["sandbags", -120, 70], ["sandbags", 50, 100],
+	"base_post": [["tank_wreck", -60, -60], ["guard_post", 150, -40], ["?%car", 120, 150], ["sandbags", -120, 70], ["sandbags", 50, 100],
 		["?crate_stack", 170, 100], ["@tracksh", -40, 20], ["@debris", 60, 40], ["@rubble", -160, 10], ["crate", -10, 45]],
 	"slab_field": [["slab_ruin", -40, -60], ["rubble_chunk", 130, 0], ["rubble_chunk", -160, 50], ["?wall_ruin", 120, -110],
 		["@crater", 60, 80], ["@rubble", -60, 40], ["@rubble", 40, 20], ["@debris", -130, 100], ["crate", 0, 50]],
@@ -86,7 +86,7 @@ const SETS := {
 	## ---- small zone pieces (second piece in a chunk corner)
 	"vat_single": [["chem_vat", 0, -30], ["barrels_rust", 80, 20], ["@toxic", -20, 40], ["@debris", 60, 50]],
 	"drum_dump": [["barrels_rust", -40, 0], ["barrels_rust", 50, -20], ["?scrap_drum", 10, 40], ["@oil", 0, 30], ["@stain", -60, 30]],
-	"lamp_car": [["street_lamp", -90, -40], ["wreck_car_blue", 60, 20], ["@rubble", -20, 50], ["@debris", 120, 60]],
+	"lamp_car": [["street_lamp", -90, -40], ["%car", 60, 20], ["@rubble", -20, 50], ["@debris", 120, 60]],
 	"tent_post": [["quarantine_tent", 0, -30], ["?crate_stack", 130, 20], ["@debris", -60, 60], ["@toxic", 60, 60]],
 	"totem_post": [["raider_totem", 0, -40], ["spike_barricade", 30, 50], ["?tire_stack", -90, 10], ["@bones", -40, 70]],
 	"sandbag_nest": [["sandbags", 0, 0], ["barrels_rust", 100, -30], ["?crate_stack", -100, -20], ["@debris", 20, 40], ["crate", 60, 40]],
@@ -94,9 +94,33 @@ const SETS := {
 	"dune_buried": [["buried_wreck", 0, -20], ["?rock_small", 100, 30], ["@tufts", -70, 40]],
 	"rubble_heap": [["rubble_chunk", -40, 0], ["rubble_chunk", 50, 20], ["?rock_small", 0, -50], ["@rubble", 0, 40], ["@rubble", -70, 30]],
 	"spire_small": [["dust_spire", 0, -40], ["@rubble", -50, 50], ["@pebbles", 60, 40]],
-	"tank_hulk": [["tank_wreck", 0, -40], ["sandbags", -150, 60], ["?barrels_rust", 140, 50], ["@tracksh", 0, 40],
+	"tank_hulk": [["%mil", 0, -40], ["sandbags", -150, 60], ["?barrels_rust", 140, 50], ["@tracksh", 0, 40],
 		["@debris", -60, 70], ["@rubble", 100, 0], ["crate", 60, 70]],
 }
+## Vehicle wrecks (tools/art_world/vehicles.py): real vehicle types, 3 damage
+## variants each. Set entries use pool tokens: "%car", "%big", "%mil",
+## "%moto" (resolved per zone, see _veh). "%big" may roll a semi + trailer.
+const VEH_CARS := ["veh_sedan_0", "veh_sedan_1", "veh_sedan_2", "veh_sedan_red_0", "veh_sedan_red_1", "veh_sedan_red_2",
+	"veh_wagon_0", "veh_wagon_1", "veh_wagon_2", "veh_pickup_0", "veh_pickup_1", "veh_pickup_2"]
+const VEH_BIG := ["veh_school_bus_0", "veh_school_bus_1", "veh_school_bus_2", "veh_city_bus_0", "veh_city_bus_1", "veh_city_bus_2",
+	"veh_box_truck_0", "veh_box_truck_1", "veh_box_truck_2", "veh_semi_0", "veh_semi_0"]
+const VEH_MIL := ["tank_wreck", "veh_tank_1", "veh_tank_2", "veh_apc_0", "veh_apc_1", "veh_apc_2", "veh_humvee_0", "veh_humvee_1", "veh_humvee_2"]
+const VEH_MOTO := ["veh_moto_0", "veh_moto_1", "veh_moto_2"]
+## Zone flavour: extra cars mixed into "%car" (and what "%big" leans to).
+const ZONE_VEH := {
+	"city": [["veh_police_0", "veh_police_1", "veh_police_2", "veh_sedan_0", "veh_wagon_1"], ["veh_city_bus_0", "veh_city_bus_1", "veh_city_bus_2", "veh_box_truck_0"]],
+	"quarantine": [["veh_ambulance_0", "veh_ambulance_1", "veh_ambulance_2", "veh_police_0", "veh_police_2"], ["veh_ambulance_0", "veh_ambulance_2", "veh_box_truck_1"]],
+	"military": [["veh_humvee_0", "veh_humvee_1", "veh_humvee_2", "veh_pickup_2"], ["veh_tank_1", "veh_apc_0", "veh_apc_2", "veh_semi_0"]],
+	"raider": [["veh_pickup_0", "veh_pickup_1", "veh_pickup_2", "veh_moto_0", "veh_moto_1"], ["veh_school_bus_1", "veh_semi_0", "veh_box_truck_2"]],
+	"dustfall": [["veh_humvee_1", "veh_sedan_1", "veh_pickup_1"], ["veh_tank_2", "veh_apc_1", "veh_school_bus_2"]],
+	"refinery": [["veh_pickup_0", "veh_pickup_1", "veh_box_truck_0"], ["veh_semi_0", "veh_box_truck_1", "veh_box_truck_2"]],
+}
+## Hero feet sit this far below the unit origin (player FEET_Y): a prop's
+## y-sort node goes this far above its base line, so a unit draws in front
+## exactly when its feet are below the prop's base (mobs' feet are higher,
+## within the collision block).
+const SORT_FEET := 30.0
+
 ## Generic set pieces per biome: [set, weight].
 const BIOME_SETS := {
 	0: [["junkyard", 12], ["pileup", 8], ["ruin_house", 10], ["campsite", 12], ["crater_field", 10], ["barricade", 8],
@@ -177,6 +201,10 @@ func setup(p_seed: int, player: Node2D) -> void:
 	_chunks_root = Node2D.new()
 	_chunks_root.name = "Chunks"
 	_chunks_root.z_index = -10
+	## Y-sort: World > Wasteland > Chunks > chunk > prop sprites all merge into
+	## the World's sort with the units (floor / decals stay on lower z layers).
+	y_sort_enabled = true
+	_chunks_root.y_sort_enabled = true
 	## Style bible: the floor is authored in the zone's own 4 ground colours,
 	## so it gets no tint at all (mood comes from light pools).
 	_chunks_root.modulate = Color.WHITE
@@ -236,6 +264,28 @@ static func prop_tex(n: String) -> Texture2D:
 ## Positions are floored to whole art texels (bible 1.1).
 static func snap(p: Vector2) -> Vector2:
 	return (p / UnitAnim.TEXEL).floor() * UnitAnim.TEXEL
+
+
+## World prop sprite centred on `centre` (chunk-local). Standing props are
+## Y-SORTED with the units: the node sits SORT_FEET above the prop's base line
+## (PropMeta "base", the bottom of its collision footprint) and the texture is
+## offset back, so heroes / mobs walk behind tall props and in front of them.
+## Flat ground pieces keep drawing under every unit.
+static func prop_sprite(kind: String, tex: Texture2D, centre: Vector2) -> Sprite2D:
+	var sp := Sprite2D.new()
+	sp.texture = tex
+	sp.scale = Vector2.ONE * UnitAnim.TEXEL
+	var m := PropMeta.info(kind)
+	if m.get("flat", false):
+		sp.position = centre
+		sp.z_index = 2
+		return sp
+	var key := PropMeta.base_y(kind, float(tex.get_height())) - SORT_FEET
+	sp.position = centre + Vector2(0.0, key)
+	sp.offset = Vector2(0.0, -key / UnitAnim.TEXEL)
+	## The chunk layer sits at z -10: +10 puts standing props on the units' layer.
+	sp.z_index = 10
+	return sp
 
 
 ## Engine contact shadow for a prop (never baked into the art): the hard pixel
@@ -370,6 +420,7 @@ func _spawn_chunk(coord: Vector2i) -> Node2D:
 	var chunk := WastelandChunk.new()
 	chunk.name = "Chunk_%d_%d" % [coord.x, coord.y]
 	chunk.position = Vector2(coord.x * CHUNK_SIZE, coord.y * CHUNK_SIZE)
+	chunk.y_sort_enabled = true
 	var rect := Rect2(chunk.position, Vector2(CHUNK_SIZE, CHUNK_SIZE))
 	var segs := field.segments_in(rect)
 	var decals: Array = []
@@ -483,12 +534,26 @@ func _populate_road(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], dec
 				did_convoy = true
 				_gid += 1
 				var n := 2 + rng.randi() % 2
-				var step := 235.0 if absf(dir.x) > 0.7 else 125.0
+				var kinds: Array[String] = []
+				var exts: Array[float] = []
+				var total := 0.0
 				for k in range(n):
-					var roll := rng.randf()
-					var cars: Array[String] = ["wreck_car", "wreck_car_red", "wreck_car_blue", "wreck_car_olive", "wreck"]
-					var kind: String = "wreck_bus" if roll < 0.15 else ("wreck_truck" if roll < 0.4 else cars[rng.randi() % 5])
-					var vp := p0 + dir * (float(k) - float(n - 1) * 0.5) * step + nrm * rng.randf_range(-0.4, 0.4) * GroundField.ROAD_HALF
+					var kind := _veh("%big" if rng.randf() < 0.3 else ("%moto" if rng.randf() < 0.08 else "%car"), rng)
+					if kind == "veh_semi_0":
+						kind = "veh_box_truck_0"
+					var t := _tex(kind)
+					var ext := 120.0
+					if t:
+						ext = (absf(dir.x) * t.get_width() + absf(dir.y) * t.get_height() * 0.8) * UnitAnim.TEXEL + 24.0
+					kinds.append(kind)
+					exts.append(ext)
+					total += ext
+				var along := -total * 0.5
+				for k in range(n):
+					along += exts[k] * 0.5
+					var vp := p0 + dir * along + nrm * rng.randf_range(-0.4, 0.4) * GroundField.ROAD_HALF
+					along += exts[k] * 0.5
+					var kind := kinds[k]
 					_put(chunk, kind, vp, true)
 					decals.append([_decal("oil", rng), (vp + Vector2(rng.randf_range(-30, 30), 24) - chunk.position).floor(), 0.0, false, Color.WHITE])
 					if rng.randf() < 0.6:
@@ -602,6 +667,37 @@ func _populate_sets(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], dec
 			break
 
 
+## Resolve a vehicle pool token ("%car", "%big", "%mil", "%moto") for this zone.
+func _veh(token: String, rng: RandomNumberGenerator) -> String:
+	var zv: Array = ZONE_VEH.get(_grade, [[], []])
+	match token:
+		"%car":
+			if not (zv[0] as Array).is_empty() and rng.randf() < 0.6:
+				return str(zv[0][rng.randi() % (zv[0] as Array).size()])
+			return VEH_CARS[rng.randi() % VEH_CARS.size()]
+		"%big":
+			if not (zv[1] as Array).is_empty() and rng.randf() < 0.6:
+				return str(zv[1][rng.randi() % (zv[1] as Array).size()])
+			return VEH_BIG[rng.randi() % VEH_BIG.size()]
+		"%mil":
+			return VEH_MIL[rng.randi() % VEH_MIL.size()]
+		"%moto":
+			return VEH_MOTO[rng.randi() % VEH_MOTO.size()]
+	return token
+
+
+## Place a vehicle; a semi tractor brings its trailer (hitched behind it, in
+## the same 3/4 angle). Returns the world-px length taken along x.
+func _put_vehicle(chunk: Node2D, kind: String, wp: Vector2, decals: Array, rng: RandomNumberGenerator) -> void:
+	_put(chunk, kind, wp, true, decals, rng)
+	if kind == "veh_semi_0":
+		var st := _tex(kind)
+		var tt := _tex("veh_trailer_0")
+		if st and tt:
+			var dx := (st.get_width() * 0.5 + tt.get_width() * 0.5 - 70.0) * UnitAnim.TEXEL
+			_put(chunk, "veh_trailer_0", wp + Vector2(dx, -dx * 0.15), true, decals, rng)
+
+
 func _build_set(chunk: Node2D, name: String, anchor: Vector2, rng: RandomNumberGenerator, decals: Array) -> void:
 	_gid += 1
 	## Mirror the layout half the time (positions only: sprites are never
@@ -624,6 +720,8 @@ func _build_set(chunk: Node2D, name: String, anchor: Vector2, rng: RandomNumberG
 				_place_crate(chunk, wp - chunk.position, rng)
 		elif kind == "fire":
 			LightFx.fire(chunk, (wp - chunk.position).floor(), 0.9)
+		elif kind.begins_with("%"):
+			_put_vehicle(chunk, _veh(kind, rng), wp, decals, rng)
 		else:
 			_put(chunk, kind, wp, true, decals, rng)
 
@@ -677,21 +775,17 @@ func _put(chunk: Node2D, kind: String, world_pos: Vector2, big: bool, decals: Ar
 	var local := snap(world_pos - chunk.position)
 	if is_block and not _block_ok(Rect2(PropMeta.block_rect(kind).position + chunk.position + local, PropMeta.block_rect(kind).size), _gid):
 		return
-	var sp := Sprite2D.new()
-	sp.texture = tex
-	sp.scale = Vector2.ONE * UnitAnim.TEXEL
-	sp.position = local
-	sp.z_index = 2
+	var sp := prop_sprite(kind, tex, local)
 	var m := PropMeta.info(kind)
 	if m.has("light"):
 		var lp: Vector2 = m["light"]
 		if kind == "street_lamp":
-			LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
+			LightFx.lamp(chunk, local + lp * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
 		elif kind == "chem_vat":
-			LightFx.lamp(chunk, sp.position + lp * UnitAnim.TEXEL, 130.0, Color(0.61, 0.81, 0.24, 0.26), 0.1)
-	add_prop_shadow(chunk, kind, sp.position)
+			LightFx.lamp(chunk, local + lp * UnitAnim.TEXEL, 130.0, Color(0.61, 0.81, 0.24, 0.26), 0.1)
+	add_prop_shadow(chunk, kind, local)
 	if is_block:
-		add_prop_block(chunk, kind, sp.position)
+		add_prop_block(chunk, kind, local)
 	chunk.add_child(sp)
 	_register(chunk, kind, local, tex, _gid)
 	var sz := Vector2(tex.get_width(), tex.get_height()) * UnitAnim.TEXEL
@@ -767,8 +861,8 @@ func _populate_decals(chunk: Node2D, coord: Vector2i, segs: Array[Dictionary], d
 ## "@x" = floor decal. The first entry is the hero prop (label anchor).
 const LANDMARK_SETS := [
 	## 0 wreck field (Scrapyard, Convoy Wreck)
-	[["wreck_bus", 0, -215], ["wreck_car", -235, -60], ["wreck", 225, -70], ["barrels_rust", 240, 100], ["tire_stack", -290, 50],
-		["scrap_pile", 160, 200], ["wreck_car_red", -200, 190], ["tire", 110, -300], ["@oil", 20, -140], ["@oil", -110, -20],
+	[["%big", 0, -215], ["%car", -235, -50], ["%car", 235, -60], ["barrels_rust", 240, 100], ["tire_stack", -290, 50],
+		["scrap_pile", 160, 200], ["%car", -200, 190], ["?%moto", 60, 160], ["tire", 110, -300], ["@oil", 20, -140], ["@oil", -110, -20],
 		["@tracksh", -40, 40], ["@debris", 80, 100], ["@scrap", -60, -60], ["@stain", 0, -150], ["@rubble", 200, 20],
 		["@debris", -180, 110]],
 	## 1 garage / wall ruin (Flood Garage)
@@ -797,24 +891,30 @@ func _maybe_landmark_sprite(chunk: Node2D, coord: Vector2i) -> void:
 			for e in LANDMARK_SETS[k]:
 				var kind := str(e[0])
 				var wp := lp + Vector2(float(e[1]), float(e[2]))
+				if kind.begins_with("?"):
+					if set_rng.randf() > 0.55:
+						continue
+					kind = kind.substr(1)
 				if kind.begins_with("@"):
 					(chunk as WastelandChunk).add_decal([_decal(kind.substr(1), set_rng), (wp - chunk.position).floor(), 0.0, false, Color.WHITE])
 					continue
-				var sp := Sprite2D.new()
-				sp.texture = _tex(kind)
-				sp.scale = Vector2.ONE * UnitAnim.TEXEL
-				sp.position = snap(wp - chunk.position)
-				sp.z_index = 2
+				if kind.begins_with("%"):
+					kind = _veh(kind, set_rng)
+				var tex := _tex(kind)
+				if tex == null:
+					continue
+				var local := snap(wp - chunk.position)
+				var sp := prop_sprite(kind, tex, local)
 				var m := PropMeta.info(kind)
 				if kind == "street_lamp" and m.has("light"):
-					LightFx.lamp(chunk, sp.position + (m["light"] as Vector2) * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
-				add_prop_shadow(chunk, kind, sp.position)
-				add_prop_block(chunk, kind, sp.position)
+					LightFx.lamp(chunk, local + (m["light"] as Vector2) * UnitAnim.TEXEL, 150.0, Color(1.0, 0.75, 0.25, 0.38), 0.05)
+				add_prop_shadow(chunk, kind, local)
+				add_prop_block(chunk, kind, local)
 				chunk.add_child(sp)
-				_register(chunk, kind, sp.position, sp.texture, _gid)
+				_register(chunk, kind, local, tex, _gid)
 			var hero: Array = LANDMARK_SETS[k][0]
 			var sp_pos := snap(lp + Vector2(float(hero[1]), float(hero[2])) - chunk.position)
-			var sp_tex := _tex(str(hero[0]))
+			var sp_tex := _tex(str(hero[0]) if not str(hero[0]).begins_with("%") else "wreck_bus")
 			var label := Label.new()
 			label.text = str(lm["name"])
 			label.position = sp_pos + Vector2(-40, -sp_tex.get_height() * 0.5 * UnitAnim.TEXEL - 18.0)
