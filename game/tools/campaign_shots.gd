@@ -121,6 +121,8 @@ func _level(id: String) -> void:
 			has_boss = true
 	if has_boss:
 		var pl: Node2D = m.get_node("World/Player")
+		## Level-ups auto-pick while we skip ahead (no card over the boss).
+		GameState.fast_timers = true
 		for k in range(40):
 			var o: Dictionary = runner.get("obj")
 			if str(o.get("type", "")) == "boss":
@@ -139,10 +141,17 @@ func _level(id: String) -> void:
 				break
 			await _wait(2)
 		await _wait(40)
-		## A level-up card can pop from the teleport kills: take a card first.
-		for n in get_tree().root.find_children("*", "", true, false):
-			if n.has_method("pick_index") and bool(n.call("is_open")):
-				n.call("pick_index", 0)
-		await _wait(30)
+		## Level-up cards can pop from the teleport kills: take them first.
+		for k in range(12):
+			var open := false
+			for n in get_tree().root.find_children("*", "", true, false):
+				if n.has_method("pick_index") and bool(n.call("is_open")):
+					n.call("pick_index", 0)
+					open = true
+			await _wait(8)
+			if not open and k > 2:
+				break
+		await _wait(20)
 		await _snap("%s_4_boss" % id)
+		GameState.fast_timers = false
 	await _clear()

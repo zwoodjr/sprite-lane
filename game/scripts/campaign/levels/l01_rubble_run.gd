@@ -62,6 +62,10 @@ static func def() -> Dictionary:
 				["rook", "...There's a roof. Mostly."],
 			],
 		},
+		"triggers": [
+			{"at": Vector2(0, -1500), "r": 220, "do": [["radio", "rook", "This is where it came down. Six of them under there. Keep walking."]]},
+			{"at": Vector2(0, -2400), "r": 200, "do": [["spawn", "swarm", 5, Vector2(0, -2600), 160], ["radio", "helm", "Movement in the quarry! Lots of little movement!"]]},
+		],
 		"objectives": [
 			{"type": "reach", "text": "Reach the old checkpoint", "at": Vector2(60, -620), "r": 110,
 				"waves": [{"t": 3, "kinds": "swarm", "n": 5}],

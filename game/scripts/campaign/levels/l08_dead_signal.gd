@@ -57,6 +57,10 @@ static func def() -> Dictionary:
 				["helm", "Then the plane flies by the end of the season. And we go see that heart from above.", "radio"],
 			],
 		},
+		"triggers": [
+			{"at": Vector2(0, -700), "r": 220, "do": [["radio", "juno", "Hear that? Every forty seconds. BEEP-beep-beep. It's been saying the same thing for nine years."]]},
+			{"at": Vector2(200, -2700), "r": 240, "do": [["radio", "juno", "That transport! Under the wing! Helm, that's an ENGINE cowling!"]]},
+		],
 		"objectives": [
 			{"type": "reach", "text": "Find the beacon mast", "hint": "North, past the old checkpoints",
 				"at": Vector2(0, -1250), "r": 140,

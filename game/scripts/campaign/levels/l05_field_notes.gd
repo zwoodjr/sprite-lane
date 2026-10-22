@@ -58,6 +58,10 @@ static func def() -> Dictionary:
 				["quill", "Every creature out there has a weak spot. I've written them all down. Now you can read them too."],
 			],
 		},
+		"triggers": [
+			{"at": Vector2(-260, -1500), "r": 200, "do": [["radio", "quill", "Note: ribcage, forty feet long. Something lived here I have no page for. Yet."]]},
+			{"at": Vector2(0, -2300), "r": 220, "do": [["spawn", "swarm", 6, Vector2(0, -2500), 200], ["radio", "quill", "The crater's awake. Of course it is."]]},
+		],
 		"objectives": [
 			{"type": "reach", "text": "Find Quill's tent", "at": Vector2(40, -770), "r": 120,
 				"waves": [{"t": 3, "kinds": ["glow_moth", "dune_stalker"], "n": 4}, {"t": 12, "kinds": "t1", "n": 4}],
