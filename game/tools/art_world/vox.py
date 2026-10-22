@@ -302,10 +302,57 @@ def _rot(yaw, roll=0.0, pitch=0.0):
     return Rz @ Rx @ Ry
 
 
-def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0, thr=(-0.12, 0.22, 0.6, 0.92), squash=1.0, ground=False, smooth=1.25):
+def _xform(vx, P, yaw_deg, mirror, roll_deg, pitch_deg, lift, squash, ground, nrm=None):
+    if mirror:
+        P[:, 0] *= -1
+        if nrm is not None:
+            nrm[:, 0] *= -1
+    R = _rot(math.radians(yaw_deg), math.radians(roll_deg), math.radians(pitch_deg))
+    P = P @ R.T
+    if nrm is not None:
+        nrm = nrm @ R.T
+    if squash != 1.0:
+        P[:, 2] *= squash
+        if nrm is not None:
+            nrm[:, 2] /= squash
+            nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-9
+    if ground:
+        P[:, 2] -= P[:, 2].min()
+    P[:, 2] += lift
+    return P, nrm
+
+
+def frame_of(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0, squash=1.0, ground=False):
+    """Canvas frame (ox, oy, w, h) + alpha mask the plain render would have:
+    lets later voxel damage (dents, torn hoods) render into the SAME canvas so
+    sprite size, footprint and y-sort anchors never move."""
+    solid = vx.m > 0
+    surf = solid & ~ndi.binary_erosion(solid, ndi.generate_binary_structure(3, 1), border_value=0)
+    idx = np.nonzero(surf)
+    X, Y, Z = vx.coords(idx)
+    P, _ = _xform(vx, np.stack([X, Y, Z], 1), yaw_deg, mirror, roll_deg, pitch_deg, lift, squash, ground)
+    P = P[P[:, 2] >= -0.004]
+    sx = P[:, 0] * PX_X
+    sy = P[:, 1] * PX_Y - P[:, 2] * PX_Z
+    pad = 4
+    ix = np.floor(sx).astype(int); iy = np.floor(sy).astype(int)
+    ox, oy = ix.min() - pad, iy.min() - pad
+    w, h_ = ix.max() - ox + pad + 1, iy.max() - oy + pad + 1
+    al = np.zeros((h_, w), bool)
+    iy2 = np.floor(sy + 0.5).astype(int) - oy
+    al[iy - oy, ix - ox] = True
+    al[np.clip(iy2, 0, h_ - 1), ix - ox] = True
+    return (ox, oy, w, h_), al
+
+
+def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0, thr=(-0.12, 0.22, 0.6, 0.92), squash=1.0, ground=False, smooth=1.25,
+           frame=None, gbuf=False):
     """Render to a pk.Cv (uncropped, unoutlined) + footprint polygon in
     canvas px. mirror: front at +x (vehicle faces right). roll/pitch tilt the
-    body (missing wheel, sunk in sand); lift raises it (m)."""
+    body (missing wheel, sunk in sand); lift raises it (m).
+    frame=(ox, oy, w, h) forces the canvas (pixels outside are dropped);
+    gbuf=True also returns a per-pixel G-buffer (material id, tone, model
+    position + normal, crease mask) for the hand-detail pass."""
     solid = vx.m > 0
     surf = solid & ~ndi.binary_erosion(solid, ndi.generate_binary_structure(3, 1), border_value=0)
     idx = np.nonzero(surf)
@@ -318,23 +365,12 @@ def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0
     nrm = -g / (np.linalg.norm(g, axis=1, keepdims=True) + 1e-9)
     ao = at(occ, 0, 0, 0)
     X, Y, Z = vx.coords(idx)
-    P = np.stack([X, Y, Z], 1)
-    if mirror:
-        P[:, 0] *= -1
-        nrm[:, 0] *= -1
-    R = _rot(math.radians(yaw_deg), math.radians(roll_deg), math.radians(pitch_deg))
-    P = P @ R.T
-    nrm = nrm @ R.T
-    if squash != 1.0:
-        P[:, 2] *= squash
-        nrm[:, 2] /= squash
-        nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-9
-    if ground:
-        P[:, 2] -= P[:, 2].min()
-    P[:, 2] += lift
+    M0 = np.stack([X, Y, Z], 1).astype(np.float32)
+    N0 = nrm.astype(np.float32).copy()
+    P, nrm = _xform(vx, M0.astype(float).copy(), yaw_deg, mirror, roll_deg, pitch_deg, lift, squash, ground, nrm)
     keep = P[:, 2] >= -0.004
     P, nrm, idx = P[keep], nrm[keep], tuple(a[keep] for a in idx)
-    ao = ao[keep]
+    ao = ao[keep]; M0 = M0[keep]; N0 = N0[keep]
     # screen-space normal -> bible light (pk.LV: x right, y down, z out)
     ns = np.stack([nrm[:, 0], -(nrm @ _UP), nrm @ _VD], 1)
     v = ns @ LV
@@ -361,6 +397,8 @@ def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0
     W = (vx.ny / RES - 0.5)
     ox, oy = ix.min() - pad, iy.min() - pad
     w, h_ = ix.max() - ox + pad + 1, iy.max() - oy + pad + 1
+    if frame is not None:
+        ox, oy, w, h_ = frame
     ix -= ox; iy -= oy
     order = np.argsort(depth, kind="stable")
     col = np.zeros((h_, w, 3), np.uint8)
@@ -379,15 +417,21 @@ def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0
     iy2 = np.floor(sy + 0.5).astype(int) - oy
     IX = np.concatenate([ix, ix]); IY = np.concatenate([iy2, iy])
     D = np.concatenate([depth, depth]); RGB = np.concatenate([rgb, rgb]); MT = np.concatenate([mat, mat])
+    VI = np.concatenate([np.arange(len(t)), np.arange(len(t))])
+    inb = (IX >= 0) & (IX < w) & (IY >= 0) & (IY < h_)
+    IX, IY, D, RGB, MT, VI = IX[inb], IY[inb], D[inb], RGB[inb], MT[inb], VI[inb]
     o = np.argsort(D, kind="stable")
     col[IY[o], IX[o]] = RGB[o]
     alpha[IY[o], IX[o]] = 255
     dbuf[IY[o], IX[o]] = D[o]
     mbuf[IY[o], IX[o]] = MT[o]
+    vbuf = np.full((h_, w), -1, np.int64)
+    vbuf[IY[o], IX[o]] = VI[o]
     # inner silhouette lines: a surface far behind its neighbour gets that
     # neighbour's deep tone (the crevice / overhang edge), 1 px.
     jump = 0.09
     out = col.copy()
+    crease = np.zeros((h_, w), bool)
     for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
         nb_d = np.roll(np.roll(dbuf, dy, 0), dx, 1)
         nb_m = np.roll(np.roll(mbuf, dy, 0), dx, 1)
@@ -399,11 +443,19 @@ def render(vx, yaw_deg=14.0, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0
             for y, x in zip(ys, xs):
                 tl = tones[nb_m[y, x]]
                 out[y, x] = tl[0]
+            crease |= edge
     out = _mode_clean(out, alpha, mbuf)
     a = np.dstack([out, alpha])
     cv = Cv(w, h_)
     cv.a = a
-    return cv, (ox, oy)
+    if not gbuf:
+        return cv, (ox, oy)
+    vi = np.clip(vbuf, 0, None)
+    has = vbuf >= 0
+    G = {"mat": mbuf, "alpha": alpha > 0, "crease": crease, "depth": dbuf,
+         "pos": np.where(has[..., None], M0[vi], 0), "n": np.where(has[..., None], N0[vi], 0),
+         "light": np.where(has, v[vi], 0), "names": vx.names, "tones": vx.tones, "mirror": mirror}
+    return cv, (ox, oy), G
 
 
 def footprint(vx_len, vx_wid, yaw_deg, mirror=False, roll_deg=0.0, pitch_deg=0.0, lift=0.0, x_off=0.0):

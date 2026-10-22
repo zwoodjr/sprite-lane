@@ -21,6 +21,7 @@ import numpy as np
 from pk import *
 from pk import _post_orphans
 import vox
+import vdetail as VD
 from vox import Vox
 
 # ---------------------------------------------------------------- materials
@@ -131,19 +132,26 @@ def wear(v, var, seed, paint_mats=("paint", "paint2"), glass=("glass",), near=la
          drift=None, holes=8):
     pm = list(paint_mats)
     if var == 1:
-        v.swap_noise(pm + ["seam"], "scorch", 0.62, 0.3, seed, zbias=-0.25, zref=zref)
-        v.swap_noise(pm + ["seam"], "rust", 0.75, 0.12, seed + 1)
-        v.swap_noise("scorch", "rust2", 0.25, 0.1, seed + 4)
+        # fire climbs: everything above the sills is burnt to black / dark
+        # oxidised metal, the lowest paint survives under a heat halo
+        ph = (seed % 17) * 0.37
+        burn = lambda X, Y, Z: Z > zref * (0.3 + 0.07 * np.sin(X * 1.9 + ph) + 0.04 * np.sin(X * 5.3 + 2 * ph) + 0.015 * np.sin(X * 9.0))
+        v.swap_noise(pm + ["seam"], "scorch", 1.0, 0.35, seed, region=burn)
+        v.swap_noise(pm + ["seam"], "scorch", 0.25, 0.08, seed + 7, zbias=-0.4, zref=zref)
+        v.swap_noise("scorch", "rust2", 0.3, 0.09, seed + 4)
         v.swap_noise("scorch", "scorch2", 0.35, 0.18, seed + 2)
-        v.swap_noise(["chrome", "lamp", "tail", "amber"], "scorch", 0.8, 0.2, seed + 3)
+        v.swap_noise(["chrome", "lamp", "tail", "amber", "steel"], "scorch", 0.8, 0.2, seed + 3)
         for g in glass:
             v.swap_noise(g, "gbroke", 1.1, 0.3, seed)
     else:
-        v.swap_noise(pm + ["seam"], "rust", 0.22 if var == 0 else 0.36, 0.13, seed, zbias=0.38, zref=zref)
+        # base rust only creeps up from the bottom; the hand-detail pass
+        # (vdetail.py) adds edge-following rust, streaks and perforation
+        v.swap_noise(pm + ["seam"], "rust", 0.03 if var == 0 else 0.1, 0.1, seed, zbias=0.5, zref=zref,
+                     region=lambda X, Y, Z: Z < 0.4 * zref)
         v.swap_noise("rust", "rust2", 0.4, 0.07, seed + 5)
-        v.swap_noise(pm, "rust", 0.1 if var == 0 else 0.16, 0.06, seed + 9)
         for g in glass:
             v.swap_noise(g, "gbroke", 0.35 if var == 0 else 0.6, 0.35, seed + 3)
+    holes = 0   # bullet holes are painted per pixel in vdetail.bullets
     if holes:
         v.holes(holes, seed, lambda X, Y, Z: near(X, Y, Z) & (Z > 0.3), only=pm + ["rust", "scorch"])
     if drift:
@@ -809,16 +817,36 @@ def finish_keep(cv):
     return out, (int(x0), int(y0))
 
 
-def make(name, var, seed=None):
+def make(name, var, seed=None, detail=True, steps=None):
+    """Voxel base render + hand-pixel detail layer (vdetail.py). The canvas,
+    crop, footprint and y-sort anchors are fixed by the undamaged model, so
+    dents / torn hoods never move collision or sorting."""
     fn, kws = TYPES[name]
     seed = seed if seed is not None else (zlib.crc32(name.encode()) % 997) * 7 + var * 31
     v, (L, W), tilt = fn(var, seed, **kws[var])
     yaw = YAW[var] * min(1.0, 5.6 / L)
     mir = MIRROR[var]
-    cv, (ox, oy) = vox.render(v, yaw_deg=yaw, mirror=mir, roll_deg=tilt.get("roll", 0.0), pitch_deg=tilt.get("pitch", 0.0),
-                              lift=tilt.get("lift", 0.0))
+    rk = dict(yaw_deg=yaw, mirror=mir, roll_deg=tilt.get("roll", 0.0), pitch_deg=tilt.get("pitch", 0.0), lift=tilt.get("lift", 0.0))
     fp = vox.footprint(L, W, yaw, mir, tilt.get("roll", 0.0), tilt.get("pitch", 0.0))
-    out, (cx, cy) = finish_keep(cv)
+    if not detail:
+        cv, (ox, oy) = vox.render(v, **rk)
+        out, (cx, cy) = finish_keep(cv)
+        fp = [(x - ox - cx, y - oy - cy) for (x, y) in fp]
+        return out, fp
+    frame, al0 = vox.frame_of(v, **rk)
+    ox, oy = frame[0], frame[1]
+    ys, xs = np.nonzero(al0)
+    cx, cy = int(xs.min()) - 1, int(ys.min()) - 1          # outline adds 1 px
+    cw, ch = int(xs.max()) - cx + 2, int(ys.max()) - cy + 2
+    VD.vox_pass(v, name, var, seed, (L, W))
+    cv, _, G = vox.render(v, frame=frame, gbuf=True, **rk)
+    for _ in range(3):
+        remove_orphans(cv)
+    VD.paint(cv, G, name, var, seed, **({"steps": steps} if steps else {}))
+    cv.a[:, :, 3] = np.where(cv.a[:, :, 3] > 0, 255, 0)
+    outline(cv, None)
+    out = Cv(cw, ch)
+    out.a = cv.a[cy:cy + ch, cx:cx + cw].copy()
     fp = [(x - ox - cx, y - oy - cy) for (x, y) in fp]
     return out, fp
 
