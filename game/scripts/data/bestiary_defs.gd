@@ -45,6 +45,7 @@ const NOTES := {
 	"raider_brute": ["The muscle of a raider crew. Welding masks, scrap mauls, no mercy.", "Slow to turn after a swing."],
 	"raider_captain": ["Crew leader. Keeps the medicine bag on her own back.", "Kill her and the bag drops."],
 	"dust_warden": ["What guards the pads at the end. A war machine the plague made into something holy.", "The plague core opens when it vents."],
+	"rad_gator_matriarch": ["The mother of every gator in the cathedral marsh. The sacs on her back are full. Don't let them hatch.", "Burst the brood sacs and she staggers."],
 }
 
 ## Hidden lore pages (found in runs, kept at once).

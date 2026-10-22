@@ -1,0 +1,90 @@
+extends RefCounted
+
+## CHAPTER 1 · 3 — Lights Out. Bolt Juno has kept one city block's power alive
+## by himself since the plague. The Dust is shorting his substation and the war
+## machines are coming for the current. Helm needs a generator. Juno needs
+## somebody to talk to.
+
+static func def() -> Dictionary:
+	return {
+		"title": "Lights Out",
+		"subtitle": "One block in the whole Dust still has its lights on. Not for long.",
+		"tier": 3,
+		"enemy_hp": 0.9,
+		"enemy_damage": 0.8,
+		"hero": "bolt_juno",
+		"seed": 2403,
+		"bounds": Rect2(-1200, -3350, 2400, 3650),
+		"roads": [[Vector2(-200, 320), Vector2(0, -900), Vector2(-120, -1700), Vector2(80, -2500), Vector2(300, -3450)]],
+		"sets": [
+			["tank_farm", -560, -300], ["pipe_run", 580, -420], ["drum_dump", -620, -950],
+			["pipe_run", 620, -1100], ["tank_farm", 640, -2000], ["junk_heap", -640, -2050],
+			["pipe_run", -600, -2650], ["drum_dump", 660, -2900], ["tank_farm", -600, -3150],
+		],
+		"props": [["world/relay", 0, -2230], ["power_pole", -380, -1220], ["power_pole", 440, -1560],
+			["power_pole", -150, -1900], ["power_pole", 200, -2550], ["veh_pickup_1", 380, -2860]],
+		"crates": [[300, -600], [-320, -800], [280, -1400], [-340, -1700], [-300, -2450]],
+		"clear": [[0, -2150, 300]],
+		"intro": "intro",
+		"outro": "outro",
+		"scenes": {
+			"intro": [
+				["juno", "—and THAT is why you never splice copper to aluminium. Galvanic corrosion. Ask me how I know."],
+				["helm", "Who is this? You're on my channel.", "radio"],
+				["juno", "Oh! A person! A real voice! Hi! Juno. Bolt Juno. I keep the lights on. Well. Kept. Am keeping. It's a whole thing."],
+				["helm", "You've got POWER out there?", "radio"],
+				["juno", "One block. Mine. Nine years, one substation, two breakers, a relay held together with spite and a belt buckle."],
+				["juno", "Except the Dust got into the breakers last night and now everything with a motor in a mile wants a bite of my current."],
+				["helm", "Keep the lights on, Juno. I've got a dark hangar and a dead generator. Let's make a deal.", "radio"],
+				["juno", "A DEAL. I love deals. I haven't made a deal in nine years. Okay. Okay okay okay. Breakers first."],
+			],
+			"relay": [
+				["juno", "Breakers are in. Relay's spinning up. Come on, come on, sweetheart, you can do it..."],
+				["juno", "It needs fifty seconds to sync. And every machine in the refinery just heard it hum."],
+				["helm", "Can you hold fifty seconds?", "radio"],
+				["juno", "I have held worse for longer. I once held a live wire for an entire song. Long song. Ballad."],
+			],
+			"core": [
+				["juno", "Synced! It's synced! Look at that, steady as a heartbeat."],
+				["juno", "Okay, the generator core comes out of the relay housing and it is HEAVY and also slightly radioactive. Mostly not."],
+				["helm", "I'm at the north gate with the truck. Bring it home, Juno.", "radio"],
+				["juno", "Home. Huh. Haven't said that in a while either."],
+			],
+			"outro": [
+				["helm", "Lights. LIGHTS. Rook, look up! The hangar has a ceiling! It's ugly!", "radio"],
+				["rook", "It's been ugly the whole time. Now you can see it."],
+				["juno", "The wiring in here is a crime. A crime. Who did this? Don't answer. I'll fix it. I'll fix all of it."],
+				["pebble", "He talks a lot."],
+				["vesper", "He talks MORE than a lot."],
+				["juno", "Nine years alone! I'm catching up! Hello! Hi, big dog! Hi, small loud dog!"],
+			],
+		},
+		"objectives": [
+			{"type": "reach", "text": "Get to the substation", "at": Vector2(0, -980), "r": 120,
+				"waves": [{"t": 4, "kinds": "machine", "n": 4}, {"t": 12, "kinds": "t1", "n": 4}]},
+			{"type": "hold", "text": "Reset breaker A", "hint": "Stand at the breaker box till it clicks",
+				"at": Vector2(-380, -1300), "r": 120, "time": 16,
+				"waves": [{"t": 0, "kinds": "coil_spider", "n": 3}, {"t": 6, "kinds": "scrap_hound", "n": 3}, {"t": 11, "kinds": "machine", "n": 3}],
+				"on_done": [["radio", "juno", "Click! Hear that? That's the sound of me being right."]]},
+			{"type": "hold", "text": "Reset breaker B", "hint": "Second breaker, across the yard",
+				"at": Vector2(440, -1640), "r": 120, "time": 16,
+				"waves": [{"t": 0, "kinds": "machine", "n": 4}, {"t": 6, "kinds": "iron_horse", "n": 1}, {"t": 11, "kinds": "machine", "n": 4}],
+				"on_done": [["radio", "juno", "Two for two. To the relay! Run! Not because danger. Because excited."]]},
+			{"type": "reach", "text": "Get to the relay", "at": Vector2(0, -2040), "r": 120,
+				"on_done": [["scene", "relay"]]},
+			{"type": "defend", "text": "Hold the relay while it syncs", "hint": "Machines go for the relay. Keep them off it",
+				"at": Vector2(0, -2140), "r": 260, "time": 65, "hp": 240, "fail": "The relay blew. The block goes dark for good.",
+				"waves": [{"t": 0, "kinds": "scrap_hound", "n": 5}, {"t": 8, "kinds": "coil_spider", "n": 5},
+					{"t": 16, "kinds": ["iron_horse", "scrap_hound"], "n": 4}, {"t": 24, "kinds": "machine", "n": 6},
+					{"t": 33, "kinds": ["fusion_golem"], "n": 1}, {"t": 38, "kinds": "machine", "n": 6},
+					{"t": 46, "kinds": ["iron_horse", "coil_spider"], "n": 5}, {"t": 54, "kinds": "fusion_golem", "n": 1}],
+				"trickle": {"every": 3.0, "kinds": "machine", "cap": 12},
+				"on_done": [["scene", "core"], ["npc", {"id": "helm", "hero": "helm_wisp", "at": Vector2(330, -2780), "label": "HELM"}]]},
+			{"type": "carry", "text": "Haul the generator out", "hint": "Core, then coil. Heavy. Machines want them",
+				"carry": {"from": [Vector2(0, -2120), Vector2(-180, -2160)], "to": Vector2(330, -2790), "slow": 0.55, "icon": "camp_generator",
+					"carry_hint": "Get it to Helm's truck. Heavy load: you're slower"},
+				"trickle": {"every": 3.0, "kinds": "machine", "cap": 10}},
+			{"type": "extract", "text": "Ride out with Helm", "at": Vector2(300, -2880)},
+		],
+		"rewards": {"scrap": 220, "survivors": ["bolt_juno"], "camp": {"generator": 1}, "part": "battery"},
+	}
