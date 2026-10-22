@@ -270,6 +270,9 @@ func _play_lines(lines: Array) -> void:
 
 
 func _show_line(spk: String, text: String, radio: bool) -> void:
+	## "{hero}" speaks as whoever is playing this level.
+	if spk == "{hero}":
+		spk = CampaignDefs.hero_speaker(GameState.selected_character_id)
 	var sd: Dictionary = CampaignDefs.speaker(spk) if spk != "" else {}
 	radio = radio or bool(sd.get("radio", false))
 	var col := Color(str(sd.get("color", "e9dfc9"))) if spk != "" else DIM
@@ -386,6 +389,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 ## Radio (non-blocking)
 
 func radio(spk: String, text: String) -> void:
+	if spk == "{hero}":
+		spk = CampaignDefs.hero_speaker(GameState.selected_character_id)
 	_radio_q.append([spk, text])
 
 

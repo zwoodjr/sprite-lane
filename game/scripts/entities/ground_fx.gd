@@ -12,6 +12,8 @@ const ART := {
 	"poison": {"path": "res://assets/sprites/depth/world/plague_fog.png", "n": 1, "fps": 1.0, "tint": Color(0.85, 1.2, 0.6, 0.85), "size_k": 2.3},
 	## Depth E2: enemy spore cloud (Sporing / Bloated elites) — hurts the hero.
 	"spore": {"path": "res://assets/sprites/depth/world/plague_fog.png", "n": 1, "fps": 1.0, "tint": Color(1.0, 1.0, 1.0, 0.95), "size_k": 2.3},
+	## Campaign: raider fire bottles (Mother Vane) — a fire patch that burns the hero.
+	"flame": {"path": "res://assets/sprites/fx/fx_firewalk.png", "n": 4, "fps": 10.0, "tint": Color(1, 1, 1, 0.95), "size_k": 1.6},
 }
 
 var mode: String = "burn"
@@ -41,15 +43,15 @@ func _ready() -> void:
 	_sprite.modulate = art["tint"]
 	if mode in ["spore", "poison"]:
 		_sprite.scale.y *= 0.62
-	if mode == "burn":
+	if mode in ["burn", "flame"]:
 		_sprite.offset = Vector2(0, -float(_frames[0].get_height()) * 0.35) if not _frames.is_empty() else Vector2.ZERO
 	add_child(_sprite)
-	if mode == "burn":
+	if mode in ["burn", "flame"]:
 		LightFx.lamp(self, Vector2.ZERO, radius * 2.6, Color(1.0, 0.5, 0.2, 0.35), 0.25)
 	## Pixel layer (bible §5): flame tongues on a fire patch, bubbles in a cloud.
-	var px_id: String = str({"burn": "st_burn", "poison": "st_poison", "spore": "st_poison"}.get(mode, ""))
+	var px_id: String = str({"burn": "st_burn", "flame": "st_burn", "poison": "st_poison", "spore": "st_poison"}.get(mode, ""))
 	if px_id != "":
-		if mode == "burn":
+		if mode in ["burn", "flame"]:
 			_sprite.visible = false
 		var n := clampi(int(radius / 12.0), 2, 7)
 		for i in range(n):
@@ -89,6 +91,11 @@ func _physics_process(delta: float) -> void:
 		"poison":
 			for e in RunFx.enemies_in(get_tree(), global_position, radius):
 				e.call("apply_status", "poison", 2.0, value)
+		"flame":
+			var pf := get_tree().get_first_node_in_group("player") as Node2D
+			if pf != null and pf.global_position.distance_to(global_position) <= radius + 8.0:
+				if pf.has_method("drain") and not bool(pf.call("is_dashing")):
+					pf.call("drain", value * TICK)
 		"spore":
 			var p := get_tree().get_first_node_in_group("player") as Node2D
 			if p != null and p.global_position.distance_to(global_position) <= radius + 10.0:

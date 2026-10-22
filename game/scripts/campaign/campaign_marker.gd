@@ -76,7 +76,7 @@ func _draw() -> void:
 	var pulse := 0.5 + 0.5 * sin(_t * 4.0)
 	match kind:
 		"zone":
-			draw_colored_polygon(_ellipse(radius), Color(TEAL, 0.12 + 0.06 * pulse))
+			draw_colored_polygon(_ellipse(radius), Color(TEAL, 0.08))
 			_ring(radius + 2.0, INK, 4.0, true)
 			_ring(radius, TEAL, 2.0, true)
 			if progress >= 0.0:

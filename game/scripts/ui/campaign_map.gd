@@ -212,14 +212,14 @@ func _build_detail() -> void:
 	var heroes := GameState.campaign_heroes_for(_sel)
 	var pick := GameState.campaign_pick_for(_sel)
 	var hr := HBoxContainer.new()
-	hr.add_theme_constant_override("separation", 8)
+	hr.add_theme_constant_override("separation", 6)
 	v.add_child(hr)
 	var forced := heroes.size() == 1
 	for hid in heroes:
 		var hb := _HeroTile.new()
 		hb.hero = str(hid)
 		hb.on = str(hid) == pick
-		hb.custom_minimum_size = Vector2(72, 72)
+		hb.custom_minimum_size = Vector2(64, 64)
 		hb.focus_mode = Control.FOCUS_NONE
 		hb.flat = true
 		for st in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
@@ -230,10 +230,12 @@ func _build_detail() -> void:
 			Juice.sfx("ui_tap")
 			_build_detail())
 		hr.add_child(hb)
-	var who := UiTheme.head_label(("AS " if forced else "") + str(CharacterDefs.get_character(pick).get("display_name", pick)).to_upper(), UiTheme.T_H3, UiTheme.TEXT)
-	who.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hr.add_child(who)
-	var go := UiTheme.big_button("REPLAY" if done else "PLAY", UiTheme.AMBER, 80, 32)
+	var hname := str(CharacterDefs.get_character(pick).get("display_name", pick)).to_upper()
+	if forced:
+		var who := UiTheme.head_label("AS " + hname, UiTheme.T_H3, UiTheme.TEXT)
+		who.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hr.add_child(who)
+	var go := UiTheme.big_button(("REPLAY" if done else "PLAY") + ("" if forced else "  ·  " + hname), UiTheme.AMBER, 80, 32)
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var lid := _sel
 	go.pressed.connect(func() -> void: GameState.go_campaign_level(lid, GameState.campaign_pick_for(lid)))

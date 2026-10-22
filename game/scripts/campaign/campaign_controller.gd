@@ -9,6 +9,7 @@ extends "res://scripts/match/match_controller.gd"
 const RunnerScript := preload("res://scripts/campaign/objective_runner.gd")
 const StoryScript := preload("res://scripts/campaign/story_panel.gd")
 const CardScript := preload("res://scripts/campaign/level_card.gd")
+const CinematicScript := preload("res://scripts/campaign/cinematic.gd")
 
 var level: Dictionary = {}
 var runner: Node
@@ -52,6 +53,8 @@ func _ready() -> void:
 	add_child(story)
 	story.set("hero_name", str(GameState.get_character().get("display_name", "")))
 	story.set("auto", GameState.campaign_autoplay)
+	if GameState.has_meta("auto_choice"):
+		story.set("auto_choice", int(GameState.get_meta("auto_choice")))
 	card = CanvasLayer.new()
 	card.set_script(CardScript)
 	add_child(card)
@@ -72,12 +75,32 @@ func _start() -> void:
 	for o in level.get("objectives", []):
 		first = o
 		break
-	card.call("show_intro", level, GameState.selected_character_id, GameState.selected_pet_id if bool(GameState.pet.get("active", false)) else "", str(first.get("text", "")))
+	card.call("show_intro", level, GameState.selected_character_id, GameState.selected_pet_id if bool(GameState.pet.get("active", false)) else "", str(first.get("text", level.get("goal", ""))))
 	await card.chosen
+	if bool(level.get("cinematic", false)):
+		await _cinematic()
+		return
 	if level.has("intro"):
 		await play_scene(str(level["intro"]))
 	started = true
 	runner.call("start")
+
+
+## Epilogue: no fight. The painted hangar, the story, the plane takes off.
+func _cinematic() -> void:
+	hud.visible = false
+	var tc: Variant = hud.get("_touch_controls")
+	if tc is CanvasItem or tc is CanvasLayer:
+		tc.set("visible", false)
+	var cine: CanvasLayer = CinematicScript.new()
+	add_child(cine)
+	started = true
+	if level.has("intro"):
+		await play_scene(str(level["intro"]))
+	await cine.takeoff()
+	if level.has("sky"):
+		await play_scene(str(level["sky"]))
+	_on_extract_requested()
 
 
 func _process(delta: float) -> void:

@@ -23,7 +23,8 @@ extends Node
 ##   ["npc_remove", id] · ["npc_label", id, text] · ["pet_join", npc_id] ·
 ##   ["banner", title, sub] · ["toast", text] · ["heal"] · ["shake", amt] ·
 ##   ["prop", kind, x, y] · ["wait", s] · ["if", [k, v], [then], [else]] ·
-##   ["clear_enemies"] · ["fail", reason] · ["scrap", n]
+##   ["clear_enemies"] · ["fail", reason] · ["scrap", n] ·
+##   ["hazard", "spore"|"flame", at, r, life, dps] (ground that hurts the hero)
 ## boss {role: "elite"} = a named elite (HP bar over its head, no top bar).
 
 signal level_won
@@ -105,15 +106,30 @@ func _next() -> void:
 	t_obj = 0.0
 	count = 0.0
 	need = 1.0
+	match str(obj.get("type", "")):
+		"kill":
+			need = float(obj.get("count", 10))
+		"hold", "defend", "survive", "wait":
+			need = float(obj.get("time", 10.0))
+		"collect":
+			need = float((obj.get("items", []) as Array).size())
+		"carry":
+			need = float(((obj.get("carry", {}) as Dictionary).get("from", []) as Array).size())
 	_waves_done = {}
 	_trickle_t = 0.0
 	_spawned = []
-	_kills0 = GameState.kills
-	_begin(obj)
+	_kills0 = _kill_count()
+	## Scene / setup first, then the objective starts (boss spawns, pads open).
+	_update_hud()
 	if obj.has("on_start"):
 		busy = true
 		await run_actions(obj["on_start"])
 		busy = false
+	if finished or mc == null or bool(mc.call("is_run_over")):
+		return
+	t_obj = 0.0
+	_kills0 = _kill_count()
+	_begin(obj)
 	_update_hud()
 
 
@@ -319,7 +335,7 @@ func _process(delta: float) -> void:
 			if count >= need:
 				_complete()
 		"kill":
-			count = float(GameState.kills - _kills0)
+			count = float(_kill_count() - _kills0)
 			if count >= need:
 				_complete()
 		"clear":
@@ -359,7 +375,7 @@ func _tick_defend_target(delta: float) -> void:
 	for e in get_tree().get_nodes_in_group("enemies"):
 		var en := e as Node2D
 		if en and is_instance_valid(en) and not bool(en.get("_dead")) and en.global_position.distance_to(at) <= 90.0 * maxf(1.0, float(en.get("body_scale")) * 0.6):
-			dmg += float(en.get("damage")) * 0.35
+			dmg += float(en.get("damage")) * 0.18
 	_target_hp = maxf(0.0, _target_hp - dmg * delta)
 	if _zone:
 		_zone.set("hp_ratio", _target_hp / _target_max)
@@ -450,6 +466,23 @@ func _tick_waves() -> void:
 			_spawn_group(w.get("kinds", "t1"), int(w.get("n", 4)), w.get("at", Vector2.INF), float(w.get("r", 120.0)), str(w.get("role", "")))
 
 
+## Kills toward a kill objective: all kills, or only `kinds` (ids / pools).
+func _kill_count() -> int:
+	if not obj.has("kinds"):
+		return GameState.kills
+	var ids: Array = []
+	var ks: Variant = obj["kinds"]
+	for k in (ks if ks is Array else [ks]):
+		if POOLS.has(str(k)):
+			ids.append_array(POOLS[str(k)])
+		else:
+			ids.append(str(k))
+	var n := 0
+	for id in ids:
+		n += int(GameState.run_kind_kills.get(str(id), 0))
+	return n
+
+
 func _all_waves_fired() -> bool:
 	return _waves_done.size() >= (obj.get("waves", []) as Array).size()
 
@@ -513,6 +546,11 @@ func _spawn_boss(b: Dictionary) -> Node2D:
 		return null
 	if b.has("name"):
 		e.set("display_name", str(b["name"]))
+	## Ranged bosses that would kite a melee hero forever stand and fight.
+	if b.has("pref"):
+		var d: Dictionary = (e.get("_def") as Dictionary).duplicate()
+		d["pref"] = float(b["pref"])
+		e.set("_def", d)
 	if b.has("brain"):
 		var path := "res://scripts/campaign/bosses/%s.gd" % str(b["brain"])
 		if ResourceLoader.exists(path):
@@ -613,6 +651,15 @@ func _act(a: Array) -> void:
 			var ok := GameState.campaign_flag_is(str(c[0]), c[1] if c.size() > 1 else null)
 			var br: Array = a[2] if ok else (a[3] if a.size() > 3 else [])
 			await run_actions(br)
+		"hazard":
+			var g := Node2D.new()
+			g.set_script(load(RunFx.GROUND_FX))
+			g.set("mode", str(a[1]))
+			g.set("radius", float(a[3]) if a.size() > 3 else 90.0)
+			g.set("life", float(a[4]) if a.size() > 4 else 8.0)
+			g.set("value", float(a[5]) if a.size() > 5 else 6.0)
+			g.position = a[2]
+			mc.get("world").add_child(g)
 		"scrap":
 			var got := GameState.add_scrap(int(a[1]))
 			mc.call("toast", "+%d scrap" % got, UiTheme.AMBER)

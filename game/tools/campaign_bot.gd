@@ -52,6 +52,18 @@ func _run() -> void:
 func _play(id: String) -> void:
 	GameState.campaign = GameState._fresh_campaign()
 	GameState.campaign_debug_unlock_to(id)
+	## CBOT_FLAGS="vesper_open=false,nyx_sold_road=true": play a story branch.
+	for kv in OS.get_environment("CBOT_FLAGS").split(",", false):
+		var pr := str(kv).split("=")
+		if pr.size() == 2:
+			var v: Variant = pr[1]
+			if pr[1] == "true":
+				v = true
+			elif pr[1] == "false":
+				v = false
+			GameState.campaign["flags"][pr[0]] = v
+	if OS.get_environment("CBOT_CHOICE") != "":
+		GameState.set_meta("auto_choice", int(OS.get_environment("CBOT_CHOICE")))
 	Admin.god = _god
 	if not GameState.prepare_campaign_level(id, _hero):
 		print("SUMMARY level=%s result=missing" % id)

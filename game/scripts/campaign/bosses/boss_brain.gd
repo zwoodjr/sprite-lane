@@ -14,6 +14,10 @@ var _wind: float = 0.0
 var _wind_max: float = 1.0
 var _at: Vector2 = Vector2.ZERO
 var _r: float = 80.0
+var _dash_left: float = 0.0
+var _dash_dir: Vector2 = Vector2.ZERO
+var _dash_speed: float = 600.0
+var _dash_hit: bool = false
 
 
 func moves() -> Dictionary:
@@ -38,6 +42,16 @@ func tick(en: Node2D, delta: float) -> bool:
 		on_phase()
 	for k in _cd.keys():
 		_cd[k] = float(_cd[k]) - delta
+	if _dash_left > 0.0:
+		_dash_left -= delta
+		en.set("velocity", _dash_dir * _dash_speed)
+		(en as CharacterBody2D).move_and_slide()
+		var p := player()
+		if p and not _dash_hit and p.global_position.distance_to(en.global_position) < 52.0 * float(en.get("body_scale")) and p.has_method("take_damage"):
+			_dash_hit = true
+			p.call("take_damage", float(en.get("damage")) * 1.2, en)
+			Juice.shake(0.3)
+		return true
 	if _move != "":
 		_wind -= delta
 		var k2 := clampf(1.0 - _wind / _wind_max, 0.0, 1.0)
@@ -101,6 +115,14 @@ func on_death(_en: Node2D) -> void:
 
 
 ## Shared bits ----------------------------------------------------------------
+
+## A straight charge (the wind-up telegraph already showed the lane).
+func dash(dir: Vector2, speed: float, time: float) -> void:
+	_dash_dir = dir.normalized()
+	_dash_speed = speed
+	_dash_left = time
+	_dash_hit = false
+	Juice.dust_puff(e.global_position, 8)
 
 func fan(n: int, spread: float, spd: float, dmg_k: float) -> void:
 	var p := player()

@@ -146,7 +146,7 @@ func show_outro(lv: Dictionary, res: Dictionary) -> void:
 	_open(0.92)
 	_box.add_child(_spacer(0, true))
 	_head(lv)
-	var ex := UiTheme.title_label("EXTRACTED", UiTheme.T_TITLE, UiTheme.TEAL)
+	var ex := UiTheme.title_label(str(lv.get("outro_title", "EXTRACTED")), UiTheme.T_TITLE, UiTheme.TEAL)
 	ex.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_box.add_child(ex)
 	var nums := HBoxContainer.new()

@@ -22,7 +22,7 @@ static func def() -> Dictionary:
 			["rubble_heap", -620, -3050], ["barricade", 620, -3300], ["street_block", -560, -3450],
 		],
 		"props": [["rubble_chunk", -320, -2720], ["rubble_chunk", -170, -2760], ["wall_collapsed", -260, -2840],
-			["sandbags", 260, -660], ["veh_box_truck_0", 420, -3460]],
+			["sandbags", 260, -660], ["veh_box_truck_0", 560, -3480]],
 		"crates": [[260, -400], [-300, -1100], [320, -1750], [-280, -2350], [240, -2900]],
 		"landmarks": [{"name": "OLD CHECKPOINT", "pos": Vector2(60, -700), "kind": 3}],
 		"intro": "intro",

@@ -45,6 +45,7 @@ var _shoot_cd: float = 1.0
 var _hurt_flash: float = 0.0
 var _waiting: bool = false
 var _feet: float = 32.0
+var _since_hit: float = 99.0
 const HIT_RADIUS := 48.0
 
 
@@ -164,6 +165,10 @@ func _process(delta: float) -> void:
 			_anim.set_facing(_player.global_position.x < global_position.x)
 	if vulnerable:
 		_take_mob_hits(delta)
+		## Out of the fight for a moment: they patch themselves up a little.
+		_since_hit += delta
+		if _since_hit > 2.5 and hp < max_hp:
+			hp = minf(max_hp, hp + max_hp * 0.03 * delta)
 	if ally:
 		_tick_ally(delta)
 	queue_redraw()
@@ -178,7 +183,7 @@ func _take_mob_hits(delta: float) -> void:
 			continue
 		var reach := HIT_RADIUS * float(en.get("body_scale"))
 		if en.global_position.distance_to(global_position) <= reach:
-			dmg += float(en.get("damage")) * 0.55
+			dmg += float(en.get("damage")) * 0.4
 	if dmg > 0.0:
 		hurt(dmg * delta)
 
@@ -188,6 +193,7 @@ func hurt(amount: float) -> void:
 		return
 	hp = maxf(0.0, hp - amount)
 	_hurt_flash = 0.12
+	_since_hit = 0.0
 	if hp <= 0.0:
 		dead = true
 		if _anim.has_state("death"):

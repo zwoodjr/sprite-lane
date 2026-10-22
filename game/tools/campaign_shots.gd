@@ -120,12 +120,29 @@ func _level(id: String) -> void:
 		if str(o.get("type", "")) == "boss":
 			has_boss = true
 	if has_boss:
-		for k in range(30):
-			if str((runner.get("obj") as Dictionary).get("type", "")) == "boss":
+		var pl: Node2D = m.get_node("World/Player")
+		for k in range(40):
+			var o: Dictionary = runner.get("obj")
+			if str(o.get("type", "")) == "boss":
+				## Stand where the fight happens, a little south of the boss.
+				var bat: Vector2 = (o.get("boss", {}) as Dictionary).get("at", pl.global_position)
+				pl.global_position = bat + Vector2(0, 330)
 				break
 			if not bool(runner.get("busy")):
 				runner.call("debug_complete")
+				var tg: Vector2 = runner.call("current_target")
+				if tg != Vector2.INF:
+					pl.global_position = tg + Vector2(0, 60)
 			await _wait(10)
-		await _wait(50)
+		for k in range(60):
+			if runner.get("_boss") != null:
+				break
+			await _wait(2)
+		await _wait(40)
+		## A level-up card can pop from the teleport kills: take a card first.
+		for n in get_tree().root.find_children("*", "", true, false):
+			if n.has_method("pick_index") and bool(n.call("is_open")):
+				n.call("pick_index", 0)
+		await _wait(30)
 		await _snap("%s_4_boss" % id)
 	await _clear()

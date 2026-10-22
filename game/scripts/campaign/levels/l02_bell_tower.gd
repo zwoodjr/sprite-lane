@@ -79,8 +79,8 @@ static func def() -> Dictionary:
 		},
 		"objectives": [
 			{"type": "defend", "text": "Cover the stranger", "hint": "Keep the pack off her. Stay in the ring",
-				"at": Vector2(40, -500), "r": 300, "time": 55, "hp": 200, "fail": "The stranger went down. Nobody rings for her.",
-				"on_start": [["npc", {"id": "rook", "hero": "ash_rook", "at": Vector2(40, -520), "label": "STRANGER", "ally": true}],
+				"at": Vector2(40, -400), "r": 260, "time": 55, "hp": 200, "fail": "The stranger went down. Nobody rings for her.",
+				"on_start": [["npc", {"id": "rook", "hero": "ash_rook", "at": Vector2(40, -420), "label": "STRANGER", "ally": true}],
 					["npc_mode", "rook", "ally"]],
 				"waves": [{"t": 0, "kinds": "scrap_hound", "n": 4, "at": Vector2(60, -900), "r": 160},
 					{"t": 8, "kinds": "t1", "n": 5}, {"t": 16, "kinds": ["scav_bear_cub", "scrap_hound"], "n": 5},
