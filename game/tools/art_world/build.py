@@ -29,6 +29,7 @@ GRADES = ["haze", "drift", "refinery", "city", "quarantine", "raider", "chemical
 # S <= 0.6x hero, M <= 1.7x, L <= 2.6x, landmark set pieces up to 3.6x tall.
 PS, PM, PL_, LM = (60, 140), (170, 320), (260, 440), (360, 520)
 import props_big as B
+import vehicles as VH
 PROPS = {
     # assets/sprites/props (chunk dressing, breakables, extract pads)
     "rock_small": (S.rock_small, "props", PS), "rock_large": (S.rock_large, "props", PS),
@@ -40,9 +41,6 @@ PROPS = {
     "herb_crate": (S.herb_crate, "props", PS), "vial_crate": (S.vial_crate, "props", PS),
     "apothecary_chest": (S.apothecary_chest, "props", PS), "barrels_rust": (B.drum_pair, "props", PM),
     "sandbags": (B.sandbags_big, "props", PM),
-    "wreck_car": (B.wreck_car, "props", PM), "wreck_car_red": (B.wreck_car_red, "props", PM),
-    "wreck_car_blue": (B.wreck_car_blue, "props", PM), "wreck_car_olive": (B.wreck_car_olive, "props", PM),
-    "wreck_truck": (B.wreck_truck, "props", PM), "wreck_bus": (B.wreck_bus, "props", PL_), "wreck": (B.wreck, "props", PM),
     "pole_down": (lambda: B.big("pole_down"), "props", PM),
     "fence_broken": (B.fence_big, "props", PM), "wall_ruin": (B.wall_ruin_big, "props", PM),
     "wall_ruin_b": (B.wall_ruin_b, "props", PM),
@@ -52,13 +50,13 @@ PROPS = {
     # assets/sprites/depth/zone
     "chem_vat": (B.chem_vat_big, "depth/zone", PM), "bunker": (B.bunker_big, "depth/zone", PL_),
     "bunker_open": (B.bunker_open_big, "depth/zone", PL_), "rubble_chunk": (lambda: B.big("rubble_chunk"), "depth/zone", PM),
-    "wreck_pile": (B.wreck_pile_big, "depth/zone", PM), "buried_wreck": (B.buried_wreck_big, "depth/zone", PM),
+    "wreck_pile": (VH.wreck_pile, "depth/zone", PL_), "buried_wreck": (VH.buried_wreck, "depth/zone", PL_),
     # assets/sprites/depth/world (radio jobs, landmarks, haul crate)
     "medicine_crate": (Z.medicine_crate, "depth/world", PM),
 }
 for _n, _f in (("pipe_rack", "zone"), ("oil_tank", "zone"), ("street_lamp", "zone"), ("shop_ruin", "zone"),
                ("quarantine_tent", "zone"), ("hazard_barrier", "zone"), ("spike_barricade", "zone"), ("raider_totem", "zone"),
-               ("tank_wreck", "zone"), ("guard_post", "zone"), ("slab_ruin", "zone"), ("dust_spire", "zone"),
+                ("guard_post", "zone"), ("slab_ruin", "zone"), ("dust_spire", "zone"),
                ("power_pole", "zone"), ("beast_ribs", "zone"), ("field_tent", "world"), ("market_stall", "world"),
                ("plane_wreck", "world"), ("relay", "world"), ("vault", "world"), ("watch_tower", "world")):
     PROPS[_n] = ((lambda n=_n: B.big(n)), "depth/" + _f, LM if _f == "world" or _n in ("dust_spire",) else PL_)
@@ -68,10 +66,8 @@ for _n, _f in (("pipe_rack", "zone"), ("oil_tank", "zone"), ("street_lamp", "zon
 BLOCK = {
     "wall_ruin": (16, 0.95), "wall_ruin_b": (16, 0.95), "sandbags": (14, 0.92), "wall_collapsed": (18, 0.5),
     "rock_large": (12, 0.8), "rock_huge": (18, 0.8),
-    "wreck_car": (24, 0.9), "wreck_car_red": (24, 0.9), "wreck_car_blue": (24, 0.9), "wreck_car_olive": (24, 0.9), "wreck": (24, 0.9),
-    "wreck_truck": (26, 0.92), "wreck_bus": (28, 0.95),
     "oil_tank": (30, 0.86), "shop_ruin": (24, 0.95), "quarantine_tent": (24, 0.86), "hazard_barrier": (16, 0.97),
-    "spike_barricade": (14, 0.9), "chem_vat": (16, 0.9), "tank_wreck": (30, 0.92), "guard_post": (18, 0.86),
+    "spike_barricade": (14, 0.9), "chem_vat": (16, 0.9), "guard_post": (18, 0.86),
     "slab_ruin": (20, 0.6), "dust_spire": (22, 0.8), "bunker": (44, 0.62), "bunker_open": (44, 0.62),
     "vault": (36, 0.95), "plane_wreck": (26, 0.6), "market_stall": (22, 0.95), "field_tent": (24, 0.8),
     "relay": (26, 0.9), "watch_tower": (18, 0.86), "wreck_pile": (26, 0.9), "buried_wreck": (24, 0.8),
@@ -83,6 +79,28 @@ LIGHT = {"street_lamp": None, "chem_vat": None}
 # deliberate single-pixel highlights (spines, rivets) per asset
 GLINTS = {"cactus": 9, "barrier_scrap": 8}
 SINK_W = {"s": 190, "m": 240, "l": 290}
+# Vehicle wrecks (vehicles.py): every type x 3 damage variants -> props/veh_<type>_<v>.png.
+# Legacy names stay as aliases so older sets / jobs keep working.
+import vehicles as VH
+VEH_ALIAS = {"wreck_car": ("sedan", 0), "wreck_car_red": ("sedan_red", 0), "wreck_car_blue": ("sedan", 2),
+             "wreck_car_olive": ("sedan_red", 2), "wreck": ("sedan", 1), "wreck_truck": ("pickup", 0),
+             "wreck_bus": ("school_bus", 0), "tank_wreck": ("tank", 0)}
+VEH_SMALL = {"moto"}  # walk-through
+# vehicles: bus ~4x hero length, tilted wrecks; one class above PL_
+VEH_CLASS = (290, 460)
+
+
+def vehicle_meta(cv, fp):
+    """Collision from the art: the central band of the ground footprint
+    parallelogram (texels, relative to the sprite centre); y-sort base =
+    its bottom edge."""
+    xs = sorted(p[0] for p in fp)
+    ys = sorted(p[1] for p in fp)
+    x0, x1 = (xs[0] + xs[1]) / 2, (xs[2] + xs[3]) / 2
+    y0, y1 = (ys[0] + ys[1]) / 2, (ys[2] + ys[3]) / 2
+    cx, cy = (x0 + x1) / 2 - cv.w / 2, (y0 + y1) / 2 - cv.h / 2
+    bw, bh = int(round((x1 - x0) * 0.94)), int(round(max(14, (y1 - y0) * 0.9)))
+    return [bw, bh, cx, cy]
 
 
 def foot(cv):
@@ -117,6 +135,7 @@ def main(check_only=False):
             m["block"] = [bw, bh, ox, cv.h / 2 - bh / 2 - 1]
         if name in FLAT:
             m["flat"] = True
+        m["base"] = (m["block"][3] + m["block"][1] / 2) if "block" in m else cv.h / 2 - 2
         if name == "street_lamp":
             # glass centre x in the source canvas (50) minus crop offset
             op = cv.opaque()
@@ -127,6 +146,26 @@ def main(check_only=False):
         meta[name] = m
         if not check_only:
             save(cv, SPR + folder + "/" + name + ".png")
+    for vt in VH.TYPES:
+        for var in range(3):
+            name = "veh_%s_%d" % (vt, var)
+            cv, fp = VH.make(vt, var)
+            report.append(validate(cv, "prop", size_max=VEH_CLASS, name=name))
+            m = {"size": [cv.w, cv.h], "foot": [min(p[0] for p in fp) - cv.w / 2, max(p[0] for p in fp) - cv.w / 2]}
+            if vt not in VEH_SMALL:
+                m["block"] = vehicle_meta(cv, fp)
+                m["base"] = m["block"][3] + m["block"][1] / 2
+            else:
+                m["base"] = cv.h / 2 - 3
+            meta[name] = m
+            outs = [SPR + "props/" + name + ".png"]
+            for al, (at, av) in VEH_ALIAS.items():
+                if (at, av) == (vt, var):
+                    meta[al] = dict(m)
+                    outs.append(SPR + ("depth/zone/" if al == "tank_wreck" else "props/") + al + ".png")
+            if not check_only:
+                for o in outs:
+                    save(cv, o)
     # sinkholes per zone that has the twist (crater city + dustfall), 3 sizes
     for gi in (8, 9):
         for k, w in SINK_W.items():
@@ -181,6 +220,8 @@ def write_gd(meta, regions):
             parts.append('"light": Vector2(%.1f, %.1f)' % tuple(m["light"]))
         if m.get("flat"):
             parts.append('"flat": true')
+        if "base" in m:
+            parts.append('"base": %.1f' % m["base"])
         if "deck" in m:
             parts.append('"deck": %d' % m["deck"])
         lines.append('\t"%s": {%s},' % (k, ", ".join(parts)))
@@ -189,6 +230,12 @@ def write_gd(meta, regions):
               "",
               "static func info(name: String) -> Dictionary:",
               "\treturn META.get(name, {})", "",
+              "",
+              "## Y-sort base line (world px below the sprite centre): units whose feet are",
+              "## below it draw in front of the prop, above it behind.",
+              "static func base_y(name: String, tex_h: float = 0.0) -> float:",
+              "\tvar m: Dictionary = META.get(name, {})",
+              "\treturn float(m.get(\"base\", tex_h * 0.5)) * UnitAnim.TEXEL", "",
               "",
               "## Collision rect (world px, relative to the sprite centre), or an empty Rect2.",
               "static func block_rect(name: String, flip: bool = false) -> Rect2:",
