@@ -88,21 +88,36 @@ static func upgrade(u: Dictionary) -> String:
 	return "up_piercing"
 
 
-## Icon for a gear item: its mod / weapon style / slot.
+## Icon for a gear item: one per mod, weapon variant, named Legendary and
+## armour / accessory look (gear_<slot>_<noun>); slot art as the fallback.
 static func item(it: Dictionary) -> String:
 	var kind := str(it.get("kind", ""))
 	if kind == "mod" and has("mod_" + str(it.get("mod", ""))):
 		return "mod_" + str(it.get("mod", ""))
 	if kind == "weapon":
 		var hero := str(it.get("hero", ""))
+		var leg := str(it.get("legendary", ""))
+		if leg != "" and has("leg_" + leg):
+			return "leg_" + leg
+		var wid := "wpn_%s_%s" % [hero, str(it.get("variant", ""))]
+		if has(wid):
+			return wid
 		var styles: Array = KitDefs.styles(hero) if hero != "" else []
 		if not styles.is_empty():
 			return style(hero, str(styles[0]["id"]))
 		return "slot_weapon"
 	var sl := str(it.get("slot", ""))
+	var gid := "gear_%s_%d" % [sl, GearDefs.noun_index(it)]
+	if has(gid):
+		return gid
 	if has("slot_" + sl):
 		return "slot_" + sl
 	return "slot_charm"
+
+
+## Set emblem icon id.
+static func emblem(set_id: String) -> String:
+	return "emb_" + set_id
 
 
 ## Ingredients / tonics / materials share one lookup.

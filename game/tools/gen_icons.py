@@ -1738,6 +1738,460 @@ def _(c):
     ICONS["camp_backpack"](c)
 
 
+# ===================================================== gear identity (gear UX)
+# Every stash item reads as itself: armour / accessories get one icon per noun
+# (3 per slot), weapons one per variant (finish + a medallion glyph), named
+# Legendaries a gilded weapon with their own medallion, sets an emblem
+# (shown on a set-coloured badge in the UI), plus the stash lock.
+
+
+def medallion(c, cx, cy, r, ramp, glyph):
+    """Round badge on the icon's lower-right: INK ring keeps it apart from
+    the weapon under it; glyph(c, cx, cy, r) draws inside."""
+    c.circle(cx, cy, r + 1.6, "ink", flat=1)
+    c.circle(cx, cy, r, ramp, hl=False)
+    glyph(c, cx, cy, r)
+
+
+def g_spark(c, x, y, r):
+    c.star(x, y, r * 0.85, r * 0.3, 4, "fire", rot=-90, hl=False)
+
+
+def g_bell(c, x, y, r):
+    s = r / 9.0
+    c.poly([(x - 2 * s, y - 6 * s), (x + 2 * s, y - 6 * s), (x + 4 * s, y + 2 * s), (x + 6 * s, y + 4 * s), (x - 6 * s, y + 4 * s), (x - 4 * s, y + 2 * s)], "brass", hl=False)
+    c.circle(x, y + 5.5 * s, 1.6 * s, "brass", flat=2)
+
+
+def g_bars(c, x, y, r):
+    s = r / 9.0
+    for dx in (-3, 3):
+        c.line((x + dx * s - 2 * s, y + 6 * s), (x + dx * s + 2 * s, y - 6 * s), 2.4 * s, "rust", hl=False)
+
+
+def g_coil(c, x, y, r):
+    s = r / 9.0
+    c.path([(x - 6 * s, y + 4 * s), (x - 3 * s, y - 5 * s), (x, y + 4 * s), (x + 3 * s, y - 5 * s), (x + 6 * s, y + 4 * s)], 2.2 * s, "brass", hl=False)
+
+
+def g_cross(c, x, y, r, ramp="bone"):
+    s = r / 9.0
+    c.rect(x - 1.6 * s, y - 6 * s, x + 1.6 * s, y + 6 * s, ramp, flat=2)
+    c.rect(x - 5 * s, y - 2.8 * s, x + 5 * s, y + 0.4 * s, ramp, flat=2)
+
+
+def g_blade(c, x, y, r):
+    s = r / 9.0
+    c.poly([(x - 6 * s, y + 6 * s), (x + 6 * s, y - 6 * s), (x + 3 * s, y + 1 * s)], "frost", hl=False)
+
+
+def g_moon(c, x, y, r):
+    c.circle(x, y, r * 0.7, "bone", flat=2)
+    c.cut_circle(x + r * 0.35, y - r * 0.25, r * 0.55)
+
+
+def g_wing(c, x, y, r):
+    s = r / 16.0
+    wing(c, x - 7 * s, y + 2 * s, s * 0.9, "bone")
+
+
+def g_flame(c, x, y, r):
+    flame(c, x, y + 1, r / 15.0 * 0.95, inner=False)
+
+
+def g_drop(c, x, y, r):
+    drop(c, x, y + 1, r / 15.0, "glow")
+
+
+def g_bolt(c, x, y, r):
+    bolt_glyph(c, x, y, r / 17.0, "dust")
+
+
+def g_frost(c, x, y, r):
+    snowflake(c, x, y, r * 0.8, "frost")
+
+
+def g_burst(c, x, y, r):
+    c.star(x, y, r * 0.85, r * 0.42, 6, "fire", rot=-90, hl=False)
+
+
+def g_skull(c, x, y, r):
+    skull(c, x, y - 1, r / 13.0, "bone")
+
+
+def g_cloud(c, x, y, r):
+    cloud(c, x, y, r / 13.0, "ash")
+
+
+def g_saw(c, x, y, r):
+    c.star(x, y, r * 0.85, r * 0.62, 10, "steel", rot=0, hl=False)
+    c.circle(x, y, r * 0.25, "dark", flat=1)
+
+
+def g_coins(c, x, y, r):
+    s = r / 9.0
+    c.circle(x - 2.5 * s, y + 1.5 * s, 4 * s, "brass", hl=False)
+    c.circle(x + 2.5 * s, y - 1.5 * s, 4 * s, "dust", hl=False)
+
+
+ELEMENT_GLYPH = {"fire": g_flame, "poison": g_drop, "shock": g_bolt, "frost": g_frost}
+
+# hero -> base silhouette (KitDefs style 0) and variants
+# (variant id, kind, glyph or element / legendary id)
+WEAPON_BASE = {
+    "ash_rook": "style_ash_rook_boom", "vesper_thorn": "style_vesper_thorn_bolt",
+    "pebble": "style_pebble_maul", "bolt_juno": "style_bolt_juno_chain",
+    "sister_cinder": "style_sister_cinder_suppressor", "quill_marrow": "style_quill_marrow_bayonet",
+    "nyx_caldera": "style_nyx_caldera_dustblades", "helm_wisp": "style_helm_wisp_sidearm",
+}
+WEAPON_VARIANTS = {
+    "ash_rook": [("patched", None), ("long_fuse", g_spark), ("cluster", "fire"), ("last_shift", "L")],
+    "vesper_thorn": [("patched", None), ("bell_tuned", g_bell), ("hollowpoint", "poison"), ("bellwether", "L")],
+    "pebble": [("patched", None), ("rebar", g_bars), ("quarry", "shock"), ("gravedigger", "L")],
+    "bolt_juno": [("patched", None), ("coiled", g_coil), ("arc", "shock"), ("live_line", "L")],
+    "sister_cinder": [("patched", None), ("chapel", g_cross), ("thurible", "fire"), ("censer", "L")],
+    "quill_marrow": [("patched", None), ("surgical", lambda c, x, y, r: g_cross(c, x, y, r, "blood")), ("autopsy", "poison"), ("bonesaw", "L")],
+    "nyx_caldera": [("patched", None), ("night", g_moon), ("smuggler", "frost"), ("twin_debts", "L")],
+    "helm_wisp": [("patched", None), ("flight", g_wing), ("flare", "fire"), ("mayday", "L")],
+}
+LEGENDARY_GLYPH = {
+    "last_shift": g_burst, "bellwether": g_bell, "gravedigger": g_skull, "live_line": g_bolt,
+    "censer": g_cloud, "bonesaw": g_saw, "twin_debts": g_coins, "mayday": g_wing,
+}
+PATCHED = {"steel": "rust", "gun": "dark", "brass": "rust", "dust": "rust"}
+GILDED = {"steel": "brass", "gun": "dark", "wood": "rust", "rust": "dust"}
+EPIC_TINT = {"fire": {"steel": "rust"}, "poison": {"steel": "plague"}, "shock": {"steel": "teal"}, "frost": {"steel": "frost"}}
+
+
+def _weapon_icon(base, kind, extra):
+    def fn(c):
+        if kind == "patched":
+            c.remap = dict(PATCHED)
+            ICONS[base](c)
+            c.remap = {}
+            c.line((18, 31), (26, 19), 5, "cloth", hl=False)
+            return
+        if kind == "legendary":
+            c.remap = dict(GILDED)
+            ICONS[base](c)
+            c.remap = {}
+            medallion(c, 36, 36, 10.5, "dark", LEGENDARY_GLYPH[extra])
+            c.ring(36, 36, 10.5, 9.0, "dust", hl=False)
+            return
+        if kind == "epic":
+            c.remap = dict(EPIC_TINT[extra])
+            ICONS[base](c)
+            c.remap = {}
+            medallion(c, 37, 37, 9.5, "flesh", ELEMENT_GLYPH[extra])
+            return
+        ICONS[base](c)
+        medallion(c, 37, 37, 9.5, "teal", extra)
+    return fn
+
+
+for _hero, _vs in WEAPON_VARIANTS.items():
+    for _i, (_vid, _x) in enumerate(_vs):
+        _kind = ["patched", "rare", "epic", "legendary"][_i]
+        _ic = _weapon_icon(WEAPON_BASE[_hero], _kind, _x if _kind != "legendary" else _vid)
+        ICONS["wpn_%s_%s" % (_hero, _vid)] = _ic
+        if _kind == "legendary":
+            ICONS["leg_%s" % _vid] = _ic
+
+
+# ---------------------------------------------------- armour + accessories (27)
+@icon("gear_head_0")
+def _(c):  # Hood
+    c.poly([(24, 4), (36, 9), (42, 22), (42, 44), (6, 44), (6, 22), (12, 9)], "cloth")
+    c.ellipse(24, 28, 10, 12, "dark", flat=0)
+    c.ellipse(20, 26, 1.6, 1.4, "fire", flat=2)
+    c.ellipse(28, 26, 1.6, 1.4, "fire", flat=2)
+    c.rect(6, 40, 42, 44, "leather", hl=False)
+
+
+@icon("gear_head_1")
+def _(c):  # Visor
+    c.ellipse(24, 24, 18, 17, "steel")
+    c.rect(6, 24, 42, 36, "steel")
+    c.rect(8, 20, 40, 28, "teal", flat=1)
+    c.rect(8, 20, 40, 22, "teal", flat=3)
+    c.rect(22, 6, 26, 20, "steel", flat=2)
+    c.rect(4, 34, 44, 38, "gun", hl=False)
+
+
+@icon("gear_head_2")
+def _(c):  # Cap (goggled field cap)
+    ICONS["slot_head"](c)
+
+
+@icon("gear_chest_0")
+def _(c):  # Vest
+    ICONS["slot_chest"](c)
+
+
+@icon("gear_chest_1")
+def _(c):  # Coat
+    c.poly([(14, 4), (34, 4), (42, 12), (40, 46), (8, 46), (6, 12)], "leather")
+    c.poly([(19, 4), (24, 22), (29, 4)], "dark", flat=1)
+    c.poly([(19, 4), (15, 10), (21, 24), (24, 22)], "leather", flat=2)
+    c.poly([(29, 4), (33, 10), (27, 24), (24, 22)], "leather", flat=2)
+    c.line((24, 22), (24, 46), 1.4, "dark", hl=False, cap=False)
+    for y in (27, 33, 39):
+        c.circle(27, y, 1.6, "brass", flat=2)
+
+
+@icon("gear_chest_2")
+def _(c):  # Plate
+    c.poly([(10, 8), (38, 8), (42, 18), (38, 40), (24, 45), (10, 40), (6, 18)], "steel")
+    c.poly([(24, 10), (24, 43), (38, 39), (41, 18), (37, 10)], "steel", flat=0)
+    c.rect(10, 22, 38, 25, "gun", hl=False)
+    for (x, y) in ((12, 12), (36, 12), (12, 36), (36, 36)):
+        c.px(x, y, "brass", 3)
+
+
+@icon("gear_shoulders_0")
+def _(c):  # Pauldrons
+    ICONS["slot_shoulders"](c)
+
+
+@icon("gear_shoulders_1")
+def _(c):  # Mantle
+    c.poly([(8, 20), (16, 10), (32, 10), (40, 20), (44, 38), (34, 34), (24, 40), (14, 34), (4, 38)], "cloth")
+    c.ellipse(24, 14, 7, 4, "dark", flat=0)
+    c.rect(18, 18, 30, 21, "leather", hl=False)
+    c.circle(24, 19.5, 2.4, "brass", flat=2)
+
+
+@icon("gear_shoulders_2")
+def _(c):  # Spaulders (layered plates)
+    for i, y in enumerate((10, 18, 26)):
+        c.ellipse(24, y + 6, 18 - i * 2, 7, "steel")
+        c.rect(6 + i * 2, y + 6, 42 - i * 2, y + 10, "steel", flat=0)
+    c.rect(20, 38, 28, 44, "leather", hl=False)
+
+
+@icon("gear_legs_0")
+def _(c):  # Greaves
+    for x in (8, 26):
+        c.poly([(x, 6), (x + 14, 6), (x + 13, 40), (x + 1, 40)], "steel")
+        c.ellipse(x + 7, 20, 6, 5, "steel", flat=2)
+        c.rect(x, 40, x + 14, 44, "leather", hl=False)
+        c.rect(x, 11, x + 14, 13, "leather", hl=False)
+
+
+@icon("gear_legs_1")
+def _(c):  # Trousers
+    ICONS["slot_legs"](c)
+
+
+@icon("gear_legs_2")
+def _(c):  # Leggings with knee pads
+    c.poly([(12, 4), (36, 4), (37, 44), (28, 44), (24, 16), (20, 44), (11, 44)], "leather")
+    c.rect(12, 4, 36, 8, "dark", hl=False)
+    c.ellipse(15.5, 26, 5, 5.5, "rust")
+    c.ellipse(32.5, 26, 5, 5.5, "rust")
+
+
+@icon("gear_hands_0")
+def _(c):  # Gloves
+    ICONS["slot_hands"](c)
+
+
+@icon("gear_hands_1")
+def _(c):  # Grips (fingerless, steel knuckles)
+    c.poly([(12, 20), (36, 20), (40, 18), (44, 22), (37, 33), (35, 44), (13, 44)], "leather")
+    for i, x in enumerate((12, 18, 24, 30)):
+        c.rect(x, 12 + (i % 2) * 2, x + 5.5, 21, "skin")
+    c.rect(11, 19, 37, 25, "steel")
+    for x in (14, 20, 26, 32):
+        c.px(x, 22, "bone", 2)
+
+
+@icon("gear_hands_2")
+def _(c):  # Wraps (bandaged fist)
+    c.poly([(10, 14), (36, 12), (42, 18), (40, 34), (34, 44), (12, 44), (8, 30)], "bone")
+    for y in (18, 25, 32, 39):
+        c.line((9, y + 2), (41, y - 2), 1.6, "ash", hl=False, cap=False)
+    c.rect(26, 40, 30, 47, "bone", hl=False)
+
+
+@icon("gear_boots_0")
+def _(c):  # Boots
+    ICONS["slot_boots"](c)
+
+
+@icon("gear_boots_1")
+def _(c):  # Treads (steel-shod)
+    boot(c, 0, 0, 1.0, "dark", "steel")
+    c.rect(8, 42, 45, 46, "gun", hl=False)
+    for x in (12, 20, 28, 36):
+        c.rect(x, 44, x + 4, 47, "gun", hl=False)
+    c.rect(11, 20, 27, 23, "steel", hl=False)
+
+
+@icon("gear_boots_2")
+def _(c):  # Striders (tall, strapped)
+    c.poly([(14, 2), (28, 2), (28, 30), (40, 34), (43, 40), (43, 44), (11, 44), (12, 30)], "cloth")
+    c.rect(10, 41, 45, 46, "dark")
+    for y in (8, 16, 24):
+        c.rect(13, y, 29, y + 3, "leather", hl=False)
+        c.px(26, y + 1, "brass", 3)
+
+
+@icon("gear_charm_0")
+def _(c):  # Rabbit's Foot
+    c.path([(24, 2), (24, 10)], 2.2, "leather", hl=False)
+    c.rect(20, 9, 28, 14, "brass")
+    c.ellipse(24, 26, 9, 13, "bone")
+    c.ellipse(20, 39, 4.5, 4, "bone")
+    c.ellipse(28, 39, 4.5, 4, "bone")
+    c.ellipse(24, 40, 4, 4.5, "bone")
+
+
+@icon("gear_charm_1")
+def _(c):  # Lucky Bottle Cap
+    ICONS["slot_charm"](c)
+
+
+@icon("gear_charm_2")
+def _(c):  # Dog Tags
+    c.path([(10, 2), (18, 16)], 1.6, "steel", hl=False)
+    c.path([(38, 2), (30, 14)], 1.6, "steel", hl=False)
+    c.rect(10, 16, 26, 40, "steel")
+    c.rect(22, 12, 38, 36, "steel")
+    for y in (20, 25, 30):
+        c.rect(25, y, 35, y + 1.6, "gun", hl=False)
+
+
+@icon("gear_vial_0")
+def _(c):  # Tonic Vial
+    ICONS["slot_vial"](c)
+
+
+@icon("gear_vial_1")
+def _(c):  # Dust Draught
+    bottle(c, "round", "dust")
+
+
+@icon("gear_vial_2")
+def _(c):  # Plague Ward
+    bottle(c, "flask", "plague")
+    c.rect(21, 30, 27, 33, "bone", flat=2)
+    c.rect(22.5, 28, 25.5, 36, "bone", flat=2)
+
+
+@icon("gear_patch_0")
+def _(c):  # Squad Patch
+    shield(c, 24, 24, 1.35, "cloth")
+    chevron_up(c, 24, 16, 1.1, "dust")
+    chevron_up(c, 24, 26, 1.1, "dust")
+
+
+@icon("gear_patch_1")
+def _(c):  # Hospital Cross
+    ICONS["slot_patch"](c)
+
+
+@icon("gear_patch_2")
+def _(c):  # Scrap Union Badge
+    cog(c, 24, 24, 20, 10, "brass", 0)
+    c.circle(24, 24, 10, "rust", hl=False)
+    c.rect(19, 18, 29, 30, "steel")
+    c.rect(19, 18, 29, 21, "steel", flat=2)
+
+
+# ------------------------------------------------------------ set emblems (12)
+@icon("emb_plague_doctor")
+def _(c):  # beaked mask
+    c.ellipse(20, 20, 13, 14, "dark")
+    c.poly([(26, 22), (46, 40), (24, 32)], "bone")
+    c.circle(16, 17, 4.5, "glow", flat=2)
+    c.circle(16, 17, 4.5, "ink", flat=1)
+    c.circle(16, 17, 3, "glow", flat=2)
+
+
+@icon("emb_demolition_crew")
+def _(c):  # bomb
+    c.circle(22, 28, 15, "dark")
+    c.rect(28, 8, 36, 16, "steel")
+    c.path([(34, 9), (40, 4), (44, 6)], 2.2, "rust", hl=False)
+    c.star(44, 5, 5, 2, 4, "fire", hl=False)
+
+
+@icon("emb_night_runner")
+def _(c):  # crescent + star
+    c.circle(22, 26, 18, "frost")
+    c.cut_circle(31, 19, 15)
+    c.star(36, 34, 7, 2.5, 4, "bone", hl=False)
+
+
+@icon("emb_field_salvager")
+def _(c):  # cog + wrench
+    cog(c, 20, 26, 16, 8, "brass", 6)
+    c.line((26, 22), (42, 6), 5, "steel")
+    c.ring(41, 8, 6.5, 2.6, "steel", hl=False)
+    c.cut_rect(40, 2, 47, 8)
+
+
+@icon("emb_foremans_kit")
+def _(c):  # hard hat
+    c.ellipse(24, 26, 18, 16, "dust")
+    c.cut_rect(0, 27, 48, 48)
+    c.rect(2, 26, 46, 32, "dust")
+    c.rect(21, 10, 27, 26, "dust", flat=0)
+
+
+@icon("emb_bell_ringers_shroud")
+def _(c):
+    g_bell(c, 24, 22, 20)
+
+
+@icon("emb_quarry_plate")
+def _(c):  # pickaxe
+    c.line((10, 42), (34, 14), 4.5, "wood")
+    c.ring(28, 20, 20, 15, "steel", 200, 340, hl=False)
+
+
+@icon("emb_linemans_rig")
+def _(c):
+    bolt_glyph(c, 24, 24, 1.4, "dust")
+
+
+@icon("emb_cathedral_vestments")
+def _(c):  # candle
+    c.rect(17, 20, 31, 44, "bone")
+    c.rect(15, 42, 33, 46, "brass", hl=False)
+    flame(c, 24, 11, 0.7, inner=False)
+
+
+@icon("emb_surgeons_coat")
+def _(c):  # scalpel over a blood drop
+    drop(c, 20, 28, 1.2, "blood")
+    scalpel(c, (12, 42), (42, 6))
+
+
+@icon("emb_smugglers_wraps")
+def _(c):  # crossed daggers
+    blade(c, (8, 42), (40, 6), 6, "frost")
+    blade(c, (40, 42), (8, 6), 6, "frost")
+
+
+@icon("emb_flight_crew_gear")
+def _(c):  # wings
+    wing(c, 26, 22, 1.2, "brass")
+    wing(c, 22, 22, 1.2, "brass", flip=True)
+    c.circle(24, 24, 4.5, "dust")
+
+
+@icon("ui_lock")
+def _(c):  # padlock
+    c.ring(24, 18, 12, 7.5, "steel", 180, 360, hl=False)
+    c.rect(12, 18, 16.5, 24, "steel", hl=False)
+    c.rect(31.5, 18, 36, 24, "steel", hl=False)
+    c.rect(8, 22, 40, 44, "brass")
+    c.circle(24, 31, 3.5, "ink", flat=1)
+    c.rect(22.5, 31, 25.5, 39, "ink", flat=1)
+
+
 # ================================================================ render
 RARITY_RAMPS = {
     "common": ((0x5d, 0x56, 0x54), (0x8f, 0x87, 0x7e), (0xe9, 0xdf, 0xc9)),
@@ -1747,35 +2201,67 @@ RARITY_RAMPS = {
 }
 
 
+FRAME_BG = {"common": (0x1f, 0x1a, 0x1d), "rare": (0x1b, 0x22, 0x2c), "epic": (0x2e, 0x18, 0x30), "legendary": (0x3e, 0x2a, 0x10)}
+## Rim thickness (texels) and the colour-blind gem in the top-left corner:
+## common = square, rare = diamond, epic = triangle, legendary = crown.
+FRAME_RIM = {"common": 1, "rare": 1, "epic": 2, "legendary": 3}
+FRAME_GEM = {
+    "common": ["XX", "XX"],
+    "rare": [".X.", "XXX", ".X."],
+    "epic": ["..X..", ".XXX.", "XXXXX"],
+    "legendary": ["X.X.X", "XXXXX", "XXXXX"],
+}
+
+
 def frame(rarity, tx=28):
     """Recessed icon well with a painted rarity rim (UI texel units, saved x2).
-    tx x tx texels; 9-slice margin = 6 texels (12 px)."""
+    tx x tx texels; 9-slice margin = 8 texels (16 px). Rarity reads three ways:
+    rim colour + thickness, the well's tint, and the corner gem's shape."""
     sh, base, hi = RARITY_RAMPS[rarity]
+    rim = FRAME_RIM[rarity]
     a = np.zeros((tx, tx, 4), np.uint8)
     a[:, :, 3] = 255
     a[:, :, :3] = INK
-    a[1:-1, 1:-1, :3] = (0x1f, 0x1a, 0x1d)
-    # inset bevel: dark top-left, light bottom-right (recessed)
-    a[1, 1:-1, :3] = INK
-    a[1:-1, 1, :3] = INK
-    a[-2, 2:-1, :3] = (0x36, 0x42, 0x4f)
-    a[2:-1, -2, :3] = (0x36, 0x42, 0x4f)
-    # rarity rim: 1 texel ring inside the edge + corner brackets
-    a[0, :, :3] = sh
-    a[-1, :, :3] = sh
-    a[:, 0, :3] = sh
-    a[:, -1, :3] = sh
-    for (x, y, dx, dy) in ((0, 0, 1, 1), (tx - 1, 0, -1, 1), (0, tx - 1, 1, -1), (tx - 1, tx - 1, -1, -1)):
-        for i in range(5):
-            a[y, x + dx * i, :3] = base
-            a[y + dy * i, x, :3] = base
-        a[y, x, :3] = hi
+    a[1:-1, 1:-1, :3] = FRAME_BG[rarity]
+    # rarity rim: rim texels; outer = base (shadow tone for common), inner = shadow
+    outer = sh if rarity == "common" else base
+    for i in range(rim):
+        col = outer if i == 0 else (hi if (rarity == "legendary" and i == rim - 1) else sh)
+        a[i, i:tx - i, :3] = col
+        a[tx - 1 - i, i:tx - i, :3] = col
+        a[i:tx - i, i, :3] = col
+        a[i:tx - i, tx - 1 - i, :3] = col
+    # inset bevel just inside the rim: dark top-left, light bottom-right (recessed)
+    r = rim
+    a[r, r:-r, :3] = INK
+    a[r:-r, r, :3] = INK
+    a[-1 - r, r + 1:-r, :3] = (0x36, 0x42, 0x4f)
+    a[r + 1:-r, -1 - r, :3] = (0x36, 0x42, 0x4f)
+    # corner brackets for rare+
+    if rarity != "common":
+        for (x, y, dx, dy) in ((0, 0, 1, 1), (tx - 1, 0, -1, 1), (0, tx - 1, 1, -1), (tx - 1, tx - 1, -1, -1)):
+            for i in range(6):
+                a[y, x + dx * i, :3] = hi if rarity == "legendary" else base
+                a[y + dy * i, x, :3] = hi if rarity == "legendary" else base
+            a[y, x, :3] = hi
     # rarity stripe on the left edge (bible: painted rim stripe on the left)
-    a[3:-3, 0, :3] = base
-    a[0, 0, 3] = 0
-    a[0, -1, 3] = 0
-    a[-1, 0, 3] = 0
-    a[-1, -1, 3] = 0
+    a[8:-8, 0:rim, :3] = base if rarity != "legendary" else hi
+    # gem, INK-outlined, top-left inside the 8-texel corner
+    g = FRAME_GEM[rarity]
+    gx, gy = r + 2, r + 2
+    if rarity == "legendary":
+        gx, gy = 3, 4
+    m = np.zeros((tx, tx), bool)
+    for yy, row in enumerate(g):
+        for xx, ch in enumerate(row):
+            if ch == "X":
+                m[gy + yy, gx + xx] = True
+    pad = np.pad(m, 1)
+    ring = (pad[:-2, 1:-1] | pad[2:, 1:-1] | pad[1:-1, :-2] | pad[1:-1, 2:]) & ~m
+    a[ring, :3] = INK
+    a[m, :3] = hi if rarity != "common" else base
+    for c0 in ((0, 0), (0, -1), (-1, 0), (-1, -1)):
+        a[c0[0], c0[1], 3] = 0
     return Image.fromarray(a, "RGBA").resize((tx * 2, tx * 2), Image.NEAREST)
 
 

@@ -265,6 +265,13 @@ func show_tab(t: String) -> void:
 	if t != _tab:
 		_scroll_y_keep = 0
 	_tab = t
+	## The stash wants the room: fold the hangar picture down while it's open.
+	var vh := 208.0 if t == "stash" else 400.0
+	if _view != null and not is_equal_approx(_view.custom_minimum_size.y, vh):
+		if is_inside_tree():
+			_view.create_tween().tween_property(_view, "custom_minimum_size:y", vh, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		else:
+			_view.custom_minimum_size.y = vh
 	for k in _tab_btns.keys():
 		var b: Button = _tab_btns[k]
 		var on := str(k) == t
@@ -604,7 +611,14 @@ func toggle_tonic(tid: String) -> bool:
 
 
 ## =========================================================================
-## Stash (Phase B fills it with gear)
+## Stash: sort / filter, icon-led grid, inspect + compare, safe salvage
+
+const SORTS := {"rarity": "RARITY", "slot": "SLOT", "set": "SET", "newest": "NEW"}
+const GROUPS := ["", "weapon", "mod", "armor", "accessory"]
+const GROUP_LABEL := {"": "ALL", "weapon": "WEAPONS", "mod": "MODS", "armor": "ARMOR", "accessory": "TRINKETS"}
+const RARITY_FILTERS := ["", "common", "rare", "epic", "legendary"]
+var _sort: String = "rarity"
+var _filters: Dictionary = {"group": "", "set": "", "rarity": "", "fits": ""}
 
 func _build_stash() -> void:
 	var cap := GameState.stash_capacity()
@@ -620,20 +634,112 @@ func _build_stash() -> void:
 		var g := Control.new()
 		g.custom_minimum_size = Vector2(8, 0)
 		sh.add_child(g)
-	var eqb := UiTheme.big_button("EQUIP SURVIVORS", UiTheme.TEAL, 64, 20)
+	var eqb := UiTheme.big_button("GEAR", UiTheme.TEAL, 64, 20)
 	eqb.icon = IconSet.tex("slot_chest", false)
+	eqb.custom_minimum_size.x = 0
+	eqb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	eqb.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
-	_list.add_child(eqb)
-	_list.add_child(_row("stash", null))
+	sh.add_child(eqb)
+	## Sort (one row) + filters (one row): big, one-thumb toggles.
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 8)
+	_list.add_child(srow)
+	for s in SORTS.keys():
+		var b := UiTheme.big_button(str(SORTS[s]), UiTheme.AMBER if s == _sort else UiTheme.LINE, 64, 16)
+		b.custom_minimum_size.x = 0
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.mouse_force_pass_scroll_events = true
+		b.pressed.connect(set_stash_sort.bind(str(s)))
+		srow.add_child(b)
+	var frow := HBoxContainer.new()
+	frow.add_theme_constant_override("separation", 8)
+	_list.add_child(frow)
+	var hero := GameState.selected_character_id
+	var fdefs := [
+		["group", str(GROUP_LABEL[str(_filters["group"])])],
+		["rarity", "ANY RARITY" if str(_filters["rarity"]) == "" else str(GearDefs.RARITY_NAME[str(_filters["rarity"])]).to_upper()],
+		["set", "SETS ONLY" if str(_filters["set"]) == "any" else "ANY SET"],
+		["fits", "FITS %s" % GearUi.hero_name(hero).to_upper().get_slice(" ", 0)],
+	]
+	for fd in fdefs:
+		var on := str(_filters[str(fd[0])]) != ""
+		var b := UiTheme.big_button(str(fd[1]), UiTheme.AMBER if on else UiTheme.LINE, 64, 16)
+		b.custom_minimum_size.x = 0
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		b.mouse_force_pass_scroll_events = true
+		b.pressed.connect(cycle_stash_filter.bind(str(fd[0])))
+		frow.add_child(b)
+	## Safety tools: bulk-salvage commons, buy-back bin.
+	var trow := HBoxContainer.new()
+	trow.add_theme_constant_override("separation", 8)
+	_list.add_child(trow)
+	var bulk := GameState.bulk_salvage_preview()
+	var bb := UiTheme.big_button("SALVAGE COMMONS (%d)" % bulk.size(), UiTheme.RUST, 64, 16)
+	bb.custom_minimum_size.x = 0
+	bb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bb.disabled = bulk.is_empty()
+	bb.mouse_force_pass_scroll_events = true
+	bb.pressed.connect(ask_bulk_salvage)
+	trow.add_child(bb)
+	var rb := UiTheme.big_button("BUY BACK (%d)" % GameState.salvage_bin.size(), UiTheme.TEAL, 64, 16)
+	rb.custom_minimum_size.x = 0
+	rb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rb.disabled = GameState.salvage_bin.is_empty()
+	rb.mouse_force_pass_scroll_events = true
+	rb.pressed.connect(open_buyback)
+	trow.add_child(rb)
+	var shown := GameState.stash_view(_sort, _filters)
+	if shown.size() < GameState.stash.size():
+		_list.add_child(_note("Showing %d of %d" % [shown.size(), GameState.stash.size()]))
 	var grid := GridContainer.new()
+	grid.name = "StashGrid"
 	grid.columns = 5
 	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.add_theme_constant_override("v_separation", 16)
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	_list.add_child(grid)
-	for i in range(cap):
-		grid.add_child(_slot(GameState.stash[i] if i < GameState.stash.size() else {}))
+	for it in shown:
+		grid.add_child(_slot(it))
+	if _filters.values().all(func(x: Variant) -> bool: return str(x) == ""):
+		for i in range(cap - GameState.stash.size()):
+			grid.add_child(_slot({}))
+	_list.add_child(_row("stash", null))
+
+
+func set_stash_sort(s: String) -> void:
+	if SORTS.has(s):
+		_sort = s
+		_rebuild()
+
+
+## Each filter button cycles its options (one thumb, no dropdowns).
+func cycle_stash_filter(key: String) -> void:
+	match key:
+		"group":
+			_filters["group"] = GROUPS[(GROUPS.find(str(_filters["group"])) + 1) % GROUPS.size()]
+		"rarity":
+			_filters["rarity"] = RARITY_FILTERS[(RARITY_FILTERS.find(str(_filters["rarity"])) + 1) % RARITY_FILTERS.size()]
+		"set":
+			_filters["set"] = "" if str(_filters["set"]) == "any" else "any"
+		"fits":
+			_filters["fits"] = "" if str(_filters["fits"]) != "" else GameState.selected_character_id
+	_rebuild()
+
+
+func set_stash_filters(f: Dictionary) -> void:
+	for k in f.keys():
+		_filters[str(k)] = str(f[k])
+	_rebuild()
+
+
+## uids the grid shows, in order (tests).
+func stash_shown() -> Array:
+	var out: Array = []
+	for it in GameState.stash_view(_sort, _filters):
+		out.append(int(it.get("uid", -1)))
+	return out
 
 
 func _slot(item: Dictionary) -> Control:
@@ -645,57 +751,243 @@ func _slot(item: Dictionary) -> Control:
 	var clear := StyleBoxEmpty.new()
 	for st in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(st, clear)
-	var ic := LoadoutScreen.item_icon(item, 112.0) if not item.is_empty() else UiTheme.icon_well("", "common", 112)
+	var ic := GearUi.tile(item, 112, {"empty_alpha": 0.4})
 	ic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ic.modulate = Color(1, 1, 1, 1.0 if not item.is_empty() else 0.4)
 	b.add_child(ic)
 	if item.is_empty():
 		b.disabled = true
 	else:
-		if not GameState.equipped_by(int(item.get("uid", -1))).is_empty():
-			var e := UiTheme.pixel_label("E", UiTheme.PX_M, UiTheme.TEAL)
-			e.position = Vector2(12, 12)
-			e.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(e)
 		b.pressed.connect(inspect_item.bind(int(item.get("uid", -1))))
 	return b
 
 
-## Item detail popup: stats, who wears it, salvage for scrap.
+## Item card: big icon + name + rarity, stats, compare vs the selected
+## survivor's piece, set progress; EQUIP / LOCK / SALVAGE.
 func inspect_item(uid: int) -> void:
 	var it := GameState.stash_item(uid)
 	if it.is_empty():
 		return
-	var lines: Array = []
-	var rar := str(it.get("rarity", "common"))
-	lines.append(GearDefs.RARITY_NAME.get(rar, rar))
-	for l in GearDefs.stat_lines(it):
-		lines.append(str(l))
+	GameState.mark_seen(uid)
+	close_popup()
+	var v := GearUi.overlay(self)
+	_popup = v.get_meta("root")
+	_popup.set_meta("uid", uid)
+	v.add_child(_item_head(it))
+	v.add_child(UiTheme.body_label("\n".join(GearDefs.stat_lines(it)), UiTheme.T_BODY, UiTheme.TEXT))
 	var by := GameState.equipped_by(uid)
 	if not by.is_empty():
-		lines.append("Worn by %s" % str(CharacterDefs.get_character(str(by[0])).get("display_name", by[0])))
-	_open_popup(str(it.get("name", "Item")), lines)
-	var v: VBoxContainer = _popup.find_children("*", "VBoxContainer", true, false)[0]
-	var sal := UiTheme.big_button("SALVAGE  +%d SCRAP" % GearDefs.salvage_value(it), UiTheme.RUST, 60, 18)
-	sal.pressed.connect(func() -> void:
-		GameState.salvage(uid)
-		Juice.sfx("ui_purchase")
-		close_popup()
-		_rebuild())
-	v.add_child(sal)
-	v.move_child(sal, v.get_child_count() - 2)
-	## One-tap equip onto the selected survivor when it fits them.
+		var wl := UiTheme.head_label("WORN BY %s" % GearUi.hero_name(str(by[0])).to_upper(), UiTheme.T_H3, UiTheme.TEAL)
+		v.add_child(wl)
 	var hero := GameState.selected_character_id
+	v.add_child(GearUi.compare_box(it, hero))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
 	if GameState.slot_for(uid, hero) != "" and (by.is_empty() or str(by[0]) != hero):
-		var hname := str(CharacterDefs.get_character(hero).get("display_name", hero))
-		var eq := UiTheme.big_button("EQUIP ON %s" % hname.to_upper(), UiTheme.TEAL, 60, 18)
+		var eq := UiTheme.big_button("EQUIP ON %s" % GearUi.hero_name(hero).to_upper(), UiTheme.TEAL, 64, 20)
+		eq.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		eq.custom_minimum_size.x = 0
 		eq.pressed.connect(func() -> void:
 			if GameState.quick_equip(uid, hero):
 				Juice.sfx("ui_equip")
+				GameState.reset_loadout_to_defaults()
 			close_popup()
 			_rebuild())
-		v.add_child(eq)
-		v.move_child(eq, v.get_child_count() - 3)
+		row.add_child(eq)
+	var sid := str(it.get("set", ""))
+	if sid != "":
+		var sb := UiTheme.big_button("SET", UiTheme.LINE, 64, 20)
+		sb.icon = IconSet.tex(IconSet.emblem(sid), false)
+		sb.custom_minimum_size.x = 120
+		sb.pressed.connect(open_set.bind(sid))
+		row.add_child(sb)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	v.add_child(row2)
+	var locked := bool(it.get("locked", false))
+	var lk := UiTheme.big_button("LOCKED" if locked else "LOCK", UiTheme.AMBER if locked else UiTheme.LINE, 64, 20)
+	lk.icon = IconSet.tex("ui_lock", false)
+	lk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lk.custom_minimum_size.x = 0
+	lk.pressed.connect(func() -> void:
+		GameState.toggle_lock(uid)
+		Juice.sfx("ui_toggle")
+		_rebuild()
+		inspect_item(uid))
+	row2.add_child(lk)
+	var sal := UiTheme.big_button("SALVAGE +%d" % GearDefs.salvage_value(it), UiTheme.RUST, 64, 20)
+	sal.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sal.custom_minimum_size.x = 0
+	sal.disabled = locked
+	sal.pressed.connect(ask_salvage.bind(uid))
+	row2.add_child(sal)
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
+	close.pressed.connect(close_popup)
+	v.add_child(close)
+
+
+## Big icon + name in rarity colour + rarity tab / set chip.
+func _item_head(it: Dictionary, big: bool = false) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 16)
+	h.add_child(GearUi.tile(it, 128 if big else 112, {"worn": false, "new": false}))
+	var tv := VBoxContainer.new()
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.alignment = BoxContainer.ALIGNMENT_CENTER
+	tv.add_theme_constant_override("separation", 8)
+	h.add_child(tv)
+	var nm := UiTheme.title_label(str(it.get("name", "Item")), UiTheme.T_TITLE if big else UiTheme.T_H1, GearUi.color(it))
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tv.add_child(nm)
+	tv.add_child(GearUi.rarity_line(it, big))
+	return h
+
+
+## Salvage: Commons go at once; Epic / Legendary / set pieces need a second,
+## held press on a card that shows the name + rarity big. Locked = refused.
+func ask_salvage(uid: int) -> void:
+	var it := GameState.stash_item(uid)
+	if it.is_empty():
+		return
+	if bool(it.get("locked", false)):
+		Juice.sfx("ui_denied")
+		_toast("Locked — unlock it first")
+		return
+	if not GearDefs.needs_salvage_confirm(it):
+		confirm_salvage(uid)
+		return
+	close_popup()
+	var v := GearUi.overlay(self)
+	_popup = v.get_meta("root")
+	_popup.name = "SalvageConfirm"
+	var warn := UiTheme.head_label("SALVAGE THIS?", UiTheme.T_H2, UiTheme.DANGER)
+	v.add_child(warn)
+	v.add_child(_item_head(it, true))
+	var what := "A named Legendary" if str(it.get("legendary", "")) != "" else "An %s item" % str(GearDefs.RARITY_NAME[GearUi.rar(it)]) if GearUi.rar(it) == "epic" else "A %s item" % str(GearDefs.RARITY_NAME[GearUi.rar(it)])
+	if str(it.get("set", "")) != "":
+		what += ", part of the %s set" % GearDefs.set_title(str(it["set"]))
+	v.add_child(UiTheme.body_label("%s. It waits in BUY BACK if you change your mind." % what, UiTheme.T_BODY, UiTheme.TEXT))
+	var pay := HBoxContainer.new()
+	pay.add_theme_constant_override("separation", 8)
+	pay.add_child(IconSet.rect("cur_scrap", 48))
+	var pl := UiTheme.pixel_label("+%d" % GearDefs.salvage_value(it), UiTheme.PX_L, UiTheme.AMBER)
+	pl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pay.add_child(pl)
+	v.add_child(pay)
+	var hold := GearUi.hold_button("HOLD TO SALVAGE", UiTheme.RUST, 0.8, confirm_salvage.bind(uid))
+	hold.name = "HoldSalvage"
+	v.add_child(hold)
+	var keep := UiTheme.big_button("KEEP IT", UiTheme.TEAL, 64, 24)
+	keep.pressed.connect(func() -> void: inspect_item(uid))
+	v.add_child(keep)
+
+
+func confirm_salvage(uid: int) -> int:
+	var it := GameState.stash_item(uid)
+	var got := GameState.salvage(uid)
+	if got > 0:
+		Juice.sfx("ui_purchase")
+		_toast("Salvaged %s  +%d scrap  ·  BUY BACK to undo" % [str(it.get("name", "item")), got])
+	close_popup()
+	_rebuild()
+	return got
+
+
+func ask_bulk_salvage() -> void:
+	var items := GameState.bulk_salvage_preview()
+	if items.is_empty():
+		return
+	close_popup()
+	var v := GearUi.overlay(self)
+	_popup = v.get_meta("root")
+	var total := 0
+	for it in items:
+		total += GearDefs.salvage_value(it)
+	v.add_child(UiTheme.head_label("SALVAGE %d COMMONS?" % items.size(), UiTheme.T_H1, UiTheme.AMBER))
+	v.add_child(UiTheme.body_label("+%d scrap. Never touches locked, set, Epic, Legendary, worn or insured gear." % total, UiTheme.T_BODY, UiTheme.TEXT))
+	var fl := HFlowContainer.new()
+	fl.add_theme_constant_override("h_separation", 8)
+	fl.add_theme_constant_override("v_separation", 8)
+	v.add_child(fl)
+	for it in items.slice(0, 10):
+		fl.add_child(GearUi.tile(it, 56, {"new": false, "worn": false}))
+	var go := UiTheme.big_button("SALVAGE ALL", UiTheme.RUST, 80, 24)
+	go.pressed.connect(func() -> void:
+		var r := GameState.salvage_commons()
+		Juice.sfx("ui_purchase")
+		close_popup()
+		_toast("Salvaged %d commons  +%d scrap" % [int(r["count"]), int(r["scrap"])])
+		_rebuild())
+	v.add_child(go)
+	var c := UiTheme.big_button("CANCEL", UiTheme.LINE, 64, 20)
+	c.pressed.connect(close_popup)
+	v.add_child(c)
+
+
+## Recently salvaged: buy any of the last 10 back for the scrap they paid.
+func open_buyback() -> void:
+	close_popup()
+	var v := GearUi.overlay(self, UiTheme.TEAL)
+	_popup = v.get_meta("root")
+	_popup.name = "BuyBack"
+	v.add_child(UiTheme.head_label("BUY BACK", UiTheme.T_H1, UiTheme.AMBER))
+	if GameState.salvage_bin.is_empty():
+		v.add_child(_note("Nothing salvaged lately."))
+	var full := GameState.stash.size() >= GameState.stash_capacity()
+	if full:
+		v.add_child(UiTheme.body_label("Stash full — make room to buy back.", UiTheme.T_SMALL, UiTheme.DANGER))
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(0, mini(4, GameState.salvage_bin.size()) * 128)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	var lv := VBoxContainer.new()
+	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lv.add_theme_constant_override("separation", 8)
+	sc.add_child(lv)
+	for e in GameState.salvage_bin:
+		var it: Dictionary = e["item"]
+		var cost := int(e["scrap"])
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 16)
+		lv.add_child(h)
+		h.add_child(GearUi.tile(it, 112, {"worn": false, "new": false, "shimmer": false}))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.alignment = BoxContainer.ALIGNMENT_CENTER
+		h.add_child(info)
+		var nm := UiTheme.head_label(str(it.get("name", "Item")), UiTheme.T_H3, GearUi.color(it))
+		nm.clip_text = true
+		info.add_child(nm)
+		info.add_child(GearUi.rarity_line(it))
+		var b := UiTheme.big_button("%d" % cost, UiTheme.TEAL if GameState.account_scrap >= cost and not full else UiTheme.RUST, 64, 16)
+		b.add_theme_font_override("font", UiTheme.font_pixel)
+		b.add_theme_font_size_override("font_size", UiTheme.PX_M)
+		b.icon = IconSet.tex("cur_scrap", false)
+		b.custom_minimum_size.x = 136
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		b.disabled = GameState.account_scrap < cost or full
+		var uid := int(it.get("uid", -1))
+		b.pressed.connect(func() -> void:
+			if GameState.buy_back(uid):
+				Juice.sfx("ui_purchase")
+				_toast("%s is back in the stash" % str(it.get("name", "Item")))
+			_rebuild()
+			open_buyback())
+		h.add_child(b)
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
+	close.pressed.connect(close_popup)
+	v.add_child(close)
+
+
+func open_set(sid: String) -> void:
+	close_popup()
+	var v := GearUi.overlay(self)
+	_popup = v.get_meta("root")
+	v.add_child(GearUi.set_overview(sid, GameState.selected_character_id))
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
+	close.pressed.connect(close_popup)
+	v.add_child(close)
 
 
 ## =========================================================================

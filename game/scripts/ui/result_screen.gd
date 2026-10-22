@@ -310,13 +310,13 @@ func _stat(parent: Control, icon_id: String, value: String, col: Color) -> void:
 ## A gear well, hidden until its reveal.
 func _loot_well(it: Dictionary) -> Control:
 	var r := str(it.get("rarity", "common"))
-	var w := UiTheme.icon_well(IconSet.item(it), r, 112)
+	var w := GearUi.tile(it, 112, {"worn": false, "new": false})
 	w.set_meta("rarity", r)
 	w.tooltip_text = str(it.get("name", ""))
 	w.modulate.a = 0.0
 	if not _won:
 		## Lost: greyed and stamped with a red cross.
-		w.self_modulate = Color(0.75, 0.6, 0.6)
+		(w.get_child(0) as Control).self_modulate = Color(0.75, 0.6, 0.6)
 		var x := _Cross.new()
 		x.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		w.add_child(x)

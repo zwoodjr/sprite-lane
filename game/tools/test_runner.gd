@@ -125,6 +125,8 @@ func _run() -> void:
 	_test_gear()
 	await _test_upgrades()
 	await _test_gear_screens()
+	await _test_gear_ux()
+	await _test_gear_deploy_sync()
 	await _test_full_sets()
 	var keep_q := [GameState.daily.duplicate(true), GameState.stories.duplicate(true), GameState.milestones.duplicate(true), GameState.kennel_bond.duplicate(true)]
 	await _test_quests_events()
@@ -571,6 +573,302 @@ func _test_gear_screens() -> void:
 	GameState.stash.clear()
 	GameState.loadouts.clear()
 	print("GEAR_SCREENS_OK")
+
+## 8b) Gear UX: item identity, salvage confirm / lock / undo, bulk safety,
+## sort / filter, set progress, old-save safety.
+func _test_gear_ux() -> void:
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.insured.clear()
+	GameState.salvage_bin.clear()
+	GameState.camp["stash"] = 3
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 909
+	## Identity: one icon per variant / look; every set has an emblem.
+	var miss: Array = []
+	for hero in CharacterDefs.PLAYABLE_IDS:
+		var seen := {}
+		for v in GearDefs.variants(hero):
+			var it := {"kind": "weapon", "hero": hero, "variant": str(v["id"]), "legendary": str(v.get("legendary", ""))}
+			var id := IconSet.item(it)
+			if not IconSet.has(id) or seen.has(id):
+				miss.append(id)
+			seen[id] = true
+	for sl in GearDefs.ARMOR_SLOTS + GearDefs.ACCESSORY_SLOTS:
+		var ids := {}
+		for i in range(3):
+			var id2 := IconSet.item({"kind": "armor", "slot": sl, "noun": i})
+			if not IconSet.has(id2):
+				miss.append(id2)
+			ids[id2] = true
+		if ids.size() != 3:
+			miss.append("%s looks" % sl)
+	for sid in GearDefs.GENERAL_SETS.keys() + GearDefs.SURVIVOR_SETS.keys():
+		if not IconSet.has(IconSet.emblem(str(sid))):
+			miss.append(str(sid))
+	_check(miss.is_empty() and IconSet.has("ui_lock"), "gear icons %s" % [miss])
+	_check(GearDefs.noun_index({"slot": "boots", "name": "Worn Striders"}) == 2 and GearDefs.noun_index({"slot": "charm", "name": "Fine Lucky Bottle Cap"}) == 1, "old-save look from name")
+	## Old saves: no lock / new / bin keys -> safe defaults.
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "stash": [{"uid": 3, "name": "Plain Hood", "rarity": "common", "kind": "armor", "slot": "head"}]})
+	_check(GameState.stash.size() == 1 and not bool(GameState.stash[0].get("new", false)) and GameState.salvage_bin.is_empty() and GameState.next_uid >= 4, "old save gear ux defaults")
+	GameState.camp["stash"] = 3
+	GameState.stash.clear()
+	## Confirm rules.
+	var leg := GearDefs.make_weapon("ash_rook", "legendary", rng)
+	var setp := GearDefs.make_gear("chest", "epic", rng, "general", "ash_rook")
+	_check(GearDefs.needs_salvage_confirm(leg) and GearDefs.needs_salvage_confirm(setp) and not GearDefs.needs_salvage_confirm(GearDefs.make_gear("head", "rare", rng)), "salvage confirm rules")
+	## Lock blocks salvage; unlock allows.
+	GameState.add_to_stash(leg)
+	var lu := int(GameState.stash[0]["uid"])
+	_check(bool(GameState.stash[0].get("new", false)), "new item badge")
+	GameState.mark_seen(lu)
+	_check(not bool(GameState.stash_item(lu).get("new", false)), "mark seen")
+	_check(GameState.toggle_lock(lu) and GameState.salvage(lu) == 0 and not GameState.stash_item(lu).is_empty(), "lock blocks salvage")
+	GameState.toggle_lock(lu)
+	## Undo: salvage the Legendary, buy it back with the same uid.
+	var s0 := GameState.account_scrap
+	var got := GameState.salvage(lu)
+	_check(got == GearDefs.SALVAGE["legendary"] and GameState.stash_item(lu).is_empty() and GameState.salvage_bin.size() == 1, "salvage to bin")
+	_check(GameState.buy_back(lu) and GameState.account_scrap == s0 and str(GameState.stash_item(lu).get("legendary", "")) == "last_shift", "buy back restores")
+	_check(not GameState.buy_back(lu), "buy back once")
+	## Bin keeps valuables over a flood of commons; buy back needs scrap.
+	GameState.salvage(lu)
+	for i in range(14):
+		GameState.add_to_stash(GearDefs.make_gear("boots", "common", rng))
+		GameState.salvage(int(GameState.stash[GameState.stash.size() - 1]["uid"]))
+	var kept := false
+	for e in GameState.salvage_bin:
+		kept = kept or int(e["item"]["uid"]) == lu
+	_check(GameState.salvage_bin.size() == GameState.SALVAGE_BIN_MAX and kept, "bin keeps the legendary")
+	var keep_scrap := GameState.account_scrap
+	GameState.account_scrap = 5
+	_check(not GameState.buy_back(lu), "buy back needs scrap")
+	GameState.account_scrap = keep_scrap
+	## Bin survives save/load.
+	var back: Variant = JSON.parse_string(JSON.stringify({"version": 9, "migrated_hangar_v4": true, "stash": GameState.stash, "salvage_bin": GameState.salvage_bin, "camp": {"stash": 3}, "account_scrap": 5000}))
+	GameState.apply_save(back)
+	_check(GameState.salvage_bin.size() == GameState.SALVAGE_BIN_MAX and GameState.buy_back(lu), "bin save round trip")
+	## Bulk salvage: only loose, unlocked, unworn, uninsured Commons.
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.salvage_bin.clear()
+	var keep_uids: Array = []
+	var c_uids: Array = []
+	for i in range(4):
+		GameState.add_to_stash(GearDefs.make_gear(["head", "legs", "charm", "vial"][i], "common", rng))
+		c_uids.append(int(GameState.stash[GameState.stash.size() - 1]["uid"]))
+	GameState.add_to_stash(GearDefs.make_gear("head", "common", rng))
+	var locked_c := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+	GameState.toggle_lock(locked_c)
+	GameState.add_to_stash(GearDefs.make_gear("boots", "common", rng))
+	var worn_c := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+	GameState.equip("pebble", "boots", worn_c)
+	var odd := GearDefs.make_gear("chest", "common", rng)
+	odd["set"] = "night_runner"
+	GameState.add_to_stash(odd)
+	var set_c := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+	GameState.add_to_stash(GearDefs.make_gear("hands", "epic", rng))
+	var ep := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+	GameState.add_to_stash(GearDefs.make_weapon("pebble", "legendary", rng))
+	var lg := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+	keep_uids = [locked_c, worn_c, set_c, ep, lg]
+	var r := GameState.salvage_commons()
+	var all_kept := true
+	for u in keep_uids:
+		all_kept = all_kept and not GameState.stash_item(int(u)).is_empty()
+	var none_left := true
+	for u in c_uids:
+		none_left = none_left and GameState.stash_item(int(u)).is_empty()
+	_check(int(r["count"]) == 4 and all_kept and none_left, "bulk salvage safety %s" % [r])
+	## Sort / filter.
+	for i in range(12):
+		GameState.add_to_stash(GearDefs.roll_drop(6, "ash_rook", 0.8, rng))
+	var ok_sort := true
+	var v := GameState.stash_view("rarity")
+	for i in range(1, v.size()):
+		ok_sort = ok_sort and GearDefs.RARITIES.find(str(v[i - 1]["rarity"])) >= GearDefs.RARITIES.find(str(v[i]["rarity"]))
+	var vn := GameState.stash_view("newest")
+	for i in range(1, vn.size()):
+		ok_sort = ok_sort and int(vn[i - 1]["uid"]) > int(vn[i]["uid"])
+	var vs := GameState.stash_view("set")
+	var seen_loose := false
+	for it in vs:
+		if str(it.get("set", "")) == "":
+			seen_loose = true
+		elif seen_loose:
+			ok_sort = false
+	_check(ok_sort and v.size() == GameState.stash.size(), "stash sorts")
+	var ok_f := true
+	for it in GameState.stash_view("rarity", {"group": "weapon"}):
+		ok_f = ok_f and str(it["kind"]) == "weapon"
+	for it in GameState.stash_view("rarity", {"rarity": "epic"}):
+		ok_f = ok_f and str(it["rarity"]) == "epic"
+	for it in GameState.stash_view("rarity", {"set": "any"}):
+		ok_f = ok_f and str(it.get("set", "")) != ""
+	for it in GameState.stash_view("rarity", {"fits": "pebble"}):
+		ok_f = ok_f and GameState.slot_for(int(it["uid"]), "pebble") != ""
+	var n_fit := 0
+	for it in GameState.stash:
+		if GameState.slot_for(int(it["uid"]), "pebble") != "":
+			n_fit += 1
+	_check(ok_f and GameState.stash_view("rarity", {"fits": "pebble"}).size() == n_fit, "stash filters")
+	## Set progress: 2 Night Runner pieces on, a third reads 2/6 -> 3/6.
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	var nr: Array = []
+	for sl in ["head", "chest", "legs", "boots"]:
+		var g := GearDefs.make_gear(sl, "epic", rng, "general", "ash_rook")
+		g["set"] = "night_runner"
+		GameState.add_to_stash(g)
+		nr.append(int(GameState.stash[GameState.stash.size() - 1]["uid"]))
+	GameState.equip("ash_rook", "head", nr[0])
+	GameState.equip("ash_rook", "chest", nr[1])
+	var sp := GameState.set_progress("ash_rook", GameState.stash_item(nr[2]))
+	_check(sp.size() == 1 and int(sp[0]["now"]) == 2 and int(sp[0]["after"]) == 3 and int(sp[0]["total"]) == 6, "set progress up %s" % [sp])
+	var pd := GearDefs.make_gear("head", "epic", rng, "general", "ash_rook")
+	pd["set"] = "plague_doctor"
+	GameState.add_to_stash(pd)
+	var sp2 := GameState.set_progress("ash_rook", GameState.stash[GameState.stash.size() - 1])
+	_check(sp2.size() == 2 and str(sp2[1]["set"]) == "night_runner" and int(sp2[1]["after"]) == 1, "set progress down %s" % [sp2])
+	_check(GearUi.compare_lines(GearDefs.make_gear("head", "legendary", rng), {}).size() >= 1, "compare lines")
+	## Screens: Hangar stash (sort, filter, confirm, lock, bulk, buy back) + Gear.
+	GameState.selected_character_id = "ash_rook"
+	for i in range(6):
+		GameState.add_to_stash(GearDefs.make_gear(["hands", "vial", "patch", "charm", "legs", "boots"][i], "common", rng))
+	GameState.add_to_stash(GearDefs.make_weapon("ash_rook", "legendary", rng))
+	var hl := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+	var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(h)
+	await get_tree().process_frame
+	h.call("show_tab", "stash")
+	await get_tree().process_frame
+	for s2 in ["slot", "set", "newest", "rarity"]:
+		h.call("set_stash_sort", s2)
+	for f in ["group", "group", "rarity", "set", "fits"]:
+		h.call("cycle_stash_filter", f)
+	await get_tree().process_frame
+	h.call("set_stash_filters", {"group": "", "rarity": "", "set": "", "fits": ""})
+	_check((h.call("stash_shown") as Array).size() == GameState.stash.size(), "stash grid shows all")
+	h.call("inspect_item", hl)
+	await get_tree().process_frame
+	h.call("ask_salvage", hl)
+	await get_tree().process_frame
+	_check(not GameState.stash_item(hl).is_empty() and h.find_child("SalvageConfirm", true, false) != null, "legendary asks to confirm")
+	_check(int(h.call("confirm_salvage", hl)) == GearDefs.SALVAGE["legendary"] and GameState.stash_item(hl).is_empty(), "confirmed salvage")
+	h.call("open_buyback")
+	await get_tree().process_frame
+	_check(h.find_child("BuyBack", true, false) != null and GameState.buy_back(hl), "buy back from the screen")
+	GameState.toggle_lock(hl)
+	h.call("ask_salvage", hl)
+	await get_tree().process_frame
+	_check(not GameState.stash_item(hl).is_empty(), "locked stays")
+	GameState.toggle_lock(hl)
+	var com := -1
+	for it in GameState.stash:
+		if GameState.bulk_salvageable(it):
+			com = int(it["uid"])
+	h.call("ask_salvage", com)
+	_check(GameState.stash_item(com).is_empty(), "common salvages at once")
+	h.call("ask_bulk_salvage")
+	await get_tree().process_frame
+	h.call("open_set", "night_runner")
+	await get_tree().process_frame
+	h.call("close_popup")
+	h.queue_free()
+	await get_tree().process_frame
+	var lo: Node = (load("res://scenes/ui/loadout.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lo)
+	await get_tree().process_frame
+	lo.call("select_slot", "legs")
+	lo.call("preview_item", nr[2])
+	for s3 in ["newest", "set", "rarity"]:
+		lo.call("set_sort", s3)
+	await get_tree().process_frame
+	_check(bool(lo.call("equip_item", nr[2])) and int(GameState.worn_set_counts("ash_rook").get("night_runner", 0)) == 3, "equip from picker")
+	lo.call("select_slot", "")
+	lo.call("open_set", "night_runner")
+	await get_tree().process_frame
+	lo.call("close_popup")
+	lo.queue_free()
+	await get_tree().process_frame
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.salvage_bin.clear()
+	print("GEAR_UX_OK")
+
+
+## 8c) What Gear shows is what prep shows and what the match applies — also
+## after cycling survivors on the Gear screen (owner bug: "equipped a bunch,
+## the loadout wasn't the same").
+func _test_gear_deploy_sync() -> void:
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.insured.clear()
+	GameState.camp["stash"] = 3
+	var keep := [GameState.selected_mode_id, GameState.fast_timers, GameState.tutorial_done]
+	GameState.selected_character_id = "ash_rook"
+	GameState.fast_timers = true
+	GameState.tutorial_done = true
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	GameState.loadout_from = "prep"
+	var lo: Node = (load("res://scenes/ui/loadout.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lo)
+	await get_tree().process_frame
+	## Cycle to another survivor and equip there.
+	lo.call("cycle_hero", 1)
+	lo.call("cycle_hero", 1)
+	var x := str(lo.call("get_hero"))
+	_check(x != "ash_rook" and GameState.selected_character_id == x, "gear hero = deploy hero")
+	for it in [GearDefs.make_weapon(x, "epic", rng), GearDefs.make_gear("head", "rare", rng), GearDefs.make_gear("boots", "legendary", rng), GearDefs.make_gear("charm", "common", rng)]:
+		GameState.add_to_stash(it)
+		var u := int(GameState.stash[GameState.stash.size() - 1]["uid"])
+		var sl := GameState.slot_for(u, x)
+		lo.call("select_slot", sl)
+		lo.call("equip_item", u)
+	## Look at other survivors, come back.
+	lo.call("cycle_hero", 1)
+	lo.call("cycle_hero", -1)
+	var shown: Dictionary = lo.call("shown_uids")
+	_check(shown.size() == 4 and GameState.selected_character_id == x, "gear shows 4 on %s" % x)
+	lo.queue_free()
+	await get_tree().process_frame
+	var p: Node = (load("res://scenes/ui/prep.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(p)
+	await get_tree().process_frame
+	_check(str(p.get("_hero")) == x and (p.call("gear_uids") as Dictionary) == shown, "prep shows the gear screen's kit")
+	p.queue_free()
+	await get_tree().process_frame
+	## Deploy: the match applies exactly this kit.
+	GameState.begin_run()
+	var wi: Dictionary = GameState.gear.get("weapon_item", {})
+	_check(int(wi.get("uid", -1)) == int(shown["weapon"]), "deploy weapon item")
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for i in range(10):
+		await get_tree().physics_frame
+	var pl: Node = m.get_node("World/Player")
+	var pw: Dictionary = pl.get("_weapon")
+	var eq := GameState.equipped_items(x)
+	var applied := {}
+	for sl2 in eq.keys():
+		applied[str(sl2)] = int((eq[sl2] as Dictionary)["uid"])
+	_check(applied == shown and str(pw.get("name", "")) == str(GameState.stash_item(int(shown["weapon"])).get("name", "?")), "match applies gear %s" % [pw.get("name", "")])
+	_check(GameState.gear_stat("max_hp") >= 0.0 and GameState.selected_character_id == x, "match hero")
+	TouchInput.clear_sticks()
+	m.queue_free()
+	for k in range(5):
+		await get_tree().process_frame
+	GameState.loadout_from = "hangar"
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.selected_character_id = "ash_rook"
+	GameState.selected_mode_id = keep[0]
+	GameState.fast_timers = keep[1]
+	GameState.tutorial_done = keep[2]
+	GameState.reset_loadout_to_defaults()
+	print("GEAR_SYNC_OK")
 
 
 ## 9) Each general set at 6 pieces in a short live match (2 / 4 / 6 bonuses).

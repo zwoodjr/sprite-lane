@@ -13,6 +13,8 @@ var _hero: String = ""
 func build(c: VBoxContainer) -> void:
 	c.add_theme_constant_override("separation", 16)
 	_hero = GameState.selected_character_id
+	## Recompute the deploy kit so what this screen shows is what the match applies.
+	GameState.reset_loadout_to_defaults()
 	c.add_child(header("LOADOUT", GameState.go_character_select))
 	_scroll = ScrollContainer.new()
 	_scroll.name = "PrepScroll"
@@ -69,6 +71,9 @@ func _rebuild() -> void:
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	tv.add_child(nm)
 	tv.add_child(UiTheme.head_label(str(GameState.get_mode().get("display_name", "")).to_upper(), UiTheme.T_H3, UiTheme.TEXT_DIM))
+
+	## Gear: exactly what this survivor deploys with (tap = Gear screen).
+	_build_gear_row()
 
 	## Weapon style.
 	var cur_style := GameState.kit_style(_hero)
@@ -141,6 +146,52 @@ func _rebuild() -> void:
 	pad.custom_minimum_size = Vector2(0, 24)
 	_list.add_child(pad)
 	_scroll.set_deferred("scroll_vertical", keep)
+
+
+## The 12 loadout slots as rarity wells (empty slots dimmed) + set chips.
+func _build_gear_row() -> void:
+	var eq := GameState.equipped_items(_hero)
+	var l := UiTheme.head_label("GEAR  %d/%d" % [eq.size(), GearDefs.LOADOUT_SLOTS.size()], UiTheme.T_H3, UiTheme.AMBER)
+	_list.add_child(l)
+	var grid := GridContainer.new()
+	grid.name = "PrepGear"
+	grid.columns = 6
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 8)
+	_list.add_child(grid)
+	for sl in GearDefs.LOADOUT_SLOTS:
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.flat = true
+		b.mouse_force_pass_scroll_events = true
+		b.custom_minimum_size = Vector2(96, 96)
+		for st in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+			b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+		b.pressed.connect(func() -> void: GameState.go_loadout("prep"))
+		var t := GearUi.tile(eq.get(sl, {}), 96, {"worn": false, "new": false, "icon": IconSet.slot(str(sl)), "empty_alpha": 0.3})
+		t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		b.add_child(t)
+		grid.add_child(b)
+	var sets := GameState.worn_set_counts(_hero)
+	if not sets.is_empty():
+		var fl := HFlowContainer.new()
+		fl.add_theme_constant_override("h_separation", 8)
+		fl.add_theme_constant_override("v_separation", 8)
+		_list.add_child(fl)
+		for sid in sets.keys():
+			fl.add_child(UiTheme.chip("%s %d/%d" % [GearDefs.set_title(str(sid)), int(sets[sid]), GearDefs.set_total(str(sid))], UiTheme.TEXT, GearDefs.set_color(str(sid))))
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 8)
+	_list.add_child(gap)
+
+
+## uids shown in the gear row, per slot (tests).
+func gear_uids() -> Dictionary:
+	var out := {}
+	var eq := GameState.equipped_items(_hero)
+	for sl in eq.keys():
+		out[str(sl)] = int((eq[sl] as Dictionary).get("uid", -1))
+	return out
 
 
 ## Section header + the tile row it returns.

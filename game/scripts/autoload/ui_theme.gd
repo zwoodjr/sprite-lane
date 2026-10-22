@@ -421,7 +421,7 @@ func icon_well(icon_id: String, rarity: String = "common", px: int = 128) -> Con
 	var sb := StyleBoxTexture.new()
 	sb.texture = IconSet.frame(rarity)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-		sb.set_texture_margin(side, 12.0)
+		sb.set_texture_margin(side, 16.0)
 		sb.set_content_margin(side, 0.0)
 	sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE_FIT
 	sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE_FIT

@@ -217,6 +217,7 @@ func save_profile() -> void:
 		"trophies": trophies,
 		"loadouts": loadouts,
 		"insured": insured,
+		"salvage_bin": salvage_bin,
 		"next_uid": next_uid,
 		"materials": materials,
 		"daily": daily,
@@ -321,6 +322,12 @@ func apply_save(d: Dictionary) -> void:
 	if typeof(ins) == TYPE_DICTIONARY:
 		for h in (ins as Dictionary).keys():
 			insured[str(h)] = int((ins as Dictionary)[h])
+	var bin: Variant = d.get("salvage_bin", [])
+	salvage_bin = []
+	if typeof(bin) == TYPE_ARRAY:
+		for e in (bin as Array):
+			if typeof(e) == TYPE_DICTIONARY and typeof((e as Dictionary).get("item", null)) == TYPE_DICTIONARY:
+				salvage_bin.append({"item": e["item"], "scrap": maxi(0, int(e.get("scrap", 0)))})
 	var mats: Variant = d.get("materials", {})
 	materials = {}
 	if typeof(mats) == TYPE_DICTIONARY:
@@ -332,6 +339,10 @@ func apply_save(d: Dictionary) -> void:
 		if int(it["uid"]) <= 0:
 			it["uid"] = next_uid
 		next_uid = maxi(next_uid, int(it["uid"]) + 1)
+	for e in salvage_bin:
+		var bi: Dictionary = e["item"]
+		bi["uid"] = int(bi.get("uid", 0))
+		next_uid = maxi(next_uid, int(bi["uid"]) + 1)
 	daily = _dict_or_empty(d.get("daily", {}))
 	if not (daily.get("quests", null) is Array):
 		daily = {}
@@ -785,6 +796,7 @@ func add_to_stash(item: Dictionary) -> bool:
 	var it := item.duplicate(true)
 	it["uid"] = next_uid
 	next_uid += 1
+	it["new"] = true
 	stash.append(it)
 	return true
 
@@ -830,6 +842,7 @@ func equip(hero: String, slot: String, uid: int) -> bool:
 		if int(insured.get(prev[0], -1)) == uid and str(prev[0]) != hero:
 			insured.erase(prev[0])
 	loadout_of(hero)[slot] = uid
+	it.erase("new")
 	save_profile()
 	return true
 
@@ -883,10 +896,11 @@ func is_insured(uid: int) -> bool:
 			return true
 	return false
 
-## Salvage a stash item for scrap (unequips it first).
+## Salvage a stash item for scrap (unequips it first). Locked items refuse.
+## Every salvage lands in the buy-back bin (see buy_back).
 func salvage(uid: int) -> int:
 	var it := stash_item(uid)
-	if it.is_empty():
+	if it.is_empty() or bool(it.get("locked", false)):
 		return 0
 	var by := equipped_by(uid)
 	if not by.is_empty():
@@ -894,9 +908,180 @@ func salvage(uid: int) -> int:
 	stash.erase(it)
 	var v := GearDefs.salvage_value(it)
 	account_scrap += v
+	_bin_push(it, v)
 	save_profile()
 	meta_changed.emit()
 	return v
+
+## Recently salvaged (newest first): [{item, scrap}], at most SALVAGE_BIN_MAX.
+const SALVAGE_BIN_MAX := 10
+var salvage_bin: Array = []
+
+## A full bin drops its oldest Common first, so a pile of bulk-salvaged
+## commons never pushes a mistaken Legendary out of reach.
+func _bin_push(it: Dictionary, scrap: int) -> void:
+	var e := {"item": it.duplicate(true), "scrap": scrap}
+	(e["item"] as Dictionary).erase("new")
+	salvage_bin.push_front(e)
+	while salvage_bin.size() > SALVAGE_BIN_MAX:
+		var drop := -1
+		for i in range(salvage_bin.size() - 1, -1, -1):
+			var bi: Dictionary = salvage_bin[i]["item"]
+			if str(bi.get("rarity", "common")) == "common" and str(bi.get("set", "")) == "":
+				drop = i
+				break
+		salvage_bin.remove_at(drop if drop >= 0 else salvage_bin.size() - 1)
+
+## Buy a salvaged item back for the scrap it paid. False without the scrap or room.
+func buy_back(uid: int) -> bool:
+	for i in range(salvage_bin.size()):
+		var e: Dictionary = salvage_bin[i]
+		var it: Dictionary = e["item"]
+		if int(it.get("uid", -1)) != uid:
+			continue
+		var cost := int(e["scrap"])
+		if account_scrap < cost or stash.size() >= stash_capacity() or not stash_item(uid).is_empty():
+			return false
+		account_scrap -= cost
+		stash.append(it.duplicate(true))
+		salvage_bin.remove_at(i)
+		save_profile()
+		meta_changed.emit()
+		return true
+	return false
+
+## Can this item go in a bulk "salvage all commons"? Never locked, set,
+## Epic / Legendary, worn or insured gear.
+func bulk_salvageable(it: Dictionary) -> bool:
+	var uid := int(it.get("uid", -1))
+	return str(it.get("rarity", "")) == "common" and str(it.get("set", "")) == "" \
+		and not bool(it.get("locked", false)) and str(it.get("legendary", "")) == "" \
+		and equipped_by(uid).is_empty() and not is_insured(uid)
+
+func bulk_salvage_preview() -> Array:
+	var out: Array = []
+	for it in stash:
+		if bulk_salvageable(it):
+			out.append(it)
+	return out
+
+## Salvage every bulk-safe Common. Returns {"count", "scrap"}.
+func salvage_commons() -> Dictionary:
+	var n := 0
+	var total := 0
+	for it in bulk_salvage_preview():
+		var v := salvage(int(it["uid"]))
+		if v > 0:
+			n += 1
+			total += v
+	return {"count": n, "scrap": total}
+
+func toggle_lock(uid: int) -> bool:
+	var it := stash_item(uid)
+	if it.is_empty():
+		return false
+	it["locked"] = not bool(it.get("locked", false))
+	save_profile()
+	return bool(it["locked"])
+
+func is_locked(uid: int) -> bool:
+	return bool(stash_item(uid).get("locked", false))
+
+## Clears the NEW badge (inspected, previewed or equipped).
+func mark_seen(uid: int) -> void:
+	var it := stash_item(uid)
+	if bool(it.get("new", false)):
+		it.erase("new")
+
+func new_count() -> int:
+	var n := 0
+	for it in stash:
+		if bool(it.get("new", false)):
+			n += 1
+	return n
+
+## Sorted + filtered stash. sort: rarity | slot | set | newest.
+## filters: {"group": weapon|mod|armor|accessory|<slot>, "set": "any"|<set id>,
+##   "rarity": <rarity>, "fits": <hero>} (missing / "" = no filter).
+func stash_view(sort: String = "rarity", filters: Dictionary = {}) -> Array:
+	var out: Array = []
+	var g := str(filters.get("group", ""))
+	var fs := str(filters.get("set", ""))
+	var fr := str(filters.get("rarity", ""))
+	var fh := str(filters.get("fits", ""))
+	for it in stash:
+		if g != "" and GearDefs.kind_of(it) != g and str(it.get("slot", "")) != g:
+			continue
+		if fs == "any" and str(it.get("set", "")) == "":
+			continue
+		if fs != "" and fs != "any" and str(it.get("set", "")) != fs:
+			continue
+		if fr != "" and str(it.get("rarity", "")) != fr:
+			continue
+		if fh != "" and slot_for(int(it.get("uid", -1)), fh) == "":
+			continue
+		out.append(it)
+	var key := func(it: Dictionary) -> Array:
+		var r := GearDefs.RARITIES.find(str(it.get("rarity", "common")))
+		var sl := GearDefs.LOADOUT_SLOTS.find(str(it.get("slot", "")))
+		if str(it.get("kind", "")) == "weapon":
+			sl = 0
+		elif str(it.get("kind", "")) == "mod":
+			sl = 1
+		var uid := int(it.get("uid", 0))
+		match sort:
+			"slot":
+				return [sl, -r, -uid]
+			"set":
+				return [0 if str(it.get("set", "")) != "" else 1, str(it.get("set", "")), sl, -r, -uid]
+			"newest":
+				return [-uid]
+		return [-r, sl, -uid]
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ka: Array = key.call(a)
+		var kb: Array = key.call(b)
+		for i in range(ka.size()):
+			if ka[i] != kb[i]:
+				return ka[i] < kb[i]
+		return false)
+	return out
+
+## Set pieces this survivor wears, per set id (ignores Inert vials like _compute_gear).
+func worn_set_counts(hero: String) -> Dictionary:
+	var out := {}
+	var eq := equipped_items(hero)
+	for sl in eq.keys():
+		var it: Dictionary = eq[sl]
+		if not GearDefs.fits(it, str(sl), hero) or str(sl) in ["weapon", "mod1", "mod2"]:
+			continue
+		var sid := str(it.get("set", ""))
+		if sid != "":
+			out[sid] = int(out.get(sid, 0)) + 1
+	return out
+
+## Set progress if `it` went into its slot on `hero`: [{set, now, after, total}]
+## for the item's set (up) and the replaced piece's set (down).
+func set_progress(hero: String, it: Dictionary) -> Array:
+	var out: Array = []
+	var sl := slot_for(int(it.get("uid", -1)), hero)
+	if sl == "":
+		sl = str(it.get("slot", ""))
+	var cur: Dictionary = equipped_items(hero).get(sl, {})
+	if int(cur.get("uid", -2)) == int(it.get("uid", -1)):
+		cur = {}
+	var counts := worn_set_counts(hero)
+	var sid := str(it.get("set", ""))
+	var old := str(cur.get("set", ""))
+	var worn := equipped_by(int(it.get("uid", -1)))
+	var on_hero := not worn.is_empty() and str(worn[0]) == hero
+	if sid != "":
+		var now := int(counts.get(sid, 0))
+		var after := now if on_hero or old == sid else now + 1
+		out.append({"set": sid, "now": now, "after": after, "total": GearDefs.set_total(sid)})
+	if old != "" and old != sid and not on_hero:
+		var n2 := int(counts.get(old, 0))
+		out.append({"set": old, "now": n2, "after": n2 - 1, "total": GearDefs.set_total(old)})
+	return out
 
 func material_count(id: String) -> int:
 	return int(materials.get(id, 0))
@@ -1371,6 +1556,7 @@ func reset_profile() -> void:
 	meta_upgrades.clear()
 	camp.clear()
 	stash.clear()
+	salvage_bin.clear()
 	trophies.clear()
 	loadouts.clear()
 	insured.clear()

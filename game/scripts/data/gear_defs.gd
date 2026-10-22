@@ -341,7 +341,10 @@ static func make_gear(slot: String, rarity: String, rng: RandomNumberGenerator, 
 	var kind := "accessory" if slot in ACCESSORY_SLOTS else "armor"
 	var it := {"kind": kind, "slot": slot, "rarity": rarity, "stats": _roll_stats(slot, rarity, rng),
 		"set": "", "hero": "", "icon": str(SLOT_ICON.get(slot, ""))}
-	var noun: String = _pick(SLOT_NOUN.get(slot, ["Piece"]), rng)
+	var nouns: Array = SLOT_NOUN.get(slot, ["Piece"])
+	var ni := rng.randi() % nouns.size()
+	var noun: String = nouns[ni]
+	it["noun"] = ni
 	it["name"] = "%s %s" % [_pick(RARITY_ADJ[rarity], rng), noun]
 	if kind == "armor" and rarity in ["epic", "legendary"] and set_kind != "":
 		if set_kind == "survivor" and hero != "":
@@ -358,6 +361,75 @@ static func make_gear(slot: String, rarity: String, rng: RandomNumberGenerator, 
 		it["needs_heart"] = true
 		it["charged"] = false
 	return it
+
+
+## Which of the slot's three looks an item has (its noun). Old saves have no
+## "noun" key: read it from the name; survivor-set pieces use a look per set.
+static func noun_index(it: Dictionary) -> int:
+	if it.has("noun"):
+		return clampi(int(it["noun"]), 0, 2)
+	var nouns: Array = SLOT_NOUN.get(str(it.get("slot", "")), [])
+	var nm := str(it.get("name", ""))
+	var best := -1
+	var best_len := 0
+	for i in range(nouns.size()):
+		var n := str(nouns[i])
+		if nm.ends_with(n) and n.length() > best_len:
+			best = i
+			best_len = n.length()
+	if best >= 0:
+		return best
+	var sid := str(it.get("set", ""))
+	if sid != "":
+		return absi(sid.hash()) % 3
+	return 0
+
+
+## ---------------------------------------------------------------- set info
+## One colour per set (badge plate behind its emblem icon emb_<set>).
+const SET_COLOR := {
+	"plague_doctor": Color("2b5a2c"), "demolition_crew": Color("763420"), "night_runner": Color("36424f"),
+	"field_salvager": Color("7a5520"), "foremans_kit": Color("a8520f"), "bell_ringers_shroud": Color("5a3254"),
+	"quarry_plate": Color("5a4636"), "linemans_rig": Color("1f5a58"), "cathedral_vestments": Color("9a1e26"),
+	"surgeons_coat": Color("59563a"), "smugglers_wraps": Color("3a3436"), "flight_crew_gear": Color("5e6d7a"),
+}
+
+
+static func set_color(sid: String) -> Color:
+	return SET_COLOR.get(sid, Color("3a3436"))
+
+
+static func set_total(sid: String) -> int:
+	return (SURVIVOR_SETS[sid]["slots"] as Array).size() if SURVIVOR_SETS.has(sid) else ARMOR_SLOTS.size()
+
+
+static func set_slots(sid: String) -> Array:
+	return SURVIVOR_SETS[sid]["slots"] if SURVIVOR_SETS.has(sid) else ARMOR_SLOTS
+
+
+## Piece counts at which each bonus turns on.
+static func set_thresholds(sid: String) -> Array:
+	return [2, 3] if SURVIVOR_SETS.has(sid) else GENERAL_THRESHOLDS
+
+
+static func set_bonuses(sid: String) -> Array:
+	if SURVIVOR_SETS.has(sid):
+		return SURVIVOR_SETS[sid]["bonus"]
+	return GENERAL_SETS.get(sid, {}).get("bonus", [])
+
+
+static func set_hero(sid: String) -> String:
+	return str(SURVIVOR_SETS[sid]["hero"]) if SURVIVOR_SETS.has(sid) else ""
+
+
+## Salvaging these asks twice (Epic, Legendary and every set piece).
+static func needs_salvage_confirm(it: Dictionary) -> bool:
+	return str(it.get("rarity", "common")) in ["epic", "legendary"] or str(it.get("set", "")) != ""
+
+
+## Coarse filter group for the stash: weapon / mod / armor / accessory.
+static func kind_of(it: Dictionary) -> String:
+	return str(it.get("kind", "armor"))
 
 
 static func survivor_set_for(hero: String) -> String:
@@ -516,6 +588,11 @@ static func stat_lines(item: Dictionary) -> PackedStringArray:
 	if bool(item.get("needs_heart", false)) and not bool(item.get("charged", false)):
 		out.append("Inert — awaken with a Dust Heart")
 	return out
+
+
+## (Call this from outside: GearDefs.set_title() resolves to Resource.set_name.)
+static func set_title(sid: String) -> String:
+	return set_name(sid)
 
 
 static func set_name(sid: String) -> String:

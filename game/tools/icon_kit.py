@@ -71,6 +71,7 @@ class Icon:
         self.f, self.ox, self.oy = f, ox, oy
         self.part = np.full((S, S), -1, np.int32)
         self.parts = []  # (ramp, opts)
+        self.remap = {}  # ramp -> ramp, applied as parts are added (variants)
 
     # ---------------------------------------------------------- raster core
     def _mask_from(self, fn):
@@ -80,7 +81,7 @@ class Icon:
 
     def _add(self, m, ramp, **o):
         idx = len(self.parts)
-        self.parts.append((ramp, o))
+        self.parts.append((self.remap.get(ramp, ramp), o))
         self.part[m] = idx
         return idx
 
