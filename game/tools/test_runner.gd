@@ -17,9 +17,12 @@ const MENUS := [
 	"res://scenes/ui/hangar.tscn",
 	"res://scenes/ui/loadout.tscn",
 	"res://scenes/ui/logbook.tscn",
+	"res://scenes/ui/mode_choice.tscn",
+	"res://scenes/ui/campaign_map.tscn",
 ]
 
 var _bad: int = 0
+var _campaign_levels_run: int = 0
 
 
 func _ready() -> void:
@@ -142,6 +145,7 @@ func _run() -> void:
 	await _test_ash_breaks()
 	GameState.kit = keep_kit
 	await _test_minimap()
+	await _test_campaign()
 	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
 	await _test_depth_e6()
 	await _test_quickwins()
@@ -2017,3 +2021,118 @@ func _test_minimap() -> void:
 		await get_tree().process_frame
 	await _end_depth_match(m)
 	print("MINIMAP_OK")
+
+
+## =============================================================================
+## CAMPAIGN (Act One): save migration + sanitising, flags (committed on a win,
+## dropped on a loss), unlock order, and every level loads and runs to the end
+## by debug-completing its objectives (god mode). Wander state is untouched.
+func _test_campaign() -> void:
+	var keep := [GameState.campaign.duplicate(true), GameState.selected_character_id, GameState.selected_pet_id,
+		GameState.account_scrap, GameState.camp.duplicate(), GameState.stash.duplicate(true), GameState.selected_mode_id]
+	## --- save: old saves (no key), junk, round trip
+	GameState._load_campaign(null)
+	_check(GameState.campaign_done_count() == 0 and (GameState.campaign["roster"] as Array).is_empty(), "campaign: missing key = fresh")
+	GameState._load_campaign({"done": {"p0_mayday": {"best": 91.0, "runs": 2}, "bogus": {"best": 1}}, "flags": {"a": 1.0, "b": [1], "c": "x"},
+		"roster": ["ash_rook", "nobody"], "pets": ["noel", "cat"], "parts": ["frame", "wing"], "last": "zzz", "picks": {"l07_mother_vane": "pebble", "l01_rubble_run": "ghost"}})
+	_check(GameState.campaign_level_done("p0_mayday") and GameState.campaign_done_count() == 1, "campaign: known levels kept, junk dropped")
+	_check(typeof(GameState.campaign["flags"]["a"]) == TYPE_INT and not (GameState.campaign["flags"] as Dictionary).has("b") and str(GameState.campaign["flags"]["c"]) == "x", "campaign: flags sanitised")
+	_check(GameState.campaign["roster"] == ["ash_rook"] and GameState.campaign["pets"] == ["noel"] and GameState.campaign["parts"] == ["frame"], "campaign: roster / pets / parts sanitised")
+	_check(str(GameState.campaign["last"]) == "" and (GameState.campaign["picks"] as Dictionary).size() == 1, "campaign: last + picks sanitised")
+	var snap: Dictionary = GameState.campaign.duplicate(true)
+	GameState._load_campaign(JSON.parse_string(JSON.stringify(GameState.campaign)))
+	_check(JSON.stringify(GameState.campaign) == JSON.stringify(snap), "campaign: JSON round trip")
+	GameState.save_profile()
+	var raw := FileAccess.get_file_as_string(GameState.SAVE_PATH)
+	var old: Dictionary = JSON.parse_string(raw)
+	old.erase("campaign")
+	var scrap_before := GameState.account_scrap
+	GameState.apply_save(old)
+	_check(GameState.campaign_done_count() == 0 and GameState.account_scrap == scrap_before, "campaign: pre-campaign save loads, Wander untouched")
+	GameState.apply_save(JSON.parse_string(raw))
+	_check(GameState.campaign_level_done("p0_mayday"), "campaign: saved progress loads back")
+	## --- unlocks + flags
+	GameState.campaign = GameState._fresh_campaign()
+	_check(GameState.campaign_level_unlocked("p0_mayday") and not GameState.campaign_level_unlocked("l01_rubble_run"), "campaign: prologue first, the rest locked")
+	_check(GameState.prepare_campaign_level("p0_mayday"), "campaign: prologue prepares")
+	_check(GameState.in_campaign_run() and GameState.selected_character_id == "helm_wisp" and not bool(GameState.pet.get("active", true)), "campaign: forced hero, no dog yet")
+	_check(not GameState.twist_on("one_pad") and not GameState.exposure_active() and GameState.get_mode()["id"] == "campaign", "campaign: no twists / exposure, own mode")
+	GameState.set_campaign_flag("test_flag", 2)
+	_check(GameState.campaign_flag_is("test_flag", 2) and not GameState.campaign_flag_is("test_flag", 3), "campaign: run flag readable")
+	GameState.fail_campaign_level("test")
+	_check(GameState.campaign_flag("test_flag", null) == null and not GameState.campaign_level_done("p0_mayday"), "campaign: a loss forgets this attempt's choices")
+	GameState.leave_campaign_run()
+	_check(GameState.selected_character_id == str(keep[1]) and not GameState.in_campaign_run(), "campaign: leaving restores the Wander hero")
+	GameState.prepare_campaign_level("p0_mayday")
+	GameState.set_campaign_flag("test_flag", true)
+	GameState.complete_campaign_level(100.0)
+	_check(GameState.campaign_flag_is("test_flag") and GameState.campaign_level_done("p0_mayday"), "campaign: a win commits the choices")
+	_check(GameState.campaign_has_survivor("ash_rook") and "noel" in GameState.campaign["pets"], "campaign: prologue rewards (Rook, Noel)")
+	_check(GameState.campaign_level_unlocked("l01_rubble_run") == CampaignDefs.is_playable("l01_rubble_run"), "campaign: next level unlocks")
+	GameState.leave_campaign_run()
+	## --- every playable level runs to the end
+	for id in CampaignDefs.ORDER:
+		if CampaignDefs.is_playable(str(id)):
+			await _campaign_run_level(str(id))
+	GameState.campaign_autoplay = false
+	GameState.leave_campaign_run()
+	GameState.campaign = keep[0]
+	GameState.selected_character_id = keep[1]
+	GameState.selected_pet_id = keep[2]
+	GameState.account_scrap = keep[3]
+	GameState.camp = keep[4]
+	GameState.stash = keep[5]
+	GameState.selected_mode_id = keep[6]
+	GameState.reset_loadout_to_defaults()
+	_check(_campaign_levels_run >= 1, "campaign: levels ran (%d)" % _campaign_levels_run)
+	print("CAMPAIGN_OK")
+
+
+func _campaign_run_level(id: String) -> void:
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.campaign_debug_unlock_to(id)
+	GameState.campaign_autoplay = true
+	GameState.campaign_autoplay_exit = false
+	_check(GameState.campaign_level_unlocked(id), "campaign %s unlocked after the ones before" % id)
+	if not GameState.prepare_campaign_level(id):
+		_check(false, "campaign %s prepares" % id)
+		return
+	var lv := GameState.campaign_level()
+	var m: Node = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	var runner: Node = m.get("runner")
+	var objs := 0
+	var last_idx := -1
+	var frames := 0
+	while frames < 4000 and not GameState.campaign_level_done(id):
+		frames += 1
+		await get_tree().physics_frame
+		if not is_instance_valid(m) or bool(m.get("_ended")) and not bool(m.get("won")):
+			break
+		if int(runner.get("idx")) != last_idx:
+			last_idx = int(runner.get("idx"))
+			objs += 1
+		## God mode without the Admin autoload (earlier sections free it).
+		var pl := m.get_node_or_null("World/Player")
+		if pl:
+			pl.set("hp", float(pl.get("max_hp")))
+			pl.set("_iframes", 0.5)
+		if frames % 12 == 0 and bool(m.get("started")) and not bool(runner.get("busy")) and not get_tree().paused:
+			runner.call("debug_complete")
+	var ok := GameState.campaign_level_done(id)
+	_campaign_levels_run += 1
+	_check(ok, "campaign %s completes by debug-complete (frames %d, objectives %d)" % [id, frames, objs])
+	var rw: Dictionary = lv.get("rewards", {})
+	for h in rw.get("survivors", []):
+		_check(GameState.campaign_has_survivor(str(h)) or GameState.campaign_fallen(str(h)), "campaign %s: %s joined" % [id, h])
+	## Let the outro scene / card play out (errors surface in the log).
+	for k in range(150):
+		await get_tree().process_frame
+	print("CAMPAIGN_LEVEL %s done=%s frames=%d objectives=%d time=%.1f" % [id, ok, frames, objs, float(m.get("level_time")) if is_instance_valid(m) else -1.0])
+	get_tree().paused = false
+	if is_instance_valid(m):
+		m.queue_free()
+	GameState.leave_campaign_run()
+	for k in range(3):
+		await get_tree().process_frame

@@ -90,10 +90,10 @@ func build(c: VBoxContainer) -> void:
 	top.add_child(scrap)
 
 	## Actions — bottom of the screen, under the thumb.
-	var first := not GameState.tutorial_done
-	var play := UiTheme.big_button("PLAY" if not first else "PLAY  ·  TUTORIAL", UiTheme.AMBER, 96, 40)
+	## PLAY -> CAMPAIGN (the story) or WANDER (the endless runs).
+	var play := UiTheme.big_button("PLAY", UiTheme.AMBER, 96, 40)
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	play.pressed.connect(GameState.go_mode_select)
+	play.pressed.connect(GameState.go_mode_choice)
 	c.add_child(play)
 	_pulse(play)
 	var sub := HBoxContainer.new()

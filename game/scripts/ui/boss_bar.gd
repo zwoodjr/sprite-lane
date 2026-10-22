@@ -49,6 +49,9 @@ func _find_boss() -> void:
 			var k := str(b.get("kind"))
 			var def: Dictionary = EnemyDefs.get_kind(k)
 			_name = str(def.get("display_name", k)).to_upper()
+			## Campaign named bosses (Mother Vane, the Matriarch...).
+			if str(b.get("display_name")) != "":
+				_name = str(b.get("display_name")).to_upper()
 			_phases = def.get("phases", [])
 			_shown_ratio = 1.0
 			_lag_ratio = 1.0

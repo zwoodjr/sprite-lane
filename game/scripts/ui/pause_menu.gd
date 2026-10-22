@@ -98,6 +98,23 @@ func _show_main() -> void:
 	settings.icon = IconSet.tex("tab_workshop", false)
 	settings.pressed.connect(_show_settings)
 	v.add_child(settings)
+	if GameState.in_campaign_run():
+		## Campaign: nothing to lose. Restart the level or walk back to the map.
+		var lid := GameState.campaign_level_id
+		var restart := UiTheme.big_button("RESTART LEVEL", UiTheme.LINE, 64, 20)
+		restart.pressed.connect(func() -> void:
+			get_tree().paused = false
+			GameState.fail_campaign_level("restart")
+			GameState.go_campaign_level(lid, GameState.selected_character_id))
+		v.add_child(restart)
+		var leave := UiTheme.big_button("LEAVE TO MAP", UiTheme.RUST, 64, 20)
+		leave.pressed.connect(func() -> void:
+			get_tree().paused = false
+			GameState.fail_campaign_level("left")
+			GameState.go_campaign_map())
+		v.add_child(leave)
+		_set_content(center)
+		return
 	var quit := UiTheme.big_button("ABANDON RUN", UiTheme.RUST, 64, 20)
 	quit.pressed.connect(func() -> void:
 		if not _confirm_abandon:

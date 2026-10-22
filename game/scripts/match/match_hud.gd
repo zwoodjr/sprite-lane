@@ -136,7 +136,7 @@ func setup(match_node: Node) -> void:
 	_pause.set_script(PauseMenuScript)
 	get_parent().add_child(_pause)
 	TouchInput.pause_pressed.connect(_open_pause)
-	if not GameState.tutorial_done:
+	if not GameState.tutorial_done and not GameState.in_campaign_run():
 		tutorial = Control.new()
 		tutorial.set_script(TutorialScript)
 		root.add_child(tutorial)
@@ -480,6 +480,18 @@ func _layout() -> void:
 	_phase_card.reset_size()
 	var phase_cx := (gap_l + gap_r) * 0.5
 	_phase_card.position = Vector2(phase_cx - _phase_card.size.x * 0.5, m.position.y + 2.0)
+	if campaign:
+		## Campaign: the objective tracker gets its own full-width row under
+		## the vitals / minimap (titles are longer than "EXTRACT IN").
+		var ow := minf(m.size.x - 32.0, 600.0)
+		_phase_card.custom_minimum_size = Vector2(ow, 0)
+		_phase_label.custom_minimum_size = Vector2(ow - 96.0, 0)
+		_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_phase_hint.custom_minimum_size = Vector2(ow - 20.0, 0)
+		_phase_bar.custom_minimum_size = Vector2(minf(ow - 120.0, 360.0), 6)
+		_phase_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		_phase_card.reset_size()
+		_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y + map_s + 14.0)
 	if _extract_bar:
 		var tw := minf(220.0, phase_w - 20.0)
 		_extract_bar.size = Vector2(tw, 8)
@@ -492,6 +504,8 @@ func _layout() -> void:
 		_boss_bar.position = Vector2(vp.x * 0.5 - bw * 0.5, m.position.y + 74.0)
 	var below := maxf(_threat_panel.position.y + _threat_panel.size.y, m.position.y + vit.size.y + 60.0) + 10.0
 	below = maxf(below, _phase_card.position.y + _phase_card.size.y + 54.0)
+	if campaign:
+		below = _phase_card.position.y + _phase_card.size.y + 12.0
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)
@@ -682,6 +696,48 @@ func open_pause() -> void:
 	_open_pause()
 
 ## ---------------------------------------------------------------------------
+## Campaign: the phase strip becomes the objective tracker (title, count /
+## timer, progress bar, hint); no loot / threat readout, no extract clock.
+
+var campaign: bool = false
+
+func set_campaign() -> void:
+	campaign = true
+	_threat_panel.visible = false
+	if _extract_bar:
+		_extract_bar.visible = false
+	_phase_label.text = ""
+	_timer_label.text = ""
+	_phase_label.clip_text = true
+	_phase_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_phase_label.add_theme_font_size_override("font_size", 22)
+	_phase_label.add_theme_color_override("font_color", UiTheme.TEAL)
+	_phase_hint.visible = true
+	_phase_hint.text = ""
+	_phase_hint.add_theme_constant_override("outline_size", 5)
+	_phase_hint.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.9))
+	_phase_hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_phase_bar.visible = false
+	_layout()
+
+
+func set_objective(title: String, prog: String, ratio: float, hint: String) -> void:
+	if _phase_label.text != title.to_upper():
+		_phase_label.text = title.to_upper()
+		_phase_shown_t = 0.0
+		_pulse(_phase_card)
+	_timer_label.text = prog
+	_timer_label.visible = prog != ""
+	_phase_bar.visible = ratio >= 0.0
+	if ratio >= 0.0:
+		_phase_bar.value = clampf(ratio, 0.0, 1.0)
+		if _phase_bar.get_meta("fill_col", Color.BLACK) != UiTheme.TEAL:
+			_phase_bar.set_meta("fill_col", UiTheme.TEAL)
+			UiTheme.skin_bar(_phase_bar, UiTheme.TEAL)
+	## Campaign hints stay up (they say what to do right now).
+	_phase_hint.text = hint
+
+## ---------------------------------------------------------------------------
 ## Per-frame
 
 func _process(delta: float) -> void:
@@ -709,7 +765,7 @@ func _process(delta: float) -> void:
 			_ammo_label.visible = true
 			_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if over or hr > 0.8 else (UiTheme.AMBER if hr > 0.5 else UiTheme.TEXT))
 	_phase_shown_t += delta
-	if _phase_hint:
+	if _phase_hint and not campaign:
 		_phase_hint.modulate.a = clampf((6.0 - _phase_shown_t) / 0.8, 0.0, 1.0)
 	## Rotating tips (when the tutorial isn't talking)
 	## Rotating tip bar removed from combat (audit: text wall); tips live in

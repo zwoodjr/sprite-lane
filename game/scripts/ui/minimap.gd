@@ -333,14 +333,19 @@ func _gather() -> void:
 		var off9: Vector2 = (pad as Node2D).global_position - origin
 		var last := bool(pad.get("last_chance"))
 		var pcol := MapIcons.C_PAD_LAST if last else (MapIcons.C_PAD_OPEN if _extract_open else MapIcons.C_PAD_SEALED)
+		## Campaign objective markers carry their own glyph (meta "map_glyph").
+		var pg := MapIcons.PAD
+		if (pad as Node).has_meta("map_glyph"):
+			pg = int((pad as Node).get_meta("map_glyph"))
+			pcol = Color("5cd2c0")
 		if off9.length() <= reach:
-			_add(off9, MapIcons.PAD, pcol, 1.0)
+			_add(off9, pg, pcol, 1.0)
 			if _p_n < _p_off.size():
 				_p_off[_p_n] = off9
 				_p_col[_p_n] = pcol
 				_p_n += 1
 		else:
-			_cand(off9, MapIcons.PAD, pcol, 0 if (_extract_open or last) else 5)
+			_cand(off9, pg, pcol, 0 if (_extract_open or last) else 5)
 	_pick_rim()
 
 
@@ -515,6 +520,11 @@ func _draw_icons() -> void:
 	ci.draw_colored_polygon(outl, MapIcons.DARK)
 	ci.draw_colored_polygon(pts, MapIcons.C_PLAYER)
 	## Status plate on the lower rim (fits inside the box at any size).
+	## Campaign levels have no extract clock: no plate.
+	if GameState.in_campaign_run():
+		if _legend_t > 0.0:
+			_draw_legend(ci)
+		return
 	var txt2 := "OPEN" if _extract_open else "SEALED"
 	var fnt: Font = UiTheme.font_button
 	var fs2 := 12

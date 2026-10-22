@@ -171,6 +171,31 @@ func open_panel() -> void:
 				_refresh()],
 			["Empty backpack", _empty_bag],
 		])
+	_section(v, "Campaign")
+	if in_match and _match().has_method("debug_complete_objective"):
+		_row(v, [
+			["Complete objective", func() -> void:
+				var mc := _match()
+				close_panel()
+				get_tree().paused = false
+				mc.call("debug_complete_objective")],
+			["Win level", func() -> void: _call_match("_on_extract_requested")],
+		])
+	_row(v, [
+		["Campaign map", func() -> void: _go(GameState.go_campaign_map)],
+		["Unlock all levels", func() -> void:
+			GameState.campaign_debug_unlock_to(str(CampaignDefs.ORDER[CampaignDefs.ORDER.size() - 1]))
+			_refresh()],
+	])
+	var jumps: Array = []
+	for id in CampaignDefs.ORDER:
+		if CampaignDefs.is_playable(str(id)):
+			var lid := str(id)
+			jumps.append(["%s %s" % [CampaignDefs.number_tag(lid), str(CampaignDefs.level(lid).get("title", ""))], func() -> void:
+				GameState.campaign_debug_unlock_to(lid)
+				_go(func() -> void: GameState.go_campaign_level(lid))])
+	for i in range(0, jumps.size(), 2):
+		_row(v, jumps.slice(i, i + 2))
 	_section(v, "Account")
 	_row(v, [
 		["+1,000 scrap", func() -> void: _scrap(1000)],

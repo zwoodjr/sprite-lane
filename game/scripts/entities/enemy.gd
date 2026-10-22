@@ -53,6 +53,11 @@ var faction: String = "plague"
 ## E2: elite traits (FactionDefs.TRAITS), raider crew, infighting foe.
 var traits: Array = []
 var crew: Node = null
+## Campaign: a named boss's extra moves (scripts/campaign/bosses/*.gd, RefCounted
+## with tick(enemy, delta) -> bool "I used this frame").
+var brain: RefCounted = null
+## Campaign: shown instead of the kind's display name (boss bar, banners).
+var display_name: String = ""
 var _foe: Node2D = null
 var _foe_check: float = 0.0
 var _infight_cd: float = 0.0
@@ -387,6 +392,8 @@ func _physics_process(delta: float) -> void:
 	if not traits.is_empty() and _tick_traits(delta):
 		return
 	if kind == RadioDefs.WARDEN_KIND and role == "boss" and _tick_warden(delta):
+		return
+	if brain != null and bool(brain.call("tick", self, delta)):
 		return
 	_player = get_tree().get_first_node_in_group("player") as Node2D
 	if _tick_infight(delta):
@@ -742,6 +749,8 @@ func _die() -> void:
 	## Kill hitstop for every hero (light; heavy for brutes / elites / bosses).
 	Juice.kill_stop(_archetype() == "brute" or role != "")
 	died.emit()
+	if brain != null and brain.has_method("on_death"):
+		brain.call("on_death", self)
 	collision_layer = 0
 	_warn.visible = false
 	if _tele:

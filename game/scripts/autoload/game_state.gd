@@ -231,8 +231,8 @@ func save_profile() -> void:
 		"best_tier_extracted": best_tier_extracted,
 		"total_runs": total_runs,
 		"selected_mode_id": selected_mode_id,
-		"selected_character_id": selected_character_id,
-		"selected_pet_id": selected_pet_id,
+		"selected_character_id": _wander_hero if in_campaign_run() and _wander_hero != "" else selected_character_id,
+		"selected_pet_id": _wander_pet if in_campaign_run() and _wander_pet != "" else selected_pet_id,
 		"ingredients": ingredients,
 		"tonics": tonics,
 		"tonic_loadout": tonic_loadout,
@@ -243,6 +243,7 @@ func save_profile() -> void:
 		"tier_clears": tier_clears,
 		"plane_parts": plane_parts,
 		"pacts": pacts,
+		"campaign": campaign,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
@@ -374,6 +375,7 @@ func apply_save(d: Dictionary) -> void:
 	if PetDefs.is_equipable(pet_id):
 		selected_pet_id = pet_id
 	_load_depth(d)
+	_load_campaign(d.get("campaign", {}))
 	_migrate_hangar_v4()
 
 ## Depth Update keys (old saves: all missing → empty, safe defaults).
@@ -565,6 +567,9 @@ func zone_tier() -> int:
 	return int(get_mode().get("tier", 1))
 
 func twist_on(twist: String) -> bool:
+	## Campaign levels are handcrafted: no zone twists.
+	if in_campaign_run():
+		return false
 	return ZoneDefs.has_twist(zone_tier(), twist)
 
 func pacts_unlocked() -> bool:
@@ -1079,6 +1084,9 @@ func medicine_carried() -> int:
 
 ## Medicine slows you unless a Saint's Tincture was drunk.
 func carry_speed_mult() -> float:
+	## Campaign rescue / carry objectives: a patient or a crate on your back.
+	if in_campaign_run() and campaign_carry_slow < 1.0:
+		return campaign_carry_slow
 	if tonic_fx("carry_free") > 0.0:
 		return 1.0
 	return MedicineDefs.carry_mult(medicine_carried())
@@ -1151,6 +1159,9 @@ func toggle_tonic(tid: String) -> bool:
 ## On deploy: every slotted tonic in stock is drunk (stock −1) for this run.
 func _drink_tonics() -> void:
 	run_tonics = []
+	## Campaign levels never spend the Wander tonic stock.
+	if in_campaign_run():
+		return
 	var slots := tonic_slot_count()
 	for tid in tonic_loadout.duplicate():
 		if run_tonics.size() >= slots:
@@ -1183,6 +1194,8 @@ func tonic_fx_mult(key: String) -> float:
 	return m
 
 func exposure_active() -> bool:
+	if in_campaign_run():
+		return false
 	return int(get_mode().get("tier", 1)) >= MedicineDefs.EXPOSURE_FROM_TIER
 
 ## How fast exposure builds for this hero / kit (tonics, Cinder, gear resist).
@@ -1379,10 +1392,13 @@ func reset_profile() -> void:
 	best_payout = 0
 	best_tier_extracted = 0
 	total_runs = 0
+	campaign = _fresh_campaign()
 	save_profile()
 	meta_changed.emit()
 
 func get_mode() -> Dictionary:
+	if in_campaign_run():
+		return _campaign_mode()
 	return ModeDefs.get_mode(selected_mode_id)
 
 func get_character() -> Dictionary:
@@ -1817,9 +1833,12 @@ func timer_scale() -> float:
 func go_main_menu() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
+	leave_campaign_run()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 func go_mode_select() -> void:
+	leave_campaign_run()
+	play_mode = "wander"
 	get_tree().change_scene_to_file("res://scenes/ui/mode_select.tscn")
 
 func go_character_select() -> void:
@@ -1851,6 +1870,7 @@ func go_logbook() -> void:
 func go_hangar() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
+	leave_campaign_run()
 	get_tree().change_scene_to_file("res://scenes/ui/hangar.tscn")
 
 func go_match() -> void:
@@ -1865,3 +1885,386 @@ func go_result() -> void:
 	Engine.time_scale = 1.0
 	TouchInput.clear_sticks()
 	get_tree().change_scene_to_file("res://scenes/ui/result_screen.tscn")
+
+
+## =============================================================================
+## CAMPAIGN — Act One: The Long Dust (scripts/data/campaign_defs.gd).
+## Wander (the endless extraction runs) is untouched: the campaign keeps its own
+## progress under "campaign" in the save and only ever ADDS to the shared camp
+## (hangar features the story introduces, scrap, gear). Old saves load with a
+## fresh campaign.
+
+const CAMPAIGN_V := 1
+var campaign: Dictionary = _fresh_campaign()
+## "wander" | "campaign": which mode the current run belongs to (never saved).
+var play_mode: String = "wander"
+var campaign_level_id: String = ""
+## Choices made during the current attempt; committed only when it succeeds.
+var campaign_run_flags: Dictionary = {}
+## Tests / bots: story scenes and cards advance on their own. The outro /
+## fail cards only pick (and change scene) with campaign_autoplay_exit.
+var campaign_autoplay: bool = false
+var campaign_autoplay_exit: bool = false
+## Speed multiplier while carrying something in a campaign level (1 = free).
+var campaign_carry_slow: float = 1.0
+## Level-end summary for the outro card.
+var campaign_result: Dictionary = {}
+var _wander_hero: String = ""
+var _wander_pet: String = ""
+var _campaign_mode_cache: Dictionary = {}
+var _campaign_mode_for: String = ""
+
+
+func _fresh_campaign() -> Dictionary:
+	return {"v": CAMPAIGN_V, "done": {}, "flags": {}, "roster": [], "pets": [], "parts": [], "last": "", "picks": {}}
+
+
+## Sanitised load: unknown levels / heroes / pets dropped, wrong types ignored.
+func _load_campaign(v: Variant) -> void:
+	campaign = _fresh_campaign()
+	if typeof(v) != TYPE_DICTIONARY:
+		return
+	var d: Dictionary = v
+	var done := _dict_or_empty(d.get("done", {}))
+	for k in done.keys():
+		if CampaignDefs.has_level(str(k)) and typeof(done[k]) == TYPE_DICTIONARY:
+			var e: Dictionary = done[k]
+			campaign["done"][str(k)] = {"best": maxf(0.0, float(e.get("best", 0.0))), "runs": maxi(1, int(e.get("runs", 1)))}
+	var fl := _dict_or_empty(d.get("flags", {}))
+	for k in fl.keys():
+		var fv: Variant = fl[k]
+		if typeof(fv) == TYPE_FLOAT and float(fv) == floorf(float(fv)):
+			fv = int(fv)
+		if typeof(fv) in [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+			campaign["flags"][str(k)] = fv
+	for key in ["roster", "pets", "parts"]:
+		var arr: Variant = d.get(key, [])
+		if typeof(arr) != TYPE_ARRAY:
+			continue
+		for it in (arr as Array):
+			var id := str(it)
+			var ok := false
+			match key:
+				"roster":
+					ok = CharacterDefs.is_playable(id)
+				"pets":
+					ok = PetDefs.is_equipable(id)
+				"parts":
+					ok = CampaignDefs.PLANE_PARTS.has(id)
+			if ok and not id in (campaign[key] as Array):
+				(campaign[key] as Array).append(id)
+	var last := str(d.get("last", ""))
+	if CampaignDefs.has_level(last):
+		campaign["last"] = last
+	var pk := _dict_or_empty(d.get("picks", {}))
+	for k in pk.keys():
+		if CampaignDefs.has_level(str(k)) and CharacterDefs.is_playable(str(pk[k])):
+			campaign["picks"][str(k)] = str(pk[k])
+
+
+func in_campaign_run() -> bool:
+	return play_mode == "campaign" and campaign_level_id != ""
+
+
+func campaign_level() -> Dictionary:
+	return CampaignDefs.level(campaign_level_id)
+
+
+## The run's "mode" in a campaign level: the zone tier's table (visuals,
+## pacing numbers) with the level's own enemy strength.
+func _campaign_mode() -> Dictionary:
+	if _campaign_mode_for == campaign_level_id and not _campaign_mode_cache.is_empty():
+		return _campaign_mode_cache
+	var lv := campaign_level()
+	var m := ModeDefs.tier_mode(int(lv.get("tier", 1)))
+	m["id"] = "campaign"
+	m["display_name"] = str(lv.get("title", "Campaign"))
+	m["enemy_hp"] = float(lv.get("enemy_hp", 1.0))
+	m["enemy_damage"] = float(lv.get("enemy_damage", 1.0))
+	m["spawn_density"] = 1.0
+	_campaign_mode_cache = m
+	_campaign_mode_for = campaign_level_id
+	return m
+
+
+## Flag lookup: this attempt's choices first, then the saved story.
+func campaign_flag(key: String, default: Variant = null) -> Variant:
+	if campaign_run_flags.has(key):
+		return campaign_run_flags[key]
+	return (campaign["flags"] as Dictionary).get(key, default)
+
+
+func set_campaign_flag(key: String, value: Variant) -> void:
+	campaign_run_flags[key] = value
+
+
+## Does the flag match? A bare key (value null) means "set and truthy".
+func campaign_flag_is(key: String, value: Variant = null) -> bool:
+	var f: Variant = campaign_flag(key, null)
+	if value == null:
+		return f != null and bool(f) if typeof(f) in [TYPE_BOOL, TYPE_INT, TYPE_FLOAT] else f != null and str(f) != ""
+	if f == null:
+		return false
+	if typeof(value) == TYPE_STRING or typeof(f) == TYPE_STRING:
+		return str(f) == str(value)
+	return f == value
+
+
+func campaign_level_done(id: String) -> bool:
+	return (campaign["done"] as Dictionary).has(id)
+
+
+## The first level is always open; each next one after the one before it.
+func campaign_level_unlocked(id: String) -> bool:
+	if not CampaignDefs.is_playable(id):
+		return false
+	var i := CampaignDefs.ORDER.find(id)
+	if i <= 0:
+		return i == 0
+	return campaign_level_done(str(CampaignDefs.ORDER[i - 1]))
+
+
+func campaign_done_count() -> int:
+	return (campaign["done"] as Dictionary).size()
+
+
+## The level the PLAY button continues with (first not done, else the last).
+func campaign_next_level() -> String:
+	for id in CampaignDefs.ORDER:
+		if CampaignDefs.is_playable(str(id)) and not campaign_level_done(str(id)):
+			return str(id)
+	return str(campaign.get("last", CampaignDefs.ORDER[0])) if str(campaign.get("last", "")) != "" else str(CampaignDefs.ORDER[0])
+
+
+func campaign_fallen(hero: String) -> bool:
+	return campaign_flag_is("fallen_" + hero)
+
+
+func campaign_has_survivor(hero: String) -> bool:
+	return hero in (campaign["roster"] as Array) and not campaign_fallen(hero)
+
+
+func campaign_roster() -> Array:
+	var out: Array = []
+	for h in CharacterDefs.PLAYABLE_IDS:
+		if campaign_has_survivor(str(h)):
+			out.append(str(h))
+	return out
+
+
+## Heroes the player may take into a level (forced hero = just that one).
+func campaign_heroes_for(id: String) -> Array:
+	var lv := CampaignDefs.level(id)
+	if str(lv.get("hero", "")) != "":
+		return [str(lv["hero"])]
+	var allowed: Array = lv.get("heroes", [])
+	var out: Array = []
+	for h in campaign_roster():
+		if allowed.is_empty() or h in allowed:
+			out.append(h)
+	if out.is_empty():
+		out.append(CharacterDefs.HELM_WISP_ID)
+	return out
+
+
+func campaign_pick_for(id: String) -> String:
+	var opts := campaign_heroes_for(id)
+	var p := str((campaign["picks"] as Dictionary).get(id, ""))
+	if p in opts:
+		return p
+	return str(opts[0])
+
+
+## The dog that comes along: forced by the level ("" = none), else the
+## player's Wander pick if the story has met that dog, else the first met.
+func campaign_pet_for(id: String) -> String:
+	var lv := CampaignDefs.level(id)
+	if lv.has("pet"):
+		return str(lv["pet"])
+	var pets: Array = campaign["pets"]
+	var want := _wander_pet if _wander_pet != "" else selected_pet_id
+	if want in pets:
+		return want
+	return str(pets[0]) if not pets.is_empty() else ""
+
+
+func campaign_set_pick(id: String, hero: String) -> void:
+	if hero in campaign_heroes_for(id):
+		campaign["picks"][id] = hero
+		save_profile()
+
+
+## Leaving a campaign level (to a menu): the Wander hero / pet come back.
+func leave_campaign_run() -> void:
+	if play_mode != "campaign":
+		return
+	if _wander_hero != "":
+		selected_character_id = _wander_hero
+	if _wander_pet != "":
+		selected_pet_id = _wander_pet
+	_wander_hero = ""
+	_wander_pet = ""
+	play_mode = "wander"
+	campaign_level_id = ""
+	campaign_run_flags = {}
+	campaign_carry_slow = 1.0
+	_campaign_mode_cache = {}
+	reset_loadout_to_defaults()
+
+
+## Start (or retry) a campaign level as `hero` ("" = the remembered pick).
+func go_campaign_level(id: String, hero: String = "") -> void:
+	if not prepare_campaign_level(id, hero):
+		return
+	get_tree().change_scene_to_file(CampaignDefs.MATCH_SCENE)
+
+
+## Everything a level needs before its scene loads (tests instantiate the
+## scene themselves after this).
+func prepare_campaign_level(id: String, hero: String = "") -> bool:
+	if not CampaignDefs.is_playable(id):
+		return false
+	if play_mode != "campaign" or _wander_hero == "":
+		_wander_hero = selected_character_id
+		_wander_pet = selected_pet_id
+	play_mode = "campaign"
+	campaign_level_id = id
+	_campaign_mode_cache = {}
+	campaign_run_flags = {}
+	campaign_result = {}
+	campaign_carry_slow = 1.0
+	var h := hero if hero in campaign_heroes_for(id) else campaign_pick_for(id)
+	selected_character_id = h
+	var pid := campaign_pet_for(id)
+	if pid != "":
+		selected_pet_id = pid
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	TouchInput.clear_sticks()
+	begin_run()
+	if pid == "":
+		pet["active"] = false
+	return true
+
+
+func go_mode_choice() -> void:
+	get_tree().paused = false
+	leave_campaign_run()
+	get_tree().change_scene_to_file("res://scenes/ui/mode_choice.tscn")
+
+
+func go_campaign_map() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	leave_campaign_run()
+	TouchInput.clear_sticks()
+	get_tree().change_scene_to_file("res://scenes/ui/campaign_map.tscn")
+
+
+## Level won (the hero extracted): scrap found + the level's reward, gear to
+## the stash, first-clear story rewards (survivors, dogs, plane parts, hangar
+## features), choices committed. Returns the outro summary.
+func complete_campaign_level(time_s: float) -> Dictionary:
+	if run_finished:
+		return campaign_result
+	run_finished = true
+	extracted = true
+	wiped = false
+	_clear_result_meta()
+	var id := campaign_level_id
+	var lv := campaign_level()
+	var first := not campaign_level_done(id)
+	var rw: Dictionary = lv.get("rewards", {})
+	var lines := PackedStringArray()
+	## Choices made this attempt become the story.
+	for k in campaign_run_flags.keys():
+		campaign["flags"][k] = campaign_run_flags[k]
+	for k in (rw.get("flags", {}) as Dictionary).keys():
+		campaign["flags"][str(k)] = rw["flags"][k]
+	campaign_run_flags = {}
+	var prev: Dictionary = (campaign["done"] as Dictionary).get(id, {})
+	var best := float(prev.get("best", 0.0))
+	campaign["done"][id] = {"best": time_s if best <= 0.0 else minf(best, time_s), "runs": int(prev.get("runs", 0)) + 1}
+	var base := int(rw.get("scrap", 100))
+	var paid := bag_value() + (base if first else int(round(base * CampaignDefs.REPLAY_SCRAP)))
+	result_scrap_before = account_scrap
+	account_scrap += paid
+	payout_this_run = paid
+	result_scrap_banked = paid
+	lines.append("+%d scrap" % paid)
+	result_account_xp_before = account_xp
+	account_xp_this_run = Progression.award_extract_account_xp(kills, 1.0, 1.0)
+	account_xp += account_xp_this_run
+	_sync_account_level()
+	var joined: Array = []
+	var dogs: Array = []
+	if first:
+		for h in rw.get("survivors", []):
+			if CharacterDefs.is_playable(str(h)) and not str(h) in (campaign["roster"] as Array):
+				campaign["roster"].append(str(h))
+				joined.append(str(h))
+				lines.append("%s joins the camp" % str(CharacterDefs.get_character(str(h)).get("display_name", h)))
+		for p in rw.get("pets", []):
+			if PetDefs.is_equipable(str(p)) and not str(p) in (campaign["pets"] as Array):
+				campaign["pets"].append(str(p))
+				dogs.append(str(p))
+				lines.append("%s is home" % str(PetDefs.get_pet(str(p)).get("name", p)))
+		var part := str(rw.get("part", ""))
+		if part != "" and CampaignDefs.PLANE_PARTS.has(part) and not part in (campaign["parts"] as Array):
+			campaign["parts"].append(part)
+			lines.append("Plane part: %s" % str(CampaignDefs.PLANE_PARTS[part]["name"]))
+		## Hangar features the story introduces: a floor, never a refund.
+		var cp: Dictionary = rw.get("camp", {})
+		for k in cp.keys():
+			var want := int(cp[k])
+			if HangarDefs.layer_of(str(k)) != "" and camp_rank(str(k)) < want:
+				camp[str(k)] = want
+				lines.append("Hangar: %s rank %d" % [str(HangarDefs.SHARED.get(str(k), {}).get("name", k)), want])
+	## Survivors always in the camp from the start of the story.
+	_bank_run_loot()
+	for it in result_found:
+		lines.append("Gear: %s" % str(it.get("name", "item")))
+	var nxt := CampaignDefs.next_level(id)
+	campaign["last"] = nxt if nxt != "" else id
+	result_summary = "%s complete" % str(lv.get("title", ""))
+	_reset_run_power_after_end()
+	campaign_result = {"id": id, "won": true, "first": first, "time": time_s, "scrap": paid,
+		"lines": lines, "joined": joined, "pets": dogs, "next": nxt}
+	quest_event("extract", 1, {"tier": int(lv.get("tier", 1)), "mult": 1.0})
+	save_profile()
+	return campaign_result
+
+
+## Level lost: nothing is banked or lost (gear and the pack stay home safe);
+## this attempt's choices are forgotten so a retry can choose again.
+func fail_campaign_level(reason: String) -> Dictionary:
+	if run_finished:
+		return campaign_result
+	run_finished = true
+	wiped = true
+	extracted = false
+	_clear_result_meta()
+	campaign_run_flags = {}
+	run_loot = []
+	run_materials = {}
+	run_pack = {}
+	_reset_run_power_after_end()
+	campaign_result = {"id": campaign_level_id, "won": false, "reason": reason, "lines": PackedStringArray()}
+	return campaign_result
+
+
+## Admin / tests: mark levels done up to (not including) `id`, with a roster.
+func campaign_debug_unlock_to(id: String) -> void:
+	for lid in CampaignDefs.ORDER:
+		if str(lid) == id:
+			break
+		if not campaign_level_done(str(lid)):
+			campaign["done"][str(lid)] = {"best": 0.0, "runs": 1}
+		var rw: Dictionary = CampaignDefs.level(str(lid)).get("rewards", {})
+		for h in rw.get("survivors", []):
+			if not str(h) in (campaign["roster"] as Array):
+				campaign["roster"].append(str(h))
+		for p in rw.get("pets", []):
+			if not str(p) in (campaign["pets"] as Array):
+				campaign["pets"].append(str(p))
+	save_profile()

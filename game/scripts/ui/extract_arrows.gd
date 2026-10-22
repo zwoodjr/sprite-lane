@@ -10,6 +10,9 @@ var _glyphs: Control
 var _g_n: int = 0
 var _g_pos := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
 var _g_col := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
+## Campaign objective markers (meta "map_glyph") draw their own glyph in TEAL.
+var _g_id := PackedInt32Array([0, 0, 0, 0, 0, 0])
+const C_OBJECTIVE := Color("5cd2c0")
 
 
 func _ready() -> void:
@@ -22,7 +25,7 @@ func _ready() -> void:
 	add_child(_glyphs)
 	_glyphs.draw.connect(func() -> void:
 		for i in range(_g_n):
-			MapIcons.draw(_glyphs, MapIcons.PAD, _g_pos[i], _g_col[i], 2.0))
+			MapIcons.draw(_glyphs, _g_id[i], _g_pos[i], _g_col[i], 2.0))
 	_arrow_tex = UiTheme.tex("extract_arrow")
 	if _arrow_tex == null:
 		_arrow_tex = load("res://assets/sprites/ui/extract_arrow.png")
@@ -74,6 +77,9 @@ func _draw() -> void:
 		var col: Color = MapIcons.C_PAD_OPEN if _extract_open else Color(MapIcons.C_PAD_SEALED, 0.85)
 		if bool(pad.get("last_chance")):
 			col = MapIcons.C_PAD_LAST
+		var objective := (pad as Node).has_meta("map_glyph")
+		if objective:
+			col = C_OBJECTIVE
 		var ang: float = dir.angle() + PI * 0.5
 		if _arrow_tex:
 			## Painted brass chevron (64 px art) — tinted only for sealed / last chance.
@@ -88,6 +94,8 @@ func _draw() -> void:
 			var tint := Color(0.6, 1.0, 0.6) if _extract_open else Color(0.75, 0.7, 0.62, 0.85)
 			if bool(pad.get("last_chance")):
 				tint = Color(1.0, 0.55, 0.45)
+			if objective:
+				tint = Color(0.62, 1.0, 0.92)
 			draw_texture(_arrow_tex, -_arrow_tex.get_size() * 0.5, tint)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		else:
@@ -96,7 +104,9 @@ func _draw() -> void:
 		## Distance label
 		var dist_m := int(_player.global_position.distance_to(pad.global_position) / 10.0)
 		var label := "%sm" % dist_m
-		if _extract_open:
+		if objective:
+			pass
+		elif _extract_open:
 			label = "OPEN " + label
 		else:
 			label = "SOON " + label
@@ -107,6 +117,7 @@ func _draw() -> void:
 		if _g_n < _g_pos.size():
 			_g_pos[_g_n] = (lp + Vector2(-11.0, -5.0)).round()
 			_g_col[_g_n] = col
+			_g_id[_g_n] = int((pad as Node).get_meta("map_glyph")) if objective else MapIcons.PAD
 			_g_n += 1
 		draw_string_outline(f, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.06, 0.04, 0.03, 0.9))
 		draw_string(f, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
