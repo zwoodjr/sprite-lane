@@ -334,7 +334,7 @@ func _test_hangar() -> void:
 	## Prices per the brief.
 	_check(HangarDefs.cost("generator", 0) == 100 and HangarDefs.cost("generator", 4) == 1500, "shared prices")
 	_check(HangarDefs.cost("station_pebble", 4) == 1100 and HangarDefs.cost("kennel_noel", 2) == 900, "station/kennel prices")
-	_check(HangarDefs.cost("stash", 0) == 300 and HangarDefs.cost("stash", 3) == -1, "stash prices")
+	_check(HangarDefs.cost("stash", 0) == 300 and HangarDefs.cost("stash", HangarDefs.STASH_PRICES.size()) == -1 and HangarDefs.stash_slots(0) == 80 and HangarDefs.stash_slots(5) == 280, "stash prices")
 	## Ammo Bench gating.
 	GameState.camp.clear()
 	_check(not GameState.ammo_pickups_enabled() and RunFx.random_bench_ammo_id() == "", "ammo gated at bench 0")
@@ -367,7 +367,7 @@ func _test_hangar() -> void:
 				break
 	_check(GameState.account_scrap == 0, "full max costs exactly %d" % HangarDefs.full_max_cost())
 	GameState.mechs_built = keep_mechs
-	_check(GameState.stash_capacity() == 50, "stash 50 slots")
+	_check(GameState.stash_capacity() == HangarDefs.stash_slots(GameState.camp_rank("stash")), "stash slots")
 	_check(GameState.starting_hp_bonus() == 50.0 and is_equal_approx(GameState.scrap_find_mult(), 1.4), "generator/press")
 	_check(GameState.pad_ping_lead() == ModeDefs.PING_LEAD + 15.0, "radio tower")
 	_check(float(GameState.hero_ability().get("cooldown", 0.0)) < base_cd, "station cooldown")

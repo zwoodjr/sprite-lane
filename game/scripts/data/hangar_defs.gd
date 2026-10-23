@@ -6,17 +6,17 @@ extends RefCounted
 ##   shared   — Generator, Radio Tower, Scrap Press, Ammo Bench (5 ranks)
 ##   station  — one per survivor, "station_<hero id>" (5 ranks: weapon + trick)
 ##   kennel   — one per dog, "kennel_<pet id>" (3 ranks)
-##   stash    — "stash" (3 ranks of +10 slots)
+##   stash    — "stash" (5 ranks of +40 slots; 80 → 280)
 ##   pack     — "backpack" (3 ranks of carry room, MedicineDefs)
 ## Every tuning number lives here. Arrays indexed by rank (index 0 = not bought).
 
 const SHARED_PRICES: Array = [100, 250, 500, 900, 1500]
 const STATION_PRICES: Array = [80, 200, 400, 700, 1100]
 const KENNEL_PRICES: Array = [150, 400, 900]
-const STASH_PRICES: Array = [300, 600, 1000]
+const STASH_PRICES: Array = [300, 600, 1000, 1600, 2500]
 
-const STASH_BASE_SLOTS := 20
-const STASH_SLOTS_PER_RANK := 10
+const STASH_BASE_SLOTS := 80
+const STASH_SLOTS_PER_RANK := 40
 
 const SHARED_IDS: Array = ["generator", "radio_tower", "scrap_press", "ammo_bench"]
 
