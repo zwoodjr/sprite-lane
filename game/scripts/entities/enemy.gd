@@ -24,6 +24,8 @@ var _lunge_left: float = 0.0
 var _lunge_dir: Vector2 = Vector2.ZERO
 var _tele_at: Vector2 = Vector2.ZERO
 var _knock: Vector2 = Vector2.ZERO
+## Steering velocity without knockback (knock is added on top each frame, never accumulated).
+var _base_vel: Vector2 = Vector2.ZERO
 var _strafe_sign: float = 1.0
 var _player: Node2D
 var _dead: bool = false
@@ -408,7 +410,8 @@ func _physics_process(delta: float) -> void:
 		var drift := Vector2.ZERO
 		if hidden and not has_status("stun") and _player:
 			drift = (global_position - _player.global_position).normalized().orthogonal() * speed * 0.3 * _strafe_sign
-		velocity = velocity.move_toward(drift, 900.0 * delta) + _knock
+		_base_vel = _base_vel.move_toward(drift, 900.0 * delta)
+		velocity = _base_vel + _knock
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 		move_and_slide()
 		_update_anim(false)
@@ -417,7 +420,8 @@ func _physics_process(delta: float) -> void:
 		_lure_left -= delta
 		var to_lure := _lure_pos - global_position
 		var want := to_lure.normalized() * speed if to_lure.length() > 20.0 else Vector2.ZERO
-		velocity = velocity.move_toward(want, 900.0 * delta) + _knock
+		_base_vel = _base_vel.move_toward(want, 900.0 * delta)
+		velocity = _base_vel + _knock
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 		move_and_slide()
 		_update_anim(false)
@@ -450,7 +454,8 @@ func _physics_process(delta: float) -> void:
 				_show_telegraph(_tele_at, LUNGE_HIT_RADIUS * body_scale + 10.0, k)
 			"brute":
 				_show_telegraph(global_position + Vector2(0, 12), 70.0 * body_scale, k)
-		velocity = velocity.move_toward(Vector2.ZERO, 900.0 * delta) + _knock
+		_base_vel = _base_vel.move_toward(Vector2.ZERO, 900.0 * delta)
+		velocity = _base_vel + _knock
 		move_and_slide()
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 		_face(dir.x)
@@ -489,7 +494,8 @@ func _physics_process(delta: float) -> void:
 	else:
 		want = dir.orthogonal() * chase * 0.55 * _strafe_sign
 	want += _separation() * chase * 1.1
-	velocity = velocity.move_toward(want, 900.0 * delta) + _knock
+	_base_vel = _base_vel.move_toward(want, 900.0 * delta)
+	velocity = _base_vel + _knock
 	_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
 	_update_anim(false)
@@ -1037,7 +1043,8 @@ func _tick_infight(delta: float) -> bool:
 	var d := to.length()
 	_face(to.x)
 	if d > FactionDefs.INFIGHT_HIT_RANGE * maxf(body_scale, 1.0):
-		velocity = velocity.move_toward(to / maxf(d, 0.01) * speed * _slow_mult(), 900.0 * delta) + _knock
+		_base_vel = _base_vel.move_toward(to / maxf(d, 0.01) * speed * _slow_mult(), 900.0 * delta)
+		velocity = _base_vel + _knock
 		_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 		move_and_slide()
 		_update_anim(false)
@@ -1080,7 +1087,8 @@ func _follow_crew(delta: float) -> void:
 	if to.length() > 14.0:
 		want = to.normalized() * speed * FactionDefs.CREW_SPEED * _slow_mult()
 	want += _separation() * speed * 0.6
-	velocity = velocity.move_toward(want, 900.0 * delta) + _knock
+	_base_vel = _base_vel.move_toward(want, 900.0 * delta)
+	velocity = _base_vel + _knock
 	_knock = _knock.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
 	_update_anim(false)

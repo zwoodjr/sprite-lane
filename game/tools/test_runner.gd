@@ -141,6 +141,7 @@ func _run() -> void:
 	var keep_depth := [GameState.ingredients.duplicate(), GameState.tonics.duplicate(), GameState.tonic_loadout.duplicate()]
 	await _test_depth_e1()
 	await _test_depth_e2()
+	await _test_knock_cap()
 	var keep_notes := [GameState.bestiary.duplicate(), GameState.lore_pages.duplicate()]
 	await _test_depth_e3()
 	GameState.bestiary = keep_notes[0]
@@ -2130,6 +2131,29 @@ func _test_quickwins() -> void:
 	for k in range(3):
 		await get_tree().process_frame
 	print("QUICKWINS_OK")
+
+
+## Knockback must not stack into velocity (Raider Captain flew off-map).
+func _test_knock_cap() -> void:
+	var m: Node = await _depth_match("smog", "ash_rook")
+	var player: Node2D = m.get_node("World/Player")
+	player.set("_iframes", 99.0)
+	for kind in ["raider_captain", "raider_grunt", "scrap_hound"]:
+		var e := _mob(m, str(kind), player.global_position + Vector2(220, 0))
+		e.set("crew", null)
+		await get_tree().physics_frame
+		var start := e.global_position
+		for i in range(8):
+			if is_instance_valid(e):
+				e.call("take_damage", 0.01, Vector2.RIGHT, 120.0, false)
+			await get_tree().physics_frame
+		for i in range(60):
+			await get_tree().physics_frame
+		var moved := e.global_position.distance_to(start) if is_instance_valid(e) else 0.0
+		_check(moved < 450.0, "knock cap: %s moved %d px" % [kind, int(moved)])
+		if is_instance_valid(e):
+			e.queue_free()
+	await _end_depth_match(m)
 
 
 func _end_depth_match(m: Node) -> void:
