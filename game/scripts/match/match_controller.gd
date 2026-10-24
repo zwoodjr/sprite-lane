@@ -40,12 +40,14 @@ var _pad_guards: int = 0
 var quiet: bool = false
 ## Early threat ramp (audit #7): small pincer packs in the first minute so
 ## tier 1 actually lands a hit in ~30 s. [match time, mob count].
-const OPENING_WAVES := [[9.0, 6], [20.0, 7], [32.0, 8]]
+## Balance pass: bigger and one more — the old three waves died before contact
+## for every ranged hero (no hits in the first 30 s on Haze–Blight).
+const OPENING_WAVES := [[5.0, 8], [14.0, 9], [24.0, 10], [36.0, 10]]
 ## Waves mix fast lungers with spitters: a kiting ranged hero can outrun one
 ## side, not both, and spitters reach past the hero's comfort range.
 const WAVE_KINDS := ["scrap_hound", "rad_gator", "toxic_scorp", "glow_moth", "coil_spider", "dune_stalker"]
 const COLD_OPEN_MOBS := 3
-const AMBUSH_PER_WAVE := 2
+const AMBUSH_PER_WAVE := 3
 const AMBUSH_TELL := 0.7
 const AMBUSH_HP := 2.2
 const AMBUSH_KINDS := ["rad_gator", "dune_stalker"]
@@ -257,7 +259,7 @@ func _tick_opening_waves() -> void:
 	## Plus a two-spitter ambush that burrows up close (dust telegraph first),
 	## so even a hero who out-ranges every lane has to dodge something.
 	for j in range(AMBUSH_PER_WAVE):
-		var at := player.global_position + Vector2.RIGHT.rotated(base + PI / 3.0 + PI * float(j)) * randf_range(200.0, 240.0)
+		var at := player.global_position + Vector2.RIGHT.rotated(base + PI / 3.0 + TAU / float(AMBUSH_PER_WAVE) * float(j)) * randf_range(190.0, 230.0)
 		if not _spot_free(at, 26.0):
 			continue
 		Juice.dust_puff(at, 12)
@@ -383,6 +385,8 @@ func _maybe_ping_next_window() -> void:
 	if _phase_time_left > GameState.pad_ping_lead() * GameState.timer_scale():
 		return
 	_place_window_pads(nxt)
+	if twists:
+		twists.call("on_window_ping", _pads)
 	var last := bool(_phases[nxt].get("is_last", false))
 	hud.show_toast(
 		("LAST CHANCE opens in %ds — red pads marked" if last else "Extract opens in %ds — 2 pads marked on the map") % int(ceil(_phase_time_left / GameState.timer_scale())),
@@ -449,6 +453,9 @@ func _start_phase(index: int) -> void:
 	## Hangar Pad Linger — modest extra open time (does not skip TL for free).
 	if _extract_open:
 		_phase_time_left += GameState.extract_grace_sec() * GameState.timer_scale()
+		## Military Base: dead pads need a cell run first — a little more time.
+		if twists:
+			_phase_time_left += float(twists.call("window_bonus")) * GameState.timer_scale()
 	_current_window_was_open = _extract_open
 	_ping_done_for_window = false
 	GameState.last_phase_label = str(phase["label"])
@@ -815,7 +822,7 @@ func _on_extract_requested() -> void:
 	_extract_bonuses()
 	GameState.on_extract_success()
 	Juice.sfx("extract_win")
-	Juice.haptic(60)
+	Juice.haptic(Juice.HAPTIC_EXTRACT)
 	hud.show_banner("EXTRACTED", "Payout %d scrap (×%.1f)" % [GameState.payout_this_run, GameState.loot_mult], Color(0.55, 1.0, 0.6))
 	if is_instance_valid(player):
 		Juice.burst(player.global_position, Color(1, 0.85, 0.4), 40, 260.0, 0.9, 1.4)

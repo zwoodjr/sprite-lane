@@ -16,7 +16,7 @@ const ROWS := [
 	{"key": "vol_sfx", "type": "slider", "label": "Effects", "desc": "Weapons, mobs, pickups.", "min": 0.0, "max": 1.0, "step": 0.05},
 	{"key": "vol_ambience", "type": "slider", "label": "Ambience", "desc": "Wind, zone beds, the hangar.", "min": 0.0, "max": 1.0, "step": 0.05},
 	{"key": "vol_ui", "type": "slider", "label": "Interface", "desc": "", "min": 0.0, "max": 1.0, "step": 0.05},
-	{"key": "haptics", "type": "toggle", "label": "Vibration", "desc": ""},
+	{"key": "haptics", "type": "toggle", "label": "Vibration", "desc": "Light taps for hits, elite kills, rare pickups and extracting."},
 	{"key": "screen_shake", "type": "toggle", "label": "Screen shake", "desc": ""},
 	{"key": "heat_shimmer", "type": "toggle", "label": "Heat shimmer", "desc": "Faint heat haze over the map. Off saves battery."},
 	{"key": "film_grain", "type": "toggle", "label": "Edge dither", "desc": "Pixel-dither shading at the screen edges."},

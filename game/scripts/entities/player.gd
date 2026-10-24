@@ -596,7 +596,7 @@ func _tick_buffs(delta: float) -> void:
 func apply_powerup(def: Dictionary) -> void:
 	var id := str(def.get("id", ""))
 	Juice.sfx("pick_ammo" if def.has("ammo") or id.ends_with("ammo") else "pick_rare")
-	Juice.haptic(15)
+	Juice.haptic(Juice.HAPTIC_TICK)
 	Juice.burst(global_position, def.get("color", Color.WHITE), 16, 180.0, 0.5)
 	Juice.float_text(global_position + Vector2(0, -30), str(def.get("name", "Boost")), def.get("color", Color.WHITE), 20)
 	if id == "heal" or def.has("instant_heal"):
@@ -1531,7 +1531,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	hurt.emit(dmg)
 	Juice.sfx("hurt")
 	Juice.shake(0.28)
-	Juice.haptic(30)
+	Juice.haptic(Juice.HAPTIC_HIT)
 	Juice.flash(body, Color(2.5, 0.6, 0.5), 0.15)
 	_anim.squash(0.12)
 	if not (_anim.is_playing("dash") or _anim.is_playing("ability")):

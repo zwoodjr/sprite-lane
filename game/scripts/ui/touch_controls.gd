@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Phone controls. All touches are routed here (true multi-touch):
 ##   - Floating MOVE stick: appears under the thumb anywhere in the left 60% of
 ##     the screen (right 60% when left-handed), base follows the thumb past the
-##     rim, 10% dead zone, eased speed curve (full near the rim), fades on release.
+##     rim, 10% dead zone, eased speed curve (full at 2/3 deflection), fades on release.
 ##   - Right thumb: big DASH + smaller ABILITY bottle caps with cooldown rings.
 ##   - Pause cap in the top-right corner (above the minimap), 44-pt touch target.
 ## Attacks are automatic (closest enemy in weapon range), so there's no FIRE.
@@ -13,8 +13,12 @@ const ActionButton = preload("res://scripts/ui/action_button.gd")
 const BASE_STICK_RADIUS := 84.0
 const KNOB_RADIUS := 34.0
 const DEADZONE := 0.10      ## fraction of the radius ignored
-const FULL_AT := 0.95       ## deflection for full speed (near the rim)
-const CURVE := 1.6          ## >1 = finer control at small deflections
+## Balance pass: full speed at 2/3 deflection (an easy run without pinning the
+## knob to the rim or leaning on DASH), a gentler curve so the first third
+## still gives precise, slow steps.
+const FULL_AT := 0.66       ## deflection for full speed (the faint inner ring)
+const CURVE := 1.35         ## >1 = finer control at small deflections
+const MIN_SPEED := 0.12     ## just past the dead zone: a slow creep, not a lurch
 const STICK_ZONE_FRAC := 0.60
 ## Ignore stick starts in the top HUD band.
 const TOP_BAND_FRAC := 0.16
@@ -173,7 +177,6 @@ func _begin_touch(index: int, pos: Vector2) -> bool:
 	_move_active = true
 	_fade = 1.0
 	TouchInput.set_move(Vector2.ZERO)
-	Juice.haptic(8)
 	stick_draw.queue_redraw()
 	return true
 
@@ -203,7 +206,7 @@ func _drag_touch(index: int, pos: Vector2) -> bool:
 			return true
 	return false
 
-## Pure mapping (also used by tests): 10% dead zone, eased curve, full speed near the rim,
+## Pure mapping (also used by tests): 10% dead zone, eased curve, full speed at FULL_AT,
 ## direction is exact (instant turns), magnitude linear in between.
 static func stick_vector(origin: Vector2, tip: Vector2, radius: float) -> Vector2:
 	var raw := (tip - origin) / maxf(radius, 1.0)
@@ -211,7 +214,7 @@ static func stick_vector(origin: Vector2, tip: Vector2, radius: float) -> Vector
 	if mag < DEADZONE:
 		return Vector2.ZERO
 	var t := clampf((mag - DEADZONE) / (FULL_AT - DEADZONE), 0.0, 1.0)
-	return raw / mag * maxf(0.18, pow(t, CURVE))
+	return raw / mag * maxf(MIN_SPEED, pow(t, CURVE))
 
 func _end_touch(index: int) -> bool:
 	for b in _buttons:

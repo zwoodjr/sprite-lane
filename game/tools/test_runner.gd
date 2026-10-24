@@ -554,6 +554,27 @@ func _test_gear() -> void:
 	GameState.on_wipe()
 	_check(not GameState.stash_item(u1).is_empty() and GameState.stash_item(u2).is_empty(), "wipe keeps insured only")
 	_check(GameState.result_lost_items.size() == 2, "wipe lost list %d" % GameState.result_lost_items.size())
+	## Balance pass: a full kit loses at most DEATH_KIT_LOSS worn pieces, and the
+	## tier's death_keep share of found gear (best first) makes it home.
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.insured.clear()
+	var keep_mode := GameState.selected_mode_id
+	var worn := ["head", "chest", "shoulders", "legs", "hands", "boots"]
+	for sl in worn:
+		GameState.add_to_stash(GearDefs.make_gear(sl, "rare", rng))
+		GameState.equip("ash_rook", sl, int(GameState.stash[GameState.stash.size() - 1]["uid"]))
+	GameState.selected_mode_id = "pall"
+	GameState.begin_run()
+	for k in range(9):
+		GameState.add_run_loot(GearDefs.make_gear("legs", "rare", rng))
+	GameState.add_run_loot(GearDefs.make_gear("boots", "legendary", rng))
+	GameState.on_wipe()
+	var nkeep := int(floor(10.0 * float(ModeDefs.get_mode("pall")["death_keep"]) + 0.001))
+	_check(GameState.equipped_items("ash_rook").size() == worn.size() - GameState.DEATH_KIT_LOSS, "death takes %d worn pieces" % GameState.DEATH_KIT_LOSS)
+	_check(GameState.result_death_kept.size() == nkeep and str(GameState.result_death_kept[0].get("rarity", "")) == "legendary", "death keeps best %d found" % nkeep)
+	_check(GameState.result_lost_items.size() == 10 - nkeep + GameState.DEATH_KIT_LOSS, "proportional death loss %d" % GameState.result_lost_items.size())
+	GameState.selected_mode_id = keep_mode
 	## Elite / boss rewards (Part 3).
 	var er := GearDefs.roll_role_reward("elite", "cyber_juggernaut", 3, "ash_rook", 0.0, rng)
 	var eitems: Array = er["items"]
@@ -1293,13 +1314,15 @@ func _test_quests_events() -> void:
 func _test_tiers() -> void:
 	var tiers := ModeDefs.all_tiers()
 	_check(tiers.size() == 10 and ModeDefs.all_modes().size() == 10, "10 tiers exposed")
-	var expect := [[0.85, 0.75, 0.10], [1.0, 1.0, 0.15], [1.15, 1.25, 0.20], [1.30, 1.5, 0.25], [1.50, 1.8, 0.30],
-		[1.70, 2.1, 0.35], [1.95, 2.5, 0.40], [2.20, 3.0, 0.45], [2.50, 3.5, 0.50], [3.00, 4.5, 0.55]]
+	var expect := [[1.0, 0.75, 0.10], [1.25, 1.0, 0.15], [1.4, 1.25, 0.20], [1.55, 1.5, 0.25], [1.75, 1.8, 0.30],
+		[1.8, 2.1, 0.35], [2.0, 2.5, 0.40], [2.25, 3.0, 0.45], [2.55, 3.5, 0.50], [3.00, 4.5, 0.55]]
 	for i in range(10):
 		var t: Dictionary = tiers[i]
 		var e: Array = expect[i]
 		_check(is_equal_approx(float(t["enemy_hp"]), float(e[0])) and is_equal_approx(float(t["payout_mult"]), float(e[1]))
 			and is_equal_approx(float(t["death_keep"]), float(e[2])), "tier %d table" % (i + 1))
+		if i >= 1:
+			_check(float(t["enemy_damage"]) > float(tiers[i - 1]["enemy_damage"]) and float(t["spawn_density"]) > float(tiers[i - 1]["spawn_density"]), "tier %d harder than the one below" % (i + 1))
 		if i >= 2:
 			var prev: Dictionary = tiers[i - 1]
 			_check(float(t["window_open"]) == float(prev["window_open"]) - 1.0 and float(t["window_every"]) > float(prev["window_every"]), "tier %d window rule" % (i + 1))
@@ -1307,11 +1330,40 @@ func _test_tiers() -> void:
 	_check(ModeDefs.canonical_id("squall") == "smog" and ModeDefs.canonical_id("medium") == "drift", "old tier ids")
 	## Unlocks: extract on a tier opens the next one.
 	GameState.best_tier_extracted = 0
+	var keep_te := GameState.tier_extracts.duplicate()
+	GameState.tier_extracts = {}
 	_check(GameState.highest_unlocked_tier() == 2 and not GameState.is_tier_unlocked(3), "start unlocks")
+	_check(GameState.extracts_to_next_tier() == ModeDefs.unlock_extracts(1) - 1 + ModeDefs.unlock_extracts(2), "extracts to smog %d" % GameState.extracts_to_next_tier())
 	GameState.selected_mode_id = "drift"
 	GameState.begin_run()
 	GameState.on_extract_success()
-	_check(GameState.is_tier_unlocked(3) and not GameState.is_tier_unlocked(4), "drift extract opens smog")
+	_check(not GameState.is_tier_unlocked(3) and GameState.extracts_to_next_tier() == 1, "one drift extract isn't enough")
+	GameState.begin_run()
+	GameState.on_extract_success()
+	_check(GameState.is_tier_unlocked(3) and not GameState.is_tier_unlocked(4), "two drift extracts open smog")
+	## Stick (balance pass): full speed at 2/3 deflection, slow creep near the dead zone.
+	var tcs: GDScript = load("res://scripts/ui/touch_controls.gd")
+	_check(is_equal_approx((tcs.call("stick_vector", Vector2.ZERO, Vector2(0.7, 0.0), 1.0) as Vector2).length(), 1.0), "stick full at 70%")
+	var slow: float = (tcs.call("stick_vector", Vector2.ZERO, Vector2(0.2, 0.0), 1.0) as Vector2).length()
+	_check(slow > 0.05 and slow < 0.2, "stick creeps at 20%% (%.2f)" % slow)
+	_check((tcs.call("stick_vector", Vector2.ZERO, Vector2(0.05, 0.0), 1.0) as Vector2) == Vector2.ZERO, "stick dead zone")
+	## Pacing: Dustfall needs ~21 extracts from Drift up (was 8).
+	var total_need := 0
+	for t in range(2, 10):
+		total_need += ModeDefs.unlock_extracts(t)
+	_check(total_need >= 18 and total_need <= 30, "dustfall pacing %d extracts" % total_need)
+	## Extracts on a harder tier count toward the easier ones.
+	GameState.best_tier_extracted = 2
+	GameState.tier_extracts = {"2": 2, "4": 3}
+	GameState.selected_mode_id = "smog"
+	GameState.begin_run()
+	GameState.on_extract_success()
+	_check(GameState.best_tier_extracted == 4 and GameState.is_tier_unlocked(5), "harder extracts count down")
+	## The counter loads from a save (bad keys dropped).
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "best_tier_extracted": 3, "tier_extracts": {"2": 2, "4": 4, "x": 9, "12": 1}})
+	_check(int(GameState.tier_extracts.get("4", 0)) == 4 and GameState.tier_extracts.size() == 2 and GameState.best_tier_extracted == 3, "tier extracts load")
+	GameState.tier_extracts = keep_te
+	GameState.best_tier_extracted = 1
 	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "selected_mode_id": "blight"})
 	_check(GameState.selected_mode_id != "blight" and GameState.best_tier_extracted == 0, "locked tier not selected from save")
 	## Tier select screen.
@@ -1898,6 +1950,22 @@ func _test_depth_e7() -> void:
 	tw.call("on_pickup", "power_cell", Vector2.ZERO)
 	await get_tree().process_frame
 	_check(bool(pad.get("powered")) and not GameState.run_has_cell, "e7 cell powers the pad")
+	## Balance pass: the cell turns up at the ping (before the window), on the
+	## way to the nearer pad, and dead-pad windows run longer.
+	for zp in get_tree().get_nodes_in_group("zone_pickups"):
+		zp.free()
+	pad.call("set_open", false)
+	pad.call("set_powered", true)
+	pad.global_position = player.global_position + Vector2(700, 0)
+	tw.call("on_window_ping", [pad])
+	var cells := get_tree().get_nodes_in_group("zone_pickups")
+	_check(not bool(pad.get("powered")) and cells.size() == 1, "e7 cell spawns at the ping")
+	if cells.size() == 1:
+		var cp: Vector2 = (cells[0] as Node2D).global_position - player.global_position
+		_check(cp.length() <= float(ZoneDefs.POWER_CELL["dist"].y) + 1.0 and cp.normalized().dot(Vector2.RIGHT) > 0.6, "e7 cell on the way to the pad")
+	tw.call("on_window_open", 2, [pad])
+	_check(get_tree().get_nodes_in_group("zone_pickups").size() == 1, "e7 no second cell at open")
+	_check(float(tw.call("window_bonus")) > 0.0, "e7 dead-pad window bonus")
 	pad.queue_free()
 	await _end_depth_match(m)
 	## Deadfall: one pad, sinkholes, rubble, serpent, revive.

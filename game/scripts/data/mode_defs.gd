@@ -65,18 +65,21 @@ static func bag_curve(raw: float) -> float:
 	return BAG_KNEE * pow(raw / BAG_KNEE, BAG_EXP)
 
 
-## Part 5 table: id, name, strength, payout, keep on death, blurb.
+## Part 5 table: id, name, enemy HP, enemy damage, spawn density, payout,
+## keep on death, blurb. Balance pass (Oct 2026): Haze–Blight never threatened
+## (no hits in the first minute, 0 deaths, the campaign cleared first try), so
+## the early tiers hit harder and come in thicker; Haze stays the gentle one.
 const TIER_TABLE: Array = [
-	["haze", "Haze", 0.85, 0.75, 0.10, "Thin dust. Forgiving windows — learn when to leave."],
-	["drift", "Drift", 1.0, 1.0, 0.15, "Real pressure. Shorter windows, richer bags."],
-	["smog", "Smog", 1.15, 1.25, 0.20, "Elites start hunting. They carry good gear."],
-	["pall", "Pall", 1.30, 1.5, 0.25, "The sky goes grey at noon."],
-	["blight", "Blight", 1.50, 1.8, 0.30, "Bosses walk the dust now."],
-	["shroud", "Shroud", 1.70, 2.1, 0.35, "You hear them before you see them."],
-	["choke", "Choke", 1.95, 2.5, 0.40, "Every breath costs something."],
-	["blackout", "Blackout", 2.20, 3.0, 0.45, "Elites hunt in pairs."],
-	["deadfall", "Deadfall", 2.50, 3.5, 0.50, "Nothing out here wants you to leave."],
-	["dustfall", "Dustfall", 3.00, 4.5, 0.55, "Pay the dust its due."],
+	["haze", "Haze", 1.0, 1.3, 1.0, 0.75, 0.10, "Thin dust. Forgiving windows — learn when to leave."],
+	["drift", "Drift", 1.25, 1.55, 1.12, 1.0, 0.15, "Real pressure. Shorter windows, richer bags."],
+	["smog", "Smog", 1.4, 1.65, 1.18, 1.25, 0.20, "Elites start hunting. They carry good gear."],
+	["pall", "Pall", 1.55, 1.75, 1.24, 1.5, 0.25, "The sky goes grey at noon."],
+	["blight", "Blight", 1.75, 1.85, 1.3, 1.8, 0.30, "Bosses walk the dust now."],
+	["shroud", "Shroud", 1.8, 1.9, 1.32, 2.1, 0.35, "You hear them before you see them."],
+	["choke", "Choke", 2.0, 1.95, 1.36, 2.5, 0.40, "Every breath costs something."],
+	["blackout", "Blackout", 2.25, 2.05, 1.4, 3.0, 0.45, "Elites hunt in pairs."],
+	["deadfall", "Deadfall", 2.55, 2.25, 1.45, 3.5, 0.50, "Nothing out here wants you to leave."],
+	["dustfall", "Dustfall", 3.0, 2.6, 1.5, 4.5, 0.55, "Pay the dust its due."],
 ]
 ## Window rule above Drift: each tier 1s shorter open, longer gap / first window.
 const DRIFT_FIRST := 120.0
@@ -89,11 +92,17 @@ const MIN_OPEN := 7.0
 const WINDOWS_BY_TIER: Array = [3, 4, 4, 4, 5, 5, 5, 6, 6, 6]
 const LOOT_CAP_HAZE := 2.5
 const LOOT_CAP := 3.0
-const SPAWN_STEP := 0.05
-## Damage scales a little gentler than HP so high tiers stay dodgeable.
-const DAMAGE_SHARE := 0.8
 ## Tiers open from the start; the rest unlock by extracting on the tier below.
 const START_UNLOCKED := 2
+## Balance pass: extracts needed on a tier (or harder) before the next one opens
+## (index = tier - 1). One extract per tier opened Dustfall by career run ~10;
+## this paces it to ~30 runs (21 extracts minimum from Drift up; a Monte Carlo
+## career at the measured death rates lands at 26-40 runs, mean ~32).
+const UNLOCK_EXTRACTS: Array = [1, 2, 2, 2, 3, 3, 3, 3, 3, 4]
+
+
+static func unlock_extracts(tier: int) -> int:
+	return int(UNLOCK_EXTRACTS[clampi(tier, 1, UNLOCK_EXTRACTS.size()) - 1])
 
 
 static func _tiers() -> Array[Dictionary]:
@@ -101,16 +110,14 @@ static func _tiers() -> Array[Dictionary]:
 	for i in range(TIER_TABLE.size()):
 		var r: Array = TIER_TABLE[i]
 		var tier := i + 1
-		var strength := float(r[2])
 		if tier == 1:
-			out.append(_t(str(r[0]), str(r[1]), 1, 90.0, 75.0, 20.0, 3, 20.0, LOOT_CAP_HAZE, float(r[4]), strength, strength, 0.9, float(r[3]), 3, str(r[5])))
+			out.append(_t(str(r[0]), str(r[1]), 1, 90.0, 75.0, 20.0, 3, 20.0, LOOT_CAP_HAZE, float(r[6]), float(r[2]), float(r[3]), float(r[4]), float(r[5]), 3, str(r[7])))
 			continue
 		var above := tier - 2
 		var open := maxf(MIN_OPEN, DRIFT_OPEN + OPEN_STEP * above)
-		var dmg := 1.0 + (strength - 1.0) * DAMAGE_SHARE
 		out.append(_t(str(r[0]), str(r[1]), tier, DRIFT_FIRST + FIRST_STEP * above, DRIFT_EVERY + EVERY_STEP * above,
-			open, int(WINDOWS_BY_TIER[i]), open, LOOT_CAP, float(r[4]), strength, dmg, 1.0 + SPAWN_STEP * above,
-			float(r[3]), 2, str(r[5])))
+			open, int(WINDOWS_BY_TIER[i]), open, LOOT_CAP, float(r[6]), float(r[2]), float(r[3]), float(r[4]),
+			float(r[5]), 2, str(r[7])))
 	return out
 
 

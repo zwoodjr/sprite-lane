@@ -123,9 +123,26 @@ func apply_audio_settings() -> void:
 		snd.call("apply_settings")
 
 
+## Light haptics (Settings > Vibration). Tiers, all short: HAPTIC_TICK for a
+## rare pickup, HAPTIC_HIT when the hero is hit, HAPTIC_BIG for an elite / boss
+## kill or a Legendary, HAPTIC_EXTRACT for getting out. A small gap keeps a
+## swarm of hits from turning into a constant buzz.
+const HAPTIC_TICK := 12
+const HAPTIC_HIT := 20
+const HAPTIC_BIG := 35
+const HAPTIC_EXTRACT := 60
+const HAPTIC_GAP_MS := 90
+var _haptic_last_ms: int = -100000
+
+
 func haptic(ms: int = 20) -> void:
-	if GameState.settings.get("haptics", true) and OS.has_feature("mobile"):
-		Input.vibrate_handheld(ms)
+	if not GameState.settings.get("haptics", true) or not OS.has_feature("mobile"):
+		return
+	var now := Time.get_ticks_msec()
+	if now - _haptic_last_ms < HAPTIC_GAP_MS and ms < HAPTIC_EXTRACT:
+		return
+	_haptic_last_ms = now
+	Input.vibrate_handheld(ms)
 
 
 ## --- Screen shake ------------------------------------------------------------

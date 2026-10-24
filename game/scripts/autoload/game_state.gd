@@ -170,6 +170,8 @@ var migrated_v3: bool = false
 var best_payout: int = 0
 ## Highest Dust tier extracted on (unlocks the next one).
 var best_tier_extracted: int = 0
+## Extracts per tier ({"3": 2, ...}); tiers unlock on ModeDefs.UNLOCK_EXTRACTS.
+var tier_extracts: Dictionary = {}
 var total_runs: int = 0
 
 ## Deployed loadout (copied at deploy).
@@ -262,6 +264,7 @@ func save_profile() -> void:
 		"successful_extracts": successful_extracts,
 		"best_payout": best_payout,
 		"best_tier_extracted": best_tier_extracted,
+		"tier_extracts": tier_extracts,
 		"total_runs": total_runs,
 		"selected_mode_id": selected_mode_id,
 		"selected_character_id": _wander_hero if in_campaign_run() and _wander_hero != "" else selected_character_id,
@@ -467,6 +470,13 @@ func apply_save(d: Dictionary) -> void:
 	best_payout = int(d.get("best_payout", 0))
 	## Old saves: missing key = 0 (tiers 1–2 are always open).
 	best_tier_extracted = clampi(int(d.get("best_tier_extracted", 0)), 0, ModeDefs.EXPOSED_TIERS)
+	tier_extracts = {}
+	var te: Variant = d.get("tier_extracts", {})
+	if te is Dictionary:
+		for k in (te as Dictionary).keys():
+			var tk := int(str(k))
+			if tk >= 1 and tk <= ModeDefs.EXPOSED_TIERS:
+				tier_extracts[str(tk)] = maxi(0, int((te as Dictionary)[k]))
 	total_runs = int(d.get("total_runs", 0))
 	_sync_account_level()
 	var mode_id := str(d.get("selected_mode_id", selected_mode_id))
@@ -1432,16 +1442,45 @@ func _bank_run_loot() -> void:
 	run_materials = {}
 	_bank_pack()
 
-## Death: found gear and brought-in gear are lost, except the insured item.
+## Death (balance pass): extracting is still the only way to bank a run's
+## gear, but the cost is proportional — found gear is lost except the tier's
+## death_keep share (best pieces first), and at most DEATH_KIT_LOSS pieces of the
+## worn kit go down with you (never the insured one).
+const DEATH_KIT_LOSS := 2
+var result_death_kept: Array = []
+
 func _lose_run_loot() -> void:
-	result_lost_items = run_loot.duplicate(true)
+	result_lost_items = []
+	result_death_kept = []
+	var order := range(run_loot.size())
+	order.sort_custom(func(a: int, b: int) -> bool:
+		var ra := _keep_rank(run_loot[a])
+		var rb := _keep_rank(run_loot[b])
+		return ra > rb if ra != rb else a < b)
+	var n_keep := int(floor(float(run_loot.size()) * float(get_mode().get("death_keep", 0.1)) + 0.001))
+	for i in range(order.size()):
+		var it: Dictionary = run_loot[order[i]]
+		if i < n_keep and add_to_stash(it):
+			result_death_kept.append(it)
+		else:
+			result_lost_items.append(it.duplicate(true))
 	var hero := selected_character_id
 	var keep := int(insured.get(hero, -1))
 	var eq := equipped_items(hero)
+	var at_risk: Array = []
 	for sl in eq.keys():
+		if int((eq[sl] as Dictionary).get("uid", -1)) != keep:
+			at_risk.append(sl)
+	at_risk.sort()
+	var drng := RandomNumberGenerator.new()
+	drng.seed = run_seed * 31 + 7
+	for i in range(mini(DEATH_KIT_LOSS, at_risk.size())):
+		var j := drng.randi_range(i, at_risk.size() - 1)
+		var tmp: Variant = at_risk[i]
+		at_risk[i] = at_risk[j]
+		at_risk[j] = tmp
+		var sl: Variant = at_risk[i]
 		var it: Dictionary = eq[sl]
-		if int(it.get("uid", -1)) == keep:
-			continue
 		result_lost_items.append(it.duplicate(true))
 		stash.erase(it)
 		loadout_of(hero).erase(sl)
@@ -1651,7 +1690,35 @@ func cleanse_exposure(v: float) -> void:
 func today() -> String:
 	return Time.get_date_string_from_system()
 
-## Each tier unlocks after extracting on the one below (Part 5).
+## Extracts on `tier` or any harder tier.
+func extracts_at_or_above(tier: int) -> int:
+	var n := 0
+	for k in tier_extracts.keys():
+		if int(str(k)) >= tier:
+			n += int(tier_extracts[k])
+	return n
+
+## Balance pass: a tier counts as cleared (and opens the next one) after
+## ModeDefs.unlock_extracts(tier) extracts on it or higher — ~25-35 runs from a
+## fresh career to Dustfall instead of ~10.
+func _advance_tier_clears() -> void:
+	while best_tier_extracted < ModeDefs.EXPOSED_TIERS and \
+			extracts_at_or_above(best_tier_extracted + 1) >= ModeDefs.unlock_extracts(best_tier_extracted + 1):
+		best_tier_extracted += 1
+
+## Extracts still needed on the top open tier (or higher) to open the next; 0 = all open.
+func extracts_to_next_tier() -> int:
+	var top := highest_unlocked_tier()
+	if top >= ModeDefs.EXPOSED_TIERS:
+		return 0
+	## Extracts on the top tier count for every tier below it too.
+	var need := 0
+	for t in range(best_tier_extracted + 1, top + 1):
+		need = maxi(need, ModeDefs.unlock_extracts(t) - extracts_at_or_above(t))
+	return need
+
+## Each tier unlocks after extracting on the one below (Part 5) — now a few
+## times (ModeDefs.UNLOCK_EXTRACTS).
 func highest_unlocked_tier() -> int:
 	return clampi(maxi(ModeDefs.START_UNLOCKED, best_tier_extracted + 1), 1, ModeDefs.EXPOSED_TIERS)
 
@@ -1825,6 +1892,7 @@ func reset_profile() -> void:
 	successful_extracts = 0
 	best_payout = 0
 	best_tier_extracted = 0
+	tier_extracts = {}
 	total_runs = 0
 	campaign = _fresh_campaign()
 	save_profile()
@@ -1908,6 +1976,7 @@ func begin_run(drink_tonics: bool = true) -> void:
 	run_xp_changed.emit(run_xp, run_level)
 
 func _clear_result_meta() -> void:
+	result_death_kept = []
 	result_scrap_before = 0
 	result_scrap_banked = 0
 	result_scrap_lost = 0
@@ -2196,9 +2265,11 @@ func on_extract_success() -> void:
 	result_unlocks.append_array(extract_bonus_notes)
 	quest_event("extract", 1, {"tier": int(mode.get("tier", 1)), "mult": loot_mult})
 	var tier_n := int(mode.get("tier", 1))
+	if not in_campaign_run():
+		tier_extracts[str(tier_n)] = int(tier_extracts.get(str(tier_n), 0)) + 1
 	if tier_n > best_tier_extracted:
 		var before := highest_unlocked_tier()
-		best_tier_extracted = tier_n
+		_advance_tier_clears()
 		if highest_unlocked_tier() > before:
 			result_unlocks.append("New tier unlocked: %s" % str(ModeDefs.tier_mode(highest_unlocked_tier()).get("display_name", "")))
 	result_unlocks.append_array(result_unlocks_pending)
@@ -2251,6 +2322,8 @@ func on_wipe() -> void:
 		result_lost_keys.append(str(it.get("name", "item")))
 	if not kept_item.is_empty():
 		result_kept_keys.append(str(kept_item.get("name", "item")))
+	for it in result_death_kept:
+		result_kept_keys.append(str(it.get("name", "item")))
 	result_summary = "Wiped. Kept %d%% of the bag (+%d scrap). Lost %d. Lost gear: %s" % [
 		int(round(float(mode.get("death_keep", 0.1)) * 100.0)),
 		keep,

@@ -173,6 +173,9 @@ func build(c: VBoxContainer) -> void:
 			var more := UiTheme.pixel_label("+%d" % (gear_list.size() - 5), UiTheme.PX_M, UiTheme.TEXT_DIM)
 			more.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			grid.add_child(more)
+	if not _won and not GameState.result_death_kept.is_empty():
+		mid.add_child(UiTheme.body_label("Dragged home %d found piece%s (best first) — extract to keep the rest." % [GameState.result_death_kept.size(),
+			"" if GameState.result_death_kept.size() == 1 else "s"], UiTheme.T_SMALL, UiTheme.AMBER))
 	if _won and GameState.result_auto_salvaged_n > 0:
 		var al := UiTheme.body_label("Auto-salvaged %d common%s (+%d scrap)" % [GameState.result_auto_salvaged_n,
 			"" if GameState.result_auto_salvaged_n == 1 else "s", GameState.result_auto_salvaged_scrap], UiTheme.T_SMALL, UiTheme.AMBER)

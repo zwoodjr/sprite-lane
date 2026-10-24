@@ -128,7 +128,7 @@ func _collect() -> void:
 		Juice.burst(global_position, col, 16, 160.0, 0.5)
 		Juice.sfx("pick_tonic", 2.0)
 		Juice.sfx("pick_epic", -6.0)
-		Juice.haptic(30)
+		Juice.haptic(Juice.HAPTIC_TICK)
 		var hud := get_tree().get_first_node_in_group("hud")
 		if hud and hud.has_method("show_toast"):
 			hud.call("show_toast", "Medicine in the pack — it's heavy, and the plague can smell it" if GameState.smells_medicine() else "Medicine in the pack", col)

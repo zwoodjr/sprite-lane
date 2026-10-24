@@ -80,8 +80,11 @@ const RAIDER_HUNT_AT := 45.0
 ## A fresh filter turns up every `respawn` s (up to `max_out` lying around).
 const TOXIC_AIR := {"drain": 0.9, "refill": 40.0, "hurt": 5.0, "filters": 3, "filter_dist": Vector2(250.0, 700.0),
 	"respawn": 35.0, "max_out": 4}
-## Military Base: pads stay dead until you bring a power cell (one appears each window).
-const POWER_CELL := {"dist": Vector2(350.0, 650.0)}
+## Military Base: pads stay dead until you bring a power cell. The cell turns up
+## at the window's ping (PING_LEAD s before it opens), on the way to the nearer
+## pad (`along` of the way there, `dist` clamp from the hero), and dead-pad
+## windows stay open `window_bonus` s longer, so cell + pad fit in one window.
+const POWER_CELL := {"dist": Vector2(220.0, 420.0), "along": 0.45, "window_bonus": 6.0}
 const MACHINES_ENRAGED := {"speed": 1.2, "damage": 1.2}
 ## Crater City.
 const SINKHOLES := {"count": 6, "radius": Vector2(60.0, 95.0), "dist": Vector2(250.0, 1400.0), "damage": 0.12, "fling": 160.0, "cd": 1.0}

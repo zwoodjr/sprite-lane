@@ -111,7 +111,11 @@ func _collect() -> void:
 		Juice.float_text(global_position + Vector2(0, -30), str(item.get("name", "Gear")), GearDefs.RARITY_COLOR.get(rar, Color.WHITE), 17 if rar in ["epic", "legendary"] else 14)
 	var rr := str(item.get("rarity", "common")) if material_id == "" else "common"
 	Juice.sfx({"rare": "pick_rare", "epic": "pick_epic", "legendary": "pick_legendary"}.get(rr, "pick_common"))
-	Juice.haptic(20)
+	## Haptics only for rare+ (Commons are everywhere).
+	if rr in ["rare", "epic"]:
+		Juice.haptic(Juice.HAPTIC_TICK)
+	elif rr == "legendary":
+		Juice.haptic(Juice.HAPTIC_BIG)
 	queue_free()
 
 

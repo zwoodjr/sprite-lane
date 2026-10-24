@@ -74,6 +74,13 @@ var _econ := [0, 0, 0]
 ## Gear picked up this run by rarity (LOOT line).
 var _loot_n := 0
 var _loot_by := {}
+## Balance pass: time of the first hit taken, total HP lost, and a "sloppy"
+## driver (arg 16) that steers late and noisily and often forgets to dash.
+var _first_hit_t := -1.0
+var _hp_lost := 0.0
+var _sloppy := false
+var _sl_t := 0.0
+var _sl_v := Vector2.ZERO
 
 
 func _restore_profile() -> void:
@@ -132,6 +139,7 @@ func _ready() -> void:
 	if a.size() > 10: _grants = a[10]
 	if a.size() > 11: _force_ammo = a[11]
 	if a.size() > 12: _start_hp = float(a[12])
+	if a.size() > 16: _sloppy = a[16] == "sloppy"
 	## arg 13 "max": every Hangar upgrade at full rank for this run (not saved).
 	if a.size() > 13 and a[13] == "max":
 		_keep_camp = GameState.camp.duplicate()
@@ -173,9 +181,14 @@ func _ready() -> void:
 	get_tree().current_scene = _m
 	_p = _m.get_node("World/Player")
 	_apply_grants()
+	_last_hp = float(_p.get("hp"))
 	_p.died.connect(func() -> void: print("EVENT died t=%.1f" % _t))
 	_p.health_changed.connect(func(c: float, mx: float) -> void:
-		if c < _last_hp: _dmg_events += 1
+		if c < _last_hp:
+			_dmg_events += 1
+			_hp_lost += _last_hp - c
+			if _first_hit_t < 0.0:
+				_first_hit_t = _t
 		_last_hp = c)
 	_go = true
 
@@ -277,6 +290,25 @@ func _process(delta: float) -> void:
 
 
 func _drive(delta: float) -> void:
+	if _sloppy and not _stand:
+		_sl_t -= delta
+		if _sl_t > 0.0:
+			TouchInput.move_vector = _sl_v
+			return
+		_sl_t = 0.35
+		_drive_real(delta)
+		_sl_v = (TouchInput.move_vector + Vector2(randf_range(-0.35, 0.35), randf_range(-0.35, 0.35))).limit_length(1.0)
+		TouchInput.move_vector = _sl_v
+		return
+	_drive_real(delta)
+
+
+func _dash() -> void:
+	if not _sloppy or randf() < 0.4:
+		TouchInput.pulse_dash()
+
+
+func _drive_real(delta: float) -> void:
 	if _stand:
 		TouchInput.move_vector = Vector2.ZERO
 		return
@@ -329,7 +361,7 @@ func _drive(delta: float) -> void:
 			_pad_dist = to.length()
 			## Dash only on the way in — a dash on the pad throws you off it.
 			if e and e.global_position.distance_to(_p.global_position) < 70.0 and to.length() > 90.0:
-				TouchInput.pulse_dash()
+				_dash()
 			TouchInput.move_vector = mv
 			return
 	## Dustfall: never wander into the storm wall.
@@ -378,20 +410,20 @@ func _drive(delta: float) -> void:
 				var away: Vector2 = (_p.global_position - threat.global_position).normalized()
 				mv = away.rotated(0.5)
 				if dash_ready:
-					TouchInput.pulse_dash()
+					_dash()
 			elif low_hp and d < 260.0:
 				mv = -to.normalized().rotated(0.4 * sin(_t))
 			elif d > rng * 0.8:
 				mv = to.normalized()
 				if d < 240.0 and d > rng + 30.0 and dash_ready and not low_hp:
-					TouchInput.pulse_dash()
+					_dash()
 			else:
 				## In reach: orbit slowly so swings keep landing.
 				mv = to.normalized().rotated(PI * 0.5) * 0.45
 		elif d < 110.0:
 			## Too close: run away and dash.
 			mv = -to.normalized().rotated(0.6)
-			TouchInput.pulse_dash()
+			_dash()
 		elif d < rng * 0.6:
 			mv = -to.normalized().rotated(0.5 * sin(_t))
 		elif d < rng * 0.95:
@@ -609,6 +641,7 @@ func _summary() -> void:
 		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
+	print("BAL first_hit=%.1f hp_lost=%.0f max_hp=%.0f reload_frac=%.2f" % [_first_hit_t, _hp_lost, float(_p.get("max_hp")) if is_instance_valid(_p) else -1.0, _reload_s / maxf(1.0, _t)])
 	print("STUCK total=%.1f max_streak=%.2f at=(%.0f,%.0f)" % [_stuck_s, _stuck_max, _stuck_at.x, _stuck_at.y])
 	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])
 	print("LOOT common=%d rare=%d epic=%d legendary=%d total=%d auto=%d" % [int(_loot_by.get("common", 0)), int(_loot_by.get("rare", 0)),

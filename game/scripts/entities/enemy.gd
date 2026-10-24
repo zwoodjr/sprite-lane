@@ -733,6 +733,7 @@ func _die() -> void:
 		if not ZoneDefs.exclusive(zt).is_empty() and randf() < (ZoneDefs.EXCLUSIVE_BOSS_CHANCE if role == "boss" else ZoneDefs.EXCLUSIVE_ELITE_CHANCE):
 			GearPickup.spawn(parent, global_position + Vector2(0, -20), GameState.make_exclusive(zt))
 		GameState.quest_event("elite")
+		Juice.haptic(Juice.HAPTIC_BIG)
 		if role == "boss":
 			var bb := GameState.boss_loot_bonus
 			GameState.on_boss_killed(kind)

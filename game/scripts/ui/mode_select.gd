@@ -195,6 +195,15 @@ func _build_detail(mode: Dictionary) -> void:
 	zl.clip_text = true
 	zl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	v.add_child(zl)
+	## Unlock pacing: how many more extracts open the next tier.
+	var top_t := GameState.highest_unlocked_tier()
+	var left := GameState.extracts_to_next_tier()
+	if int(mode["tier"]) == top_t and left > 0:
+		var ul := UiTheme.body_label("Extract %d more time%s here to open %s" % [left, "" if left == 1 else "s",
+			str(ModeDefs.tier_mode(top_t + 1).get("display_name", ""))], UiTheme.T_SMALL, UiTheme.AMBER, false)
+		ul.clip_text = true
+		ul.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		v.add_child(ul)
 	var tl := Control.new()
 	tl.custom_minimum_size = Vector2(0, 24)
 	tl.draw.connect(_draw_timeline.bind(tl, mode))

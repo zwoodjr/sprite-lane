@@ -176,13 +176,74 @@ func on_pickup(kind: String, _at: Vector2) -> void:
 	_sync_hud()
 
 
+## The window's pads were just placed (its ping, or its opening when there was
+## no ping). Military Base: kill the pads and drop a power cell on the way to
+## the nearer one right away, so the cell run starts with the ping, not with
+## the (short) window itself.
+func on_window_ping(pads: Array) -> void:
+	if not has("power_cells"):
+		return
+	for pad in pads:
+		if is_instance_valid(pad) and pad.has_method("set_powered"):
+			pad.call("set_powered", false)
+	if GameState.run_has_cell:
+		_toast("Pads are dead — you carry a power cell, take it to a pad")
+		return
+	if _cell_on_ground() == null:
+		spawn_pickup("power_cell", _cell_spot(pads))
+	_toast("Pads are dead — grab the power cell (blue on the map) first")
+
+
 func on_window_open(_index: int, pads: Array) -> void:
 	if has("power_cells"):
+		var dead := false
 		for pad in pads:
-			if is_instance_valid(pad) and pad.has_method("set_powered"):
-				pad.call("set_powered", false)
-		spawn_pickup("power_cell", _ring_spot(ZoneDefs.POWER_CELL["dist"]))
-		_toast("Pads are dead — a power cell is marked on the map")
+			if is_instance_valid(pad) and not bool(pad.get("powered")):
+				dead = true
+		## Pads placed without a ping: do the ping work now.
+		if not dead:
+			on_window_ping(pads)
+		elif not GameState.run_has_cell and _cell_on_ground() == null:
+			spawn_pickup("power_cell", _cell_spot(pads))
+
+
+func _cell_on_ground() -> Node2D:
+	for zp in get_tree().get_nodes_in_group("zone_pickups"):
+		if is_instance_valid(zp) and str(zp.get("kind")) == "power_cell" and not zp.is_queued_for_deletion():
+			return zp as Node2D
+	return null
+
+
+## Part of the way from the hero to the nearer pad, nudged sideways a little.
+func _cell_spot(pads: Array) -> Vector2:
+	if not is_instance_valid(player):
+		return _ring_spot(ZoneDefs.POWER_CELL["dist"])
+	var near: Node2D = null
+	var bd := INF
+	for pad in pads:
+		if is_instance_valid(pad):
+			var d: float = (pad as Node2D).global_position.distance_to(player.global_position)
+			if d < bd:
+				bd = d
+				near = pad
+	if near == null:
+		return _ring_spot(ZoneDefs.POWER_CELL["dist"])
+	var lim: Vector2 = ZoneDefs.POWER_CELL["dist"]
+	var to := near.global_position - player.global_position
+	var along := clampf(to.length() * float(ZoneDefs.POWER_CELL["along"]), lim.x, minf(lim.y, to.length() - 80.0))
+	for attempt in range(6):
+		var side := rng.randf_range(-0.35, 0.35) * (1.0 + attempt * 0.3)
+		var p := player.global_position + to.normalized().rotated(side) * along
+		if storm_radius < INF and p.distance_to(_origin) > storm_radius * 0.85:
+			p = _origin + (p - _origin).limit_length(storm_radius * 0.85)
+		if match_ctl == null or not match_ctl.has_method("_spot_clear") or bool(match_ctl.call("_spot_clear", p)):
+			return p
+	return player.global_position + to.normalized() * along
+
+
+## Extra open seconds for dead-pad windows (Military Base).
+func window_bonus() -> float:
+	return float(ZoneDefs.POWER_CELL["window_bonus"]) if has("power_cells") else 0.0
 
 
 func _process(delta: float) -> void:
