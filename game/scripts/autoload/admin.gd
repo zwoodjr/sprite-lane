@@ -8,6 +8,19 @@ extends CanvasLayer
 const CFG := "user://admin.cfg"
 const CORNER := 110.0
 const TAPS := 5
+## One finger tap arrives twice (ScreenTouch + emulated mouse, or the reverse
+## on desktop); a second press inside this window is the same tap.
+const TAP_DEDUPE_MS := 80
+
+## RELEASE GATE. The panel is available when this is a debug build, or the
+## export has the "admin" feature tag, or ADMIN_IN_RELEASE is true.
+## ADMIN_IN_RELEASE is ON for now because the web tester build is a release
+## export (and Xogot builds may be too). TURN OFF FOR APP STORE: set it to
+## false (and drop any "admin" custom feature from export presets).
+const ADMIN_IN_RELEASE := true
+
+## False when gated off: no taps are counted and the chip never shows.
+var allowed: bool = true
 
 var enabled: bool = false
 var god: bool = false
@@ -21,8 +34,9 @@ var _fps: Label
 func _ready() -> void:
 	layer = 120
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	allowed = admin_allowed()
 	var cf := ConfigFile.new()
-	if cf.load(CFG) == OK:
+	if allowed and cf.load(CFG) == OK:
 		enabled = bool(cf.get_value("admin", "enabled", false))
 	_chip = Button.new()
 	_chip.text = "ADMIN"
@@ -40,6 +54,13 @@ func _ready() -> void:
 	_place_chip()
 	get_viewport().size_changed.connect(_place_chip)
 	_chip.visible = enabled
+	if not allowed:
+		set_process(false)
+		set_process_input(false)
+
+
+static func admin_allowed() -> bool:
+	return OS.is_debug_build() or OS.has_feature("admin") or ADMIN_IN_RELEASE
 
 
 func _place_chip() -> void:
@@ -61,7 +82,12 @@ func _process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if not allowed:
+		return
 	var pos := Vector2.INF
+	## Emulated events (touch->mouse or mouse->touch) are copies of a real one.
+	if event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if event is InputEventScreenTouch and event.pressed:
 		pos = event.position
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -71,19 +97,30 @@ func _input(event: InputEvent) -> void:
 	## Event positions are in window pixels; convert to the stretched UI space.
 	var vp := get_viewport()
 	var ui_pos: Vector2 = vp.get_screen_transform().affine_inverse() * pos if vp else pos
+	register_tap(ui_pos, Time.get_ticks_msec())
+
+
+## One corner press at `now` ms. True when it toggled the panel unlock.
+func register_tap(ui_pos: Vector2, now: int) -> bool:
+	if not allowed:
+		return false
 	if ui_pos.x > CORNER or ui_pos.y > CORNER:
 		_taps.clear()
-		return
-	var now := Time.get_ticks_msec()
+		return false
+	if _taps.size() > 0 and now - int(_taps[_taps.size() - 1]) < TAP_DEDUPE_MS:
+		return false
 	_taps.append(now)
 	while _taps.size() > 0 and now - int(_taps[0]) > 2500:
 		_taps.pop_front()
 	if _taps.size() >= TAPS:
 		_taps.clear()
 		set_enabled(not enabled)
+		return true
+	return false
 
 
 func set_enabled(on: bool) -> void:
+	on = on and allowed
 	enabled = on
 	_chip.visible = on
 	if not on:

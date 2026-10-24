@@ -22,6 +22,9 @@ var _continue_row: HBoxContainer
 var _actions: VBoxContainer
 var _skip: bool = false
 var _won: bool = true
+## Buttons stay deaf until the ceremony is over, so a skip tap never lands on
+## RUN AGAIN / MENU while they are still invisible.
+var actions_live: bool = false
 
 
 func build(c: VBoxContainer) -> void:
@@ -81,6 +84,11 @@ func build(c: VBoxContainer) -> void:
 	sv.add_child(UiTheme.head_label("SCRAP BANKED" if _won else "SCRAP KEPT", UiTheme.T_H3, UiTheme.TEXT_DIM))
 	_scrap_label = UiTheme.pixel_label("+0", UiTheme.PX_L, UiTheme.AMBER)
 	sv.add_child(_scrap_label)
+	var extra := _scrap_after() - GameState.result_scrap_before - GameState.result_scrap_banked
+	if extra > 0:
+		var xl := UiTheme.body_label("+%d from salvage & rewards" % extra, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+		xl.name = "ScrapExtraLine"
+		sv.add_child(xl)
 	var right := VBoxContainer.new()
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
 	right.add_theme_constant_override("separation", 8)
@@ -91,6 +99,7 @@ func build(c: VBoxContainer) -> void:
 		right.add_child(lost)
 	_bank_label = UiTheme.pixel_label("%d" % GameState.result_scrap_before, UiTheme.PX_M, UiTheme.TEXT)
 	_bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_bank_label.name = "ScrapTotal"
 	right.add_child(_bank_label)
 	var bl := UiTheme.head_label("TOTAL", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 	bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -140,7 +149,11 @@ func build(c: VBoxContainer) -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 8)
 	scroll.add_child(mid)
-	var gear_list: Array = GameState.result_found if _won else GameState.result_lost_items
+	var gear_list: Array = GameState.result_found.duplicate() if _won else GameState.result_lost_items
+	var held: Array = []
+	if _won and GameState.result_held_n > 0:
+		held = GameState.pending_rewards.slice(maxi(0, GameState.pending_rewards.size() - GameState.result_held_n))
+		gear_list.append_array(held)
 	if not gear_list.is_empty():
 		var gh := UiTheme.head_label("GEAR TO STASH" if _won else "GEAR LOST", UiTheme.T_H3, UiTheme.AMBER if _won else UiTheme.DANGER)
 		mid.add_child(gh)
@@ -165,8 +178,13 @@ func build(c: VBoxContainer) -> void:
 			"" if GameState.result_auto_salvaged_n == 1 else "s", GameState.result_auto_salvaged_scrap], UiTheme.T_SMALL, UiTheme.AMBER)
 		al.name = "AutoSalvageLine"
 		mid.add_child(al)
+	if _won and GameState.result_held_n > 0:
+		var hl := UiTheme.body_label("Stash full: %d item%s held, nothing lost. Salvage something in Stash to make room." % [GameState.result_held_n,
+			"" if GameState.result_held_n == 1 else "s"], UiTheme.T_SMALL, UiTheme.AMBER)
+		hl.name = "HeldLine"
+		mid.add_child(hl)
 	if _won and GameState.result_salvaged > 0:
-		mid.add_child(UiTheme.body_label("Stash full: %d extra%s salvaged for %d scrap" % [GameState.result_overflow_n,
+		mid.add_child(UiTheme.body_label("Stash full: %d extra common%s salvaged for %d scrap" % [GameState.result_overflow_n,
 			"" if GameState.result_overflow_n == 1 else "s", GameState.result_salvaged], UiTheme.T_SMALL, UiTheme.TEXT_DIM))
 	if _won and (GameState.result_auto_salvaged_n > 0 or GameState.result_salvaged > 0):
 		mid.add_child(UiTheme.body_label("Changed your mind? Stash > BUY BACK.", UiTheme.T_SMALL, UiTheme.TEXT_DIM))
@@ -204,8 +222,22 @@ func build(c: VBoxContainer) -> void:
 	menu.pressed.connect(GameState.go_main_menu)
 	_continue_row.add_child(menu)
 	_actions.modulate.a = 0.0
+	_set_actions_live(false)
 
 	_sequence()
+
+
+func _scrap_after() -> int:
+	return GameState.result_scrap_after if GameState.result_scrap_after >= 0 else GameState.account_scrap
+
+
+## Every button under the actions block ignores input until the reveal ends.
+func _set_actions_live(on: bool) -> void:
+	actions_live = on
+	if not is_instance_valid(_actions):
+		return
+	for b in _actions.find_children("*", "BaseButton", true, false):
+		(b as Control).mouse_filter = Control.MOUSE_FILTER_STOP if on else Control.MOUSE_FILTER_IGNORE
 
 
 func _gui_input(e: InputEvent) -> void:
@@ -243,7 +275,9 @@ func _sequence() -> void:
 		Juice.sfx("radio_blip", -6.0)
 		await _wait(0.2)
 	if is_instance_valid(_actions):
-		_actions.create_tween().tween_property(_actions, "modulate:a", 1.0, 0.2)
+		var ft := _actions.create_tween()
+		ft.tween_property(_actions, "modulate:a", 1.0, 0.2)
+		ft.tween_callback(_set_actions_live.bind(true))
 		var p := _actions.get_child(0) as Control
 		var tw := p.create_tween().set_loops()
 		tw.tween_property(p, "self_modulate", Color(1.12, 1.08, 1.0), 0.7).set_trans(Tween.TRANS_SINE)
@@ -254,19 +288,20 @@ func _sequence() -> void:
 func _count_scrap() -> void:
 	var gain := GameState.result_scrap_banked
 	var base := GameState.result_scrap_before
+	var total := _scrap_after()
 	var steps := clampi(gain, 0, 30)
 	for i in range(steps + 1):
 		if _skip or not is_instance_valid(_scrap_label):
 			break
 		var v := int(round(float(gain) * float(i) / float(maxi(steps, 1))))
 		_scrap_label.text = "+%d" % v
-		_bank_label.text = str(base + v)
+		_bank_label.text = str(base + int(round(float(total - base) * float(i) / float(maxi(steps, 1)))))
 		if i % 3 == 0:
 			Juice.sfx("pick_scrap", -10.0)
 		await get_tree().create_timer(0.035).timeout
 	if is_instance_valid(_scrap_label):
 		_scrap_label.text = "+%d" % gain
-		_bank_label.text = str(GameState.account_scrap)
+		_bank_label.text = str(total)
 		_punch(_scrap_label)
 
 

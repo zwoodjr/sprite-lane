@@ -93,8 +93,11 @@ func build(c: VBoxContainer) -> void:
 	if not GameState.check_milestones().is_empty():
 		GameState.save_profile()
 		_refresh_view(false)
-	if GameState.claim_pending_rewards() > 0:
-		_toast("A story reward was waiting — it's in the stash now")
+	var claimed := GameState.claim_pending_rewards()
+	if not GameState.pending_rewards.is_empty():
+		_toast("Stash full: %d item%s waiting. Salvage something to make room." % [GameState.pending_rewards.size(), "" if GameState.pending_rewards.size() == 1 else "s"])
+	elif claimed > 0:
+		_toast("%d held item%s moved into the stash" % [claimed, "" if claimed == 1 else "s"])
 	if GameState.hangar_notice != "":
 		_toast(GameState.hangar_notice)
 		GameState.hangar_notice = ""
@@ -864,6 +867,10 @@ func inspect_item(uid: int) -> void:
 	sal.disabled = locked
 	sal.pressed.connect(ask_salvage.bind(uid))
 	row2.add_child(sal)
+	lk.tooltip_text = "Locked = can't salvage. Still lost on death."
+	var lh := UiTheme.body_label(lk.tooltip_text, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	lh.name = "LockHint"
+	v.add_child(lh)
 	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
 	close.pressed.connect(close_popup)
 	v.add_child(close)

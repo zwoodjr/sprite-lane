@@ -127,6 +127,7 @@ func _run() -> void:
 	await _test_gear_screens()
 	await _test_gear_ux()
 	await _test_loot2()
+	await _test_p0_ui()
 	await _test_gear_deploy_sync()
 	await _test_full_sets()
 	var keep_q := [GameState.daily.duplicate(true), GameState.stories.duplicate(true), GameState.milestones.duplicate(true), GameState.kennel_bond.duplicate(true)]
@@ -516,7 +517,8 @@ func _test_gear() -> void:
 	GameState.begin_run()
 	GameState.add_run_loot(GearDefs.make_gear("legs", "epic", rng))
 	GameState.on_extract_success()
-	_check(GameState.result_salvaged == GearDefs.SALVAGE["epic"], "overflow salvaged")
+	_check(GameState.result_salvaged == 0 and GameState.result_held_n == 1 and str(GameState.pending_rewards.back()["rarity"]) == "epic", "overflow holds epic")
+	GameState.pending_rewards.pop_back()
 	## Death: brought-in gear lost except the insured piece; found gear lost.
 	GameState.stash.clear()
 	GameState.loadouts.clear()
@@ -953,6 +955,92 @@ func _test_loot2() -> void:
 	GameState.stash = keep_stash
 	GameState.loadouts = keep_lo
 	print("LOOT2_OK")
+
+
+## P0 UI: full-stash overflow never salvages Rare+ (held instead), result
+## TOTAL matches the bank, result buttons deaf during the reveal, admin taps.
+func _test_p0_ui() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var keep_auto: Variant = GameState.settings.get("auto_salvage_commons", false)
+	var keep_bin := GameState.salvage_bin.duplicate(true)
+	var keep_stash := GameState.stash.duplicate(true)
+	var keep_lo := GameState.loadouts.duplicate(true)
+	var keep_pend := GameState.pending_rewards.duplicate(true)
+	var keep_scrap := GameState.account_scrap
+	for auto in [false, true]:
+		GameState.set_setting("auto_salvage_commons", auto)
+		GameState.stash.clear()
+		GameState.loadouts.clear()
+		GameState.pending_rewards.clear()
+		GameState.salvage_bin.clear()
+		while GameState.stash.size() < GameState.stash_capacity():
+			GameState.add_to_stash(GearDefs.make_gear("boots", "common", rng))
+		GameState.selected_mode_id = "drift"
+		GameState.begin_run()
+		var leg := GearDefs.make_weapon("ash_rook", "legendary", rng)
+		var setc := GearDefs.make_gear("chest", "common", rng, "general", "ash_rook")
+		setc["set"] = "night_runner"
+		for it in [GearDefs.make_gear("legs", "common", rng), leg, GearDefs.make_gear("legs", "epic", rng), GearDefs.make_gear("head", "rare", rng), setc]:
+			GameState.add_run_loot(it)
+		GameState.on_extract_success()
+		var held_r: Array = GameState.pending_rewards.map(func(x: Dictionary) -> String: return str(x["rarity"]))
+		_check(GameState.result_held_n == 4 and GameState.pending_rewards.size() == 4 and held_r.has("legendary") and held_r.has("epic") and held_r.has("rare"), "overflow holds rare+/set auto=%s %s" % [auto, held_r])
+		_check(GameState.result_overflow_n + GameState.result_auto_salvaged_n == 1, "only the plain common salvaged auto=%s" % auto)
+		for e in GameState.salvage_bin:
+			_check(str((e["item"] as Dictionary).get("rarity", "")) == "common", "bin has commons only")
+		_check(GameState.stash.size() == GameState.stash_capacity(), "stash untouched")
+		## Result TOTAL equals the bank after every payout; buttons deaf until shown.
+		var rs: Node = (load("res://scenes/ui/result_screen.tscn") as PackedScene).instantiate()
+		get_tree().root.add_child(rs)
+		await get_tree().process_frame
+		var again: Button = null
+		for b in rs.find_children("*", "Button", true, false):
+			if (b as Button).text == "RUN AGAIN":
+				again = b
+		_check(again != null and again.mouse_filter == Control.MOUSE_FILTER_IGNORE and not bool(rs.get("actions_live")), "result buttons deaf during reveal")
+		_check(rs.find_child("HeldLine", true, false) != null, "held line shown")
+		rs.set("_skip", true)
+		for i in range(90):
+			await get_tree().process_frame
+			if bool(rs.get("actions_live")):
+				break
+		await get_tree().create_timer(0.4).timeout
+		var tot: Label = rs.find_child("ScrapTotal", true, false) as Label
+		_check(tot != null and tot.text == str(GameState.account_scrap) and GameState.result_scrap_after == GameState.account_scrap, "result TOTAL %s vs %d" % [tot.text if tot else "none", GameState.account_scrap])
+		_check(bool(rs.get("actions_live")) and is_instance_valid(again) and again.mouse_filter == Control.MOUSE_FILTER_STOP, "result buttons live after reveal")
+		rs.queue_free()
+		await get_tree().process_frame
+		## Making room pulls held gear in.
+		GameState.salvage(int(GameState.stash[0]["uid"]))
+		_check(GameState.pending_rewards.size() == 3 and GameState.stash.size() == GameState.stash_capacity(), "salvage claims a held item")
+	## Admin: a touch + its emulated mouse copy count once; 5 real taps toggle.
+	var adm: Node = (load("res://scripts/autoload/admin.gd") as GDScript).new()
+	add_child(adm)
+	await get_tree().process_frame
+	_check(bool(adm.get("allowed")), "admin allowed in this build")
+	if adm:
+		var was := bool(adm.get("enabled"))
+		var t0 := 1000000
+		var toggled := false
+		for i in range(3):
+			toggled = bool(adm.call("register_tap", Vector2(20, 20), t0 + i * 300)) or toggled
+			toggled = bool(adm.call("register_tap", Vector2(20, 20), t0 + i * 300 + 5)) or toggled
+		_check(not toggled and bool(adm.get("enabled")) == was, "3 doubled taps do not unlock")
+		adm.set("_taps", [])
+		for i in range(5):
+			toggled = bool(adm.call("register_tap", Vector2(20, 20), t0 + 5000 + i * 300))
+		_check(toggled and bool(adm.get("enabled")) != was, "5 taps toggle admin")
+		adm.call("set_enabled", was)
+		adm.set("_taps", [])
+		adm.queue_free()
+	GameState.settings["auto_salvage_commons"] = keep_auto
+	GameState.salvage_bin = keep_bin
+	GameState.stash = keep_stash
+	GameState.loadouts = keep_lo
+	GameState.pending_rewards = keep_pend
+	GameState.account_scrap = keep_scrap
+	print("P0_UI_OK")
 
 
 ## 8c) What Gear shows is what prep shows and what the match applies — also

@@ -56,6 +56,12 @@ var result_salvaged: int = 0
 var result_auto_salvaged_n: int = 0
 var result_auto_salvaged_scrap: int = 0
 var result_overflow_n: int = 0
+## Rare+ (and set) finds that didn't fit a full stash: held in pending_rewards
+## until there's room (never salvaged silently).
+var result_held_n: int = 0
+## Bank total once every result payout landed (payout, salvage, quest rewards).
+## -1 = not snapshotted (the result screen falls back to account_scrap).
+var result_scrap_after: int = -1
 ## Unlock lines raised mid-run (trophies), shown on the result screen.
 var result_unlocks_pending: PackedStringArray = []
 ## --- Logbook (Phase C) ---
@@ -937,6 +943,7 @@ func salvage(uid: int) -> int:
 	var v := GearDefs.salvage_value(it)
 	account_scrap += v
 	_bin_push(it, v)
+	claim_pending_rewards()
 	save_profile()
 	meta_changed.emit()
 	return v
@@ -1272,6 +1279,11 @@ func auto_salvageable(it: Dictionary) -> bool:
 static func _keep_rank(it: Dictionary) -> int:
 	return GearDefs.RARITIES.find(str(it.get("rarity", "common"))) * 2 + (1 if str(it.get("set", "")) != "" else 0)
 
+## May a stash-full overflow salvage this find? Plain Commons only.
+static func overflow_salvageable(it: Dictionary) -> bool:
+	return str(it.get("rarity", "common")) == "common" and str(it.get("set", "")) == "" \
+			and str(it.get("legendary", "")) == ""
+
 ## Salvage a found (not yet stashed) item: scrap now, a uid so it can be
 ## bought back from the bin.
 func _salvage_found(it: Dictionary, frac: float) -> int:
@@ -1284,14 +1296,17 @@ func _salvage_found(it: Dictionary, frac: float) -> int:
 	return v
 
 ## Extract: found gear → stash, materials banked. Auto-salvage (setting) takes
-## plain Commons first; if the stash is still too small, the lowest items
-## (Commons first) are salvaged. Both land in the buy-back bin.
+## plain Commons first. If the stash is still too small, only plain Commons
+## are salvaged for room (into the buy-back bin); Rare+ and set pieces are never
+## salvaged on overflow: they wait in pending_rewards (the holding area) and
+## move in as soon as the stash has space.
 func _bank_run_loot() -> void:
 	result_found = []
 	result_salvaged = 0
 	result_auto_salvaged_n = 0
 	result_auto_salvaged_scrap = 0
 	result_overflow_n = 0
+	result_held_n = 0
 	var keep: Array = []
 	var auto := auto_salvage_on()
 	for it in run_loot:
@@ -1312,15 +1327,21 @@ func _bank_run_loot() -> void:
 			drop[order[i]] = true
 		var kept: Array = []
 		for i in range(keep.size()):
-			if drop.has(i):
+			if not drop.has(i):
+				kept.append(keep[i])
+			elif overflow_salvageable(keep[i]):
 				result_salvaged += _salvage_found(keep[i], GearDefs.OVERFLOW_SALVAGE)
 				result_overflow_n += 1
 			else:
-				kept.append(keep[i])
+				pending_rewards.append(keep[i].duplicate(true))
+				result_held_n += 1
 		keep = kept
 	for it in keep:
 		if add_to_stash(it):
 			result_found.append(it)
+		else:
+			pending_rewards.append(it.duplicate(true))
+			result_held_n += 1
 	for k in run_materials.keys():
 		materials[k] = material_count(str(k)) + int(run_materials[k])
 		result_unlocks.append("+%d %s" % [int(run_materials[k]), GearDefs.MATERIAL_NAME.get(str(k), str(k))])
@@ -1625,7 +1646,7 @@ func _complete_story_step(hero: String) -> void:
 			pending_rewards.append(w)
 		result_unlocks_pending.append("Legendary earned: %s" % str(w.get("name", "")))
 
-## Story Legendaries that waited for stash space.
+## Gear held for stash room: story Legendaries and stash-full overflow finds.
 func claim_pending_rewards() -> int:
 	var n := 0
 	while not pending_rewards.is_empty() and stash.size() < stash_capacity():
@@ -1812,6 +1833,8 @@ func _clear_result_meta() -> void:
 	result_auto_salvaged_n = 0
 	result_auto_salvaged_scrap = 0
 	result_overflow_n = 0
+	result_held_n = 0
+	result_scrap_after = -1
 
 func on_window_skipped() -> void:
 	windows_skipped += 1
@@ -2098,6 +2121,7 @@ func on_extract_success() -> void:
 	_reset_run_power_after_end()
 	for m in check_milestones():
 		result_unlocks.append("Milestone: %s" % str(m["name"]))
+	result_scrap_after = account_scrap
 	save_profile()
 
 func on_wipe() -> void:
@@ -2145,6 +2169,7 @@ func on_wipe() -> void:
 	_reset_run_power_after_end()
 	for m in check_milestones():
 		result_unlocks.append("Milestone: %s" % str(m["name"]))
+	result_scrap_after = account_scrap
 	save_profile()
 
 func _reset_run_power_after_end() -> void:

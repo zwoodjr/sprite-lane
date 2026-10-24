@@ -29,6 +29,9 @@ var _list: VBoxContainer
 var _popup: Control
 
 
+## Lock only guards against salvage; extraction rules still apply.
+const LOCK_HINT := "Locked = can't salvage. Still lost on death."
+
 func build(c: VBoxContainer) -> void:
 	c.add_theme_constant_override("separation", 16)
 	_hero = GameState.selected_character_id
@@ -517,6 +520,10 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 		GameState.toggle_lock(uid)
 		_rebuild_list(true))
 	extra.add_child(lk)
+	lk.tooltip_text = LOCK_HINT
+	var lh := UiTheme.body_label(LOCK_HINT, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	lh.name = "LockHint"
+	v.add_child(lh)
 	return p
 
 

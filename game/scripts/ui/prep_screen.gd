@@ -172,6 +172,9 @@ func _build_gear_row() -> void:
 		t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		b.add_child(t)
 		grid.add_child(b)
+	var risk := UiTheme.body_label("Gear you deploy with is at risk: lost on death unless insured. Locked = can't salvage. Still lost on death.", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	risk.name = "GearRiskNote"
+	_list.add_child(risk)
 	var sets := GameState.worn_set_counts(_hero)
 	if not sets.is_empty():
 		var fl := HFlowContainer.new()
