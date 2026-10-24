@@ -3309,6 +3309,10 @@ func _test_safe_save() -> void:
 	for k in range(3):
 		await get_tree().process_frame
 	GameState.leave_campaign_run()
+	var stash_n := GameState.stash.size()
+	GameState.live_run = {"mode": "campaign", "level": "p0_mayday", "hero": GameState.selected_character_id}
+	var ab := GameState.abandon_live_run()
+	_check((ab.get("lost", []) as Array).is_empty() and GameState.stash.size() == stash_n, "campaign abandon: gear kept")
 	GameState.campaign = keep_c
 	GameState.selected_mode_id = keep_mode
 	GameState.selected_character_id = keep_hero

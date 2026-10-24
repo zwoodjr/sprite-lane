@@ -156,8 +156,11 @@ func _live_prompt() -> void:
 	var at_risk: Array = info.get("at_risk", [])
 	var lose := "your equipped gear (%s)" % ", ".join(PackedStringArray(at_risk)) if not at_risk.is_empty() else "your equipped gear"
 	var kept := str(info.get("kept", ""))
-	lines.append(["ABANDON counts as a death: %s is lost, no scrap is recovered and the pack is lost.%s" % [
-		lose, (" Insured: %s stays." % kept) if kept != "" else ""], UiTheme.DANGER])
+	if str(info.get("mode", "")) == "campaign":
+		lines.append(["ABANDON counts as a failed level: the run is lost, your gear is kept.", UiTheme.DANGER])
+	else:
+		lines.append(["ABANDON counts as a death: %s is lost, no scrap is recovered and the pack is lost.%s" % [
+			lose, (" Insured: %s stays." % kept) if kept != "" else ""], UiTheme.DANGER])
 	_abandon_armed = false
 	_dialog = modal("RUN INTERRUPTED", lines, [
 		["RESUME", UiTheme.AMBER, func() -> void:
@@ -171,7 +174,7 @@ func _live_prompt() -> void:
 			if not _abandon_armed:
 				_abandon_armed = true
 				if b:
-					b.text = "TAP AGAIN: LOSE THE GEAR"
+					b.text = "TAP AGAIN: LOSE THE RUN" if str(info.get("mode", "")) == "campaign" else "TAP AGAIN: LOSE THE GEAR"
 				return
 			var r := GameState.abandon_live_run()
 			_close_dialog()

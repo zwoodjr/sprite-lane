@@ -2909,7 +2909,7 @@ func live_run_info() -> Dictionary:
 	info["max_hp"] = float(m.get("max_hp", 0.0))
 	var hero := str(mk.get("hero", ""))
 	var lost: Array = []
-	if hero != "":
+	if hero != "" and str(mk.get("mode", "")) != "campaign":
 		var keep := int(insured.get(hero, -1))
 		var eq := equipped_items(hero)
 		for sl in eq.keys():
@@ -2943,7 +2943,8 @@ func abandon_live_run() -> Dictionary:
 		hero = selected_character_id
 	var keep := int(insured.get(hero, -1))
 	var lost: Array = []
-	var eq := equipped_items(hero)
+	## Campaign: matches a campaign death — the run is lost, gear is kept.
+	var eq: Dictionary = {} if str(mk.get("mode", "")) == "campaign" else equipped_items(hero)
 	for sl in eq.keys():
 		var it: Dictionary = eq[sl]
 		if int(it.get("uid", -1)) == keep:
