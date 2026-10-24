@@ -140,7 +140,7 @@ func _build_view() -> Control:
 		v.add_child(tr)
 		_layers[n] = tr
 	## Depth E7: Helm's plane, rebuilt outside the door one tier-part at a time.
-	for i in range(1, ZoneDefs.PLANE_PARTS.size() + 1):
+	for i in range(1, ZoneDefs.PLANE_LAYERS + 1):
 		var pp := ZoneDefs.PLANE_LAYER % i
 		if not ResourceLoader.exists(pp):
 			continue
@@ -223,8 +223,8 @@ func _layer_visible(n: String) -> bool:
 	if n.begins_with("trophy_"):
 		return GameState.has_trophy(n.substr(7))
 	if n.begins_with("plane_"):
-		## Layer i = the part from tier i + 2 (Smog = 1 ... Dustfall = 8).
-		return GameState.plane_parts.has(str(int(n.substr(6)) + 2))
+		## Layer i = the part ZoneDefs.PLANE_PARTS draws on it.
+		return GameState.has_plane_part(ZoneDefs.plane_part_for_layer(int(n.substr(6))))
 	if n.begins_with("cosmetic_"):
 		return GameState.has_cosmetic(n.substr(9))
 	var cut := n.rfind("_")
@@ -1088,8 +1088,10 @@ func _add_tier_trophies() -> void:
 			grid.add_child(c)
 	var parts: Array = []
 	for t in ZoneDefs.PLANE_PARTS.keys():
-		parts.append(("[x] " if GameState.plane_parts.has(str(t)) else "[ ] ") + str(ZoneDefs.PLANE_PARTS[t]["name"]))
-	var pl := UiTheme.body_label("HELM'S PLANE  %d/%d — %s" % [GameState.plane_part_count(), ZoneDefs.PLANE_PARTS.size(), "  ".join(PackedStringArray(parts))], 13, UiTheme.TEXT_DIM)
+		if bool(ZoneDefs.PLANE_PARTS[t].get("optional", false)) and not GameState.has_plane_part(str(t)):
+			continue
+		parts.append(("[x] " if GameState.has_plane_part(str(t)) else "[ ] ") + str(ZoneDefs.PLANE_PARTS[t]["name"]))
+	var pl := UiTheme.body_label("HELM'S PLANE  %s — %s" % [GameState.plane_progress_text(), "  ".join(PackedStringArray(parts))], 13, UiTheme.TEXT_DIM)
 	v.add_child(pl)
 	v.move_child(pl, close.get_index())
 

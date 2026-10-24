@@ -336,6 +336,15 @@ func _least_recent() -> int:
 
 func _ask(d: Dictionary) -> Dictionary:
 	var opts: Array = d["choice"]
+	## Memory run (replay of a finished level): the choice already made is the
+	## only one on offer, so the replay can never rewrite the story.
+	var memo := false
+	for o in opts:
+		var lk: Variant = GameState.campaign_locked_choice(str((o as Dictionary).get("flag", "")))
+		if lk != null and str(lk) == str((o as Dictionary).get("value", true)):
+			opts = [o]
+			memo = true
+			break
 	_skipping = false
 	if d.has("prompt"):
 		_tap = false
@@ -344,7 +353,7 @@ func _ask(d: Dictionary) -> Dictionary:
 		c.queue_free()
 	_choice_pick = -1
 	for i in range(opts.size()):
-		var b := UiTheme.big_button(str(opts[i]["text"]).to_upper(), UiTheme.AMBER if i == 0 else UiTheme.TEAL, 72, 24)
+		var b := UiTheme.big_button(str(opts[i]["text"]).to_upper() + ("  (MEMORY)" if memo else ""), UiTheme.AMBER if i == 0 else UiTheme.TEAL, 72, 24)
 		b.custom_minimum_size = Vector2(0, 72)
 		var k := i
 		b.pressed.connect(func() -> void: _choice_pick = k)

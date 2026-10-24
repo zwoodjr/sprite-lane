@@ -7,7 +7,7 @@ extends RefCounted
 static func def() -> Dictionary:
 	return {
 		"title": "Wheels Up",
-		"subtitle": "Airframe, battery, fuel, engine, heart. Everybody in.",
+		"subtitle": "Airframe, battery, fuel, engine. Everybody in.",
 		"goal": "Say your goodbyes to the Dust",
 		"tier": 1,
 		"hero": "helm_wisp",

@@ -123,13 +123,29 @@ const PACTS := {
 }
 
 ## --- Helm's plane ------------------------------------------------------------------
-## First clear of each tier from Smog returns a part; all 8 = the plane flies.
+## THE one plane-part list (Wander and Campaign share it; GameState.plane_parts
+## holds {part id: true}). Each part can come home either way: `tier` = first
+## clear of that Wander tier, `level` = first clear of that campaign level.
+## `layer` = the hangar art layer it lights (0 = none). `optional` parts are
+## extras that never count towards the plane being whole (the Dust Heart only
+## comes home on the "power the plane" ending).
 const PLANE_PARTS := {
-	3: {"id": "fuselage", "name": "Fuselage"}, 4: {"id": "wings", "name": "Wings"},
-	5: {"id": "tail", "name": "Tail Fin"}, 6: {"id": "engine", "name": "Engine"},
-	7: {"id": "propeller", "name": "Propeller"}, 8: {"id": "gear", "name": "Landing Gear"},
-	9: {"id": "canopy", "name": "Cockpit Canopy"}, 10: {"id": "paint", "name": "Fuel + Paint"},
+	"fuselage": {"name": "Airframe", "tier": 3, "level": "p0_mayday", "layer": 1, "icon": "tab_camp"},
+	"wings": {"name": "Wings", "tier": 4, "layer": 2, "icon": "tab_camp"},
+	"tail": {"name": "Tail Fin", "tier": 5, "layer": 3, "icon": "tab_camp"},
+	"engine": {"name": "Engine", "tier": 6, "level": "l08_dead_signal", "layer": 4, "icon": "mat_salvage_core"},
+	"propeller": {"name": "Propeller", "tier": 7, "layer": 5, "icon": "tab_camp"},
+	"gear": {"name": "Landing Gear", "tier": 8, "layer": 6, "icon": "tab_camp"},
+	"canopy": {"name": "Cockpit Canopy", "tier": 9, "layer": 7, "icon": "tab_camp"},
+	"fuel": {"name": "Fuel Tanks", "tier": 10, "level": "l06_smugglers_road", "layer": 8, "icon": "camp_ammo_bench"},
+	"battery": {"name": "Battery", "level": "l03_lights_out", "icon": "camp_generator"},
+	"heart": {"name": "Dust Heart", "level": "l12_dustfall", "icon": "mat_dust_heart", "optional": true},
 }
+## Old save ids -> unified ids (Wander saved tiers "3".."10", the campaign
+## saved its own ids).
+const PLANE_LEGACY := {"3": "fuselage", "4": "wings", "5": "tail", "6": "engine", "7": "propeller",
+	"8": "gear", "9": "canopy", "10": "fuel", "frame": "fuselage"}
+const PLANE_LAYERS := 8
 const PLANE_LAYER := "res://assets/sprites/depth/plane/plane_%d.png"
 ## Where the plane layers sit on the hangar's 1200x750 painted canvas (outside the door).
 const PLANE_RECT := Rect2(490, 330, 222, 118)
@@ -162,5 +178,35 @@ static func pact(id: String) -> Dictionary:
 	return PACTS.get(id, {})
 
 
+## The part a Wander tier's first clear sends home ({} if none; has "id").
 static func plane_part(tier: int) -> Dictionary:
-	return PLANE_PARTS.get(tier, {})
+	for k in PLANE_PARTS.keys():
+		if int(PLANE_PARTS[k].get("tier", 0)) == tier:
+			var d: Dictionary = PLANE_PARTS[k].duplicate()
+			d["id"] = str(k)
+			return d
+	return {}
+
+
+## Unified id for a saved key (new id, old tier number or old campaign id), "" if unknown.
+static func plane_part_id(key: String) -> String:
+	if PLANE_PARTS.has(key):
+		return key
+	return str(PLANE_LEGACY.get(key, ""))
+
+
+## Parts that count towards a whole plane (everything not optional).
+static func plane_required() -> Array:
+	var out: Array = []
+	for k in PLANE_PARTS.keys():
+		if not bool(PLANE_PARTS[k].get("optional", false)):
+			out.append(str(k))
+	return out
+
+
+## Part shown by hangar art layer i (1..PLANE_LAYERS), "" if none.
+static func plane_part_for_layer(i: int) -> String:
+	for k in PLANE_PARTS.keys():
+		if int(PLANE_PARTS[k].get("layer", 0)) == i:
+			return str(k)
+	return ""

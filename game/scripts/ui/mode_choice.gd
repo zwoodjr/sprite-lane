@@ -81,7 +81,7 @@ func _campaign_card() -> Control:
 	pr.add_theme_constant_override("separation", 8)
 	v.add_child(pr)
 	pr.add_child(IconSet.rect("tab_camp", 48))
-	var pl := UiTheme.pixel_label("PLANE %d/%d" % [(GameState.campaign["parts"] as Array).size(), CampaignDefs.PLANE_ORDER.size()], UiTheme.PX_M, UiTheme.AMBER)
+	var pl := UiTheme.pixel_label("PLANE " + GameState.plane_progress_text(), UiTheme.PX_M, UiTheme.AMBER)
 	pl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	pr.add_child(pl)
 	var sp := Control.new()

@@ -111,5 +111,5 @@ static func def() -> Dictionary:
 				"on_start": [["radio", "helm", "Biscuit, give me eyes! Noel, sic 'em!"]]},
 			{"type": "extract", "text": "Get inside", "hint": "Stand on the pad for 3 seconds", "at": Vector2(0, -2750)},
 		],
-		"rewards": {"scrap": 150, "survivors": ["helm_wisp", "ash_rook"], "pets": ["noel"], "part": "frame"},
+		"rewards": {"scrap": 150, "survivors": ["helm_wisp", "ash_rook"], "pets": ["noel"], "part": "fuselage"},
 	}

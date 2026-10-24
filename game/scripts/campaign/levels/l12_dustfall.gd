@@ -98,5 +98,5 @@ static func def() -> Dictionary:
 				"waves": [{"t": 0, "kinds": "swarm", "n": 8}, {"t": 8, "kinds": "ash_wraiths", "n": 6}, {"t": 16, "kinds": "swarm", "n": 8}],
 				"on_start": [["shake", 0.8], ["hazard", "spore", Vector2(-180, -1900), 120.0, 60.0, 5.0], ["hazard", "spore", Vector2(200, -1300), 120.0, 60.0, 5.0]]},
 		],
-		"rewards": {"scrap": 500, "part": "heart"},
+		"rewards": {"scrap": 500, "part": "heart", "part_if": ["ending", "power"]},
 	}

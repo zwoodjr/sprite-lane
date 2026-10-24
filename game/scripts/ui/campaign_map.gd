@@ -74,11 +74,12 @@ func _camp_strip() -> Control:
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(sp)
 	## Helm's plane: parts found / needed.
-	var have := (GameState.campaign["parts"] as Array).size()
+	var have := GameState.plane_part_count()
 	var ic := IconSet.rect("tab_camp", 48)
 	ic.modulate = Color.WHITE if have > 0 else Color(0.35, 0.3, 0.3)
 	h.add_child(ic)
-	var pl := UiTheme.pixel_label("%d/%d" % [have, CampaignDefs.PLANE_ORDER.size()], UiTheme.PX_M, UiTheme.AMBER)
+	var pl := UiTheme.pixel_label(GameState.plane_progress_text(), UiTheme.PX_M, UiTheme.AMBER)
+	pl.name = "PlaneCount"
 	pl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(pl)
 	return p
@@ -240,6 +241,27 @@ func _build_detail() -> void:
 	var lid := _sel
 	go.pressed.connect(func() -> void: GameState.go_campaign_level(lid, GameState.campaign_pick_for(lid)))
 	v.add_child(go)
+	if done:
+		v.add_child(UiTheme.body_label("Replays are memories: rewards yes, the story stays as it was.", UiTheme.T_SMALL, UiTheme.TEXT_DIM, true))
+	if GameState.campaign_done_count() > 0:
+		v.add_child(_restart_button())
+
+
+## The only way to change a finished story: wipe it and start Mayday again.
+## Two taps (the first arms it). Wander progress and gear are untouched.
+func _restart_button() -> Button:
+	var rb := UiTheme.big_button("RESTART CAMPAIGN", UiTheme.RUST, 56, 20)
+	rb.name = "RestartCampaign"
+	rb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rb.pressed.connect(func() -> void:
+		if not bool(rb.get_meta("armed", false)):
+			rb.set_meta("armed", true)
+			rb.text = "TAP AGAIN: ERASE THE STORY, START OVER"
+			return
+		GameState.restart_campaign()
+		Juice.sfx("ui_tap")
+		get_tree().reload_current_scene())
+	return rb
 
 
 ## Chapter bands (zone ground, speck clusters, the chapter name) + the trail.

@@ -103,7 +103,8 @@ var kit: Dictionary = {}
 ## Depth E6: mech pets rebuilt in the Workshop ({pet id: true}).
 var mechs_built: Dictionary = {}
 ## Depth E7: tier-clear trophies {hero: {"<tier>": true}}, Helm's plane parts
-## {"<tier>": true}, Dust Pacts picked for the next run, and run-only zone state.
+## {part id: true} (ZoneDefs.PLANE_PARTS: the ONE tracker Wander and the
+## Campaign both write), Dust Pacts picked for the next run, and run-only zone state.
 var tier_clears: Dictionary = {}
 var plane_parts: Dictionary = {}
 var pacts: Array = []
@@ -447,8 +448,7 @@ func _load_depth(d: Dictionary) -> void:
 	var pp: Variant = d.get("plane_parts", {})
 	if typeof(pp) == TYPE_DICTIONARY:
 		for t in (pp as Dictionary).keys():
-			if not ZoneDefs.plane_part(int(str(t))).is_empty():
-				plane_parts[str(int(str(t)))] = true
+			add_plane_part(str(t))
 	pacts = []
 	var pc: Variant = d.get("pacts", [])
 	if typeof(pc) == TYPE_ARRAY:
@@ -625,11 +625,34 @@ func pact_loot_bonus() -> float:
 func has_tier_clear(hero: String, tier: int) -> bool:
 	return bool((tier_clears.get(hero, {}) as Dictionary).get(str(tier), false))
 
+## Parts towards a whole plane (optional extras like the Dust Heart aside).
 func plane_part_count() -> int:
-	return plane_parts.size()
+	var n := 0
+	for k in ZoneDefs.plane_required():
+		if plane_parts.has(str(k)):
+			n += 1
+	return n
+
+func plane_part_total() -> int:
+	return ZoneDefs.plane_required().size()
+
+func has_plane_part(id: String) -> bool:
+	return plane_parts.has(ZoneDefs.plane_part_id(id))
+
+## Same "PLANE x/y" text everywhere (+ HEART when the core is aboard).
+func plane_progress_text() -> String:
+	return "%d/%d" % [plane_part_count(), plane_part_total()] + (" +HEART" if plane_parts.has("heart") else "")
+
+## Adds a part by any id (new / old tier / old campaign). True if it was new.
+func add_plane_part(key: String) -> bool:
+	var id := ZoneDefs.plane_part_id(key)
+	if id == "" or plane_parts.has(id):
+		return false
+	plane_parts[id] = true
+	return true
 
 func plane_complete() -> bool:
-	return plane_parts.size() >= ZoneDefs.PLANE_PARTS.size()
+	return plane_part_count() >= plane_part_total()
 
 ## Extract on tier >= 3: the survivor's trophy for that tier, and the first
 ## clear of the tier sends a plane part home.
@@ -643,9 +666,8 @@ func _record_tier_clear(tier: int) -> void:
 		tier_clears[hero] = row
 		result_unlocks_pending.append("Trophy: %s cleared %s" % [str(get_character().get("display_name", hero)), str(ZoneDefs.zone(tier)["name"])])
 	var part := ZoneDefs.plane_part(tier)
-	if not part.is_empty() and not plane_parts.has(str(tier)):
-		plane_parts[str(tier)] = true
-		result_unlocks_pending.append("Helm's plane: %s recovered (%d/%d)" % [str(part["name"]), plane_parts.size(), ZoneDefs.PLANE_PARTS.size()])
+	if not part.is_empty() and add_plane_part(str(part["id"])):
+		result_unlocks_pending.append("Helm's plane: %s recovered (%d/%d)" % [str(part["name"]), plane_part_count(), plane_part_total()])
 		if plane_complete():
 			result_unlocks_pending.append("Helm's plane is whole — new bases beyond the Dust are in reach")
 			hangar_notice = "Helm's plane is whole. Somewhere past the Dust, new bases are waiting."
@@ -2221,7 +2243,7 @@ var _campaign_mode_for: String = ""
 
 
 func _fresh_campaign() -> Dictionary:
-	return {"v": CAMPAIGN_V, "done": {}, "flags": {}, "roster": [], "pets": [], "parts": [], "last": "", "picks": {}}
+	return {"v": CAMPAIGN_V, "done": {}, "flags": {}, "roster": [], "pets": [], "last": "", "picks": {}}
 
 
 ## Sanitised load: unknown levels / heroes / pets dropped, wrong types ignored.
@@ -2242,7 +2264,19 @@ func _load_campaign(v: Variant) -> void:
 			fv = int(fv)
 		if typeof(fv) in [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
 			campaign["flags"][str(k)] = fv
-	for key in ["roster", "pets", "parts"]:
+	_normalize_story_outcomes()
+	## Old saves kept campaign plane parts here: merge them into the one
+	## tracker (plane_parts, loaded before this). A Dust Heart a destroy
+	## ending wrongly handed out stays gone.
+	var old_parts: Variant = d.get("parts", [])
+	if typeof(old_parts) == TYPE_ARRAY:
+		for it in (old_parts as Array):
+			if ZoneDefs.plane_part_id(str(it)) == "heart" and not _canon_flag_is("ending", "power"):
+				continue
+			add_plane_part(str(it))
+	if plane_parts.has("heart") and _canon_flag_is("ending", "destroy"):
+		plane_parts.erase("heart")
+	for key in ["roster", "pets"]:
 		var arr: Variant = d.get(key, [])
 		if typeof(arr) != TYPE_ARRAY:
 			continue
@@ -2254,8 +2288,6 @@ func _load_campaign(v: Variant) -> void:
 					ok = CharacterDefs.is_playable(id)
 				"pets":
 					ok = PetDefs.is_equipable(id)
-				"parts":
-					ok = CampaignDefs.PLANE_PARTS.has(id)
 			if ok and not id in (campaign[key] as Array):
 				(campaign[key] as Array).append(id)
 	var last := str(d.get("last", ""))
@@ -2269,6 +2301,54 @@ func _load_campaign(v: Variant) -> void:
 
 func in_campaign_run() -> bool:
 	return play_mode == "campaign" and campaign_level_id != ""
+
+
+## A replay of a level the story already finished: a "memory". The first
+## completion is canonical; a memory pays rewards but never changes who
+## lived, who fell, or any story flag. Only RESTART CAMPAIGN rewrites it.
+func campaign_memory_run() -> bool:
+	return in_campaign_run() and campaign_level_done(campaign_level_id)
+
+
+## The saved (canonical) story flag, ignoring this attempt's choices.
+func campaign_canon_flag(key: String, default: Variant = null) -> Variant:
+	return (campaign["flags"] as Dictionary).get(key, default)
+
+
+func _canon_flag_is(key: String, value: Variant) -> bool:
+	var f: Variant = campaign_canon_flag(key, null)
+	return f != null and str(f) == str(value)
+
+
+## Survivors who can fall in the story, keyed by the outcome flag that picks them.
+const STORY_FALL_FLAG := "choke_fall"
+const STORY_CAN_FALL := ["vesper_thorn", "nyx_caldera"]
+
+
+## One outcome, one truth: the saved Choke outcome decides who fell (repairs
+## saves where replays killed a second survivor or left one fallen while the
+## outcome said everyone lived).
+func _normalize_story_outcomes() -> void:
+	var fl: Dictionary = campaign["flags"]
+	if not fl.has(STORY_FALL_FLAG):
+		return
+	var who := str(fl[STORY_FALL_FLAG])
+	for h in STORY_CAN_FALL:
+		if str(h) == who:
+			fl["fallen_" + str(h)] = true
+		else:
+			fl.erase("fallen_" + str(h))
+
+
+## Wipe the story only (Wander progress, gear and Wander-earned plane parts
+## stay). The one way to change a finished story.
+func restart_campaign() -> void:
+	campaign = _fresh_campaign()
+	campaign_run_flags = {}
+	campaign_result = {}
+	## Story-only part: the heart comes back only by choosing it again.
+	plane_parts.erase("heart")
+	save_profile()
 
 
 func campaign_level() -> Dictionary:
@@ -2300,7 +2380,17 @@ func campaign_flag(key: String, default: Variant = null) -> Variant:
 
 
 func set_campaign_flag(key: String, value: Variant) -> void:
+	## Memories replay the story as it happened: decided flags are locked.
+	if campaign_memory_run() and (campaign["flags"] as Dictionary).has(key):
+		return
 	campaign_run_flags[key] = value
+
+
+## Memory runs: the option already chosen for this flag (null = still open).
+func campaign_locked_choice(key: String) -> Variant:
+	if campaign_memory_run() and (campaign["flags"] as Dictionary).has(key):
+		return campaign["flags"][key]
+	return null
 
 
 ## Does the flag match? A bare key (value null) means "set and truthy".
@@ -2481,11 +2571,15 @@ func complete_campaign_level(time_s: float) -> Dictionary:
 	var first := not campaign_level_done(id)
 	var rw: Dictionary = lv.get("rewards", {})
 	var lines := PackedStringArray()
-	## Choices made this attempt become the story.
-	for k in campaign_run_flags.keys():
-		campaign["flags"][k] = campaign_run_flags[k]
-	for k in (rw.get("flags", {}) as Dictionary).keys():
-		campaign["flags"][str(k)] = rw["flags"][k]
+	## The FIRST completion's choices become the story; replays are memories.
+	if first:
+		for k in campaign_run_flags.keys():
+			campaign["flags"][k] = campaign_run_flags[k]
+		for k in (rw.get("flags", {}) as Dictionary).keys():
+			campaign["flags"][str(k)] = rw["flags"][k]
+		_normalize_story_outcomes()
+	else:
+		lines.append("A memory: the story stays as it was")
 	campaign_run_flags = {}
 	var prev: Dictionary = (campaign["done"] as Dictionary).get(id, {})
 	var best := float(prev.get("best", 0.0))
@@ -2514,10 +2608,11 @@ func complete_campaign_level(time_s: float) -> Dictionary:
 				campaign["pets"].append(str(p))
 				dogs.append(str(p))
 				lines.append("%s is home" % str(PetDefs.get_pet(str(p)).get("name", p)))
-		var part := str(rw.get("part", ""))
-		if part != "" and CampaignDefs.PLANE_PARTS.has(part) and not part in (campaign["parts"] as Array):
-			campaign["parts"].append(part)
-			lines.append("Plane part: %s" % str(CampaignDefs.PLANE_PARTS[part]["name"]))
+		var part := ZoneDefs.plane_part_id(str(rw.get("part", "")))
+		var pif: Array = rw.get("part_if", [])
+		var part_ok := pif.size() < 2 or _canon_flag_is(str(pif[0]), pif[1])
+		if part != "" and part_ok and add_plane_part(part):
+			lines.append("Plane part: %s (%s)" % [str(ZoneDefs.PLANE_PARTS[part]["name"]), plane_progress_text()])
 		## Hangar features the story introduces: a floor, never a refund.
 		var cp: Dictionary = rw.get("camp", {})
 		for k in cp.keys():

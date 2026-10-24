@@ -149,6 +149,8 @@ func _run() -> void:
 	GameState.kit = keep_kit
 	await _test_minimap()
 	await _test_campaign()
+	await _test_story_canon()
+	await _test_plane_unified()
 	var keep_mech := [GameState.mechs_built.duplicate(), GameState.selected_pet_id, GameState.account_scrap]
 	await _test_depth_e6()
 	await _test_quickwins()
@@ -1676,10 +1678,12 @@ func _test_depth_e7() -> void:
 	GameState._record_tier_clear(2)
 	_check(GameState.tier_clears.is_empty(), "e7 no trophy below smog")
 	GameState._record_tier_clear(5)
-	_check(GameState.has_tier_clear("pebble", 5) and GameState.plane_parts.has("5") and not GameState.has_tier_clear("ash_rook", 5), "e7 trophy + plane part")
+	_check(GameState.has_tier_clear("pebble", 5) and GameState.has_plane_part("tail") and not GameState.has_tier_clear("ash_rook", 5), "e7 trophy + plane part")
 	for t in range(3, 11):
 		GameState._record_tier_clear(t)
-	_check(GameState.plane_complete() and GameState.plane_part_count() == 8, "e7 plane complete")
+	_check(not GameState.plane_complete() and GameState.plane_part_count() == 8, "e7 all tier parts, battery still missing")
+	GameState.add_plane_part("battery")
+	_check(GameState.plane_complete() and GameState.plane_part_count() == GameState.plane_part_total(), "e7 plane complete")
 	## Pacts.
 	GameState.pacts = []
 	GameState.best_tier_extracted = 2
@@ -1692,7 +1696,7 @@ func _test_depth_e7() -> void:
 	## Save sanitize.
 	GameState._load_depth({"tier_clears": {"pebble": {"5": true, "1": true, "x": true}, "nobody": {"5": true}}, "plane_parts": {"4": true, "2": true}, "pacts": ["thick_dust", "bogus", "thick_dust"]})
 	_check(GameState.tier_clears.size() == 1 and (GameState.tier_clears["pebble"] as Dictionary).size() == 1, "e7 save tier clears sanitized")
-	_check(GameState.plane_parts.keys() == ["4"] and GameState.pacts == ["thick_dust"], "e7 save plane / pacts sanitized")
+	_check(GameState.plane_parts.keys() == ["wings"] and GameState.pacts == ["thick_dust"], "e7 save plane / pacts sanitized")
 	GameState._load_depth({})
 	_check(GameState.tier_clears.is_empty() and GameState.plane_parts.is_empty() and GameState.pacts.is_empty(), "e7 old saves")
 	## Pact in a match: enemies tougher, narrower windows.
@@ -2483,15 +2487,16 @@ func _test_minimap() -> void:
 ## by debug-completing its objectives (god mode). Wander state is untouched.
 func _test_campaign() -> void:
 	var keep := [GameState.campaign.duplicate(true), GameState.selected_character_id, GameState.selected_pet_id,
-		GameState.account_scrap, GameState.camp.duplicate(), GameState.stash.duplicate(true), GameState.selected_mode_id]
+		GameState.account_scrap, GameState.camp.duplicate(), GameState.stash.duplicate(true), GameState.selected_mode_id, GameState.plane_parts.duplicate()]
 	## --- save: old saves (no key), junk, round trip
 	GameState._load_campaign(null)
 	_check(GameState.campaign_done_count() == 0 and (GameState.campaign["roster"] as Array).is_empty(), "campaign: missing key = fresh")
+	GameState.plane_parts = {}
 	GameState._load_campaign({"done": {"p0_mayday": {"best": 91.0, "runs": 2}, "bogus": {"best": 1}}, "flags": {"a": 1.0, "b": [1], "c": "x"},
 		"roster": ["ash_rook", "nobody"], "pets": ["noel", "cat"], "parts": ["frame", "wing"], "last": "zzz", "picks": {"l07_mother_vane": "pebble", "l01_rubble_run": "ghost"}})
 	_check(GameState.campaign_level_done("p0_mayday") and GameState.campaign_done_count() == 1, "campaign: known levels kept, junk dropped")
 	_check(typeof(GameState.campaign["flags"]["a"]) == TYPE_INT and not (GameState.campaign["flags"] as Dictionary).has("b") and str(GameState.campaign["flags"]["c"]) == "x", "campaign: flags sanitised")
-	_check(GameState.campaign["roster"] == ["ash_rook"] and GameState.campaign["pets"] == ["noel"] and GameState.campaign["parts"] == ["frame"], "campaign: roster / pets / parts sanitised")
+	_check(GameState.campaign["roster"] == ["ash_rook"] and GameState.campaign["pets"] == ["noel"] and GameState.plane_parts.keys() == ["fuselage"] and not GameState.campaign.has("parts"), "campaign: roster / pets / parts sanitised (parts merged into the one tracker)")
 	_check(str(GameState.campaign["last"]) == "" and (GameState.campaign["picks"] as Dictionary).size() == 1, "campaign: last + picks sanitised")
 	var snap: Dictionary = GameState.campaign.duplicate(true)
 	GameState._load_campaign(JSON.parse_string(JSON.stringify(GameState.campaign)))
@@ -2537,6 +2542,7 @@ func _test_campaign() -> void:
 	GameState.camp = keep[4]
 	GameState.stash = keep[5]
 	GameState.selected_mode_id = keep[6]
+	GameState.plane_parts = keep[7]
 	GameState.reset_loadout_to_defaults()
 	_check(_campaign_levels_run >= 1, "campaign: levels ran (%d)" % _campaign_levels_run)
 	print("CAMPAIGN_OK")
@@ -2548,10 +2554,20 @@ func _campaign_run_level(id: String) -> void:
 	GameState.campaign_autoplay = true
 	GameState.campaign_autoplay_exit = false
 	_check(GameState.campaign_level_unlocked(id), "campaign %s unlocked after the ones before" % id)
+	if id == "l12_dustfall":
+		GameState.plane_parts.erase("heart")
 	if not GameState.prepare_campaign_level(id):
 		_check(false, "campaign %s prepares" % id)
 		return
 	var lv := GameState.campaign_level()
+	await _campaign_play(id, lv)
+	if id == "l12_dustfall":
+		## The story bot picks the first option: Destroy the heart.
+		_check(GameState.campaign_flag_is("ending", "destroy") and not GameState.has_plane_part("heart"), "campaign: destroying the heart gives no Dust Heart part")
+
+
+## Plays a prepared level to the end (debug-complete), outro included.
+func _campaign_play(id: String, lv: Dictionary) -> void:
 	var m: Node = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
 	get_tree().root.add_child(m)
 	get_tree().current_scene = m
@@ -2559,7 +2575,8 @@ func _campaign_run_level(id: String) -> void:
 	var objs := 0
 	var last_idx := -1
 	var frames := 0
-	while frames < 4000 and not GameState.campaign_level_done(id):
+	## Ends on the win itself (a replay is already "done" before it starts).
+	while frames < 4000 and not (is_instance_valid(m) and bool(m.get("won"))):
 		frames += 1
 		await get_tree().physics_frame
 		if not is_instance_valid(m) or bool(m.get("_ended")) and not bool(m.get("won")):
@@ -2574,7 +2591,7 @@ func _campaign_run_level(id: String) -> void:
 			pl.set("_iframes", 0.5)
 		if frames % 12 == 0 and bool(m.get("started")) and not bool(runner.get("busy")) and not get_tree().paused:
 			runner.call("debug_complete")
-	var ok := GameState.campaign_level_done(id)
+	var ok := GameState.campaign_level_done(id) and is_instance_valid(m) and bool(m.get("won"))
 	_campaign_levels_run += 1
 	_check(ok, "campaign %s completes by debug-complete (frames %d, objectives %d)" % [id, frames, objs])
 	var rw: Dictionary = lv.get("rewards", {})
@@ -2590,3 +2607,209 @@ func _campaign_run_level(id: String) -> void:
 	GameState.leave_campaign_run()
 	for k in range(3):
 		await get_tree().process_frame
+
+
+## Story lines a scene would show with the current flags (mirrors
+## story_panel._play_lines; a choice shows its locked / first option).
+func _scene_text(lines: Array) -> String:
+	var out := PackedStringArray()
+	for ln in lines:
+		if ln is Dictionary:
+			var d: Dictionary = ln
+			if d.has("choice"):
+				var opts: Array = d["choice"]
+				var pick: Dictionary = opts[0]
+				for o in opts:
+					var lk: Variant = GameState.campaign_locked_choice(str((o as Dictionary).get("flag", "")))
+					if lk != null and str(lk) == str((o as Dictionary).get("value", true)):
+						pick = o
+				out.append(_scene_text(pick.get("then", [])))
+			elif d.has("if"):
+				var cond: Array = d["if"]
+				var ok := GameState.campaign_flag_is(str(cond[0]), cond[1] if cond.size() > 1 else null)
+				out.append(_scene_text(d.get("then", []) if ok else d.get("else", [])))
+			continue
+		out.append(str((ln as Array)[1]))
+	return "\n".join(out)
+
+
+## Choke outro + epilogue agree with who the saved story says fell.
+func _check_story_text(what: String) -> void:
+	var fall := str(GameState.campaign_canon_flag("choke_fall", ""))
+	var choke := _scene_text(CampaignDefs.level("l10_choke")["scenes"]["outro"])
+	var epi := _scene_text(CampaignDefs.level("e0_wheels_up")["scenes"]["hangar"])
+	var v_fell := GameState.campaign_fallen("vesper_thorn")
+	var n_fell := GameState.campaign_fallen("nyx_caldera")
+	_check(v_fell == (fall == "vesper_thorn") and n_fell == (fall == "nyx_caldera"), "story %s: fallen state = the Choke outcome (%s)" % [what, fall])
+	_check(("Where's Vesper" in choke) == v_fell and ("Where is Nyx" in choke) == n_fell and ("EVERYONE" in choke) == (not v_fell and not n_fell), "story %s: Choke outro matches the fallen state" % what)
+	_check(("window seat" in epi) == v_fell and ("shortcut through the sky" in epi) == n_fell and ("back way out of a sky" in epi) == (not n_fell), "story %s: epilogue matches the fallen state" % what)
+
+
+func _first_clear(id: String, flags: Dictionary) -> void:
+	GameState.prepare_campaign_level(id)
+	_check(not GameState.campaign_memory_run(), "story: %s first clear is not a memory" % id)
+	for k in flags.keys():
+		GameState.set_campaign_flag(str(k), flags[k])
+	GameState.complete_campaign_level(100.0)
+	GameState.leave_campaign_run()
+
+
+func _test_story_canon() -> void:
+	var keep := [GameState.campaign.duplicate(true), GameState.plane_parts.duplicate(), GameState.selected_character_id, GameState.selected_pet_id,
+		GameState.account_scrap, GameState.stash.duplicate(true), GameState.camp.duplicate(), GameState.selected_mode_id]
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.campaign_debug_unlock_to("l02_bell_tower")
+	## First playthrough: Vesper kept at arm's length, Nyx loyal -> Vesper falls at Choke.
+	_first_clear("l02_bell_tower", {"vesper_open": false})
+	GameState.campaign_debug_unlock_to("l06_smugglers_road")
+	_first_clear("l06_smugglers_road", {"nyx_sold_road": false})
+	GameState.campaign_debug_unlock_to("l10_choke")
+	_first_clear("l10_choke", {"choke_fall": "vesper_thorn", "fallen_vesper_thorn": true})
+	_check(GameState.campaign_fallen("vesper_thorn") and GameState.campaign_has_survivor("nyx_caldera"), "story: first Choke clear is canonical (Vesper fell)")
+	_check_story_text("first clear")
+	var canon: Dictionary = GameState.campaign["flags"].duplicate()
+	## Memory replays try to rewrite earlier choices.
+	for pair in [["l02_bell_tower", "vesper_open", true], ["l06_smugglers_road", "nyx_sold_road", true]]:
+		GameState.prepare_campaign_level(str(pair[0]))
+		_check(GameState.campaign_memory_run(), "story: %s replay is a memory" % pair[0])
+		_check(str(GameState.campaign_locked_choice(str(pair[1]))) == str(canon[pair[1]]), "story: %s choice is locked to the first pick" % pair[0])
+		GameState.set_campaign_flag(str(pair[1]), pair[2])
+		_check(str(GameState.campaign_flag(str(pair[1]))) == str(canon[pair[1]]), "story: %s replay can't flip %s" % [pair[0], pair[1]])
+		var sc := GameState.account_scrap
+		var res := GameState.complete_campaign_level(90.0)
+		_check(GameState.account_scrap > sc and "A memory: the story stays as it was" in res["lines"], "story: %s memory still pays" % pair[0])
+		GameState.leave_campaign_run()
+	## Replaying Choke trying to kill a second survivor (Nyx).
+	GameState.prepare_campaign_level("l10_choke")
+	GameState.set_campaign_flag("choke_fall", "nyx_caldera")
+	GameState.set_campaign_flag("fallen_nyx_caldera", true)
+	GameState.complete_campaign_level(80.0)
+	GameState.leave_campaign_run()
+	_check(JSON.stringify(GameState.campaign["flags"]) == JSON.stringify(canon), "story: replays leave every story flag as it was")
+	_check(GameState.campaign_fallen("vesper_thorn") and not GameState.campaign_fallen("nyx_caldera") and "nyx_caldera" in GameState.campaign_roster(), "story: replay can't kill a second survivor")
+	_check_story_text("after replays")
+	## A real replay of Choke through the level scene (outro included).
+	GameState.campaign_autoplay = true
+	GameState.campaign_autoplay_exit = false
+	GameState.prepare_campaign_level("l10_choke")
+	await _campaign_play("l10_choke", GameState.campaign_level())
+	GameState.campaign_autoplay = false
+	_check(JSON.stringify(GameState.campaign["flags"]) == JSON.stringify(canon) and not GameState.campaign_fallen("nyx_caldera"), "story: played Choke replay changes nothing")
+	_check_story_text("after a played replay")
+	## Broken old saves are repaired from the saved outcome.
+	GameState._load_campaign({"done": {"p0_mayday": {"best": 1.0, "runs": 1}}, "flags": {"choke_fall": "none", "fallen_nyx_caldera": true}, "roster": ["nyx_caldera", "vesper_thorn"]})
+	_check(not GameState.campaign_fallen("nyx_caldera") and not GameState.campaign_fallen("vesper_thorn"), "story: save repair (everyone lived = nobody fallen)")
+	_check_story_text("repaired save A")
+	GameState._load_campaign({"flags": {"choke_fall": "vesper_thorn", "fallen_vesper_thorn": true, "fallen_nyx_caldera": true}, "roster": ["nyx_caldera", "vesper_thorn"]})
+	_check(GameState.campaign_fallen("vesper_thorn") and not GameState.campaign_fallen("nyx_caldera"), "story: save repair (one outcome, one fallen)")
+	_check_story_text("repaired save B")
+	## RESTART CAMPAIGN is the only way to change the story.
+	GameState.restart_campaign()
+	_check(GameState.campaign_done_count() == 0 and (GameState.campaign["flags"] as Dictionary).is_empty(), "story: restart wipes the story")
+	GameState.campaign_debug_unlock_to("l10_choke")
+	_first_clear("l10_choke", {"choke_fall": "nyx_caldera", "fallen_nyx_caldera": true})
+	_check(GameState.campaign_fallen("nyx_caldera") and not GameState.campaign_fallen("vesper_thorn"), "story: after a restart the first clear decides again")
+	_check_story_text("after restart")
+	var cm: Node = (load("res://scenes/ui/campaign_map.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(cm)
+	for k in range(3):
+		await get_tree().process_frame
+	_check(cm.find_child("RestartCampaign", true, false) != null, "story: campaign map has RESTART CAMPAIGN")
+	cm.queue_free()
+	await get_tree().process_frame
+	GameState.campaign = keep[0]
+	GameState.plane_parts = keep[1]
+	GameState.selected_character_id = keep[2]
+	GameState.selected_pet_id = keep[3]
+	GameState.account_scrap = keep[4]
+	GameState.stash = keep[5]
+	GameState.camp = keep[6]
+	GameState.selected_mode_id = keep[7]
+	GameState.reset_loadout_to_defaults()
+
+
+func _labels_text(n: Node) -> String:
+	var out := PackedStringArray()
+	for l in n.find_children("*", "Label", true, false):
+		out.append((l as Label).text)
+	for b in n.find_children("*", "Button", true, false):
+		out.append((b as Button).text)
+	return "\n".join(out)
+
+
+func _test_plane_unified() -> void:
+	var keep := [GameState.campaign.duplicate(true), GameState.plane_parts.duplicate(), GameState.selected_character_id, GameState.selected_pet_id,
+		GameState.account_scrap, GameState.stash.duplicate(true), GameState.camp.duplicate(), GameState.tier_clears.duplicate(true), GameState.selected_mode_id]
+	## One tracker: a campaign part and the same part from Wander count once.
+	GameState.plane_parts = {}
+	GameState.campaign = GameState._fresh_campaign()
+	_first_clear("p0_mayday", {})
+	_check(GameState.has_plane_part("fuselage") and GameState.plane_part_count() == 1, "plane: campaign part lands in the one tracker")
+	GameState.selected_character_id = "pebble"
+	GameState._record_tier_clear(3)
+	GameState._record_tier_clear(4)
+	_check(GameState.plane_part_count() == 2 and GameState.has_plane_part("wings"), "plane: Wander tier part, no double count")
+	## Same count in the Campaign map, the mode choice and the Hangar.
+	var want := GameState.plane_progress_text()
+	for sp in ["res://scenes/ui/campaign_map.tscn", "res://scenes/ui/mode_choice.tscn"]:
+		var s: Node = (load(sp) as PackedScene).instantiate()
+		get_tree().root.add_child(s)
+		for k in range(3):
+			await get_tree().process_frame
+		_check(want in _labels_text(s), "plane: %s shows %s" % [sp.get_file(), want])
+		s.queue_free()
+		await get_tree().process_frame
+	var hg: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(hg)
+	await get_tree().process_frame
+	hg.call("open_trophies")
+	await get_tree().process_frame
+	_check(("HELM'S PLANE  " + want) in _labels_text(hg), "plane: hangar shows %s" % want)
+	_check(bool(hg.call("_layer_visible", "plane_1")) and bool(hg.call("_layer_visible", "plane_2")) and not bool(hg.call("_layer_visible", "plane_3")), "plane: hangar art follows the tracker")
+	hg.call("close_popup")
+	hg.queue_free()
+	await get_tree().process_frame
+	## Save migration: old Wander tier keys + old campaign parts merge, nothing lost.
+	GameState._load_depth({"plane_parts": {"3": true, "6": true, "4": true}})
+	GameState._load_campaign({"flags": {"ending": "power"}, "parts": ["frame", "battery", "engine", "heart", "bogus"]})
+	var ks: Array = GameState.plane_parts.keys()
+	ks.sort()
+	_check(ks == ["battery", "engine", "fuselage", "heart", "wings"] and GameState.plane_part_count() == 4, "plane: old saves merge both trackers (%s)" % str(ks))
+	GameState._load_depth({"plane_parts": {"5": true}})
+	GameState._load_campaign({"flags": {"ending": "destroy"}, "parts": ["fuel", "heart"]})
+	ks = GameState.plane_parts.keys()
+	ks.sort()
+	_check(ks == ["fuel", "tail"], "plane: old destroy-ending save drops the wrongly given Dust Heart (%s)" % str(ks))
+	GameState.save_profile()
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	GameState.plane_parts = {}
+	GameState.apply_save(raw)
+	_check(GameState.has_plane_part("fuel") and GameState.has_plane_part("tail") and GameState.plane_part_count() == 2, "plane: unified tracker survives a save round trip")
+	## Dustfall: destroy -> no heart; power -> heart.
+	for pair in [["destroy", false], ["power", true]]:
+		GameState.plane_parts = {}
+		GameState.campaign = GameState._fresh_campaign()
+		GameState.campaign_debug_unlock_to("l12_dustfall")
+		_first_clear("l12_dustfall", {"ending": pair[0]})
+		_check(GameState.has_plane_part("heart") == bool(pair[1]), "plane: %s the heart -> Dust Heart part %s" % [pair[0], pair[1]])
+		_check(GameState.plane_part_count() == 0, "plane: the heart never counts towards the whole plane")
+	## A memory replay of Dustfall can't change the ending (or hand out the heart).
+	GameState.plane_parts = {}
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.campaign_debug_unlock_to("l12_dustfall")
+	_first_clear("l12_dustfall", {"ending": "destroy"})
+	GameState.prepare_campaign_level("l12_dustfall")
+	GameState.set_campaign_flag("ending", "power")
+	GameState.complete_campaign_level(99.0)
+	GameState.leave_campaign_run()
+	_check(GameState.campaign_flag_is("ending", "destroy") and not GameState.has_plane_part("heart"), "plane: Dustfall replay keeps destroy, no heart")
+	GameState.campaign = keep[0]
+	GameState.plane_parts = keep[1]
+	GameState.selected_character_id = keep[2]
+	GameState.selected_pet_id = keep[3]
+	GameState.account_scrap = keep[4]
+	GameState.stash = keep[5]
+	GameState.camp = keep[6]
+	GameState.tier_clears = keep[7]
+	GameState.selected_mode_id = keep[8]
+	GameState.reset_loadout_to_defaults()

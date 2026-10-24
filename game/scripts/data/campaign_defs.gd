@@ -64,15 +64,7 @@ const TITLES := {
 	"l12_dustfall": "Dustfall", "e0_wheels_up": "Wheels Up",
 }
 
-## Helm's plane, one salvaged part at a time (campaign only).
-const PLANE_PARTS := {
-	"frame": {"name": "Airframe", "icon": "tab_camp"},
-	"battery": {"name": "Battery", "icon": "camp_generator"},
-	"fuel": {"name": "Fuel Tanks", "icon": "camp_ammo_bench"},
-	"engine": {"name": "Engine", "icon": "mat_salvage_core"},
-	"heart": {"name": "Dust Heart", "icon": "mat_dust_heart"},
-}
-const PLANE_ORDER := ["frame", "battery", "fuel", "engine", "heart"]
+## Plane parts live in ZoneDefs.PLANE_PARTS (one list for Wander + Campaign).
 
 ## Who talks. `portrait` = 192 px painted bust; `radio` = speaks over the
 ## radio by default (CRT frame, static).

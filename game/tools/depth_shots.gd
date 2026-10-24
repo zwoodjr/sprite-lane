@@ -386,7 +386,7 @@ func _shots_e7() -> void:
 		await _snap("e7_%s" % mid)
 		m.queue_free()
 		await _frames(3)
-	GameState.plane_parts = {"3": true, "4": true, "5": true, "6": true, "7": true}
+	GameState.plane_parts = {"fuselage": true, "wings": true, "tail": true, "engine": true, "propeller": true}
 	GameState.tier_clears = {"vesper_thorn": {"3": true, "4": true, "5": true}, "pebble": {"3": true}}
 	var hg := await _open("res://scenes/ui/hangar.tscn")
 	await _snap("e7_hangar_plane")
