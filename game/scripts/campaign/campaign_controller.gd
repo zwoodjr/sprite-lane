@@ -67,7 +67,21 @@ func _ready() -> void:
 	runner.call("setup", self, level)
 	runner.level_won.connect(_on_level_won)
 	runner.level_failed.connect(func(reason: String) -> void: _finish_wipe(reason))
+	_live_begin()
 	_start.call_deferred()
+
+
+## Campaign snapshot: the level restarts on resume, so only the clock and the
+## hero's health matter here (run power / pack / finds live in GameState).
+func live_snapshot() -> Dictionary:
+	var d := {"level_time": level_time, "objective": int(runner.get("idx")) if runner else -1}
+	_snapshot_hp(d)
+	return d
+
+
+func _apply_resume(res: Dictionary) -> void:
+	level_time = maxf(0.0, float(res.get("level_time", 0.0)))
+	_restore_hp(res)
 
 
 func _start() -> void:

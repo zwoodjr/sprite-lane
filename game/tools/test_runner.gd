@@ -22,6 +22,8 @@ const MENUS := [
 ]
 
 var _bad: int = 0
+var _bak_backup: String = ""
+var _had_damaged: bool = false
 var _campaign_levels_run: int = 0
 
 
@@ -32,6 +34,8 @@ func _ready() -> void:
 func _run() -> void:
 	## Tests buy, equip and bank freely — put the player's save back afterwards.
 	var save_backup := FileAccess.get_file_as_string(GameState.SAVE_PATH) if FileAccess.file_exists(GameState.SAVE_PATH) else ""
+	_bak_backup = FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH) if FileAccess.file_exists(GameState.SAVE_BAK_PATH) else ""
+	_had_damaged = FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH)
 	## `-- only=depth_e1`: run just one section (fast iteration), then finish.
 	for a in OS.get_cmdline_user_args():
 		if str(a).begins_with("only="):
@@ -158,6 +162,7 @@ func _run() -> void:
 	var keep_e7 := [GameState.tier_clears.duplicate(true), GameState.plane_parts.duplicate(), GameState.pacts.duplicate(), GameState.best_tier_extracted]
 	await _test_depth_e7()
 	await _test_p2_ui()
+	await _test_safe_save()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
 	GameState.pacts = keep_e7[2]
@@ -196,6 +201,20 @@ func _finish(save_backup: String) -> void:
 		if f:
 			f.store_string(save_backup)
 			f.close()
+	## Test matches leave live-run records / backups behind: put the player's back.
+	GameState.live_run = {}
+	for pth in [GameState.RUN_PATH, GameState.RUN_PATH + ".tmp", GameState.SAVE_PATH + ".tmp"]:
+		if FileAccess.file_exists(pth):
+			DirAccess.remove_absolute(pth)
+	if _bak_backup != "":
+		var fb := FileAccess.open(GameState.SAVE_BAK_PATH, FileAccess.WRITE)
+		if fb:
+			fb.store_string(_bak_backup)
+			fb.close()
+	elif FileAccess.file_exists(GameState.SAVE_BAK_PATH):
+		DirAccess.remove_absolute(GameState.SAVE_BAK_PATH)
+	if not _had_damaged and FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH):
+		DirAccess.remove_absolute(GameState.SAVE_DAMAGED_PATH)
 	print("TEST_PASS" if _bad == 0 else "TEST_FAIL bad=%d" % _bad)
 	get_tree().quit(0 if _bad == 0 else 1)
 
@@ -3043,3 +3062,257 @@ func _test_p2_ui() -> void:
 	UiTheme.text_scale = UiTheme.TEXT_SCALES[UiTheme.text_size_index()]
 	GameState.reset_loadout_to_defaults()
 	print("P2_UI_OK")
+## Safe saves (atomic write + rolling backup, never a silent reset) and the
+## live-run record (force-quit: RESUME rebuilds, ABANDON = a death).
+func _write_raw(path: String, text: String) -> void:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+
+func _saved() -> Dictionary:
+	var v: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	return v if typeof(v) == TYPE_DICTIONARY else {}
+
+
+## The app is killed and launched again: run state in memory is gone, the
+## profile comes back from disk.
+func _relaunch() -> void:
+	GameState.live_run = {}
+	GameState.run_level = 1
+	GameState.run_xp = 0
+	GameState.run_pack = {}
+	GameState.scrap_found = 0
+	GameState.run_loot = []
+	GameState._reset_run_cards()
+	GameState.run_finished = false
+	GameState.load_profile()
+
+
+func _test_safe_save() -> void:
+	var keep_scrap := GameState.account_scrap
+	var keep_mode := GameState.selected_mode_id
+	var keep_hero := GameState.selected_character_id
+	## --- atomic write + rolling backup
+	GameState.account_scrap = 111
+	GameState.save_profile()
+	GameState.account_scrap = 222
+	GameState.save_profile()
+	var bak: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH))
+	_check(typeof(bak) == TYPE_DICTIONARY and int(bak.get("account_scrap", -1)) == 111, "save: backup holds the previous save")
+	_check(int(_saved().get("account_scrap", -1)) == 222, "save: main holds the latest")
+	_check(not FileAccess.file_exists(GameState.SAVE_PATH + ".tmp"), "save: no temp file left behind")
+	## --- truncated main save: falls back to the backup, never to defaults
+	var full := FileAccess.get_file_as_string(GameState.SAVE_PATH)
+	_write_raw(GameState.SAVE_PATH, full.substr(0, full.length() / 2))
+	if FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH):
+		DirAccess.remove_absolute(GameState.SAVE_DAMAGED_PATH)
+	GameState.account_scrap = 0
+	GameState.load_profile()
+	_check(GameState.load_source == "backup" and GameState.account_scrap == 111, "save: truncated save loads the backup (%s, %d)" % [GameState.load_source, GameState.account_scrap])
+	_check(GameState.load_notice != "", "save: the player is told the save was restored")
+	_check(FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH), "save: the damaged file is kept aside")
+	_check(int(_saved().get("account_scrap", -1)) == 111, "save: main rewritten from the backup, not defaults")
+	var bak2: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH))
+	_check(typeof(bak2) == TYPE_DICTIONARY and int(bak2.get("account_scrap", -1)) == 111, "save: backup not replaced by the damaged save")
+	## --- junk / empty / missing main
+	_write_raw(GameState.SAVE_PATH, "{\"version\": 4, \"account_scr")
+	GameState.account_scrap = 5
+	GameState.load_profile()
+	_check(GameState.account_scrap == 111, "save: corrupt save falls back to the backup")
+	_write_raw(GameState.SAVE_PATH, "")
+	GameState.account_scrap = 5
+	GameState.load_profile()
+	_check(GameState.account_scrap == 111, "save: empty save falls back to the backup")
+	DirAccess.remove_absolute(GameState.SAVE_PATH)
+	GameState.account_scrap = 5
+	GameState.load_profile()
+	_check(GameState.account_scrap == 111 and FileAccess.file_exists(GameState.SAVE_PATH), "save: missing save restored from the backup")
+	## --- nothing readable at all: no silent reset, nothing overwritten on load
+	_write_raw(GameState.SAVE_PATH, "garbage{")
+	_write_raw(GameState.SAVE_BAK_PATH, "more garbage")
+	GameState.load_notice = ""
+	GameState.load_profile()
+	_check(GameState.load_source == "reset" and GameState.load_notice != "", "save: unreadable everything = a fresh start WITH a notice")
+	_check(FileAccess.get_file_as_string(GameState.SAVE_PATH) == "garbage{" and FileAccess.get_file_as_string(GameState.SAVE_DAMAGED_PATH) == "garbage{", "save: unreadable save kept, not overwritten on load")
+	GameState.save_profile()
+	_check(FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH) == "more garbage", "save: an unreadable save is never copied over the backup")
+	GameState.account_scrap = keep_scrap
+	GameState.save_profile()
+	GameState.save_profile()
+	GameState.load_notice = ""
+
+	## --- live run: Wander start -> marker + snapshot; extract clears it
+	var hero := "ash_rook"
+	GameState.selected_character_id = hero
+	_equip_test_kit(hero, 0)
+	var m: Node = await _depth_match("haze", hero)
+	_check(not GameState.live_run.is_empty() and str(GameState.live_run.get("hero", "")) == hero, "live: marker set when the run starts")
+	_check(not _saved().get("live_run", {}).is_empty(), "live: marker saved in the profile")
+	_check(FileAccess.file_exists(GameState.RUN_PATH), "live: snapshot written")
+	GameState.on_extract_success()
+	_check(GameState.live_run.is_empty() and not FileAccess.file_exists(GameState.RUN_PATH) and _saved().get("live_run", {}).is_empty(), "live: extract clears the record")
+	await _end_depth_match(m)
+	## --- death clears it
+	m = await _depth_match("haze", hero)
+	_check(GameState.has_live_run(), "live: set again on the next run")
+	GameState.on_wipe()
+	_check(not GameState.has_live_run() and _saved().get("live_run", {}).is_empty(), "live: death clears the record")
+	await _end_depth_match(m)
+
+	## --- force quit mid-run, then RESUME: hero / pack / level / cards / hp back
+	_equip_test_kit(hero, 1)
+	m = await _depth_match("drift", hero)
+	var pl: Node2D = m.get_node("World/Player")
+	GameState.run_level = 4
+	GameState.run_pack = {"herb": 2}
+	GameState.scrap_found = 50
+	GameState.kills = 17
+	var card: Dictionary = UpgradeDefs.all()[0]
+	GameState.apply_run_upgrade(card)
+	m.set("_match_time", 100.0)
+	pl.set("hp", 37.0)
+	GameState.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	var snap := GameState.read_live_snapshot()
+	_check(int(snap.get("run", {}).get("run_level", 0)) == 4 and is_equal_approx(float(snap.get("match", {}).get("hp", 0.0)), 37.0), "live: backgrounding snapshots the run")
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_relaunch()
+	_check(GameState.has_live_run(), "live: record survives a relaunch")
+	GameState.selected_character_id = "sister_cinder"
+	var scene := GameState.prepare_resume()
+	_check(scene == "res://scenes/match/match.tscn", "live: resume picks the Wander match")
+	_check(GameState.selected_character_id == hero and GameState.selected_mode_id == "drift", "resume: hero + tier back")
+	_check(GameState.run_level == 4 and GameState.kills == 17 and GameState.scrap_found == 50, "resume: run level / kills / bag back")
+	_check(GameState.pack_count("herb") == 2, "resume: pack back")
+	_check(GameState.run_rank(str(card.get("id", ""))) == 1, "resume: cards back")
+	m = (load(scene) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(4):
+		await get_tree().physics_frame
+	pl = m.get_node("World/Player")
+	_check(absf(float(pl.get("hp")) - 37.0) < 2.0, "resume: hero health back (%.1f)" % float(pl.get("hp")))
+	_check(float(m.get("_match_time")) >= 100.0 and bool(m.get_meta("resumed", false)), "resume: run clock back")
+	_check(GameState.has_live_run() and int(GameState.live_run.get("resumes", 0)) == 1, "resume: still a live run")
+	GameState.on_wipe()
+	await _end_depth_match(m)
+
+	## --- force quit, then ABANDON: equipped gear gone, 0 scrap, pack gone
+	_equip_test_kit(hero, 2)
+	var uids: Array = []
+	for it in GameState.equipped_items(hero).values():
+		uids.append(int(it["uid"]))
+	m = await _depth_match("haze", hero)
+	var scrap0 := GameState.account_scrap
+	var herbs0 := GameState.ingredient_count("herb")
+	GameState.scrap_found = 500
+	GameState.run_pack = {"herb": 3}
+	GameState.live_run_snapshot()
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_relaunch()
+	_check(GameState.equipped_items(hero).size() == uids.size(), "abandon: force quit alone keeps nothing extra (gear still worn until resolved)")
+	var r := GameState.abandon_live_run()
+	_check(GameState.equipped_items(hero).is_empty(), "abandon: equipped gear removed")
+	var left := 0
+	for u in uids:
+		if not GameState.stash_item(int(u)).is_empty():
+			left += 1
+	_check(left == 0 and (r.get("lost", []) as Array).size() == uids.size(), "abandon: gear gone from the stash (%d left)" % left)
+	_check(GameState.account_scrap == scrap0 and GameState.ingredient_count("herb") == herbs0, "abandon: 0 scrap, pack not banked")
+	_check(not GameState.has_live_run(), "abandon: record cleared")
+	var sv := _saved()
+	_check(sv.get("live_run", {}).is_empty() and (sv.get("loadouts", {}).get(hero, {}) as Dictionary).is_empty(), "abandon: saved — the exploit is closed")
+	## --- insured item survives an abandon (as on any death)
+	_equip_test_kit(hero, 3)
+	var ins_uid := int(GameState.loadout_of(hero)["weapon"])
+	GameState.set_insured(hero, ins_uid)
+	m = await _depth_match("haze", hero)
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_relaunch()
+	GameState.abandon_live_run()
+	_check(GameState.equipped_items(hero).size() == 1 and not GameState.stash_item(ins_uid).is_empty(), "abandon: insured item kept")
+	## --- a damaged snapshot can't be resumed: it counts as abandoning
+	_equip_test_kit(hero, 0)
+	m = await _depth_match("haze", hero)
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_write_raw(GameState.RUN_PATH, "{\"marker\": {\"hero")
+	_relaunch()
+	_check(GameState.has_live_run(), "damaged snapshot: still prompts")
+	_check(GameState.prepare_resume() == "" and GameState.equipped_items(hero).is_empty() and not GameState.has_live_run(), "damaged snapshot: resume = abandon")
+
+	## --- the prompt on the main menu
+	_equip_test_kit(hero, 1)
+	m = await _depth_match("haze", hero)
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_relaunch()
+	var menu: Node = (load("res://scenes/ui/main_menu.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(menu)
+	for k in range(6):
+		await get_tree().process_frame
+	var modal := menu.find_child("Modal", true, false)
+	var bres := menu.find_child("Btn_RESUME", true, false) as Button
+	var bab := menu.find_child("Btn_ABANDON", true, false) as Button
+	_check(modal != null and bres != null and bab != null, "prompt: RUN INTERRUPTED with RESUME / ABANDON")
+	var says_loss := false
+	if modal:
+		for l in modal.find_children("*", "Label", true, false):
+			if "counts as a death" in (l as Label).text:
+				says_loss = true
+	_check(says_loss, "prompt: the abandon cost is spelled out")
+	if bab:
+		bab.pressed.emit()
+		_check(GameState.has_live_run(), "prompt: first ABANDON tap only arms it")
+		bab.pressed.emit()
+	await get_tree().process_frame
+	_check(not GameState.has_live_run() and GameState.equipped_items(hero).is_empty(), "prompt: ABANDON loses the gear")
+	menu.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+
+	## --- campaign: marker on start, cleared on a loss; resume rebuilds the level
+	var keep_c: Dictionary = GameState.campaign.duplicate(true)
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.prepare_campaign_level("p0_mayday")
+	m = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(3):
+		await get_tree().physics_frame
+	_check(str(GameState.live_run.get("mode", "")) == "campaign" and str(GameState.live_run.get("level", "")) == "p0_mayday", "campaign live: marker set")
+	GameState.run_level = 3
+	GameState.live_run_snapshot()
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	GameState.leave_campaign_run()
+	_relaunch()
+	var cs := GameState.prepare_resume()
+	_check(cs == CampaignDefs.MATCH_SCENE and GameState.in_campaign_run() and GameState.campaign_level_id == "p0_mayday" and GameState.run_level == 3, "campaign resume: level + run level back")
+	m = (load(cs) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(3):
+		await get_tree().physics_frame
+	GameState.fail_campaign_level("test")
+	_check(not GameState.has_live_run(), "campaign live: a loss clears the record")
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	GameState.leave_campaign_run()
+	GameState.campaign = keep_c
+	GameState.selected_mode_id = keep_mode
+	GameState.selected_character_id = keep_hero
+	GameState.account_scrap = keep_scrap
+	GameState.fast_timers = false
+	GameState.reset_loadout_to_defaults()
+	print("SAFE_SAVE_OK")

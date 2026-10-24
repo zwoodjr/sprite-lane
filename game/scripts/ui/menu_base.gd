@@ -85,3 +85,52 @@ func card(border: Color = UiTheme.LINE, bg: Color = UiTheme.PANEL) -> PanelConta
 		tint = Color(1, 1, 1, clampf(bg.a + 0.08, 0.6, 1.0))
 	p.add_theme_stylebox_override("panel", UiTheme.plate(kind, 20.0, tint))
 	return p
+
+
+## Worn modal dialog over the whole screen (dim backdrop + brass plate, the
+## pause menu's look): a title, body lines ([text, color] or plain text) and
+## buttons from `buttons` ([[label, accent, callable], ...]). Returns the
+## overlay; callers close it with queue_free.
+func modal(title: String, lines: Array, buttons: Array, title_color: Color = UiTheme.AMBER) -> Control:
+	var overlay := Control.new()
+	overlay.name = "Modal"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0.04, 0.03, 0.02, 0.82)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var plate := PanelContainer.new()
+	plate.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi", 28.0))
+	center.add_child(plate)
+	var v := VBoxContainer.new()
+	v.name = "Body"
+	v.add_theme_constant_override("separation", 14)
+	var w := minf(560.0, get_viewport_rect().size.x - 72.0)
+	v.custom_minimum_size = Vector2(w, 0)
+	plate.add_child(v)
+	v.add_child(UiTheme.title_label(title, UiTheme.T_TITLE, title_color))
+	for ln in lines:
+		var txt := str(ln[0]) if ln is Array else str(ln)
+		var col: Color = ln[1] if ln is Array and (ln as Array).size() > 1 else UiTheme.TEXT
+		var l := UiTheme.body_label(txt, UiTheme.T_BODY, col)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.custom_minimum_size = Vector2(w, 0)
+		v.add_child(l)
+	for b in buttons:
+		var btn := UiTheme.big_button(str(b[0]), b[1], 80 if b[1] == UiTheme.AMBER else 64, 32 if b[1] == UiTheme.AMBER else 22)
+		btn.name = "Btn_" + str(b[0]).split(" ")[0]
+		btn.pressed.connect(b[2])
+		v.add_child(btn)
+	plate.pivot_offset = Vector2(w * 0.5, 200)
+	plate.scale = Vector2(0.92, 0.92)
+	plate.modulate.a = 0.0
+	var tw := plate.create_tween().set_parallel(true)
+	tw.tween_property(plate, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(plate, "modulate:a", 1.0, 0.12)
+	return overlay

@@ -125,6 +125,25 @@ var jobs_done_run: int = 0
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
 const SAVE_VERSION := 4
+## Rolling backup (the save before the latest) + where an unreadable save is kept.
+const SAVE_BAK_PATH := "user://wanderer_save.bak"
+const SAVE_DAMAGED_PATH := "user://wanderer_save.damaged.json"
+## Live-run snapshot (written while a run is in progress; gone once it ends).
+const RUN_PATH := "user://wanderer_run.json"
+const LIVE_SNAPSHOT_SEC := 12.0
+## "main" | "temp" | "backup" | "fresh" | "reset" — where the profile came from.
+var load_source: String = ""
+## One-time line for the main menu (save restored from backup, etc.).
+var load_notice: String = ""
+var _main_save_ok: bool = false
+## Live-run marker, saved in the profile while a run is in progress:
+## {"id", "mode" wander|campaign, "level", "tier_mode", "hero", "pet", "started"}.
+## A marker left over at launch means the app was closed mid-run.
+var live_run: Dictionary = {}
+## Match bits of a snapshot being resumed (read by the controller's _ready).
+var pending_resume: Dictionary = {}
+var _live_ctrl: WeakRef = null
+var _live_accum: float = 0.0
 var settings: Dictionary = {
 	"sfx": true,
 	"mute": false,
@@ -258,26 +277,89 @@ func save_profile() -> void:
 		"plane_parts": plane_parts,
 		"pacts": pacts,
 		"campaign": campaign,
+		"live_run": live_run,
 	}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if f == null:
-		push_warning("Save failed: %s" % FileAccess.get_open_error())
-		return
-	f.store_string(JSON.stringify(data, "\t"))
+	if not _atomic_write(SAVE_PATH, JSON.stringify(data, "\t"), true):
+		push_warning("Save failed: %s" % SAVE_PATH)
 
-func load_profile() -> void:
-	if not FileAccess.file_exists(SAVE_PATH):
-		migrated_hangar_v4 = true
-		_sync_account_level()
-		return
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+## Safe save: write a temp file, read it back and parse it, then rename it over
+## the real file (atomic on iOS / desktop). With `backup`, the last good save is
+## first copied to SAVE_BAK_PATH (also via temp + rename), so a damaged save
+## never costs more than one save's worth of progress.
+func _atomic_write(path: String, text: String, backup: bool) -> bool:
+	var tmp := path + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
-		return
-	var parsed: Variant = JSON.parse_string(f.get_as_text())
+		return false
+	f.store_string(text)
+	f.flush()
 	f.close()
-	if typeof(parsed) != TYPE_DICTIONARY:
+	if _parse_save(FileAccess.get_file_as_string(tmp)) == null:
+		return false
+	if backup and _main_save_ok and FileAccess.file_exists(path):
+		var bt := SAVE_BAK_PATH + ".tmp"
+		if DirAccess.copy_absolute(path, bt) == OK:
+			DirAccess.rename_absolute(bt, SAVE_BAK_PATH)
+	if DirAccess.rename_absolute(tmp, path) != OK:
+		return false
+	if path == SAVE_PATH:
+		_main_save_ok = true
+	return true
+
+## Parsed save dictionary, or null when the text is empty / cut off / not JSON.
+func _parse_save(text: String) -> Variant:
+	if text.strip_edges() == "":
+		return null
+	var j := JSON.new()
+	if j.parse(text) != OK:
+		return null
+	var v: Variant = j.data
+	if typeof(v) != TYPE_DICTIONARY:
+		return null
+	return v
+
+## Load order: the save, then a finished-but-unrenamed temp, then the rolling
+## backup. A damaged save is copied aside and never silently replaced with a
+## fresh profile; the profile only starts fresh when no save file exists, or
+## (with a notice) when every file is unreadable.
+func load_profile() -> void:
+	load_source = ""
+	_main_save_ok = false
+	var found_any := false
+	for p in [SAVE_PATH, SAVE_PATH + ".tmp", SAVE_BAK_PATH]:
+		if not FileAccess.file_exists(p):
+			continue
+		found_any = true
+		var parsed: Variant = _parse_save(FileAccess.get_file_as_string(p))
+		if parsed == null:
+			push_warning("Save unreadable: %s" % p)
+			continue
+		apply_save(parsed)
+		if p == SAVE_PATH:
+			load_source = "main"
+			_main_save_ok = true
+		else:
+			load_source = "temp" if p != SAVE_BAK_PATH else "backup"
+			_keep_damaged()
+			load_notice = "Your save was damaged, so the last good copy was restored."
+			## Rewrite the main save from the recovered profile (the damaged one
+			## was kept aside and is never copied over the backup).
+			save_profile()
 		return
-	apply_save(parsed)
+	if found_any:
+		_keep_damaged()
+		load_source = "reset"
+		load_notice = "Your save couldn't be read and no backup was usable. A fresh profile was started; the damaged file was kept."
+	else:
+		load_source = "fresh"
+	migrated_hangar_v4 = true
+	_sync_account_level()
+
+## Copy an unreadable save aside (wanderer_save.damaged.json) before anything
+## writes over it.
+func _keep_damaged() -> void:
+	if FileAccess.file_exists(SAVE_PATH) and _parse_save(FileAccess.get_file_as_string(SAVE_PATH)) == null:
+		DirAccess.copy_absolute(SAVE_PATH, SAVE_DAMAGED_PATH)
 
 ## Loads a parsed save dictionary (any version — missing keys get safe defaults).
 func apply_save(d: Dictionary) -> void:
@@ -291,6 +373,7 @@ func apply_save(d: Dictionary) -> void:
 			settings["film_grain"] = false
 	settings["dither_v1"] = true
 	tutorial_done = bool(d.get("tutorial_done", false))
+	live_run = _dict_or_empty(d.get("live_run", {})).duplicate(true)
 	account_scrap = int(d.get("account_scrap", 0))
 	## Migrate v1/v2: old saves had account_xp as pseudo-power; keep XP, prefer scrap.
 	account_xp = int(d.get("account_xp", 0))
@@ -1775,7 +1858,8 @@ func reset_loadout_to_defaults() -> void:
 		insured_slots.append("armor")
 	loadout_changed.emit()
 
-func begin_run() -> void:
+## `drink_tonics` false = resuming a run whose tonics were already drunk.
+func begin_run(drink_tonics: bool = true) -> void:
 	threat_level = 0
 	windows_skipped = 0
 	extract_windows_seen = 0
@@ -1810,7 +1894,8 @@ func begin_run() -> void:
 	run_filter = 100.0
 	run_has_cell = false
 	jobs_done_run = 0
-	_drink_tonics()
+	if drink_tonics:
+		_drink_tonics()
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
@@ -2128,6 +2213,7 @@ func on_extract_success() -> void:
 	for m in check_milestones():
 		result_unlocks.append("Milestone: %s" % str(m["name"]))
 	result_scrap_after = account_scrap
+	_clear_live_run()
 	save_profile()
 
 func on_wipe() -> void:
@@ -2176,6 +2262,7 @@ func on_wipe() -> void:
 	for m in check_milestones():
 		result_unlocks.append("Milestone: %s" % str(m["name"]))
 	result_scrap_after = account_scrap
+	_clear_live_run()
 	save_profile()
 
 func _reset_run_power_after_end() -> void:
@@ -2662,6 +2749,7 @@ func complete_campaign_level(time_s: float) -> Dictionary:
 	campaign_result = {"id": id, "won": true, "first": first, "time": time_s, "scrap": paid,
 		"lines": lines, "joined": joined, "pets": dogs, "next": nxt}
 	quest_event("extract", 1, {"tier": int(lv.get("tier", 1)), "mult": 1.0})
+	_clear_live_run()
 	save_profile()
 	return campaign_result
 
@@ -2681,6 +2769,8 @@ func fail_campaign_level(reason: String) -> Dictionary:
 	run_pack = {}
 	_reset_run_power_after_end()
 	campaign_result = {"id": campaign_level_id, "won": false, "reason": reason, "lines": PackedStringArray()}
+	_clear_live_run()
+	save_profile()
 	return campaign_result
 
 
@@ -2699,3 +2789,288 @@ func campaign_debug_unlock_to(id: String) -> void:
 			if not str(p) in (campaign["pets"] as Array):
 				campaign["pets"].append(str(p))
 	save_profile()
+
+
+
+## =============================================================================
+## LIVE RUN — force-quit safety. A run in progress keeps a marker in the profile
+## (saved the moment the match starts) and a snapshot file (RUN_PATH) refreshed
+## every LIVE_SNAPSHOT_SEC and whenever the app is backgrounded / closed. Every
+## normal end (extract, death, abandon, campaign win / loss / leave) clears both.
+## At launch a leftover marker means the app died mid-run: the main menu offers
+## RESUME (rebuild the match from the snapshot) or ABANDON (counts as a death:
+## equipped gear lost, no scrap, the pack lost).
+
+## Run vars kept in a snapshot, by type: i int, f float, b bool, d dictionary,
+## a array, s PackedStringArray. (Typed restore — no Variant guesses.)
+const LIVE_RUN_KEYS := {
+	"threat_level": "i", "windows_skipped": "i", "extract_windows_seen": "i", "scrap_found": "i",
+	"kills": "i", "run_xp": "i", "run_level": "i", "run_rerolls_left": "i", "run_luck_charges": "i",
+	"events_done_run": "i", "extract_bonus_scrap": "i", "run_keys": "i", "jobs_done_run": "i",
+	"run_seed": "i", "account_xp_this_run": "i",
+	"loot_mult": "f", "run_luck": "f", "boss_loot_bonus": "f", "event_scrap_mult": "f",
+	"event_enemy_damage": "f", "exposure": "f", "run_filter": "f",
+	"run_pack_locked": "b", "run_has_cell": "b",
+	"run_mods": "d", "run_ranks": "d", "run_kind_kills": "d", "run_ammo_seen": "d",
+	"run_materials": "d", "run_pack": "d", "run_job_rewards": "d",
+	"run_picks_taken": "a", "run_loot": "a", "run_tonics": "a",
+	"extract_bonus_notes": "s", "result_unlocks_pending": "s",
+}
+
+
+func _process(delta: float) -> void:
+	if live_run.is_empty() or run_finished or _live_ctrl == null:
+		return
+	_live_accum += delta
+	if _live_accum >= LIVE_SNAPSHOT_SEC:
+		_live_accum = 0.0
+		live_run_snapshot()
+
+
+## Backgrounded (home swipe, call), focus lost or the window closing: snapshot now.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT \
+			or what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if not live_run.is_empty() and not run_finished and _live_ctrl != null:
+			live_run_snapshot()
+
+
+## A match scene is up and running (Wander or Campaign): mark the run live in
+## the profile (atomic save — also keeps this run's spent tonics spent) and
+## take the first snapshot.
+func live_run_begin(ctrl: Node) -> void:
+	_live_ctrl = weakref(ctrl)
+	_live_accum = 0.0
+	var resumes := int(live_run.get("resumes", 0)) if bool(ctrl.get_meta("resumed", false)) else 0
+	live_run = {
+		"id": run_seed,
+		"mode": "campaign" if in_campaign_run() else "wander",
+		"level": campaign_level_id if in_campaign_run() else "",
+		"tier_mode": selected_mode_id,
+		"hero": selected_character_id,
+		"pet": selected_pet_id,
+		"started": int(Time.get_unix_time_from_system()),
+		"resumes": resumes,
+	}
+	save_profile()
+	live_run_snapshot()
+
+
+func has_live_run() -> bool:
+	return not live_run.is_empty() or FileAccess.file_exists(RUN_PATH)
+
+
+## Write the snapshot (run vars + the controller's match bits). Returns success.
+func live_run_snapshot() -> bool:
+	if live_run.is_empty() or run_finished:
+		return false
+	var m: Dictionary = {}
+	var ctrl: Object = _live_ctrl.get_ref() if _live_ctrl != null else null
+	if ctrl != null and is_instance_valid(ctrl) and ctrl.has_method("live_snapshot"):
+		var got: Variant = ctrl.call("live_snapshot")
+		if typeof(got) == TYPE_DICTIONARY:
+			m = got
+	var run := {}
+	for k in LIVE_RUN_KEYS.keys():
+		var v: Variant = get(k)
+		if typeof(v) == TYPE_PACKED_STRING_ARRAY:
+			v = Array(v)
+		run[k] = v
+	var snap := {"v": 1, "saved": int(Time.get_unix_time_from_system()), "marker": live_run, "run": run, "match": m}
+	return _atomic_write(RUN_PATH, JSON.stringify(snap), false)
+
+
+## The snapshot on disk, or {} if missing / unreadable.
+func read_live_snapshot() -> Dictionary:
+	if not FileAccess.file_exists(RUN_PATH):
+		return {}
+	var v: Variant = _parse_save(FileAccess.get_file_as_string(RUN_PATH))
+	if v == null:
+		return {}
+	var d: Dictionary = v
+	if typeof(d.get("marker", null)) != TYPE_DICTIONARY or typeof(d.get("run", null)) != TYPE_DICTIONARY:
+		return {}
+	return d
+
+
+## What the resume prompt shows: marker fields + snapshot run level / time.
+func live_run_info() -> Dictionary:
+	var snap := read_live_snapshot()
+	var mk: Dictionary = live_run.duplicate()
+	if mk.is_empty():
+		mk = _dict_or_empty(snap.get("marker", {}))
+	var info := mk.duplicate()
+	info["ok"] = not snap.is_empty()
+	var run := _dict_or_empty(snap.get("run", {}))
+	var m := _dict_or_empty(snap.get("match", {}))
+	info["run_level"] = int(run.get("run_level", 1))
+	info["time"] = float(m.get("match_time", m.get("level_time", 0.0)))
+	info["hp"] = float(m.get("hp", 0.0))
+	info["max_hp"] = float(m.get("max_hp", 0.0))
+	var hero := str(mk.get("hero", ""))
+	var lost: Array = []
+	if hero != "":
+		var keep := int(insured.get(hero, -1))
+		var eq := equipped_items(hero)
+		for sl in eq.keys():
+			if int((eq[sl] as Dictionary).get("uid", -1)) != keep:
+				lost.append(str((eq[sl] as Dictionary).get("name", "item")))
+	info["at_risk"] = lost
+	info["kept"] = str(stash_item(int(insured.get(hero, -1))).get("name", "")) if hero != "" else ""
+	return info
+
+
+func _clear_live_run() -> void:
+	live_run = {}
+	_live_ctrl = null
+	_live_accum = 0.0
+	pending_resume = {}
+	for p in [RUN_PATH, RUN_PATH + ".tmp"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(p)
+
+
+## ABANDON (or a resume that can't be rebuilt): counts as a death. The equipped
+## loadout is lost (the insured item stays, as on any death), no scrap comes
+## home, and the pack is lost (Pack Lock doesn't apply — the run never ended).
+## Returns {"hero", "lost": [names], "kept": name}.
+func abandon_live_run() -> Dictionary:
+	var mk: Dictionary = live_run.duplicate()
+	if mk.is_empty():
+		mk = _dict_or_empty(read_live_snapshot().get("marker", {}))
+	var hero := str(mk.get("hero", ""))
+	if hero == "":
+		hero = selected_character_id
+	var keep := int(insured.get(hero, -1))
+	var lost: Array = []
+	var eq := equipped_items(hero)
+	for sl in eq.keys():
+		var it: Dictionary = eq[sl]
+		if int(it.get("uid", -1)) == keep:
+			continue
+		lost.append(str(it.get("name", "item")))
+		stash.erase(it)
+		loadout_of(hero).erase(sl)
+	run_pack = {}
+	run_loot = []
+	run_materials = {}
+	total_runs += 1
+	_clear_live_run()
+	reset_loadout_to_defaults()
+	save_profile()
+	return {"hero": hero, "lost": lost, "kept": str(stash_item(keep).get("name", ""))}
+
+
+## RESUME: rebuild the run from the snapshot and return the scene to load
+## ("" = it couldn't be rebuilt; the run was abandoned instead). The match
+## restarts its current phase / window (campaign: the level) with the hero at
+## the snapshot's run level, cards, pack, finds and health.
+func prepare_resume() -> String:
+	var snap := read_live_snapshot()
+	var mk := _dict_or_empty(snap.get("marker", {}))
+	var hero := str(mk.get("hero", ""))
+	var mode := str(mk.get("mode", ""))
+	var lvl := str(mk.get("level", ""))
+	var ok := not snap.is_empty() and CharacterDefs.is_playable(hero)
+	if ok and mode == "campaign":
+		ok = CampaignDefs.is_playable(lvl)
+	elif ok:
+		ok = mode == "wander"
+	if not ok:
+		abandon_live_run()
+		return ""
+	var scene := "res://scenes/match/match.tscn"
+	if mode == "campaign":
+		leave_campaign_run()
+		if not prepare_campaign_level(lvl, hero):
+			abandon_live_run()
+			return ""
+		scene = CampaignDefs.MATCH_SCENE
+	else:
+		leave_campaign_run()
+		play_mode = "wander"
+		var tm := str(mk.get("tier_mode", selected_mode_id))
+		if not ModeDefs.get_mode(tm).is_empty():
+			selected_mode_id = tm
+		selected_character_id = hero
+		var pid := str(mk.get("pet", selected_pet_id))
+		if PetDefs.is_equipable(pid) and pet_available(pid):
+			selected_pet_id = pid
+		get_tree().paused = false
+		Engine.time_scale = 1.0
+		TouchInput.clear_sticks()
+		begin_run(false)
+	_apply_run_state(_dict_or_empty(snap.get("run", {})))
+	run_finished = false
+	extracted = false
+	wiped = false
+	pending_run_choices.clear()
+	run_level_paused = false
+	if mode == "campaign":
+		## The level restarts, so this attempt's choices are made again.
+		campaign_run_flags = {}
+	live_run = mk
+	live_run["resumes"] = int(mk.get("resumes", 0)) + 1
+	pending_resume = _dict_or_empty(snap.get("match", {}))
+	pending_resume["_resume"] = true
+	loadout_changed.emit()
+	run_xp_changed.emit(run_xp, run_level)
+	return scene
+
+
+func resume_live_run() -> bool:
+	var scene := prepare_resume()
+	if scene == "":
+		return false
+	get_tree().change_scene_to_file(scene)
+	return true
+
+
+## The controller takes the match bits once ({} = a fresh run).
+func take_pending_resume() -> Dictionary:
+	var r := pending_resume
+	pending_resume = {}
+	return r
+
+
+func _apply_run_state(r: Dictionary) -> void:
+	for k in LIVE_RUN_KEYS.keys():
+		if not r.has(k):
+			continue
+		var v: Variant = r[k]
+		match str(LIVE_RUN_KEYS[k]):
+			"i":
+				if typeof(v) in [TYPE_INT, TYPE_FLOAT]:
+					set(k, int(v))
+			"f":
+				if typeof(v) in [TYPE_INT, TYPE_FLOAT]:
+					set(k, float(v))
+			"b":
+				if typeof(v) in [TYPE_BOOL, TYPE_INT, TYPE_FLOAT]:
+					set(k, bool(v))
+			"d":
+				if typeof(v) == TYPE_DICTIONARY:
+					set(k, _whole_numbers(v))
+			"a":
+				if typeof(v) == TYPE_ARRAY:
+					set(k, (v as Array).duplicate(true))
+			"s":
+				if typeof(v) == TYPE_ARRAY:
+					var ps := PackedStringArray()
+					for x in (v as Array):
+						ps.append(str(x))
+					set(k, ps)
+	if run_seed == 0:
+		run_seed = 1
+
+
+## JSON brings every number back as a float: whole ones become ints again
+## (counts, ranks), fractions stay (run_mods).
+func _whole_numbers(d: Dictionary) -> Dictionary:
+	var out := {}
+	for k in d.keys():
+		var v: Variant = d[k]
+		if typeof(v) == TYPE_FLOAT and float(v) == floorf(float(v)) and absf(float(v)) < 1e9 and str(k) not in _fresh_run_mods():
+			v = int(v)
+		out[str(k)] = v
+	return out

@@ -122,6 +122,78 @@ func build(c: VBoxContainer) -> void:
 		b.size_flags_stretch_ratio = 0.7 if str(it[0]) == "QUIT" else 1.0
 		b.pressed.connect(it[2])
 		sub.add_child(b)
+	## The app closed mid-run (force quit / crash): resume or abandon first.
+	if GameState.has_live_run():
+		_live_prompt.call_deferred()
+	elif GameState.load_notice != "":
+		_notice_prompt.call_deferred()
+
+
+## RUN INTERRUPTED — RESUME rebuilds the match; ABANDON counts as a death.
+var _abandon_armed: bool = false
+var _dialog: Control
+
+func _close_dialog() -> void:
+	if is_instance_valid(_dialog):
+		_dialog.queue_free()
+	_dialog = null
+
+func _live_prompt() -> void:
+	var info: Dictionary = GameState.live_run_info()
+	var hero := str(CharacterDefs.get_character(str(info.get("hero", ""))).get("display_name", "Your survivor"))
+	var where := ""
+	if str(info.get("mode", "")) == "campaign":
+		where = str(CampaignDefs.level(str(info.get("level", ""))).get("title", "Campaign"))
+	else:
+		where = str(ModeDefs.get_mode(str(info.get("tier_mode", ""))).get("display_name", "Wander"))
+	var t := int(float(info.get("time", 0.0)))
+	var lines: Array = [
+		["%s was out in %s when the app closed." % [hero, where], UiTheme.TEXT],
+		["Run Lv %d · %d:%02d in" % [int(info.get("run_level", 1)), t / 60, t % 60], UiTheme.AMBER],
+	]
+	if not bool(info.get("ok", false)):
+		lines.append(["The run's snapshot is damaged — resuming will count as abandoning.", UiTheme.DANGER])
+	var at_risk: Array = info.get("at_risk", [])
+	var lose := "your equipped gear (%s)" % ", ".join(PackedStringArray(at_risk)) if not at_risk.is_empty() else "your equipped gear"
+	var kept := str(info.get("kept", ""))
+	lines.append(["ABANDON counts as a death: %s is lost, no scrap is recovered and the pack is lost.%s" % [
+		lose, (" Insured: %s stays." % kept) if kept != "" else ""], UiTheme.DANGER])
+	_abandon_armed = false
+	_dialog = modal("RUN INTERRUPTED", lines, [
+		["RESUME", UiTheme.AMBER, func() -> void:
+			if not GameState.resume_live_run():
+				_close_dialog()
+				_after_abandon({}, "The run couldn't be rebuilt, so it counts as a loss.")],
+		["ABANDON", UiTheme.RUST, func() -> void:
+			var b: Button = null
+			if is_instance_valid(_dialog):
+				b = _dialog.find_child("Btn_ABANDON", true, false) as Button
+			if not _abandon_armed:
+				_abandon_armed = true
+				if b:
+					b.text = "TAP AGAIN: LOSE THE GEAR"
+				return
+			var r := GameState.abandon_live_run()
+			_close_dialog()
+			_after_abandon(r, "Run abandoned.")],
+	], UiTheme.RUST)
+
+
+func _after_abandon(r: Dictionary, head: String) -> void:
+	var lost: Array = r.get("lost", [])
+	var lines: Array = [[head, UiTheme.TEXT]]
+	lines.append(["Lost: %s" % (", ".join(PackedStringArray(lost)) if not lost.is_empty() else "nothing equipped"), UiTheme.DANGER])
+	if str(r.get("kept", "")) != "":
+		lines.append(["Insured %s came home." % str(r["kept"]), UiTheme.TEAL])
+	_dialog = modal("RUN LOST", lines, [["OK", UiTheme.LINE, func() -> void:
+		_close_dialog()
+		get_tree().reload_current_scene()]], UiTheme.RUST)
+
+
+func _notice_prompt() -> void:
+	_dialog = modal("SAVE CHECK", [[GameState.load_notice, UiTheme.TEXT]], [["OK", UiTheme.AMBER, func() -> void:
+		GameState.load_notice = ""
+		_close_dialog()]])
 
 
 ## Title sting: the logo drops in big, lands with a shake and a dust puff.

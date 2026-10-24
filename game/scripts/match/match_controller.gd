@@ -150,6 +150,79 @@ func _ready() -> void:
 		quiet = true
 		for e in get_tree().get_nodes_in_group("enemies"):
 			e.queue_free()
+	_live_begin()
+
+
+## Live run (force-quit safety): resume a snapshot if one is pending, then mark
+## the run live in the profile (GameState.live_run_begin).
+func _live_begin() -> void:
+	var res: Dictionary = GameState.take_pending_resume()
+	if not res.is_empty():
+		set_meta("resumed", true)
+		_apply_resume(res)
+	GameState.live_run_begin(self)
+
+
+## Match bits for the live-run snapshot (INF schedule times stored as -1).
+func live_snapshot() -> Dictionary:
+	var d := {
+		"match_time": _match_time,
+		"phase_index": _phase_index,
+		"window_index": _window_index,
+		"wave_i": _wave_i,
+		"next_elite": _next_elite_at if _next_elite_at != INF else -1.0,
+		"next_boss": _next_boss_at if _next_boss_at != INF else -1.0,
+		"next_crew": _next_crew_at if _next_crew_at != INF else -1.0,
+		"elite_side": _elite_side,
+		"storm": _storm_left >= 0.0,
+	}
+	_snapshot_hp(d)
+	return d
+
+
+func _snapshot_hp(d: Dictionary) -> void:
+	if is_instance_valid(player):
+		d["hp"] = float(player.get("hp"))
+		d["max_hp"] = float(player.get("max_hp"))
+
+
+func _restore_hp(res: Dictionary) -> void:
+	if not is_instance_valid(player) or not res.has("hp"):
+		return
+	var mx := float(player.get("max_hp"))
+	var hp := clampf(float(res.get("hp", mx)), 1.0, mx)
+	player.set("hp", hp)
+	player.emit_signal("health_changed", hp, mx)
+
+
+## Rebuild from a snapshot: same run clock and schedule, the current phase /
+## window restarts from its beginning (a fresh pad pair if it was open).
+func _apply_resume(res: Dictionary) -> void:
+	quiet = false
+	_radio_ping_done = true
+	_match_time = maxf(0.0, float(res.get("match_time", 0.0)))
+	_wave_i = clampi(int(res.get("wave_i", 0)), 0, OPENING_WAVES.size())
+	_elite_side = int(res.get("elite_side", 0))
+	var ne := float(res.get("next_elite", -1.0))
+	var nb := float(res.get("next_boss", -1.0))
+	var nc := float(res.get("next_crew", -1.0))
+	_next_elite_at = ne if ne >= 0.0 else INF
+	_next_boss_at = nb if nb >= 0.0 else INF
+	_next_crew_at = nc if nc >= 0.0 else INF
+	if not _phases.is_empty():
+		var pi := clampi(int(res.get("phase_index", 0)), 0, _phases.size() - 1)
+		var el := 0.0
+		for i in range(pi):
+			el += float(_phases[i]["duration"])
+		_elapsed_in_phases = el
+		var open := bool(_phases[pi].get("extract_open", false))
+		_window_index = maxi(0, int(res.get("window_index", 0)) - (1 if open else 0))
+		if open:
+			GameState.extract_windows_seen = maxi(0, GameState.extract_windows_seen - 1)
+		_pads_pinged_for = -1
+		_start_phase(pi)
+	_restore_hp(res)
+	hud.show_banner("RUN RESUMED", "%s · run Lv %d" % [str(GameState.get_character().get("display_name", "")), GameState.run_level], UiTheme.AMBER)
 
 
 ## Tutorial move lesson done: the clock starts and three weak mobs walk in.
