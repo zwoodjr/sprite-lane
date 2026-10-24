@@ -182,11 +182,9 @@ func _begin_touch(index: int, pos: Vector2) -> bool:
 
 func _in_stick_zone(pos: Vector2) -> bool:
 	var vp := get_viewport().get_visible_rect().size
-	if pos.y < vp.y * TOP_BAND_FRAC:
-		return false
-	if _left_handed:
-		return pos.x > vp.x * (1.0 - STICK_ZONE_FRAC)
-	return pos.x < vp.x * STICK_ZONE_FRAC
+	## Owner request: either thumb can start the stick anywhere below the top
+	## band, edge to edge (DASH / ABILITY are checked first, so they still win).
+	return pos.y >= vp.y * TOP_BAND_FRAC
 
 func _drag_touch(index: int, pos: Vector2) -> bool:
 	if index == _move_id:

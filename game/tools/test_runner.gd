@@ -2153,6 +2153,15 @@ func _test_knock_cap() -> void:
 		_check(moved < 450.0, "knock cap: %s moved %d px" % [kind, int(moved)])
 		if is_instance_valid(e):
 			e.queue_free()
+	var tc: Node = null
+	for n in m.find_children("*", "CanvasLayer", true, false):
+		if n.has_method("_in_stick_zone"):
+			tc = n
+	if tc:
+		var vp := tc.get_viewport().get_visible_rect().size
+		_check(bool(tc.call("_in_stick_zone", Vector2(vp.x * 0.9, vp.y * 0.5))) and bool(tc.call("_in_stick_zone", Vector2(vp.x * 0.1, vp.y * 0.5))), "stick: either thumb, full width")
+	else:
+		_check(false, "stick: touch controls found")
 	await _end_depth_match(m)
 
 
