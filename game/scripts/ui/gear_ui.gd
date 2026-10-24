@@ -150,6 +150,35 @@ static func set_badge(sid: String, px: int = 32) -> Control:
 	return p
 
 
+## SET sort group header: emblem, set name (+ survivor), "x/N owned".
+static func set_header(sid: String) -> Control:
+	var h := HBoxContainer.new()
+	h.name = "SetHeader_%s" % (sid if sid != "" else "none")
+	h.add_theme_constant_override("separation", 12)
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	if sid == "":
+		h.add_child(UiTheme.head_label("NO SET", UiTheme.T_H3, UiTheme.TEXT_DIM))
+		return h
+	h.add_child(set_badge(sid, 48))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(v)
+	var t := UiTheme.head_label(GearDefs.set_title(sid).to_upper(), UiTheme.T_H3, GearDefs.set_color(sid).lightened(0.45))
+	t.clip_text = true
+	v.add_child(t)
+	var who := GearDefs.set_hero(sid)
+	if who != "":
+		v.add_child(UiTheme.body_label("%s's set" % hero_name(who), UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+	var own := GameState.set_owned(sid)
+	var tot := GearDefs.set_total(sid)
+	var ol := UiTheme.pixel_label("%d/%d OWNED" % [own, tot], UiTheme.PX_M, UiTheme.AMBER if own >= tot else UiTheme.TEXT)
+	ol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(ol)
+	return h
+
+
 ## Who wears it: their portrait in a teal-edged square.
 static func worn_marker(hero: String, px: int = 32) -> Control:
 	var p := Panel.new()

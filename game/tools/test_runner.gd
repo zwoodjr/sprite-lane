@@ -126,6 +126,7 @@ func _run() -> void:
 	await _test_upgrades()
 	await _test_gear_screens()
 	await _test_gear_ux()
+	await _test_loot2()
 	await _test_gear_deploy_sync()
 	await _test_full_sets()
 	var keep_q := [GameState.daily.duplicate(true), GameState.stories.duplicate(true), GameState.milestones.duplicate(true), GameState.kennel_bond.duplicate(true)]
@@ -275,7 +276,7 @@ func _test_upgrades() -> void:
 			await get_tree().physics_frame
 		for g in get_tree().get_nodes_in_group("gear_drops"):
 			g.call("_collect")
-		_check(GameState.run_loot.size() >= 3, "%s role loot %d" % [hero, GameState.run_loot.size()])
+		_check(GameState.run_loot.size() >= 2, "%s role loot %d" % [hero, GameState.run_loot.size()])
 		_check(not GameState.run_materials.is_empty(), "%s boss materials" % hero)
 		_check(GameState.boss_loot_bonus >= 0.5, "%s boss loot bonus" % hero)
 		while frames < 700 and is_instance_valid(m) and not bool(m.get("_ended")):
@@ -532,7 +533,7 @@ func _test_gear() -> void:
 	## Elite / boss rewards (Part 3).
 	var er := GearDefs.roll_role_reward("elite", "cyber_juggernaut", 3, "ash_rook", 0.0, rng)
 	var eitems: Array = er["items"]
-	_check(eitems.size() == 2 and str(eitems[1]["kind"]) == "mod" and GearDefs.RARITIES.find(str(eitems[0]["rarity"])) >= 1, "elite reward")
+	_check(eitems.size() >= 1 and (eitems.size() == 1 or str(eitems[1]["kind"]) == "mod") and GearDefs.RARITIES.find(str(eitems[0]["rarity"])) >= 1, "elite reward")
 	var br := GearDefs.roll_role_reward("boss", "mutant_overlord", 5, "ash_rook", 0.0, rng)
 	var bitems: Array = br["items"]
 	_check(str(bitems[0]["rarity"]) == "epic" and str(bitems[0]["set"]) != "" and int((br["materials"] as Dictionary).get("dust_heart", 0)) >= 1, "boss reward")
@@ -633,7 +634,7 @@ func _test_gear_ux() -> void:
 	_check(not GameState.buy_back(lu), "buy back once")
 	## Bin keeps valuables over a flood of commons; buy back needs scrap.
 	GameState.salvage(lu)
-	for i in range(14):
+	for i in range(GameState.SALVAGE_BIN_MAX + 4):
 		GameState.add_to_stash(GearDefs.make_gear("boots", "common", rng))
 		GameState.salvage(int(GameState.stash[GameState.stash.size() - 1]["uid"]))
 	var kept := false
@@ -795,6 +796,161 @@ func _test_gear_ux() -> void:
 	GameState.loadouts.clear()
 	GameState.salvage_bin.clear()
 	print("GEAR_UX_OK")
+
+
+## 8b2) Loot v2: fewer Common drops (Rare+ odds kept), auto-salvage toggle,
+## overflow salvages Commons first, SET sort groups + set filter chip.
+func _test_loot2() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var keep_auto: Variant = GameState.settings.get("auto_salvage_commons", false)
+	var keep_bin := GameState.salvage_bin.duplicate(true)
+	var keep_stash := GameState.stash.duplicate(true)
+	var keep_lo := GameState.loadouts.duplicate(true)
+	## Drop counts: per random drop roll, Commons thinned to COMMON_KEEP, Rare+ unchanged.
+	for tier in [1, 5, 8]:
+		var old := {}
+		var now := {}
+		var n := 20000
+		for i in range(n):
+			var a := GearDefs.roll_drop(tier, "ash_rook", 0.0, rng)
+			old[a["rarity"]] = int(old.get(a["rarity"], 0)) + 1
+			var b := GearDefs.random_drop(tier, "ash_rook", 0.0, rng)
+			if not b.is_empty():
+				now[b["rarity"]] = int(now.get(b["rarity"], 0)) + 1
+		var rare_old := n - int(old.get("common", 0))
+		var rare_now := 0
+		for r in ["rare", "epic", "legendary"]:
+			rare_now += int(now.get(r, 0))
+		var c_ratio := float(now.get("common", 0)) / maxf(1.0, float(old.get("common", 0)))
+		print("LOOT_DROPS tier=%d old=%s new=%s" % [tier, old, now])
+		_check(absf(c_ratio - GearDefs.COMMON_KEEP) < 0.05, "commons thinned t%d %.2f" % [tier, c_ratio])
+		_check(absf(float(rare_now) / float(rare_old) - 1.0) < 0.08, "rare+ odds kept t%d %d/%d" % [tier, rare_now, rare_old])
+	## Elite / boss rewards stay guaranteed.
+	var er := GearDefs.roll_role_reward("elite", "", 3, "ash_rook", 0.0, rng)
+	var br := GearDefs.roll_role_reward("boss", "dread_naught", 5, "ash_rook", 0.0, rng)
+	_check((er["items"] as Array).size() >= 1 and (br["items"] as Array).size() >= 1 and not (br["materials"] as Dictionary).is_empty(), "elite/boss rewards guaranteed")
+	var mods := 0
+	for i in range(2000):
+		var e2 := GearDefs.roll_role_reward("elite", "", 3, "ash_rook", 0.0, rng)
+		_check((e2["items"] as Array).size() >= 1 and GearDefs.RARITIES.find(str(e2["items"][0]["rarity"])) >= 1, "elite gear guaranteed")
+		mods += (e2["items"] as Array).size() - 1
+	_check(absf(float(mods) / 2000.0 - GearDefs.ELITE_MOD_CHANCE) < 0.05, "elite bonus mod rate %d" % mods)
+	_check((GearDefs.roll_role_reward("elite", "", 3, "ash_rook", 0.0, rng, false)["items"] as Array).size() == 1, "soft cap: no bonus mod")
+	## Toggle: default OFF, and an old save without the key loads OFF.
+	_check(((load("res://scripts/ui/settings_panel.gd") as GDScript).get_script_constant_map()["ROWS"] as Array).any(func(r: Dictionary) -> bool: return str(r["key"]) == "auto_salvage_commons"), "settings row")
+	GameState.settings.erase("auto_salvage_commons")
+	GameState.save_profile()
+	var old_save: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	(old_save["settings"] as Dictionary).erase("auto_salvage_commons")
+	old_save["version"] = 3
+	GameState.apply_save(old_save)
+	_check(not GameState.auto_salvage_on() and not GameState.settings.has("auto_salvage_commons") or GameState.settings["auto_salvage_commons"] == false, "auto-salvage default off (old save)")
+	## OFF: every Common goes to the stash.
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.salvage_bin.clear()
+	GameState.selected_mode_id = "drift"
+	GameState.begin_run()
+	for i in range(3):
+		GameState.add_run_loot(GearDefs.make_gear("boots", "common", rng))
+	GameState.on_extract_success()
+	_check(GameState.stash.size() == 3 and GameState.result_auto_salvaged_n == 0, "auto off keeps commons")
+	## ON: plain Commons salvaged; set / Rare+ / upgrades kept; all in buy-back.
+	GameState.stash.clear()
+	GameState.salvage_bin.clear()
+	var worn := GearDefs.make_gear("head", "common", rng)
+	worn["stats"] = {"max_hp": 6.0}
+	GameState.add_to_stash(worn)
+	GameState.equip("ash_rook", "head", int(GameState.stash[0]["uid"]))
+	GameState.set_setting("auto_salvage_commons", true)
+	GameState.begin_run()
+	var up := GearDefs.make_gear("head", "common", rng)
+	up["stats"] = {"max_hp": 7.0, "crit": 0.02}
+	var worse := GearDefs.make_gear("head", "common", rng)
+	worse["stats"] = {"max_hp": 5.0}
+	var setp := GearDefs.make_gear("chest", "epic", rng, "general", "ash_rook")
+	for it in [GearDefs.make_gear("boots", "common", rng), up, worse, GearDefs.make_gear("hands", "rare", rng), setp]:
+		GameState.add_run_loot(it)
+	var scrap0 := GameState.account_scrap
+	GameState.on_extract_success()
+	var auto_scrap := 2 * int(GearDefs.SALVAGE["common"])
+	_check(GameState.result_auto_salvaged_n == 2 and GameState.result_auto_salvaged_scrap == auto_scrap, "auto-salvaged 2 %d" % GameState.result_auto_salvaged_n)
+	_check(GameState.stash.size() == 4 and GameState.salvage_bin.size() == 2, "kept upgrade + rare + set; bin has the commons")
+	_check(GameState.account_scrap - scrap0 >= auto_scrap, "auto scrap paid")
+	var rs: Node = (load("res://scenes/ui/result_screen.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(rs)
+	for i in range(3):
+		await get_tree().process_frame
+	var al: Label = rs.find_child("AutoSalvageLine", true, false) as Label
+	_check(al != null and al.text == "Auto-salvaged 2 commons (+%d scrap)" % auto_scrap, "result line %s" % (al.text if al else "none"))
+	rs.queue_free()
+	await get_tree().process_frame
+	var bu := int((GameState.salvage_bin[0]["item"] as Dictionary)["uid"])
+	_check(GameState.buy_back(bu) and not GameState.stash_item(bu).is_empty(), "auto-salvaged buy back")
+	## Stash full: overflow salvages Commons before anything rarer.
+	GameState.set_setting("auto_salvage_commons", false)
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	while GameState.stash.size() < GameState.stash_capacity() - 2:
+		GameState.add_to_stash(GearDefs.make_gear("boots", "common", rng))
+	GameState.begin_run()
+	GameState.add_run_loot(GearDefs.make_gear("legs", "common", rng))
+	GameState.add_run_loot(GearDefs.make_gear("legs", "epic", rng))
+	GameState.add_run_loot(GearDefs.make_gear("charm", "common", rng))
+	GameState.add_run_loot(GearDefs.make_gear("head", "rare", rng))
+	GameState.on_extract_success()
+	var kept_r: Array = GameState.result_found.map(func(x: Dictionary) -> String: return str(x["rarity"]))
+	_check(GameState.result_overflow_n == 2 and kept_r.has("epic") and kept_r.has("rare") and not kept_r.has("common"), "overflow commons first %s" % [kept_r])
+	_check(GameState.result_salvaged == 2 * int(GearDefs.SALVAGE["common"]), "overflow scrap")
+	## SET sort + set filter + stash quick toggle.
+	GameState.stash.clear()
+	GameState.selected_character_id = "ash_rook"
+	var a1 := GearDefs.make_gear("head", "epic", rng, "general", "ash_rook")
+	a1["set"] = "night_runner"
+	var a2 := GearDefs.make_gear("chest", "epic", rng, "survivor", "pebble")
+	a2["set"] = "quarry_plate"
+	a2["hero"] = "pebble"
+	var a3 := GearDefs.make_gear("head", "epic", rng, "survivor", "ash_rook")
+	a3["set"] = "foremans_kit"
+	a3["hero"] = "ash_rook"
+	for it in [GearDefs.make_gear("boots", "common", rng), a2, a1, a3, GearDefs.make_gear("legs", "rare", rng)]:
+		GameState.add_to_stash(it)
+	var order: Array = GameState.stash_view("set").map(func(x: Dictionary) -> String: return str(x.get("set", "")))
+	_check(order == ["night_runner", "foremans_kit", "quarry_plate", "", ""], "set sort order %s" % [order])
+	_check(GameState.set_owned("night_runner") == 1 and GameState.set_groups(GameState.stash_view("set")).size() == 4, "set groups")
+	var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(h)
+	await get_tree().process_frame
+	h.call("show_tab", "stash")
+	h.call("set_stash_sort", "set")
+	await get_tree().process_frame
+	_check(h.find_child("SetHeader_night_runner", true, false) != null and h.find_child("SetHeader_none", true, false) != null, "stash set headers")
+	h.call("cycle_stash_filter", "set")
+	h.call("cycle_stash_filter", "set")
+	_check((h.call("stash_shown") as Array).size() == 1, "set filter chip picks one set")
+	h.call("set_stash_filters", {"group": "", "rarity": "", "set": "", "fits": ""})
+	var tb := h.find_child("AutoSalvageToggle", true, false)
+	_check(tb != null and bool(h.call("toggle_auto_salvage")) and GameState.auto_salvage_on(), "stash quick toggle")
+	h.call("toggle_auto_salvage")
+	_check(not GameState.auto_salvage_on(), "stash quick toggle off")
+	h.queue_free()
+	await get_tree().process_frame
+	var lo: Node = (load("res://scenes/ui/loadout.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(lo)
+	await get_tree().process_frame
+	lo.call("set_hero", "ash_rook")
+	lo.call("select_slot", "head")
+	lo.call("set_sort", "set")
+	await get_tree().process_frame
+	_check(lo.find_child("SetHeader_foremans_kit", true, false) != null, "picker set headers")
+	lo.queue_free()
+	await get_tree().process_frame
+	GameState.settings["auto_salvage_commons"] = keep_auto
+	GameState.salvage_bin = keep_bin
+	GameState.stash = keep_stash
+	GameState.loadouts = keep_lo
+	print("LOOT2_OK")
 
 
 ## 8c) What Gear shows is what prep shows and what the match applies — also

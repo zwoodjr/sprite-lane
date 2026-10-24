@@ -19,13 +19,14 @@ const ROWS := [
 	{"key": "screen_shake", "type": "toggle", "label": "Screen shake", "desc": ""},
 	{"key": "heat_shimmer", "type": "toggle", "label": "Heat shimmer", "desc": "Faint heat haze over the map. Off saves battery."},
 	{"key": "film_grain", "type": "toggle", "label": "Edge dither", "desc": "Pixel-dither shading at the screen edges."},
+	{"key": "auto_salvage_commons", "type": "toggle", "label": "Auto-salvage Commons", "desc": "On extract, plain Commons turn into scrap (never sets, locked or upgrades). Buy back from the stash."},
 ]
 
 
 const ICON := {"stick_scale": "set_stick", "left_handed": "set_lefty", "show_hints": "set_hints", "mute": "set_mute",
 	"vol_master": "set_volume", "vol_music": "set_music", "vol_sfx": "set_sfx", "vol_ambience": "set_ambience",
 	"vol_ui": "set_ui", "haptics": "set_vibration", "screen_shake": "set_shake", "heat_shimmer": "set_shimmer",
-	"film_grain": "set_grain"}
+	"film_grain": "set_grain", "auto_salvage_commons": "cur_scrap"}
 
 
 func _ready() -> void:

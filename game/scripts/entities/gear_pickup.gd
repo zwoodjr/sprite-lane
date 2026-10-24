@@ -119,11 +119,15 @@ func _collect() -> void:
 static func maybe_drop(parent: Node, pos: Vector2, chance: float) -> void:
 	var tier := int(GameState.get_mode().get("tier", 1))
 	var c := chance * (1.0 + GearDefs.DROP_TIER_STEP * float(tier - 1))
+	if GameState.run_loot.size() >= GearDefs.RUN_SOFT_CAP:
+		c *= GearDefs.SOFT_CAP_MULT
 	if randf() >= c:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	spawn(parent, pos, GearDefs.roll_drop(tier, GameState.selected_character_id, GameState.gear_luck(), rng))
+	var it := GearDefs.random_drop(tier, GameState.selected_character_id, GameState.gear_luck(), rng)
+	if not it.is_empty():
+		spawn(parent, pos, it)
 
 
 ## Elite / boss kill rewards (Part 3).
@@ -131,7 +135,8 @@ static func drop_role_reward(parent: Node, pos: Vector2, role: String, kind: Str
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var tier := int(GameState.get_mode().get("tier", 1))
-	var rw := GearDefs.roll_role_reward(role, kind, tier, GameState.selected_character_id, GameState.gear_luck(), rng)
+	var rw := GearDefs.roll_role_reward(role, kind, tier, GameState.selected_character_id, GameState.gear_luck(), rng,
+		GameState.run_loot.size() < GearDefs.RUN_SOFT_CAP)
 	var i := 0
 	for it in rw["items"]:
 		spawn(parent, pos + Vector2(cos(i * 2.1), sin(i * 2.1)) * 18.0, it)

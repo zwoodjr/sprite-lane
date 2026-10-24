@@ -658,7 +658,7 @@ func _build_stash() -> void:
 	var fdefs := [
 		["group", str(GROUP_LABEL[str(_filters["group"])])],
 		["rarity", "ANY RARITY" if str(_filters["rarity"]) == "" else str(GearDefs.RARITY_NAME[str(_filters["rarity"])]).to_upper()],
-		["set", "SETS ONLY" if str(_filters["set"]) == "any" else "ANY SET"],
+		["set", _set_chip_label()],
 		["fits", "FITS %s" % GearUi.hero_name(hero).to_upper().get_slice(" ", 0)],
 	]
 	for fd in fdefs:
@@ -689,23 +689,63 @@ func _build_stash() -> void:
 	rb.mouse_force_pass_scroll_events = true
 	rb.pressed.connect(open_buyback)
 	trow.add_child(rb)
+	## Quick toggle for Settings > Auto-salvage Commons.
+	var ao := GameState.auto_salvage_on()
+	var ab := UiTheme.big_button("AUTO-SALVAGE COMMONS: %s" % ("ON" if ao else "OFF"), UiTheme.AMBER if ao else UiTheme.LINE, 64, 16)
+	ab.name = "AutoSalvageToggle"
+	ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab.mouse_force_pass_scroll_events = true
+	ab.pressed.connect(toggle_auto_salvage)
+	_list.add_child(ab)
 	var shown := GameState.stash_view(_sort, _filters)
 	if shown.size() < GameState.stash.size():
 		_list.add_child(_note("Showing %d of %d" % [shown.size(), GameState.stash.size()]))
-	var grid := GridContainer.new()
+	var groups: Array = GameState.set_groups(shown) if _sort == "set" else [{"set": null, "items": shown}]
+	var grid: GridContainer
+	for gr in groups:
+		if gr["set"] != null:
+			_list.add_child(GearUi.set_header(str(gr["set"])))
+		grid = _stash_grid()
+		for it in gr["items"]:
+			grid.add_child(_slot(it))
+	if grid == null:
+		grid = _stash_grid()
 	grid.name = "StashGrid"
+	if _filters.values().all(func(x: Variant) -> bool: return str(x) == ""):
+		if _sort == "set" and GameState.stash.size() < cap:
+			grid = _stash_grid()
+		for i in range(cap - GameState.stash.size()):
+			grid.add_child(_slot({}))
+	_list.add_child(_row("stash", null))
+
+
+func _set_chip_label() -> String:
+	var f := str(_filters["set"])
+	if f == "":
+		return "ANY SET"
+	if f == "any":
+		return "SETS ONLY"
+	return GearDefs.set_title(f).to_upper()
+
+
+func _stash_grid() -> GridContainer:
+	var grid := GridContainer.new()
 	grid.columns = 5
 	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.add_theme_constant_override("h_separation", 16)
 	grid.add_theme_constant_override("v_separation", 16)
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	_list.add_child(grid)
-	for it in shown:
-		grid.add_child(_slot(it))
-	if _filters.values().all(func(x: Variant) -> bool: return str(x) == ""):
-		for i in range(cap - GameState.stash.size()):
-			grid.add_child(_slot({}))
-	_list.add_child(_row("stash", null))
+	return grid
+
+
+func toggle_auto_salvage() -> bool:
+	var on := not GameState.auto_salvage_on()
+	GameState.set_setting("auto_salvage_commons", on)
+	Juice.sfx("ui_toggle")
+	_toast("Auto-salvage Commons on extract: %s" % ("ON" if on else "OFF"))
+	_rebuild()
+	return on
 
 
 func set_stash_sort(s: String) -> void:
@@ -722,7 +762,10 @@ func cycle_stash_filter(key: String) -> void:
 		"rarity":
 			_filters["rarity"] = RARITY_FILTERS[(RARITY_FILTERS.find(str(_filters["rarity"])) + 1) % RARITY_FILTERS.size()]
 		"set":
-			_filters["set"] = "" if str(_filters["set"]) == "any" else "any"
+			## ANY SET -> SETS ONLY -> each set you own -> ANY SET.
+			var cyc: Array = ["", "any"] + GameState.stash_set_ids()
+			var at := cyc.find(str(_filters["set"]))
+			_filters["set"] = cyc[(at + 1) % cyc.size()] if at >= 0 else ""
 		"fits":
 			_filters["fits"] = "" if str(_filters["fits"]) != "" else GameState.selected_character_id
 	_rebuild()

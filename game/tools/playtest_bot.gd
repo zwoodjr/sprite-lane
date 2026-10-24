@@ -71,6 +71,9 @@ var _raiders_seen := {}
 var _elite_traits := {}
 ## Payout breakdown (backlog 1): last in-run snapshot of the bag parts.
 var _econ := [0, 0, 0]
+## Gear picked up this run by rarity (LOOT line).
+var _loot_n := 0
+var _loot_by := {}
 
 
 func _restore_profile() -> void:
@@ -208,6 +211,13 @@ func _nearest(group: String) -> Node2D:
 func _process(delta: float) -> void:
 	if not _go: return
 	_frames += 1
+	## Gear picked up this run, by rarity (loot sweeps).
+	var ln := GameState.run_loot.size()
+	for i in range(_loot_n, ln):
+		var rr := str((GameState.run_loot[i] as Dictionary).get("rarity", "common"))
+		_loot_by[rr] = int(_loot_by.get(rr, 0)) + 1
+	if ln > _loot_n:
+		_loot_n = ln
 	if _p == null or not is_instance_valid(_p):
 		if not _ended:
 			_ended = true
@@ -342,6 +352,13 @@ func _drive(delta: float) -> void:
 		var ne := _nearest("enemies")
 		if ne == null or ne.global_position.distance_to(_p.global_position) > 160.0:
 			TouchInput.move_vector = _steer((med.global_position - _p.global_position).normalized(), delta)
+			return
+	## Gear drops: a player always detours for them when it's safe.
+	var gd := _nearest("gear_drops")
+	if gd and gd.global_position.distance_to(_p.global_position) < 600.0 and not low_hp:
+		var ng := _nearest("enemies")
+		if ng == null or ng.global_position.distance_to(_p.global_position) > 150.0:
+			TouchInput.move_vector = _steer((gd.global_position - _p.global_position).normalized(), delta)
 			return
 	## Like a player: sweep up nearby XP / scrap when nothing is in reach.
 	var loot := _nearest("loot")
@@ -594,6 +611,8 @@ func _summary() -> void:
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
 	print("STUCK total=%.1f max_streak=%.2f at=(%.0f,%.0f)" % [_stuck_s, _stuck_max, _stuck_at.x, _stuck_at.y])
 	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])
+	print("LOOT common=%d rare=%d epic=%d legendary=%d total=%d auto=%d" % [int(_loot_by.get("common", 0)), int(_loot_by.get("rare", 0)),
+		int(_loot_by.get("epic", 0)), int(_loot_by.get("legendary", 0)), _loot_n, int(GameState.get("result_auto_salvaged_n") if "result_auto_salvaged_n" in GameState else 0)])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])
 	var evos: PackedStringArray = []
 	for c in RecipeDefs.all():

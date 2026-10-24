@@ -52,6 +52,10 @@ var boss_loot_bonus: float = 0.0
 var result_found: Array = []
 var result_lost_items: Array = []
 var result_salvaged: int = 0
+## Loot v2: Commons auto-salvaged on extract (setting) and stash-full overflow.
+var result_auto_salvaged_n: int = 0
+var result_auto_salvaged_scrap: int = 0
+var result_overflow_n: int = 0
 ## Unlock lines raised mid-run (trophies), shown on the result screen.
 var result_unlocks_pending: PackedStringArray = []
 ## --- Logbook (Phase C) ---
@@ -131,6 +135,8 @@ var settings: Dictionary = {
 	## Edge dither vignette (bible: no noise / film grain). Off by default.
 	"film_grain": false,
 	"dither_v1": true,
+	## Loot v2: salvage plain Commons automatically on extract (buy-back keeps them).
+	"auto_salvage_commons": false,
 }
 var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.
@@ -914,7 +920,7 @@ func salvage(uid: int) -> int:
 	return v
 
 ## Recently salvaged (newest first): [{item, scrap}], at most SALVAGE_BIN_MAX.
-const SALVAGE_BIN_MAX := 10
+const SALVAGE_BIN_MAX := 30
 var salvage_bin: Array = []
 
 ## A full bin drops its oldest Common first, so a pile of bulk-salvaged
@@ -1033,7 +1039,7 @@ func stash_view(sort: String = "rarity", filters: Dictionary = {}) -> Array:
 			"slot":
 				return [sl, -r, -uid]
 			"set":
-				return [0 if str(it.get("set", "")) != "" else 1, str(it.get("set", "")), sl, -r, -uid]
+				return [set_order(str(it.get("set", ""))), sl, -r, -uid]
 			"newest":
 				return [-uid]
 		return [-r, sl, -uid]
@@ -1045,6 +1051,48 @@ func stash_view(sort: String = "rarity", filters: Dictionary = {}) -> Array:
 				return ka[i] < kb[i]
 		return false)
 	return out
+
+## SET sort order: general sets, then survivor sets by hero (the selected
+## survivor's first), loose items last.
+func set_order(sid: String) -> int:
+	if sid == "":
+		return 999
+	var gi := GearDefs.GENERAL_SETS.keys().find(sid)
+	if gi >= 0:
+		return gi
+	var own := GearDefs.survivor_set_for(selected_character_id)
+	if sid == own:
+		return 50
+	var si := GearDefs.SURVIVOR_SETS.keys().find(sid)
+	return 51 + si if si >= 0 else 900
+
+## Distinct pieces (slots) of a set in the stash.
+func set_owned(sid: String) -> int:
+	var slots := {}
+	for it in stash:
+		if str(it.get("set", "")) == sid:
+			slots[str(it.get("slot", ""))] = true
+	return slots.size()
+
+## Items (already in SET order) split into [{"set": sid, "items": [...]}].
+func set_groups(items: Array) -> Array:
+	var out: Array = []
+	for it in items:
+		var sid := str(it.get("set", ""))
+		if out.is_empty() or str(out[out.size() - 1]["set"]) != sid:
+			out.append({"set": sid, "items": []})
+		(out[out.size() - 1]["items"] as Array).append(it)
+	return out
+
+## Set ids present in the stash, in SET order (filter chip cycle).
+func stash_set_ids() -> Array:
+	var ids: Array = []
+	for it in stash:
+		var sid := str(it.get("set", ""))
+		if sid != "" and not ids.has(sid):
+			ids.append(sid)
+	ids.sort_custom(func(a: String, b: String) -> bool: return set_order(a) < set_order(b))
+	return ids
 
 ## Set pieces this survivor wears, per set id (ignores Inert vials like _compute_gear).
 func worn_set_counts(hero: String) -> Dictionary:
@@ -1172,17 +1220,85 @@ func on_boss_killed(kind: String) -> void:
 		trophies[kind] = true
 		result_unlocks_pending.append("Trophy: first %s kill" % EnemyDefs.get_kind(kind).get("display_name", kind))
 
-## Extract: found gear → stash (overflow salvaged), materials banked.
+func auto_salvage_on() -> bool:
+	return bool(settings.get("auto_salvage_commons", false))
+
+## Would auto-salvage take this found item? Plain Commons only: never set
+## pieces, legendaries, locked items, or a piece that beats what any survivor
+## wears in that slot (empty slots don't count).
+func auto_salvageable(it: Dictionary) -> bool:
+	if str(it.get("rarity", "")) != "common" or str(it.get("set", "")) != "" \
+			or str(it.get("legendary", "")) != "" or bool(it.get("locked", false)):
+		return false
+	var sc := GearDefs.item_score(it)
+	for h in loadouts.keys():
+		var lo: Dictionary = loadouts[h]
+		for sl in lo.keys():
+			if not GearDefs.fits(it, str(sl), str(h)):
+				continue
+			var cur := stash_item(int(lo[sl]))
+			if cur.is_empty() or GearDefs.kind_of(cur) != GearDefs.kind_of(it):
+				continue
+			if GearDefs.kind_of(it) == "mod" and str(cur.get("mod", "")) != str(it.get("mod", "")):
+				continue
+			if sc > GearDefs.item_score(cur) + 0.001:
+				return false
+	return true
+
+## Keep priority when the stash can't take everything: rarer first, set
+## pieces before loose ones, so overflow salvages Commons before anything rarer.
+static func _keep_rank(it: Dictionary) -> int:
+	return GearDefs.RARITIES.find(str(it.get("rarity", "common"))) * 2 + (1 if str(it.get("set", "")) != "" else 0)
+
+## Salvage a found (not yet stashed) item: scrap now, a uid so it can be
+## bought back from the bin.
+func _salvage_found(it: Dictionary, frac: float) -> int:
+	var c := it.duplicate(true)
+	c["uid"] = next_uid
+	next_uid += 1
+	var v := int(round(float(GearDefs.salvage_value(c)) * frac))
+	account_scrap += v
+	_bin_push(c, v)
+	return v
+
+## Extract: found gear → stash, materials banked. Auto-salvage (setting) takes
+## plain Commons first; if the stash is still too small, the lowest items
+## (Commons first) are salvaged. Both land in the buy-back bin.
 func _bank_run_loot() -> void:
 	result_found = []
 	result_salvaged = 0
+	result_auto_salvaged_n = 0
+	result_auto_salvaged_scrap = 0
+	result_overflow_n = 0
+	var keep: Array = []
+	var auto := auto_salvage_on()
 	for it in run_loot:
+		if auto and auto_salvageable(it):
+			result_auto_salvaged_scrap += _salvage_found(it, 1.0)
+			result_auto_salvaged_n += 1
+		else:
+			keep.append(it)
+	var room := maxi(0, stash_capacity() - stash.size())
+	if keep.size() > room:
+		var order := range(keep.size())
+		order.sort_custom(func(a: int, b: int) -> bool:
+			var ra := _keep_rank(keep[a])
+			var rb := _keep_rank(keep[b])
+			return ra > rb if ra != rb else a < b)
+		var drop := {}
+		for i in range(room, order.size()):
+			drop[order[i]] = true
+		var kept: Array = []
+		for i in range(keep.size()):
+			if drop.has(i):
+				result_salvaged += _salvage_found(keep[i], GearDefs.OVERFLOW_SALVAGE)
+				result_overflow_n += 1
+			else:
+				kept.append(keep[i])
+		keep = kept
+	for it in keep:
 		if add_to_stash(it):
 			result_found.append(it)
-		else:
-			var v := int(round(float(GearDefs.salvage_value(it)) * GearDefs.OVERFLOW_SALVAGE))
-			account_scrap += v
-			result_salvaged += v
 	for k in run_materials.keys():
 		materials[k] = material_count(str(k)) + int(run_materials[k])
 		result_unlocks.append("+%d %s" % [int(run_materials[k]), GearDefs.MATERIAL_NAME.get(str(k), str(k))])
@@ -1671,6 +1787,9 @@ func _clear_result_meta() -> void:
 	result_found = []
 	result_lost_items = []
 	result_salvaged = 0
+	result_auto_salvaged_n = 0
+	result_auto_salvaged_scrap = 0
+	result_overflow_n = 0
 
 func on_window_skipped() -> void:
 	windows_skipped += 1

@@ -396,11 +396,16 @@ func _build_picker(eq: Dictionary) -> void:
 	if not cur.is_empty():
 		_list.add_child(_item_row(cur, true))
 	var any := false
+	var last_set: Variant = null
 	for it in GameState.stash_view(_sort):
 		if not GearDefs.fits(it, _slot, _hero):
 			continue
 		if int(it.get("uid", -1)) == int(cur.get("uid", -2)):
 			continue
+		## SET sort: a header (emblem + x/N owned) per set, loose items last.
+		if _sort == "set" and str(it.get("set", "")) != last_set:
+			last_set = str(it.get("set", ""))
+			_list.add_child(GearUi.set_header(str(last_set)))
 		_list.add_child(_item_row(it, false))
 		any = true
 	if not any:

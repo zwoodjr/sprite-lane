@@ -160,8 +160,16 @@ func build(c: VBoxContainer) -> void:
 			var more := UiTheme.pixel_label("+%d" % (gear_list.size() - 5), UiTheme.PX_M, UiTheme.TEXT_DIM)
 			more.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			grid.add_child(more)
+	if _won and GameState.result_auto_salvaged_n > 0:
+		var al := UiTheme.body_label("Auto-salvaged %d common%s (+%d scrap)" % [GameState.result_auto_salvaged_n,
+			"" if GameState.result_auto_salvaged_n == 1 else "s", GameState.result_auto_salvaged_scrap], UiTheme.T_SMALL, UiTheme.AMBER)
+		al.name = "AutoSalvageLine"
+		mid.add_child(al)
 	if _won and GameState.result_salvaged > 0:
-		mid.add_child(UiTheme.body_label("Stash full: extras salvaged for %d scrap" % GameState.result_salvaged, UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		mid.add_child(UiTheme.body_label("Stash full: %d extra%s salvaged for %d scrap" % [GameState.result_overflow_n,
+			"" if GameState.result_overflow_n == 1 else "s", GameState.result_salvaged], UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+	if _won and (GameState.result_auto_salvaged_n > 0 or GameState.result_salvaged > 0):
+		mid.add_child(UiTheme.body_label("Changed your mind? Stash > BUY BACK.", UiTheme.T_SMALL, UiTheme.TEXT_DIM))
 	for u in GameState.result_unlocks:
 		var uc := _unlock_card(str(u))
 		mid.add_child(uc)

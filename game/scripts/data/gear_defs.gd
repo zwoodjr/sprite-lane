@@ -233,6 +233,18 @@ const KILL_DROP_CHANCE := 0.025
 const CRATE_DROP_CHANCE := 0.06
 const DROP_TIER_STEP := 0.15
 ## Rarity weights at tier 1 and the per-tier change.
+## Loot v2 ("fewer, better drops"): a random kill / crate drop that rolls
+## Common only actually drops this often; Rare+ odds per kill are unchanged,
+## so a strong run lands ~8-15 items and each one matters more. Elite / boss
+## rewards, events, jobs and bunkers are guaranteed drops and skip this.
+const COMMON_KEEP := 0.4
+## Past this many items picked up in a run, random kill / crate drop chance is
+## multiplied by SOFT_CAP_MULT and elites stop adding their bonus mod (their
+## gear piece and boss rewards stay guaranteed). Keeps long runs ~8-15 items.
+const RUN_SOFT_CAP := 10
+const SOFT_CAP_MULT := 0.35
+## Elites: one guaranteed gear piece (Rare+); the bonus mod drops this often.
+const ELITE_MOD_CHANCE := 0.35
 const RARITY_WEIGHT := {"common": 70.0, "rare": 24.0, "epic": 5.0, "legendary": 1.0}
 const RARITY_WEIGHT_STEP := {"common": -4.0, "rare": 1.5, "epic": 1.6, "legendary": 0.6}
 ## Which kind of item drops.
@@ -516,6 +528,29 @@ static func roll_drop(tier: int, hero: String, luck: float, rng: RandomNumberGen
 	return make_gear(_pick(ARMOR_SLOTS, rng), rarity, rng, set_kind, hero)
 
 
+## A random kill / crate drop ({} = nothing): Commons thinned by COMMON_KEEP.
+static func random_drop(tier: int, hero: String, luck: float, rng: RandomNumberGenerator) -> Dictionary:
+	var it := roll_drop(tier, hero, luck, rng)
+	if str(it.get("rarity", "common")) == "common" and rng.randf() >= COMMON_KEEP:
+		return {}
+	return it
+
+
+## Rough power of an item for same-slot comparisons: armor / accessories sum
+## their stats in "base rolls"; weapons by rarity; mods by their value.
+static func item_score(it: Dictionary) -> float:
+	match str(it.get("kind", "")):
+		"weapon":
+			return float(RARITIES.find(str(it.get("rarity", "common"))))
+		"mod":
+			return mod_value(it)
+	var sc := 0.0
+	var st: Dictionary = it.get("stats", {})
+	for k in st.keys():
+		sc += float(st[k]) / maxf(0.0001, float(STAT_BASE.get(str(k), 1.0)))
+	return sc
+
+
 ## A guaranteed set piece (bosses): survivor set slots for this hero or general.
 static func roll_set_piece(rarity: String, hero: String, rng: RandomNumberGenerator) -> Dictionary:
 	var survivor := rng.randf() < SURVIVOR_SET_SHARE and survivor_set_for(hero) != ""
@@ -526,7 +561,7 @@ static func roll_set_piece(rarity: String, hero: String, rng: RandomNumberGenera
 
 
 ## Rewards for an elite / boss kill: {"items": [...], "materials": {id: n}}.
-static func roll_role_reward(role: String, kind: String, tier: int, hero: String, luck: float, rng: RandomNumberGenerator) -> Dictionary:
+static func roll_role_reward(role: String, kind: String, tier: int, hero: String, luck: float, rng: RandomNumberGenerator, extras: bool = true) -> Dictionary:
 	var items: Array = []
 	var mats := {}
 	if role == "elite":
@@ -535,7 +570,8 @@ static func roll_role_reward(role: String, kind: String, tier: int, hero: String
 			items.append(roll_set_piece("epic" if r in ["common", "rare"] else r, hero, rng))
 		else:
 			items.append(roll_drop(tier, hero, luck, rng, ["armor", "accessory", "weapon"][rng.randi() % 3], str(ELITE_REWARD["min_rarity"])))
-		items.append(make_mod(random_mod_id(is_melee_hero(hero), rng), roll_rarity(tier, luck, rng, "rare")))
+		if extras and rng.randf() < ELITE_MOD_CHANCE:
+			items.append(make_mod(random_mod_id(is_melee_hero(hero), rng), roll_rarity(tier, luck, rng, "rare")))
 	elif role == "boss":
 		items.append(roll_set_piece(str(BOSS_REWARD["rarity"]), hero, rng))
 		var mid := str(BOSS_MATERIAL.get(kind, "salvage_core"))
