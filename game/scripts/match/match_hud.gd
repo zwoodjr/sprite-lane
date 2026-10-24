@@ -379,6 +379,12 @@ func _build() -> void:
 	_threat_panel = _panel(PANEL_ALPHA)
 	_threat_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(_threat_panel)
+	## Right-aligned: when the LOOT readout grows (text changes, Text size)
+	## keep its right edge on the safe margin instead of growing off-screen.
+	_threat_panel.resized.connect(func() -> void:
+		var mr := MobileLayout.control_safe_margin()
+		_threat_panel.position.x = mr.position.x + mr.size.x - _threat_panel.size.x
+	)
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 2)
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
