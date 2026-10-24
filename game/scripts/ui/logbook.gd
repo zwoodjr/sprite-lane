@@ -71,7 +71,8 @@ func _rebuild() -> void:
 				_list.add_child(_daily_row(qs[i], i))
 		"stories":
 			_list.add_child(_note("Play a survivor to move their story on. Chapter 5 earns their named Legendary."))
-			var ids: Array = CharacterDefs.PLAYABLE_IDS.duplicate()
+			## Only survivors the player can actually field.
+			var ids: Array = (QuestDefs.unlocked_context()["heroes"] as Array).duplicate()
 			ids.erase(GameState.selected_character_id)
 			ids.push_front(GameState.selected_character_id)
 			for h in ids:

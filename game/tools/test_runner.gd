@@ -157,6 +157,7 @@ func _run() -> void:
 	await _test_quickwins()
 	var keep_e7 := [GameState.tier_clears.duplicate(true), GameState.plane_parts.duplicate(), GameState.pacts.duplicate(), GameState.best_tier_extracted]
 	await _test_depth_e7()
+	await _test_p2_ui()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
 	GameState.pacts = keep_e7[2]
@@ -2901,3 +2902,144 @@ func _test_plane_unified() -> void:
 	GameState.tier_clears = keep[7]
 	GameState.selected_mode_id = keep[8]
 	GameState.reset_loadout_to_defaults()
+
+
+## P2 readability / front door: text floor + Text size, dailies only for
+## unlocked content, first launch -> Mayday, Quick Deploy, pause top-right.
+func _test_p2_ui() -> void:
+	var MenuFlowS: Script = load("res://scripts/ui/menu_flow.gd")
+	var keep_settings: Dictionary = GameState.settings.duplicate(true)
+	var keep := [GameState.total_runs, GameState.successful_extracts, GameState.account_xp, GameState.tutorial_done,
+		GameState.campaign.duplicate(true), GameState.best_tier_extracted, GameState.daily.duplicate(true),
+		GameState.selected_mode_id, GameState.selected_character_id, GameState.selected_pet_id]
+	## --- dailies never reference locked content
+	var bad_daily := 0
+	for t in range(1, 4):
+		var ctx: Dictionary = QuestDefs.unlocked_context(t)
+		for d in range(90):
+			var date := "2026-%02d-%02d" % [1 + d / 28, 1 + d % 28]
+			for q in QuestDefs.roll_daily(date, t, ctx):
+				var qd: Dictionary = q
+				if not QuestDefs.daily_is_unlocked(qd, ctx) or int(qd.get("tier", 1)) > t \
+						or (str(qd["type"]) == "elite" and t < ModeDefs.ELITE_FROM_TIER) \
+						or (qd.has("kind") and not (str(qd["kind"]) in (ctx["kinds"] as Array))):
+					bad_daily += 1
+	_check(bad_daily == 0, "p2: dailies only ask for unlocked tiers / mobs (%d bad)" % bad_daily)
+	_check(not QuestDefs.daily_is_unlocked({"type": "kills", "hero": "nobody"}, QuestDefs.unlocked_context(1))
+		and not QuestDefs.daily_is_unlocked({"type": "kills", "pet": "no_pet"}, QuestDefs.unlocked_context(1))
+		and not QuestDefs.daily_is_unlocked({"type": "extract", "zone": 9}, QuestDefs.unlocked_context(2)), "p2: hero / pet / zone requirements gate dailies")
+	## A stale save holding a locked daily is re-rolled.
+	GameState.best_tier_extracted = 0
+	GameState.daily = {"date": GameState.today(), "quests": [{"type": "extract_tier", "tier": 9, "need": 1, "have": 0, "reward": 1, "claimed": false, "label": "x"},
+		{"type": "elite", "need": 1, "have": 0, "reward": 1, "claimed": false, "label": "y"}]}
+	var ok_stale := true
+	for q in GameState.daily_quests():
+		ok_stale = ok_stale and QuestDefs.daily_is_unlocked(q, QuestDefs.unlocked_context(GameState.highest_unlocked_tier()))
+	_check(ok_stale, "p2: a saved daily for locked content is replaced")
+	## --- Text size setting persists and scales
+	UiTheme.set_text_size(2)
+	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	_check(typeof(raw) == TYPE_DICTIONARY and int((raw as Dictionary).get("settings", {}).get("text_size", -1)) == 2, "p2: text size saved")
+	GameState.settings["text_size"] = 0
+	GameState.apply_save(raw)
+	_check(UiTheme.text_size_index() == 2, "p2: text size loads back")
+	var big := UiTheme.body_label("Readable", UiTheme.T_SMALL)
+	add_child(big)
+	await get_tree().process_frame
+	_check(big.get_theme_font_size("font_size") == UiTheme.font_px(UiTheme.MIN_FONT) and UiTheme.font_px(UiTheme.MIN_FONT) > UiTheme.MIN_FONT, "p2: Extra large scales labels (%d)" % big.get_theme_font_size("font_size"))
+	UiTheme.set_text_size(0)
+	await get_tree().process_frame
+	_check(big.get_theme_font_size("font_size") == UiTheme.MIN_FONT, "p2: back to Normal refits live labels")
+	big.queue_free()
+	## --- no text under the floor, every button a 44-pt target (main screens)
+	GameState.total_runs = maxi(1, GameState.total_runs)
+	for path in ["res://scenes/ui/main_menu.tscn", "res://scenes/ui/hangar.tscn", "res://scenes/ui/loadout.tscn",
+			"res://scenes/ui/settings_menu.tscn", "res://scenes/ui/logbook.tscn", "res://scenes/ui/mode_select.tscn"]:
+		var inst: Node = (load(path) as PackedScene).instantiate()
+		get_tree().root.add_child(inst)
+		for i in range(6):
+			await get_tree().process_frame
+		var small := PackedStringArray()
+		for n in inst.find_children("*", "Control", true, false):
+			var c := n as Control
+			if not c.is_visible_in_tree():
+				continue
+			if c is Label or c is Button:
+				var px := UiTheme.font_pixel != null and c.get_theme_font("font") == UiTheme.font_pixel
+				var floor_fs := UiTheme.MIN_PIXEL_FONT if px else UiTheme.MIN_FONT
+				if c.get_theme_font_size("font_size") < floor_fs:
+					small.append("%s(%d)" % [c.name, c.get_theme_font_size("font_size")])
+			if c is BaseButton and (c.size.x < UiTheme.MIN_TOUCH - 0.5 or c.size.y < UiTheme.MIN_TOUCH - 0.5):
+				small.append("btn %s %dx%d" % [c.name, int(c.size.x), int(c.size.y)])
+		_check(small.is_empty(), "p2: %s readable + tappable %s" % [path.get_file(), ", ".join(small.slice(0, 6))])
+		if path.ends_with("main_menu.tscn"):
+			_check(inst.find_child("QuickDeploy", true, false) != null, "p2: main menu offers Quick Deploy")
+		if path.ends_with("hangar.tscn"):
+			_check(inst.find_child("QuickDeploy", true, false) != null, "p2: hangar offers Quick Deploy")
+		inst.queue_free()
+		await get_tree().process_frame
+	## --- pause cap: top-right, 44-pt target
+	var tc: Node = (load("res://scenes/ui/touch_controls.tscn") as PackedScene).instantiate()
+	add_child(tc)
+	await get_tree().process_frame
+	var pb: Control = tc.get("btn_pause")
+	var vp := get_viewport().get_visible_rect().size
+	var pc: Vector2 = pb.call("center_global")
+	_check(pc.x > vp.x * 0.8 and pc.y < vp.y * 0.12, "p2: pause sits top-right (%s)" % str(pc))
+	_check(bool(pb.call("hit", pc + Vector2(UiTheme.MIN_TOUCH * 0.5 - 1.0, 0))), "p2: pause hit area is a 44-pt target")
+	tc.queue_free()
+	## --- Quick Deploy: last hero / pet / tier, locked tier falls back
+	GameState.selected_character_id = "pebble"
+	GameState.selected_mode_id = ModeDefs.DRIFT_ID
+	MenuFlowS.call("prepare_quick_deploy")
+	_check(GameState.selected_character_id == "pebble" and GameState.selected_mode_id == ModeDefs.DRIFT_ID and GameState.play_mode == "wander"
+		and str(GameState.weapon.get("id", "")) != "", "p2: quick deploy keeps the last setup")
+	GameState.selected_mode_id = str(ModeDefs.tier_mode(ModeDefs.EXPOSED_TIERS).get("id", "haze"))
+	MenuFlowS.call("prepare_quick_deploy")
+	_check(GameState.selected_mode_id == ModeDefs.HAZE_ID, "p2: quick deploy never drops into a locked tier")
+	## --- first launch: new profile -> Mayday once; old saves -> menu
+	GameState.total_runs = 0
+	GameState.successful_extracts = 0
+	GameState.account_xp = 0
+	GameState.tutorial_done = false
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.settings.erase("opening_seen")
+	_check(str(MenuFlowS.call("first_launch_target")) == "p0_mayday", "p2: first launch on a new profile -> Mayday")
+	_check(str(MenuFlowS.call("first_launch_target")) == "", "p2: only the first launch is routed")
+	GameState.settings.erase("opening_seen")
+	GameState.total_runs = 4
+	_check(str(MenuFlowS.call("first_launch_target")) == "" and bool(GameState.settings.get("opening_seen", false)), "p2: an existing save opens the menu")
+	## The boot menu really hands over to the prologue.
+	GameState.total_runs = 0
+	GameState.settings.erase("opening_seen")
+	MenuFlowS.set("_boot_checked", false)
+	## Boot path: the menu arrives as the current scene (a stand-in is swapped out).
+	var stand_in := Node.new()
+	get_tree().root.add_child(stand_in)
+	get_tree().current_scene = stand_in
+	get_tree().change_scene_to_packed(load("res://scenes/ui/main_menu.tscn") as PackedScene)
+	for i in range(12):
+		await get_tree().process_frame
+	var cur := get_tree().current_scene
+	_check(cur != null and cur.scene_file_path == CampaignDefs.MATCH_SCENE and GameState.campaign_level_id == "p0_mayday", "p2: boot menu routes into Mayday")
+	get_tree().paused = false
+	if is_instance_valid(cur) and cur != self:
+		cur.queue_free()
+	GameState.leave_campaign_run()
+	get_tree().current_scene = self
+	await get_tree().process_frame
+	## restore
+	GameState.settings = keep_settings
+	GameState.total_runs = keep[0]
+	GameState.successful_extracts = keep[1]
+	GameState.account_xp = keep[2]
+	GameState.tutorial_done = keep[3]
+	GameState.campaign = keep[4]
+	GameState.best_tier_extracted = keep[5]
+	GameState.daily = keep[6]
+	GameState.selected_mode_id = keep[7]
+	GameState.selected_character_id = keep[8]
+	GameState.selected_pet_id = keep[9]
+	UiTheme.text_scale = UiTheme.TEXT_SCALES[UiTheme.text_size_index()]
+	GameState.reset_loadout_to_defaults()
+	print("P2_UI_OK")

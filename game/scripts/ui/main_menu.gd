@@ -1,6 +1,14 @@
 extends "res://scripts/ui/menu_base.gd"
 
 const LOGO := "res://assets/sprites/ui/logo_wanderer.png"
+const MenuFlow = preload("res://scripts/ui/menu_flow.gd")
+
+
+func _ready() -> void:
+	## First launch on a new profile: straight into the Mayday prologue.
+	if MenuFlow.route_boot(self):
+		return
+	super()
 
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
@@ -90,6 +98,9 @@ func build(c: VBoxContainer) -> void:
 	top.add_child(scrap)
 
 	## Actions — bottom of the screen, under the thumb.
+	## QUICK DEPLOY (after the first run): last hero / gear / pet / tier, one tap.
+	if MenuFlow.can_quick_deploy():
+		c.add_child(MenuFlow.quick_button())
 	## PLAY -> CAMPAIGN (the story) or WANDER (the endless runs).
 	var play := UiTheme.big_button("PLAY", UiTheme.AMBER, 96, 40)
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -111,7 +111,7 @@ func _draw() -> void:
 		else:
 			label = "SOON " + label
 		var f: Font = UiTheme.font_button
-		var fs := 20 if _extract_open else 15
+		var fs := UiTheme.font_px(22 if _extract_open else UiTheme.MIN_FONT)
 		var tw := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var lp := edge + Vector2(-tw * 0.5 + 9.0, 34)
 		if _g_n < _g_pos.size():

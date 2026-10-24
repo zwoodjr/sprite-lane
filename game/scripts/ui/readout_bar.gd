@@ -97,7 +97,7 @@ func _draw() -> void:
 		sy += 3.0
 	if _font:
 		## PressStart2P only at multiples of its 8 px grid (square pixels).
-		var fs := maxi(8, int(floor((y1 - y0) * 1.2 / 8.0)) * 8)
+		var fs := maxi(UiTheme.MIN_PIXEL_FONT, int(floor((y1 - y0) * 1.2 / 8.0)) * 8)
 		var base_y := (y0 + y1) * 0.5 + fs * 0.5
 		var tc := on_color.lightened(0.08)
 		draw_string(_font, Vector2((SCREEN.position.x + 9.0) * k, base_y), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, tc)

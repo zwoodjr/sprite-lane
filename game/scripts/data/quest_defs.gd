@@ -17,8 +17,10 @@ const DAILY_POOL: Array = [
 	{"type": "extract_mult", "needs": [1], "rewards": [90], "label": "Extract at ×%.1f loot or more", "mults": [1.5, 2.0]},
 	{"type": "gear", "needs": [2, 4], "rewards": [70, 120], "label": "Find %d pieces of gear"},
 	{"type": "event", "needs": [1, 2], "rewards": [60, 100], "label": "Complete %d radio events"},
-	{"type": "elite", "needs": [1], "rewards": [140], "label": "Kill an elite or boss", "min_tier": 3},
+	{"type": "elite", "needs": [1], "rewards": [140], "label": "Kill an elite or boss", "min_tier": ModeDefs.ELITE_FROM_TIER},
 ]
+## A pool entry may also carry "hero" / "pet" / "zone" (tier) requirements;
+## roll_daily only offers what the player has unlocked (daily_is_unlocked).
 
 ## ---------------------------------------------------------------- stories
 ## Five steps per survivor (same objectives, their own words). The last step
@@ -106,13 +108,58 @@ static func milestone(id: String) -> Dictionary:
 	return {}
 
 
-## The day's three quests (deterministic from the date and the unlocked tier).
-static func roll_daily(date: String, max_tier: int) -> Array:
+## What the player can reach today: highest tier, heroes, pets, zone tiers and
+## the mob kinds that spawn there. `max_tier` < 1 = read it from GameState.
+static func unlocked_context(max_tier: int = 0) -> Dictionary:
+	var t := max_tier if max_tier >= 1 else GameState.highest_unlocked_tier()
+	var heroes: Array = []
+	for h in CharacterDefs.PLAYABLE_IDS:
+		if not GameState.has_method("hero_unlocked") or bool(GameState.call("hero_unlocked", h)):
+			heroes.append(str(h))
+	var pets: Array = []
+	for p in PetDefs.all_pets():
+		if GameState.pet_available(str(p["id"])):
+			pets.append(str(p["id"]))
+	## Every tier spawns the T1 pool (match_controller._roll_enemy_kind).
+	var kinds: Array = []
+	for k in EnemyDefs.ids_for_tier(1):
+		kinds.append(str(k))
+	return {"max_tier": t, "heroes": heroes, "pets": pets, "kinds": kinds}
+
+
+## Does a rolled daily (or a pool entry) only ask for unlocked content?
+static func daily_is_unlocked(q: Dictionary, ctx: Dictionary) -> bool:
+	var t := int(ctx.get("max_tier", 1))
+	if int(q.get("min_tier", 1)) > t or int(q.get("tier", 1)) > t or int(q.get("zone", 1)) > t:
+		return false
+	if str(q.get("type", "")) == "elite" and t < ModeDefs.ELITE_FROM_TIER:
+		return false
+	if q.has("hero") and not (str(q["hero"]) in (ctx.get("heroes", []) as Array)):
+		return false
+	if q.has("pet") and not (str(q["pet"]) in (ctx.get("pets", []) as Array)):
+		return false
+	if q.has("kind") and ctx.has("kinds") and not (str(q["kind"]) in (ctx["kinds"] as Array)):
+		return false
+	return true
+
+
+static func dailies_unlocked(qs: Array, ctx: Dictionary) -> bool:
+	for q in qs:
+		if typeof(q) != TYPE_DICTIONARY or not daily_is_unlocked(q, ctx):
+			return false
+	return true
+
+
+## The day's three quests (deterministic from the date and what's unlocked).
+static func roll_daily(date: String, max_tier: int, ctx: Dictionary = {}) -> Array:
+	if ctx.is_empty():
+		ctx = unlocked_context(max_tier)
+	max_tier = int(ctx.get("max_tier", max_tier))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(date)
 	var pool: Array = []
 	for q in DAILY_POOL:
-		if int(q.get("min_tier", 1)) <= max_tier:
+		if daily_is_unlocked(q, ctx):
 			pool.append(q)
 	var out: Array = []
 	while out.size() < DAILY_COUNT and not pool.is_empty():
@@ -123,7 +170,13 @@ static func roll_daily(date: String, max_tier: int) -> Array:
 		var d := {"type": str(q["type"]), "need": need, "have": 0, "reward": int(q["rewards"][i]), "claimed": false}
 		match str(q["type"]):
 			"kills_kind":
-				var kind: String = q["kinds"][rng.randi() % (q["kinds"] as Array).size()]
+				var kinds: Array = []
+				for kk in q["kinds"]:
+					if not ctx.has("kinds") or str(kk) in (ctx["kinds"] as Array):
+						kinds.append(kk)
+				if kinds.is_empty():
+					kinds = q["kinds"]
+				var kind: String = kinds[rng.randi() % kinds.size()]
 				d["kind"] = kind
 				d["label"] = str(q["label"]) % [need, str(EnemyDefs.get_kind(kind).get("display_name", kind))]
 			"extract_tier":

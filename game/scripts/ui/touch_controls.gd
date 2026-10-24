@@ -5,7 +5,7 @@ extends CanvasLayer
 ##     the screen (right 60% when left-handed), base follows the thumb past the
 ##     rim, 10% dead zone, eased speed curve (full near the rim), fades on release.
 ##   - Right thumb: big DASH + smaller ABILITY bottle caps with cooldown rings.
-##   - Pause cap in the top corner.
+##   - Pause cap in the top-right corner (above the minimap), 44-pt touch target.
 ## Attacks are automatic (closest enemy in weapon range), so there's no FIRE.
 
 const ActionButton = preload("res://scripts/ui/action_button.gd")
@@ -19,6 +19,9 @@ const STICK_ZONE_FRAC := 0.60
 ## Ignore stick starts in the top HUD band.
 const TOP_BAND_FRAC := 0.16
 const FADE_TIME := 0.35
+## Pause cap: drawn 56 px, hit area MIN_TOUCH (88 px = 48 pt). Top-right per
+## the mobile review; the HUD drops the minimap below it (match_hud PAUSE_ROW).
+const PAUSE_RADIUS := 28.0
 
 @onready var root: Control = $Root
 @onready var stick_draw: Control = $Root/StickDraw
@@ -56,7 +59,7 @@ func _ready() -> void:
 	btn_dash = _make_button("DASH", 58.0, UiTheme.TEAL)
 	btn_ability = _make_button("ABILITY", 40.0, UiTheme.AMBER,
 		IconSet.path(IconSet.ability(GameState.selected_character_id, GameState.kit_ability(GameState.selected_character_id))))
-	btn_pause = _make_button("II", 20.0, Color(0.75, 0.68, 0.58))
+	btn_pause = _make_button("II", PAUSE_RADIUS, Color(0.75, 0.68, 0.58))
 	for b in [btn_dash, btn_ability, btn_pause]:
 		b.set("slim", true)
 
@@ -103,9 +106,9 @@ func _layout() -> void:
 	## corner, ABILITY up-and-left of it.
 	_place(btn_dash, Vector2(w - 82, h - 96))
 	_place(btn_ability, Vector2(w - 186, h - 136))
-	## Pause sits low in the bottom-left corner, in easy left-thumb reach; the
-	## floating stick still starts anywhere else in the left area.
-	_place(btn_pause, Vector2(30, h - 30))
+	## Pause: top-right corner (the iOS convention), never mirrored, clear of
+	## both thumbs so it can't be hit by accident mid-fight.
+	_place(btn_pause, Vector2(w - PAUSE_RADIUS - 4.0, PAUSE_RADIUS + 2.0), false)
 
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	var c := center
@@ -268,7 +271,7 @@ func _paint_ghost(c: Control, center: Vector2, tint: Color, text: String) -> voi
 		c.draw_arc(center, stick_radius, 0.0, TAU, 64, Color(tint.r, tint.g, tint.b, a * 1.6), 2.0, true)
 		c.draw_circle(center, KNOB_RADIUS * 0.8, Color(tint.r, tint.g, tint.b, a))
 	var font: Font = UiTheme.font_button
-	var fs := 16
+	var fs := UiTheme.font_px(UiTheme.MIN_FONT)
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	c.draw_string(font, center + Vector2(-w * 0.5, stick_radius + 22), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(tint.r, tint.g, tint.b, a * 3.0))
 

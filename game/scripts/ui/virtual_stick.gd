@@ -132,4 +132,4 @@ func _draw() -> void:
 	draw_arc(knob_c, knob_radius, 0.0, TAU, 32, Color(1, 1, 1, a * 0.5), 2.0, true)
 	if label_text != "":
 		var col := Color(1, 1, 1, 0.4 if not _active else 0.75)
-		draw_string(ThemeDB.fallback_font, Vector2(12, 22), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col)
+		draw_string(ThemeDB.fallback_font, Vector2(12, 22), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.font_px(UiTheme.MIN_FONT), col)

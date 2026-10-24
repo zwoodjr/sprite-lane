@@ -38,8 +38,11 @@ func center_global() -> Vector2:
 	return global_position + size * 0.5
 
 
+## Touch radius: the drawn radius plus slop, but never under a 44-pt target
+## (UiTheme.MIN_TOUCH across) so small caps like pause stay easy to hit.
 func hit(screen_pos: Vector2, slop: float = 1.25) -> bool:
-	return visible and center_global().distance_to(screen_pos) <= radius * slop
+	var reach := maxf(radius * slop, UiTheme.MIN_TOUCH * 0.5 * maxf(1.0, slop / 1.25))
+	return visible and center_global().distance_to(screen_pos) <= reach
 
 
 func press(index: int) -> void:
@@ -109,13 +112,13 @@ func _draw() -> void:
 		return
 	## Text (fallback when there's no art)
 	var font := ThemeDB.fallback_font
-	var fs := int(r * 0.36)
+	var fs := UiTheme.font_px(int(r * 0.36))
 	var tw := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var ty := c.y + fs * 0.35 - (fs * 0.35 if sub_text != "" else 0.0)
 	draw_string_outline(font, Vector2(c.x - tw * 0.5, ty), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color(0, 0, 0, 0.8 * a))
 	draw_string(font, Vector2(c.x - tw * 0.5, ty), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.96, 0.88, a))
 	if sub_text != "":
-		var sfs := int(r * 0.24)
+		var sfs := UiTheme.font_px(int(r * 0.24))
 		var sw := font.get_string_size(sub_text, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs).x
 		draw_string(font, Vector2(c.x - sw * 0.5, ty + sfs + 4), sub_text, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, Color(tint.r, tint.g, tint.b, a))
 
@@ -156,7 +159,8 @@ func _draw_slim(c: Vector2, r: float, a: float, cdr: float) -> void:
 	if _pixel == null and ResourceLoader.exists("res://assets/fonts/PressStart2P.ttf"):
 		_pixel = load("res://assets/fonts/PressStart2P.ttf")
 	var font: Font = _pixel if _pixel else ThemeDB.fallback_font
-	var fs := 16 if r > 40.0 else 8
+	## Pixel face never under 16 (the old 8 px pause label was unreadable).
+	var fs := UiTheme.pixel_px(UiTheme.PX_M)
 	var tw := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var p := Vector2(c.x - tw * 0.5, c.y + fs * 0.5)
 	draw_string_outline(font, p, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.8 * a))

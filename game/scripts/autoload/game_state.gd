@@ -1578,8 +1578,14 @@ func is_tier_unlocked(tier: int) -> bool:
 ## New quests each day.
 func refresh_daily() -> void:
 	var d := today()
+	var t := highest_unlocked_tier()
 	if str(daily.get("date", "")) != d or not (daily.get("quests", null) is Array):
-		daily = {"date": d, "quests": QuestDefs.roll_daily(d, highest_unlocked_tier())}
+		daily = {"date": d, "quests": QuestDefs.roll_daily(d, t), "checked": t}
+	elif int(daily.get("checked", -1)) != t:
+		## Older saves / changed unlocks: never keep a daily for locked content.
+		if not QuestDefs.dailies_unlocked(daily["quests"], QuestDefs.unlocked_context(t)):
+			daily = {"date": d, "quests": QuestDefs.roll_daily(d, t)}
+		daily["checked"] = t
 
 func daily_quests() -> Array:
 	refresh_daily()

@@ -502,15 +502,18 @@ func _draw_icons() -> void:
 		if labels < RIM_LABELS and _c_pri[j] <= 3 and _font:
 			labels += 1
 			var txt := _dist_text(_c_dist[j])
-			var fs := 8
-			var tw := _font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			## Barlow Condensed at the iPhone floor (the 8-px pixel face was
+			## unreadable; the 16-px one is too wide for the ring).
+			var lf: Font = UiTheme.font_button if UiTheme.font_button else _font
+			var fs := UiTheme.font_px(UiTheme.MIN_FONT)
+			var tw := lf.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 			## Inside the ring, just past the rim icon: the whole text box stays
 			## within the map circle (audit #10: labels poked outside the bezel).
-			var hd := Vector2(tw * 0.5 + 2.0, 6.0).length()
+			var hd := Vector2(tw * 0.5 + 2.0, fs * 0.4).length()
 			var lc := center + dir * minf(map_r - 26.0, map_r - 3.0 - hd)
-			var lp := (lc + Vector2(-tw * 0.5, 4.0)).round()
-			ci.draw_string_outline(_font, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, MapIcons.DARK)
-			ci.draw_string(_font, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+			var lp := (lc + Vector2(-tw * 0.5, fs * 0.35)).round()
+			ci.draw_string_outline(lf, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, MapIcons.DARK)
+			ci.draw_string(lf, lp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	## Hero: facing arrow.
 	var f := Vector2.from_angle(_face)
 	var o := f.orthogonal()
@@ -527,12 +530,13 @@ func _draw_icons() -> void:
 		return
 	var txt2 := "OPEN" if _extract_open else "SEALED"
 	var fnt: Font = UiTheme.font_button
-	var fs2 := 12
+	var fs2 := UiTheme.font_px(UiTheme.MIN_FONT)
 	var tw2 := fnt.get_string_size(txt2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2).x
-	var pr := Rect2(Vector2(center.x - tw2 * 0.5 - 6, r.y - 17), Vector2(tw2 + 12, 15))
+	var ph := float(fs2) + 2.0
+	var pr := Rect2(Vector2(center.x - tw2 * 0.5 - 6, r.y - ph + 6.0), Vector2(tw2 + 12, ph))
 	ci.draw_rect(pr, Color(0.07, 0.05, 0.035, 0.92))
 	ci.draw_rect(pr, Color(0.55, 0.4, 0.22, 0.9), false, 1.0)
-	ci.draw_string(fnt, Vector2(pr.position.x + 6, r.y - 5), txt2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2,
+	ci.draw_string(fnt, Vector2(pr.position.x + 6, pr.end.y - ph * 0.2), txt2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2,
 		MapIcons.C_PAD_OPEN if _extract_open else Color(0.78, 0.72, 0.62))
 	if _legend_t > 0.0:
 		_draw_legend(ci)
@@ -556,8 +560,9 @@ const LEGEND := [
 
 ## Tiny legend to the left of the map (tap the map to hide). Nothing pauses.
 func _draw_legend(ci: CanvasItem) -> void:
-	var row_h := 12.0
-	var w := 112.0
+	var lfs := UiTheme.font_px(UiTheme.MIN_FONT)
+	var row_h := float(lfs) + 4.0
+	var w := 150.0 * UiTheme.text_scale
 	var h := LEGEND.size() * row_h + 10.0
 	var box := Rect2(Vector2(-w - 6.0, 0.0), Vector2(w, h))
 	ci.draw_rect(box, Color(0.06, 0.045, 0.03, 0.9))
@@ -577,7 +582,7 @@ func _draw_legend(ci: CanvasItem) -> void:
 		else:
 			MapIcons.draw(ci, int(row[0]), Vector2(ix, y), _legend_col(tag), 1.0)
 		var tx := box.position.x + (34.0 if tag == "loot" or tag == "pad" else 22.0)
-		ci.draw_string(_font, Vector2(tx, y + 4.0).round(), str(row[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.9, 0.85, 0.75))
+		ci.draw_string(UiTheme.font_button, Vector2(tx, y + lfs * 0.35).round(), str(row[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, lfs, Color(0.9, 0.85, 0.75))
 		y += row_h
 
 

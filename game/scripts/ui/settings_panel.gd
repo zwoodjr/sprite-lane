@@ -6,6 +6,7 @@ extends VBoxContainer
 signal changed
 
 const ROWS := [
+	{"key": "text_size", "type": "choice", "label": "Text size", "desc": "Scales every menu and HUD word.", "options": UiTheme.TEXT_SIZE_NAMES},
 	{"key": "stick_scale", "type": "slider", "label": "Stick size", "desc": "Bigger = finer control, more thumb travel.", "min": 0.75, "max": 1.4, "step": 0.05},
 	{"key": "left_handed", "type": "toggle", "label": "Left-handed layout", "desc": "Stick on the right, DASH / ABILITY on the left."},
 	{"key": "show_hints", "type": "toggle", "label": "Show hints", "desc": "Ghost stick and rotating tips."},
@@ -23,7 +24,7 @@ const ROWS := [
 ]
 
 
-const ICON := {"stick_scale": "set_stick", "left_handed": "set_lefty", "show_hints": "set_hints", "mute": "set_mute",
+const ICON := {"text_size": "tab_notes", "stick_scale": "set_stick", "left_handed": "set_lefty", "show_hints": "set_hints", "mute": "set_mute",
 	"vol_master": "set_volume", "vol_music": "set_music", "vol_sfx": "set_sfx", "vol_ambience": "set_ambience",
 	"vol_ui": "set_ui", "haptics": "set_vibration", "screen_shake": "set_shake", "heat_shimmer": "set_shimmer",
 	"film_grain": "set_grain", "auto_salvage_commons": "cur_scrap"}
@@ -42,12 +43,25 @@ func _make_row(row: Dictionary) -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 16)
 	panel.add_child(h)
-	h.add_child(IconSet.rect(str(ICON.get(str(row["key"]), "set_ui")), 48))
+	var ic := IconSet.rect(str(ICON.get(str(row["key"]), "set_ui")), 48)
+	## Square icon: don't let the 44-pt row height stretch it.
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(ic)
 	var text := UiTheme.head_label(str(row["label"]), UiTheme.T_H3, UiTheme.TEXT)
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	h.add_child(text)
 	var key := str(row["key"])
+	if str(row["type"]) == "choice":
+		## Label on its own line, the options as a full-width segmented row.
+		h.remove_child(text)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 8)
+		h.add_child(col)
+		col.add_child(text)
+		col.add_child(_choice_row(key, row["options"]))
+		return panel
 	match str(row["type"]):
 		"toggle":
 			var b := Button.new()
@@ -95,6 +109,50 @@ func _make_row(row: Dictionary) -> Control:
 			box.add_child(val)
 			h.add_child(box)
 	return panel
+
+
+## Segmented picker (Text size): one painted button per option, the active
+## one lit teal. Text size applies live (UiTheme.set_text_size refits the screen).
+func _choice_row(key: String, options: Array) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "Choice_" + key
+	row.add_theme_constant_override("separation", 8)
+	var cur := UiTheme.text_size_index() if key == "text_size" else int(GameState.settings.get(key, 0))
+	var btns: Array[Button] = []
+	for i in range(options.size()):
+		var b := Button.new()
+		b.text = str(options[i])
+		b.focus_mode = Control.FOCUS_NONE
+		b.toggle_mode = true
+		b.button_pressed = i == cur
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, UiTheme.MIN_TOUCH)
+		b.clip_text = true
+		row.add_child(b)
+		btns.append(b)
+	var paint := func(sel: int) -> void:
+		for j in range(btns.size()):
+			btns[j].set_pressed_no_signal(j == sel)
+			_style_toggle_choice(btns[j], j == sel)
+	paint.call(cur)
+	for i in range(btns.size()):
+		btns[i].pressed.connect(func() -> void:
+			paint.call(i)
+			if key == "text_size":
+				UiTheme.set_text_size(i)
+			else:
+				GameState.set_setting(key, i)
+			Juice.sfx("ui_toggle")
+			changed.emit()
+		)
+	return row
+
+
+func _style_toggle_choice(b: Button, on: bool) -> void:
+	UiTheme.skin_button(b, UiTheme.TEAL if on else UiTheme.LINE, 8.0)
+	var col := Color(0.85, 1.0, 0.92) if on else UiTheme.TEXT_DIM
+	for k in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, col)
 
 
 func _fmt(key: String, v: float) -> String:

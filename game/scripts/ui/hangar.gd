@@ -13,6 +13,7 @@ const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
 const PET_ON_BED := {"noel": Vector2(110, 141.5), "bentley": Vector2(125, 141.5), "lillie": Vector2(140, 141.5)}
 ## Painted layers are cropped PNGs; this gives each one's rect on the painted canvas.
 const ART_LAYOUT := preload("res://scripts/data/hangar_art_layout.gd")
+const MenuFlow = preload("res://scripts/ui/menu_flow.gd")
 
 var _scrap_label: Label
 var _view: Control
@@ -87,7 +88,16 @@ func build(c: VBoxContainer) -> void:
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play.size_flags_stretch_ratio = 1.4
 	play.pressed.connect(GameState.go_mode_select)
-	bottom.add_child(play)
+	if MenuFlow.can_quick_deploy():
+		## Second row, under the thumb: DEPLOY (choose) + QUICK DEPLOY (last run's setup).
+		var go_row := HBoxContainer.new()
+		go_row.add_theme_constant_override("separation", 8)
+		c.add_child(go_row)
+		play.size_flags_stretch_ratio = 0.7
+		go_row.add_child(play)
+		go_row.add_child(MenuFlow.quick_button())
+	else:
+		bottom.add_child(play)
 
 	show_tab("camp")
 	if not GameState.check_milestones().is_empty():

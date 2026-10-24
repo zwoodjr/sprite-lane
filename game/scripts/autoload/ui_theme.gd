@@ -28,11 +28,25 @@ const T_H1 := 32
 const T_H2 := 24
 const T_H3 := 20
 const T_BODY := 20
-const T_SMALL := 16
+## Was 16: raised to the iPhone floor (MIN_FONT). Small = body size now.
+const T_SMALL := 20
 ## Pixel font (numbers / short readouts): 8 / 16 / 24 only.
-const PX_S := 8
+## The 8-px pixel size is retired (unreadable on a phone).
+const PX_S := 16
 const PX_M := 16
 const PX_L := 24
+## iPhone readability floor (P2). The UI is 720 design px wide and fills the
+## phone's width, so on the 393-pt reference iPhone 1 pt = 720 / 393 = 1.83 px:
+##   11 pt text   -> 20 design px (Barlow); the pixel face's 16 has the same cap height.
+##   44 pt target -> 81 px on 393 pt, 84 px on 375-pt phones: 88 (48 pt / 46 pt)
+##   clears every iPhone and sits on the 8-px grid.
+## Enforced on every Label / Button as it enters the tree (see _fit_text).
+const MIN_FONT := 20
+const MIN_PIXEL_FONT := 16
+const MIN_TOUCH := 88.0
+## Settings "Text size": Normal / Large / Extra large.
+const TEXT_SCALES: Array[float] = [1.0, 1.15, 1.3]
+const TEXT_SIZE_NAMES: Array[String] = ["NORMAL", "LARGE", "EXTRA LARGE"]
 ## 8-px grid, 24-px screen margins, 16-px gutters.
 const GRID := 8
 const MARGIN := 24
@@ -60,8 +74,14 @@ var _tex_cache: Dictionary = {}
 var _fade: ColorRect
 
 
+## Current Text size multiplier (GameState.settings.text_size).
+var text_scale: float = 1.0
+signal text_size_changed
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	text_scale = TEXT_SCALES[text_size_index()]
 	_load_fonts()
 	theme = _build()
 	get_tree().root.theme = theme
@@ -527,21 +547,23 @@ func big_button(text: String, accent: Color = AMBER, min_h: float = 64.0, font_s
 	if font_button:
 		b.add_theme_font_override("font", font_display if fs >= T_H1 else font_button)
 	b.add_theme_font_size_override("font_size", fs)
-	## Bible: primary 80 tall, secondary 64; touch targets >= 64 everywhere.
-	b.custom_minimum_size.y = maxf(64.0, roundf(min_h / 8.0) * 8.0)
+	## Touch targets >= 44 pt (MIN_TOUCH) everywhere.
+	b.custom_minimum_size.y = maxf(MIN_TOUCH, roundf(min_h / 8.0) * 8.0)
 	skin_button(b, accent, 18.0)
 	b.pressed.connect(func() -> void: Juice.sfx("ui_tap"))
 	return b
 
 
 ## Round bottle-cap icon button (back / close).
+## The cap art stays `px` wide; the tappable box is at least MIN_TOUCH.
 func cap_button(kind: String = "back", px: float = 64.0) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(px, px)
+	b.custom_minimum_size = Vector2(maxf(px, MIN_TOUCH), maxf(px, MIN_TOUCH))
 	b.flat = true
 	b.icon = tex("cap_" + kind)
-	b.expand_icon = true
+	b.expand_icon = false
+	b.add_theme_constant_override("icon_max_width", int(px))
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	for s in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 		var e := StyleBoxEmpty.new()
@@ -568,6 +590,8 @@ func _on_node_added(n: Node) -> void:
 		var par := n.get_parent()
 		if par is CanvasLayer:
 			(n as Control).theme = theme
+	if n is Label or n is Button:
+		_fit_text.bind(n).call_deferred()
 	if n is BaseButton:
 		var b := n as BaseButton
 		if not b.button_down.is_connected(_on_btn_down.bind(b)):
@@ -575,6 +599,79 @@ func _on_node_added(n: Node) -> void:
 			b.button_up.connect(_on_btn_up.bind(b))
 	elif n.get_parent() == get_tree().root and n is CanvasItem and n != _fade:
 		_fade_in.call_deferred()
+
+
+## --- Readability floor + Text size (P2) ------------------------------------
+
+func text_size_index() -> int:
+	return clampi(int(GameState.settings.get("text_size", 0)), 0, TEXT_SCALES.size() - 1)
+
+
+## Settings: 0 Normal / 1 Large / 2 Extra large. Saves, then refits every
+## label and button already on screen (custom-drawn text redraws itself).
+func set_text_size(i: int) -> void:
+	i = clampi(i, 0, TEXT_SCALES.size() - 1)
+	GameState.set_setting("text_size", i)
+	text_scale = TEXT_SCALES[i]
+	refit_all()
+	text_size_changed.emit()
+
+
+func refit_all() -> void:
+	for n in get_tree().root.find_children("*", "Control", true, false):
+		if n is Label or n is Button:
+			_fit_text(n as Control)
+	get_tree().root.propagate_call("queue_redraw")
+
+
+## Barlow size for a requested design size: never under 20 px, times Text size.
+func font_px(size: int) -> int:
+	return int(round(float(maxi(size, MIN_FONT)) * text_scale))
+
+
+## Pixel-face size: stays on its 8-px grid, never under 16 px.
+func pixel_px(size: int) -> int:
+	var s := float(maxi(size, MIN_PIXEL_FONT)) * text_scale
+	return maxi(MIN_PIXEL_FONT, int(round(s / 8.0)) * 8)
+
+
+## Screen px per local px for a label: 1 in the UI, the camera zoom (and any
+## node scale) for labels that live in the world.
+func _canvas_k(c: Control) -> float:
+	var p := c.get_parent()
+	while p != null:
+		if p is CanvasLayer or p is Window:
+			return 1.0
+		if p is Node2D:
+			return maxf(0.25, absf((p as Node2D).get_global_transform_with_canvas().get_scale().x))
+		p = p.get_parent()
+	return 1.0
+
+
+## One label / button: the font never renders under ~11 pt on an iPhone,
+## Text size applies, and UI buttons are at least a 44-pt touch target.
+## The size it was built with is kept in meta so Text size changes re-scale
+## from the design size instead of compounding.
+func _fit_text(c: Control) -> void:
+	if not is_instance_valid(c) or not c.is_inside_tree() or c.has_meta("no_text_fit"):
+		return
+	var base := int(c.get_meta("fs_base")) if c.has_meta("fs_base") else c.get_theme_font_size("font_size")
+	c.set_meta("fs_base", base)
+	var k := _canvas_k(c)
+	var pixel := font_pixel != null and c.get_theme_font("font") == font_pixel
+	var want: int
+	if k > 1.05 or k < 0.95:
+		## World label: the floor is on screen, the camera does the rest.
+		var floor_px := MIN_PIXEL_FONT if pixel else MIN_FONT
+		want = int(ceil(float(maxi(base, int(ceil(floor_px / k)))) * text_scale))
+	else:
+		want = pixel_px(base) if pixel else font_px(base)
+	if c.get_theme_font_size("font_size") != want:
+		c.add_theme_font_size_override("font_size", want)
+	if c is BaseButton and k <= 1.05 and not c.has_meta("touch_exempt"):
+		var m := c.custom_minimum_size
+		if m.x < MIN_TOUCH or m.y < MIN_TOUCH:
+			c.custom_minimum_size = Vector2(maxf(m.x, MIN_TOUCH), maxf(m.y, MIN_TOUCH))
 
 
 func _on_btn_down(b: BaseButton) -> void:

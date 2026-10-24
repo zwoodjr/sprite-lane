@@ -25,6 +25,9 @@ const BAR_W := 200.0 ## on-screen width of the slim bars
 const HP_BAR_H := 15.0
 const XP_BAR_H := 7.0
 const MAP_SIZE := 135.0 ## +30% (icons, rim markers)
+## The pause cap owns the top-right corner (touch_controls PAUSE_RADIUS);
+## the minimap column starts under it.
+const PAUSE_ROW := 64.0
 ## Visual tier slim HUD: PressStart2P pixel text, no plates behind the readouts.
 const PIXEL_FONT := "res://assets/fonts/PressStart2P.ttf"
 const XpLineScript := preload("res://scripts/ui/xp_line.gd")
@@ -127,6 +130,10 @@ func _ready() -> void:
 	add_child(root)
 	_build()
 	get_viewport().size_changed.connect(_layout)
+	## Labels get their final (floored / Text size) font a frame late: lay out
+	## again then, and whenever Text size changes from the pause menu.
+	_layout.call_deferred()
+	UiTheme.text_size_changed.connect(_layout)
 
 func setup(match_node: Node) -> void:
 	_match = match_node
@@ -256,7 +263,7 @@ func _build() -> void:
 	vb.add_child(_xp_readout)
 	_xp_line = Control.new()
 	_xp_line.set_script(XpLineScript)
-	_xp_line.custom_minimum_size = Vector2(HP_READOUT.x - 20.0, 10)
+	_xp_line.custom_minimum_size = Vector2(HP_READOUT.x - 20.0, UiTheme.pixel_px(UiTheme.PX_M) + 4)
 	vb.add_child(_xp_line)
 	var hp_row := Control.new()
 	hp_row.visible = false
@@ -460,11 +467,11 @@ func _layout() -> void:
 	if _minimap:
 		_minimap.custom_minimum_size = Vector2(map_s, map_s)
 		_minimap.size = Vector2(map_s, map_s)
-		_minimap.position = Vector2(right - map_s, m.position.y)
+		_minimap.position = Vector2(right - map_s, m.position.y + PAUSE_ROW)
 	_threat_panel.custom_minimum_size = Vector2(map_s, 0)
 	_threat_panel.reset_size()
 	## Clear of the minimap's SEALED / OPEN plate on its lower rim (they touched at 720x1560).
-	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + map_s + 12.0)
+	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + PAUSE_ROW + map_s + 12.0)
 	## Top-centre: a slim phase strip between the two corners.
 	var left_w := vit.size.x + 8.0
 	## Slim HUD: the extract readout sits centred in the gap between the vitals
@@ -491,7 +498,7 @@ func _layout() -> void:
 		_phase_bar.custom_minimum_size = Vector2(minf(ow - 120.0, 360.0), 6)
 		_phase_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		_phase_card.reset_size()
-		_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y + map_s + 14.0)
+		_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y + PAUSE_ROW + map_s + 14.0)
 	if _extract_bar:
 		var tw := minf(220.0, phase_w - 20.0)
 		_extract_bar.size = Vector2(tw, 8)
@@ -931,7 +938,7 @@ func _refresh_buffs(buffs: Dictionary) -> void:
 		## Special ammo (Phase 4): bigger chip outlined in the ammo colour.
 		var is_ammo := str(id) == "ammo"
 		chip.text = chip.text.to_upper() if is_ammo else chip.text
-		chip.add_theme_font_size_override("font_size", 14 if is_ammo else 12)
+		chip.add_theme_font_size_override("font_size", UiTheme.font_px(UiTheme.MIN_FONT))
 		if chip.get_meta("chip_col", Color.BLACK) != col:
 			chip.set_meta("chip_col", col)
 			chip.add_theme_stylebox_override("normal", UiTheme.plate("hud", 8.0, Color.WHITE.lerp(col, 0.45) if is_ammo else Color.WHITE))
