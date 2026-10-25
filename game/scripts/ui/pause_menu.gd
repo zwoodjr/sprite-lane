@@ -5,6 +5,7 @@ extends CanvasLayer
 
 const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 const HelpViewer = preload("res://scripts/ui/help_viewer.gd")
+const Feedback = preload("res://scripts/ui/feedback.gd")
 var _dim: ColorRect
 var _frame: MarginContainer
 var _content: Control
@@ -98,6 +99,12 @@ func _show_main() -> void:
 	settings.icon = IconSet.tex("tab_workshop", false)
 	settings.pressed.connect(_show_settings)
 	v.add_child(settings)
+	## Tester report: screenshot of the run (this menu hidden) + context.
+	var fb := UiTheme.big_button("FEEDBACK", UiTheme.LINE, 64, 20)
+	fb.name = "FeedbackButton"
+	fb.icon = IconSet.tex("tab_notes", false)
+	fb.pressed.connect(func() -> void: Feedback.open(self, self))
+	v.add_child(fb)
 	if GameState.in_campaign_run():
 		## Campaign: nothing to lose. Restart the level or walk back to the map.
 		var lid := GameState.campaign_level_id

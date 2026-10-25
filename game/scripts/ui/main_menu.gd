@@ -2,6 +2,7 @@ extends "res://scripts/ui/menu_base.gd"
 
 const LOGO := "res://assets/sprites/ui/logo_wanderer.png"
 const MenuFlow = preload("res://scripts/ui/menu_flow.gd")
+const Feedback = preload("res://scripts/ui/feedback.gd")
 
 
 func _ready() -> void:
@@ -122,6 +123,13 @@ func build(c: VBoxContainer) -> void:
 		b.size_flags_stretch_ratio = 0.7 if str(it[0]) == "QUIT" else 1.0
 		b.pressed.connect(it[2])
 		sub.add_child(b)
+	## Tester report (screenshot + context), one tap from the title.
+	var fb := UiTheme.big_button("SEND FEEDBACK", UiTheme.LINE, 64, 20)
+	fb.name = "FeedbackButton"
+	fb.icon = IconSet.tex("tab_notes", false)
+	fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fb.pressed.connect(func() -> void: Feedback.open(self))
+	c.add_child(fb)
 	## The app closed mid-run (force quit / crash): resume or abandon first.
 	if GameState.has_live_run():
 		_live_prompt.call_deferred()

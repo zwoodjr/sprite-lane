@@ -166,6 +166,7 @@ func _run() -> void:
 	await _test_p2_ui()
 	await _test_safe_save()
 	await _test_wander_extras()
+	await _test_feedback()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
 	GameState.pacts = keep_e7[2]
@@ -332,6 +333,87 @@ func _test_upgrades() -> void:
 			await get_tree().process_frame
 		hi += 1
 	print("UPGRADES_OK")
+
+
+## Tester feedback: context fields, the button on all three screens, and
+## open/close restoring the pause state (incl. from the pause menu).
+func _test_feedback() -> void:
+	var Fb: GDScript = load("res://scripts/ui/feedback.gd")
+	get_tree().paused = false
+	var ctx: Dictionary = Fb.build_context(get_tree())
+	for k in ["build", "time", "platform", "screen", "mode", "tier", "level", "hero", "pet", "loadout",
+			"run_level", "run_time", "hp", "kills", "fps", "log", "settings"]:
+		_check(ctx.has(k), "feedback ctx has " + k)
+	for k in ["build", "time", "platform", "screen", "hero", "pet", "settings"]:
+		_check(str(ctx.get(k, "")) != "", "feedback ctx %s filled" % k)
+	_check(str(ctx.get("settings", "")).contains("text ") and str(ctx.get("settings", "")).contains("left_hand"), "feedback ctx settings: text size + left hand")
+	var txt: String = Fb.report_text(ctx, "BUG", 4, "stick stuck after pause")
+	for want in ["BUG", "fun 4/5", "stick stuck after pause", "build:", "hero:", "pet:", "loadout:", "run_level:", "hp:", "kills:", "fps:", "settings:", "log lines"]:
+		_check(txt.contains(want), "feedback text has " + want)
+	## Buttons on the three screens.
+	for path in ["res://scenes/ui/main_menu.tscn", "res://scenes/ui/result_screen.tscn"]:
+		var inst: Node = (load(path) as PackedScene).instantiate()
+		get_tree().root.add_child(inst)
+		for i in range(4):
+			await get_tree().process_frame
+		_check(inst.find_child("FeedbackButton", true, false) is Button, "feedback button on " + path)
+		if path.contains("main_menu"):
+			## Open from an unpaused menu, then close: unpaused, sheet gone.
+			await Fb.open(inst)
+			await get_tree().process_frame
+			var layer := get_tree().root.get_node_or_null("FeedbackLayer")
+			_check(layer != null and get_tree().paused, "feedback open pauses + shows the sheet")
+			if layer:
+				var sheet := layer.get_node("FeedbackSheet")
+				for k in ["Categories", "Fun", "Note", "SendButton"]:
+					_check(sheet.find_child(k, true, false) != null, "feedback sheet has " + k)
+				(sheet.find_child("Cat_BUG", true, false) as Button).pressed.emit()
+				(sheet.find_child("Fun_3", true, false) as Button).pressed.emit()
+				(sheet.find_child("Note", true, false) as TextEdit).text = "test note"
+				_check(str(sheet.call("report")).contains("BUG") and str(sheet.call("report")).contains("fun 3/5"), "feedback sheet report picks")
+				## Native send: PNG/TXT into user://feedback + clipboard.
+				var before := DirAccess.get_files_at("user://feedback").size() if DirAccess.dir_exists_absolute("user://feedback") else 0
+				(sheet.find_child("SendButton", true, false) as Button).pressed.emit()
+				var files := DirAccess.get_files_at("user://feedback") if DirAccess.dir_exists_absolute("user://feedback") else PackedStringArray()
+				_check(files.size() > before, "feedback native send saves a file")
+				for f in files:
+					if str(f).begins_with("wanderer_fb_"):
+						DirAccess.remove_absolute("user://feedback/" + str(f))
+				sheet.call("close")
+			await get_tree().process_frame
+			await get_tree().process_frame
+			_check(not get_tree().paused, "feedback close leaves the tree unpaused")
+			_check(get_tree().root.get_node_or_null("FeedbackLayer") == null and not bool(Fb.is_open()), "feedback sheet freed")
+		inst.queue_free()
+		await get_tree().process_frame
+	## Pause menu: button there; feedback from pause keeps the pause, then RESUME unpauses.
+	var keep_fin := GameState.run_finished
+	GameState.run_finished = false
+	var pm := CanvasLayer.new()
+	pm.set_script(load("res://scripts/ui/pause_menu.gd"))
+	get_tree().root.add_child(pm)
+	await get_tree().process_frame
+	pm.call("open")
+	await get_tree().process_frame
+	var pb := pm.find_child("FeedbackButton", true, false) as Button
+	_check(pb != null, "feedback button in pause menu")
+	if pb:
+		pb.pressed.emit()
+		for i in range(3):
+			await get_tree().process_frame
+		_check(not pm.visible and get_tree().paused, "feedback from pause hides the pause menu")
+		var lay := get_tree().root.get_node_or_null("FeedbackLayer")
+		if lay:
+			lay.get_node("FeedbackSheet").call("close")
+		await get_tree().process_frame
+		_check(pm.visible and get_tree().paused, "feedback close returns to the pause menu")
+	pm.call("close")
+	await get_tree().process_frame
+	_check(not get_tree().paused, "pause menu resume after feedback unpauses")
+	pm.queue_free()
+	GameState.run_finished = keep_fin
+	await get_tree().process_frame
+	print("FEEDBACK_OK")
 
 
 func _check(ok: bool, what: String) -> void:

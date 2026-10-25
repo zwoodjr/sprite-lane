@@ -9,6 +9,7 @@ extends "res://scripts/ui/menu_base.gd"
 ## (level-up flash) -> gear revealed card by card with a rarity flash ->
 ## unlock cards -> actions. Tap anywhere skips the wait.
 
+const Feedback = preload("res://scripts/ui/feedback.gd")
 const REVEAL_GAP := 0.28
 
 var _scrap_label: Label
@@ -231,6 +232,14 @@ func build(c: VBoxContainer) -> void:
 	menu.size_flags_stretch_ratio = 0.6
 	menu.pressed.connect(GameState.go_main_menu)
 	_continue_row.add_child(menu)
+	## Tester report: screenshot of this result + the run's context.
+	var fb := UiTheme.big_button("FEEDBACK", UiTheme.LINE, 64, 20)
+	fb.name = "FeedbackButton"
+	fb.custom_minimum_size.x = 0
+	fb.icon = IconSet.tex("tab_notes", false)
+	fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fb.pressed.connect(func() -> void: Feedback.open(self))
+	_actions.add_child(fb)
 	_actions.modulate.a = 0.0
 	_set_actions_live(false)
 
