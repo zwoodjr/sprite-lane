@@ -119,6 +119,7 @@ func _run() -> void:
 				n.queue_free()
 		await get_tree().process_frame
 	await _test_picker()
+	await _test_music()
 	var keep_scrap := GameState.account_scrap
 	var keep_camp: Dictionary = GameState.camp.duplicate()
 	var keep_stash: Array = GameState.stash.duplicate(true)
@@ -414,6 +415,81 @@ func _test_feedback() -> void:
 	GameState.run_finished = keep_fin
 	await get_tree().process_frame
 	print("FEEDBACK_OK")
+
+
+## Metal score + world-SFX panning: every track loads and loops (stings don't),
+## the run loops share one length (lockstep crossfades), the adaptive picker
+## chooses calm / combat / boss, and a sound left of the camera pans left.
+func _test_music() -> void:
+	var snd: Node = Juice.snd
+	_check(snd != null, "music: sound director exists")
+	if snd == null:
+		return
+	var run_len: Array[float] = []
+	for id in ["mus_menu", "mus_explore", "mus_combat", "mus_boss", "mus_story", "mus_sting_death", "mus_sting_extract"]:
+		var st := load("res://assets/audio/music/%s.ogg" % id) as AudioStreamOggVorbis
+		_check(st != null, "music loads " + id)
+		if st == null:
+			continue
+		var looped: bool = not str(id).contains("sting")
+		_check(st.loop == looped, "music loop flag " + id)
+		var length := st.get_length()
+		if looped:
+			_check(length >= 90.0 and length <= 150.0, "music length %s %.1f" % [id, length])
+		else:
+			_check(length > 2.0 and length < 12.0, "sting length %s %.1f" % [id, length])
+		if id in ["mus_explore", "mus_combat", "mus_boss"]:
+			run_len.append(length)
+	_check(run_len.size() == 3 and absf(run_len[0] - run_len[1]) < 0.01 and absf(run_len[0] - run_len[2]) < 0.01,
+		"music: run loops share one length")
+	## Adaptive picker (pure).
+	_check(str(snd.call("pick_run_track", "explore", 0.15, 0, false, false)) == "explore", "music: calm -> explore")
+	_check(str(snd.call("pick_run_track", "explore", 0.8, 0, false, false)) == "combat", "music: threat -> combat")
+	_check(str(snd.call("pick_run_track", "explore", 0.2, 8, false, false)) == "combat", "music: swarm -> combat")
+	_check(str(snd.call("pick_run_track", "combat", 0.5, 3, false, false)) == "combat", "music: hysteresis holds combat")
+	_check(str(snd.call("pick_run_track", "combat", 0.2, 0, false, false)) == "explore", "music: combat cools to explore")
+	_check(str(snd.call("pick_run_track", "explore", 0.1, 0, true, false)) == "boss", "music: boss alive -> boss")
+	_check(str(snd.call("pick_run_track", "combat", 0.3, 0, false, true)) == "boss", "music: last window -> boss")
+	## Live state machine: escalation is immediate, calming waits out the hold.
+	snd.call("set_music", "run")
+	snd.call("update_run_music", 0.9, 0, false, false, 0.25)
+	_check(str(snd.get("run_track")) == "combat", "music: live run -> combat")
+	snd.call("update_run_music", 0.1, 0, false, false, 0.25)
+	_check(str(snd.get("run_track")) == "combat", "music: combat holds briefly")
+	snd.call("update_run_music", 0.1, 0, false, false, 9.0)
+	_check(str(snd.get("run_track")) == "explore", "music: back to explore after the hold")
+	snd.call("update_run_music", 0.1, 0, true, false, 0.25)
+	_check(str(snd.get("run_track")) == "boss", "music: live boss")
+	var tgt: Array = snd.get("_stem_target")
+	_check(tgt.size() == 3 and float(tgt[2]) == 1.0 and float(tgt[0]) == 0.0, "music: boss fader up, explore down")
+	snd.call("set_music", "story")
+	snd.call("set_music", "run")
+	_check(str(snd.get("run_track")) == "boss", "music: story beat doesn't restart the run score")
+	snd.call("set_music", "menu")
+	## Panning.
+	_check(float(snd.call("pan_for", -200.0, 300.0)) < 0.0, "pan: left of camera is negative")
+	_check(float(snd.call("pan_for", 200.0, 300.0)) > 0.0, "pan: right of camera is positive")
+	_check(float(snd.call("pan_for", 0.0, 300.0)) == 0.0, "pan: centre is centred")
+	_check(absf(float(snd.call("pan_for", -5000.0, 300.0))) <= 0.6001, "pan: gentle max")
+	_check(str(snd.call("pan_bus_name", -0.6)) == "SfxPanL3" and str(snd.call("pan_bus_name", 0.05)) == "SFX",
+		"pan: bus mapping")
+	var pbi := AudioServer.get_bus_index("SfxPanL3")
+	_check(pbi != -1 and AudioServer.get_bus_effect_count(pbi) == 1
+		and (AudioServer.get_bus_effect(pbi, 0) as AudioEffectPanner).pan < 0.0, "pan: left panner bus")
+	var holder := Node2D.new()
+	var cam := Camera2D.new()
+	holder.add_child(cam)
+	get_tree().root.add_child(holder)
+	cam.make_current()
+	await get_tree().process_frame
+	var centre := cam.get_screen_center_position()
+	_check(float(snd.call("pan_at", centre + Vector2(-250, 0))) < 0.0, "pan: world sound left of camera")
+	var v: Variant = snd.call("play", "hit_metal", 0.0, -1.0, centre + Vector2(-250, 0))
+	_check(v is AudioStreamPlayer and str((v as AudioStreamPlayer).bus).begins_with("SfxPanL"), "pan: voice routed to a left bus")
+	var ui: Variant = snd.call("play", "ui_tap", 0.0, -1.0, Vector2.INF)
+	_check(ui is AudioStreamPlayer and str((ui as AudioStreamPlayer).bus) == "UI", "pan: UI stays centred")
+	holder.queue_free()
+	await get_tree().process_frame
 
 
 func _check(ok: bool, what: String) -> void:

@@ -59,4 +59,23 @@ whose individual packs carry their own CC0 statements:
 | `bb - Novice Cello`, `bb - Smol Mechanisms`, `bb - Toolbox Rummaging`, `bb - Pill Bottles`, `bb - Fans and Drones`, `Micro Pack - Organic Wooshes`, `Micro Pack - Kitchen Knives`, `Micro Pack - Small Can`, `Micro Pack - NazdyNate - Electromagnetic Sounds` (`_README.txt`) | Ben Burnes (and NazdyNate) | CC0 1.0 ("public domain (Creative Commons 0)") | all music cello, UI clicks/clunks, ratchets, reload foley, medicine bottles, generator/AC hum, swings and whooshes, blade rings, EM static |
 | `beast_or_animal/` | uploader of the collection | CC0 1.0 (repository licence) | Noel's growl |
 
+## Music (metal score)
+
+`assets/audio/music/` is an original heavy-metal score composed for Wanderer (every riff,
+progression and melody is new) and rendered by `tools/audio/build_metal.py` from three
+**CC0 1.0 (public domain)** multisample libraries by Karoryfer Samples, distributed at
+<https://github.com/sfzinstruments> (each repository ships the CC0 1.0 legal code as `LICENSE`):
+
+| Library (repository) | Recorded instrument | Used for |
+|---|---|---|
+| `karoryfer.black-and-green-guitars` (Brian Wood / Karoryfer Lecolds) | DI electric guitars (Gretsch Anniversary, Hofner Club), note by note | rhythm guitars (one per side), leads, clean arpeggios |
+| `karoryfer.growlybass` | Squier Jazz Bass, sustain + staccato | bass |
+| `karoryfer.big-rusty-drums` | multi-mic rock kit (24" kick, 14" snare, toms, hats, crash, china, ride) | drums |
+
+The guitar tone (two-stage tube-style distortion, scooped tone stack, 4x12 cab simulation),
+mixing and mastering are done in the script; no amp impulse responses or third-party
+recordings beyond those libraries are used. Tracks: `mus_menu`, `mus_explore`, `mus_combat`,
+`mus_boss`, `mus_story` (loops) and `mus_sting_death`, `mus_sting_extract`.
+The earlier cello-based music from `build_music.py` was retired; that script still builds the ambience beds.
+
 The pre-2026-10 chiptune-style generator (`tools/gen_sfx.py`, `assets/sfx/`) was retired.

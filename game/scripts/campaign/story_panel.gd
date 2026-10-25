@@ -55,6 +55,7 @@ var hero_name: String = ""
 
 
 func _ready() -> void:
+	add_to_group("story_panel")
 	layer = 45
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_root = Control.new()

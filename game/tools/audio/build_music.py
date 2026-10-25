@@ -1,6 +1,7 @@
 """Wanderer ambience beds + music (menu theme, four in-run stems).
 
-Usage:  WANDERER_AUDIO_SRC=/path/to/CC0-Public-Domain-Sounds python3 -I build_music.py OUT_DIR [amb|music|all]
+Usage:  WANDERER_AUDIO_SRC=/path/to/CC0-Public-Domain-Sounds python3 -I build_music.py OUT_DIR [amb|legacy-music]
+(The game's music now comes from build_metal.py; legacy-music is the retired cello score.)
 Music is composed procedurally from recorded CC0 cello (Ben Burnes "Novice Cello"), CC0 impacts
 (Kenney) and synthesis. Every file loops seamlessly (tails folded onto the head).
 """
@@ -463,7 +464,8 @@ def MUSIC():
 
 def main():
     out = sys.argv[1]
-    what = sys.argv[2] if len(sys.argv) > 2 else "all"
+    # The music is now built by build_metal.py; "legacy-music" renders the retired cello score.
+    what = sys.argv[2] if len(sys.argv) > 2 else "amb"
     os.makedirs(out, exist_ok=True)
     tot = 0
     if what in ("amb", "all"):
@@ -472,7 +474,7 @@ def main():
             write_ogg(p, x, q=1)
             tot += os.path.getsize(p)
             print("ok", k, round(x.shape[-1] / SR, 2), flush=True)
-    if what in ("music", "all"):
+    if what == "legacy-music":
         for k, x in MUSIC().items():
             p = os.path.join(out, k + ".ogg")
             write_ogg(p, x, q=3)

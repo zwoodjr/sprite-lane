@@ -4,7 +4,10 @@ extends Node
 ## - Buses Master > Music / SFX / Ambience / UI, created at runtime.
 ## - Every SFX id has 1..N variants: res://assets/audio/sfx/<id>_<n>.ogg.
 ## - Per-id voice limits, cooldowns, pitch/volume jitter, optional 2D position.
-## - Music: menu theme, or four in-run stems that crossfade with intensity.
+## - Music: original metal score (tools/audio/build_metal.py). Menu groove; three
+##   phase-locked run loops (explore / combat / boss) crossfaded by an adaptive
+##   state machine; a story piece under campaign dialogue; result stings.
+## - Positional SFX pan by screen position (max ±PAN_MAX) and fade with distance.
 ## - Ambience: per-zone loop beds (+ hangar), crossfaded; storm overlay.
 ## Everything degrades to silence when a file is missing (headless-safe).
 
@@ -76,7 +79,23 @@ const ZONE_AMB := {
 	"": "amb_wasteland", "refinery": "amb_refinery", "city": "amb_city_night", "quarantine": "amb_quarantine",
 	"raider": "amb_raider", "chemical": "amb_chemical", "military": "amb_military", "crater": "amb_crater", "dustfall": "amb_dustfall",
 }
-const STEMS := ["mus_run_base", "mus_run_pulse", "mus_run_tension", "mus_run_boss"]
+## Run loops share tempo (160 BPM), length (72 bars) and chord map, so they play
+## in lockstep and the game only moves the faders.
+const RUN_TRACKS := ["mus_explore", "mus_combat", "mus_boss"]
+const LOOP_TRACKS := ["mus_menu", "mus_explore", "mus_combat", "mus_boss", "mus_story"]
+const STINGS := ["mus_sting_death", "mus_sting_extract"]
+## Threat (0..1) and enemies-near-hero thresholds for explore <-> combat, with hysteresis.
+const COMBAT_ON := 0.55
+const COMBAT_OFF := 0.4
+const NEAR_ON := 6
+const NEAR_OFF := 2
+const NEAR_RADIUS := 460.0
+## Minimum time a run track keeps the lead before the music may calm down again.
+const COMBAT_HOLD := 8.0
+## Stereo placement of world sounds: max pan at the screen edge, quantised to
+## PAN_STEP so native builds can route through a few fixed panner buses.
+const PAN_MAX := 0.6
+const PAN_STEP := 0.2
 ## Default mix levels (dB) per player type.
 const MUSIC_DB := -4.0
 const AMB_DB := -3.0
@@ -94,7 +113,7 @@ var _pos: Array[AudioStreamPlayer] = []
 ## on every write — the audio-thread SIGSEGV seen in 2/40 bot runs
 ## (StringName copy inside AudioServer::_mix_step).
 const FADE_BUSES := {"MusMenu": "Music", "MusStem0": "Music", "MusStem1": "Music", "MusStem2": "Music",
-	"MusStem3": "Music", "AmbA": "Ambience", "AmbB": "Ambience", "Storm": "Ambience", "LowHP": "SFX"}
+	"MusStory": "Music", "AmbA": "Ambience", "AmbB": "Ambience", "Storm": "Ambience", "LowHP": "SFX"}
 var _bus_db: Dictionary = {}
 var _flat_i: int = 0
 var _pos_i: int = 0
@@ -107,8 +126,21 @@ var _storm_player: AudioStreamPlayer
 var _lowhp_player: AudioStreamPlayer
 var _amb_current: String = ""
 var _music_state: String = ""
-var _stem_target: Array[float] = [0.0, 0.0, 0.0, 0.0]
-var _stem_level: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _stem_target: Array[float] = [0.0, 0.0, 0.0]
+var _stem_level: Array[float] = [0.0, 0.0, 0.0]
+var _story_player: AudioStreamPlayer
+var _sting_player: AudioStreamPlayer
+var _story_level: float = 0.0
+var _story_target: float = 0.0
+## Which run loop leads ("explore" / "combat" / "boss") and how long it has led.
+var run_track: String = "explore"
+var _run_track_t: float = 0.0
+var _sting_wait: float = 0.0
+var _web: bool = false
+## Web plays samples through WebAudio (no bus effects): positional voices there
+## are AudioStreamPlayer2D, which WebAudio pans. Native builds keep plain
+## players routed to fixed panner buses (no per-frame panning writes).
+var _pos2d: Array[AudioStreamPlayer2D] = []
 var _menu_level: float = 0.0
 var _menu_target: float = 0.0
 var _storm_level: float = 0.0
@@ -125,6 +157,7 @@ var intensity: float = 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_web = OS.has_feature("web")
 	_ensure_buses()
 	for id in IDS:
 		var arr: Array = []
@@ -140,13 +173,27 @@ func _ready() -> void:
 		add_child(a)
 		_flat.append(a)
 	for i in range(POOL_2D):
-		var b := AudioStreamPlayer.new()
-		b.bus = "SFX"
-		add_child(b)
-		_pos.append(b)
+		if _web:
+			var w := AudioStreamPlayer2D.new()
+			w.bus = "SFX"
+			w.attenuation = 0.0
+			w.max_distance = POS_MAX_DIST * 4.0
+			w.panning_strength = 3.0
+			add_child(w)
+			_pos2d.append(w)
+		else:
+			var b := AudioStreamPlayer.new()
+			b.bus = "SFX"
+			add_child(b)
+			_pos.append(b)
 	_menu_player = _loop_player("MusMenu", MUS_DIR + "mus_menu.ogg")
-	for si in range(STEMS.size()):
-		_stem_players.append(_loop_player("MusStem%d" % si, MUS_DIR + STEMS[si] + ".ogg"))
+	for si in range(RUN_TRACKS.size()):
+		_stem_players.append(_loop_player("MusStem%d" % si, MUS_DIR + RUN_TRACKS[si] + ".ogg"))
+	_story_player = _loop_player("MusStory", MUS_DIR + "mus_story.ogg")
+	_sting_player = AudioStreamPlayer.new()
+	_sting_player.bus = "Music"
+	_sting_player.volume_db = MUSIC_DB
+	add_child(_sting_player)
 	_amb_a = _loop_player("AmbA", "")
 	_amb_b = _loop_player("AmbB", "")
 	_storm_player = _loop_player("Storm", AMB_DIR + "amb_storm.ogg")
@@ -186,6 +233,19 @@ func _ensure_buses() -> void:
 			var fi := AudioServer.bus_count - 1
 			AudioServer.set_bus_name(fi, fb)
 			AudioServer.set_bus_send(fi, FADE_BUSES[fb])
+	## Panner buses for positional voices (native builds): SfxPanL3..SfxPanR3 -> SFX.
+	for k in range(-3, 4):
+		if k == 0:
+			continue
+		var pb := pan_bus_name(k * PAN_STEP)
+		if AudioServer.get_bus_index(pb) == -1:
+			AudioServer.add_bus()
+			var pbi := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(pbi, pb)
+			AudioServer.set_bus_send(pbi, "SFX")
+			var pe := AudioEffectPanner.new()
+			pe.pan = k * PAN_STEP
+			AudioServer.add_bus_effect(pbi, pe)
 	## Glue + safety: gentle compression on SFX, a limiter on Master so hordes never clip.
 	var sfx_i := AudioServer.get_bus_index("SFX")
 	if AudioServer.get_bus_effect_count(sfx_i) == 0:
@@ -272,7 +332,7 @@ func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Ve
 			if int(p.get_meta("t", 0)) < oldest_t:
 				oldest_t = int(p.get_meta("t", 0))
 				oldest = p
-	for p2 in _pos:
+	for p2 in _pos_voices():
 		if p2.playing and p2.get_meta("sid", "") == id:
 			live += 1
 			if int(p2.get_meta("t", 0)) < oldest_t:
@@ -292,6 +352,7 @@ func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Ve
 	var jit := float(c["pitch"]) if pitch_jitter < 0.0 else pitch_jitter
 	var vol := volume_db + randf_range(-1.2, 0.6)
 	var player: Node
+	var bus := str(c["bus"])
 	if at != Vector2.INF:
 		## Distance falloff from the view centre, decided once at start.
 		var d := _listener_dist(at)
@@ -299,11 +360,15 @@ func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Ve
 			return null
 		vol += POS_ATTEN_DB * pow(d / POS_MAX_DIST, 1.6)
 		player = _next_pos()
+		if player is AudioStreamPlayer2D:
+			(player as AudioStreamPlayer2D).global_position = at
+		elif bus == "SFX":
+			bus = pan_bus_name(pan_at(at))
 	else:
 		player = _next_flat()
 	if player == null:
 		return null
-	player.set("bus", str(c["bus"]))
+	player.set("bus", bus)
 	player.set("stream", arr[vi])
 	player.set("volume_db", vol)
 	player.set("pitch_scale", 1.0 + randf_range(-jit, jit))
@@ -317,6 +382,35 @@ func play(id: String, volume_db: float = 0.0, pitch_jitter: float = -1.0, at: Ve
 
 const POS_MAX_DIST := 1500.0
 const POS_ATTEN_DB := -18.0
+
+
+## Stereo pan for a world-space sound: its offset from the view centre as a
+## share of half the visible width, scaled to ±PAN_MAX (UI / flat sounds stay centred).
+static func pan_for(dx: float, half_width: float) -> float:
+	if half_width <= 1.0:
+		return 0.0
+	return clampf(dx / half_width, -1.0, 1.0) * PAN_MAX
+
+
+func pan_at(at: Vector2) -> float:
+	var vp := get_viewport()
+	var cam := vp.get_camera_2d() if vp else null
+	if cam == null:
+		return 0.0
+	var half := vp.get_visible_rect().size.x * 0.5 / maxf(absf(cam.zoom.x), 0.01)
+	return pan_for(at.x - cam.get_screen_center_position().x, half)
+
+
+## Bus for a pan value, snapped to PAN_STEP ("SFX" when centred).
+static func pan_bus_name(p: float) -> String:
+	var k := clampi(roundi(p / PAN_STEP), -3, 3)
+	if k == 0:
+		return "SFX"
+	return ("SfxPanL%d" if k < 0 else "SfxPanR%d") % absi(k)
+
+
+func _pos_voices() -> Array:
+	return _pos2d if _web else _pos
 
 
 func _listener_dist(at: Vector2) -> float:
@@ -337,12 +431,13 @@ func _next_flat() -> AudioStreamPlayer:
 	return null
 
 
-func _next_pos() -> AudioStreamPlayer:
-	for k in range(_pos.size()):
-		var i := (_pos_i + k) % _pos.size()
-		if not _pos[i].playing:
-			_pos_i = (i + 1) % _pos.size()
-			return _pos[i]
+func _next_pos() -> Node:
+	var pool := _pos_voices()
+	for k in range(pool.size()):
+		var i := (_pos_i + k) % pool.size()
+		if not pool[i].playing:
+			_pos_i = (i + 1) % pool.size()
+			return pool[i]
 	return null
 
 
@@ -358,28 +453,82 @@ func duck(amount_db: float, hold: float) -> void:
 
 ## --- music / ambience ------------------------------------------------------------
 
+## States: "menu" (hangar groove), "run" (adaptive loops), "story" (campaign
+## dialogue / map; run loops keep their place underneath), "result" (sting,
+## then the menu groove), "none". Re-entering the current state never restarts it.
 func set_music(state: String) -> void:
 	if state == _music_state:
 		return
+	var prev := _music_state
 	_music_state = state
+	_menu_target = 0.0
+	_story_target = 0.0
+	if state != "run":
+		_stem_target = [0.0, 0.0, 0.0]
 	match state:
 		"menu":
 			_menu_target = 1.0
-			_stem_target = [0.0, 0.0, 0.0, 0.0]
 			if _menu_player.stream and not _menu_player.playing:
 				_menu_player.play()
+		"story":
+			_story_target = 1.0
+			if _story_player.stream and not _story_player.playing:
+				_story_player.play()
 		"run":
-			_menu_target = 0.0
+			## Back from a story beat: the loops never stopped, just fade back in.
+			var running := false
 			for p in _stem_players:
-				if p.stream and not p.playing:
-					p.play()
-			## Keep stems phase-locked: restart together.
-			for p in _stem_players:
-				if p.stream:
-					p.seek(0.0)
-		_:
-			_menu_target = 0.0
-			_stem_target = [0.0, 0.0, 0.0, 0.0]
+				running = running or p.playing
+			if prev != "story" or not running:
+				run_track = "explore"
+				_run_track_t = 0.0
+				## Phase-locked: all three loops start together.
+				for p in _stem_players:
+					if p.stream:
+						p.play(0.0)
+			_apply_run_track()
+		"result":
+			## The sting is the moment: no leftover duck from the run's last SFX.
+			_duck_db = 0.0
+			_duck_hold = 0.0
+			_sting_wait = 0.1
+			var sid := "mus_sting_extract" if GameState.extracted else "mus_sting_death"
+			var path := MUS_DIR + sid + ".ogg"
+			if ResourceLoader.exists(path):
+				_sting_player.stream = load(path)
+				_sting_player.play()
+				_sting_wait = maxf(0.1, _sting_player.stream.get_length())
+
+
+## Pure: which run loop should lead. `current` gives hysteresis so the score
+## doesn't flip-flop at the threshold.
+static func pick_run_track(current: String, threat: float, near: int, boss: bool, last_window: bool) -> String:
+	if boss or last_window:
+		return "boss"
+	if current == "combat" or current == "boss":
+		return "explore" if threat < COMBAT_OFF and near <= NEAR_OFF else "combat"
+	return "combat" if threat >= COMBAT_ON or near >= NEAR_ON else "explore"
+
+
+func _apply_run_track() -> void:
+	var i := RUN_TRACKS.find("mus_" + run_track)
+	for k in range(_stem_target.size()):
+		_stem_target[k] = 1.0 if k == i else 0.0
+
+
+## Feeds the adaptive score (called by _auto_context; tools may call it directly).
+func update_run_music(threat: float, near: int, boss: bool, last_window: bool, delta: float = 0.0) -> void:
+	intensity = clampf(threat, 0.0, 1.0)
+	_run_track_t += delta
+	var want := pick_run_track(run_track, intensity, near, boss, last_window)
+	if want != run_track:
+		## Calming down waits out COMBAT_HOLD; escalating is immediate.
+		var calmer := (want == "explore") or (want == "combat" and run_track == "boss")
+		if not calmer or _run_track_t >= COMBAT_HOLD:
+			run_track = want
+			_run_track_t = 0.0
+	if _music_state == "run":
+		_apply_run_track()
 
 
 func set_ambience(id: String) -> void:
@@ -411,15 +560,6 @@ func set_low_hp(on: bool) -> void:
 		_lowhp_player.play()
 
 
-## 0 = calm, ~0.35 pulse joins, ~0.65 drums, boss = boss stem.
-func set_run_intensity(v: float, boss: bool) -> void:
-	intensity = clampf(v, 0.0, 1.0)
-	_stem_target[0] = 1.0
-	_stem_target[1] = clampf((intensity - 0.2) / 0.2, 0.0, 1.0)
-	_stem_target[2] = clampf((intensity - 0.55) / 0.15, 0.0, 1.0)
-	_stem_target[3] = 1.0 if boss else 0.0
-
-
 func _process(delta: float) -> void:
 	_ctx_t -= delta
 	if _ctx_t <= 0.0:
@@ -429,13 +569,23 @@ func _process(delta: float) -> void:
 	_fade("MusMenu", _lin_db(_menu_level) + MUSIC_DB)
 	if _menu_level <= 0.001 and _menu_player.playing and _menu_target == 0.0:
 		_menu_player.stop()
+	_story_level = move_toward(_story_level, _story_target, delta * 0.6)
+	_fade("MusStory", _lin_db(_story_level) + MUSIC_DB - 2.0)
+	if _story_level <= 0.001 and _story_player.playing and _story_target == 0.0:
+		_story_player.stop()
 	for i in range(_stem_players.size()):
-		_stem_level[i] = move_toward(_stem_level[i], _stem_target[i], delta * (0.6 if _stem_target[i] > _stem_level[i] else 0.35))
+		## Boss / combat hit fast (~1 s); calming down takes ~3 s.
+		var up := _stem_target[i] > _stem_level[i]
+		_stem_level[i] = move_toward(_stem_level[i], _stem_target[i], delta * (1.0 if up else 0.33))
 		_fade("MusStem%d" % i, _lin_db(_stem_level[i]) + MUSIC_DB)
-	if _music_state != "run" and _stem_players.size() > 0 and _stem_level.max() <= 0.001:
+	if _music_state != "run" and _music_state != "story" and _stem_players.size() > 0 and _stem_level.max() <= 0.001:
 		for p in _stem_players:
 			if p.playing:
 				p.stop()
+	if _music_state == "result" and _sting_wait > 0.0:
+		_sting_wait -= delta
+		if _sting_wait <= 0.0:
+			set_music("menu")
 	## Ambience crossfade (2 s).
 	_fade(_amb_a.bus, move_toward(_fade_db(_amb_a.bus), AMB_DB if _amb_current != "" else -60.0, delta * 30.0))
 	_fade(_amb_b.bus, move_toward(_fade_db(_amb_b.bus), -60.0, delta * 30.0))
@@ -461,6 +611,16 @@ func _lin_db(v: float) -> float:
 	return -80.0 if v <= 0.001 else linear_to_db(v)
 
 
+## Campaign dialogue on screen: a blocking story scene, or Helm's radio plate.
+func _dialogue_state() -> int:
+	for n in get_tree().get_nodes_in_group("story_panel"):
+		if n.get("active") == true:
+			return 2
+		if n.has_method("radio_busy") and bool(n.call("radio_busy")):
+			return 1
+	return 0
+
+
 ## Reads the running scene and game state to pick music/ambience on its own,
 ## so menus and the match never need to call into audio explicitly.
 func _auto_context() -> void:
@@ -469,31 +629,39 @@ func _auto_context() -> void:
 		return
 	var path := scene.scene_file_path
 	if path.ends_with("match.tscn"):
-		set_music("run")
+		var talk := _dialogue_state()
+		set_music("story" if talk == 2 else "run")
+		if talk == 1:
+			## Duck under Helm's radio.
+			duck(-7.0, 0.35)
 		var grade := str(ZoneDefs.zone(GameState.zone_tier()).get("grade", ""))
 		set_ambience(str(ZONE_AMB.get(grade, "amb_wasteland")))
 		var storming := scene.has_method("is_storming") and bool(scene.call("is_storming"))
 		set_storm(storming)
 		var boss := false
 		var elites := 0
+		var near := 0
+		var pl := get_tree().get_first_node_in_group("player") as Node2D
 		for e in get_tree().get_nodes_in_group("enemies"):
 			var r := str(e.get("role")) if e.get("role") != null else ""
 			if r == "boss":
 				boss = true
 			elif r == "elite":
 				elites += 1
+			if pl != null and e is Node2D and (e as Node2D).global_position.distance_squared_to(pl.global_position) < NEAR_RADIUS * NEAR_RADIUS:
+				near += 1
 		var v := 0.15 + 0.1 * float(GameState.threat_level)
 		v += 0.12 * float(elites)
 		if scene.get("_extract_open") == true:
 			v += 0.1
-		if _last_window(scene):
+		var last := _last_window(scene)
+		if last:
 			v = maxf(v, 0.75)
 		if storming:
 			v = 1.0
 		if intensity_override >= 0.0:
 			v = intensity_override
-		set_run_intensity(v, boss)
-		var pl := get_tree().get_first_node_in_group("player")
+		update_run_music(v, near, boss, last or storming, 0.25)
 		if pl != null and pl.get("max_hp") != null:
 			var hp_r := float(pl.get("hp")) / maxf(float(pl.get("max_hp")), 1.0)
 			set_low_hp(hp_r > 0.0 and hp_r < 0.3)
@@ -503,8 +671,12 @@ func _auto_context() -> void:
 		set_storm(false)
 		set_low_hp(false)
 		if path.ends_with("result_screen.tscn"):
-			set_music("none")
+			if _music_state != "menu":
+				set_music("result")
 			set_ambience("amb_wasteland")
+		elif path.ends_with("campaign_map.tscn"):
+			set_music("story")
+			set_ambience("amb_hangar")
 		else:
 			set_music("menu")
 			set_ambience("amb_hangar")
