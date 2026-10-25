@@ -19,6 +19,7 @@ uniform float sat = 0.88;
 uniform float vignette = 0.62;
 uniform float dither = 0.0;
 uniform float lift = 0.0;
+uniform float gamma = 1.0;
 
 void fragment() {
 	vec3 c = texture(screen_tex, SCREEN_UV).rgb;
@@ -40,7 +41,7 @@ void fragment() {
 	} else {
 		c *= 1.0 - vignette * v * v;
 	}
-	COLOR = vec4(clamp(c, 0.0, 1.0), 1.0);
+	COLOR = vec4(pow(clamp(c, 0.0, 1.0), vec3(gamma)), 1.0);
 }
 """
 
@@ -67,6 +68,7 @@ const PIVOT := 0.36
 
 var _mat: ShaderMaterial
 var _grain_on: bool = false
+var _gamma: float = 1.0
 
 
 func _ready() -> void:
@@ -99,11 +101,22 @@ func _ready() -> void:
 		var v: Variant = look[k]
 		_mat.set_shader_parameter(k, v)
 	_apply_grain()
+	_gamma = SettingsDefs.gamma()
+	_mat.set_shader_parameter("gamma", _gamma)
 
 
 func _process(_delta: float) -> void:
 	if bool(GameState.settings.get("film_grain", false)) != _grain_on:
 		_apply_grain()
+	## Settings > Brightness (gamma on the world, under the HUD).
+	var g := SettingsDefs.gamma()
+	if absf(g - _gamma) > 0.001:
+		_gamma = g
+		_mat.set_shader_parameter("gamma", g)
+
+
+func gamma_value() -> float:
+	return _gamma
 
 
 func _apply_grain() -> void:

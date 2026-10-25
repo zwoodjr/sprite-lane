@@ -113,7 +113,7 @@ func _build_scene_ui() -> void:
 	_text = Label.new()
 	_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_text.add_theme_font_override("font", UiTheme.font_body)
-	_text.add_theme_font_size_override("font_size", 24)
+	_text.add_theme_font_size_override("font_size", _cap(24))
 	_text.add_theme_color_override("font_color", BONE)
 	_text.add_theme_constant_override("line_spacing", 2)
 	_text.custom_minimum_size = Vector2(0, 112)
@@ -129,7 +129,7 @@ func _build_scene_ui() -> void:
 	_root.add_child(_name_plate)
 	_name = Label.new()
 	_name.add_theme_font_override("font", UiTheme.font_button)
-	_name.add_theme_font_size_override("font_size", 28)
+	_name.add_theme_font_size_override("font_size", _cap(28))
 	_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_name_plate.add_child(_name)
 	_choices = VBoxContainer.new()
@@ -141,6 +141,11 @@ func _build_scene_ui() -> void:
 		_skipping = true
 		_tap = true)
 	_root.add_child(_skip)
+
+
+## Settings > Caption size scales dialogue / radio subtitle text.
+static func _cap(px: int) -> int:
+	return int(round(float(px) * SettingsDefs.caption_scale()))
 
 
 func _build_radio_ui() -> void:
@@ -179,12 +184,12 @@ func _build_radio_ui() -> void:
 	h.add_child(v)
 	_radio_name = Label.new()
 	_radio_name.add_theme_font_override("font", UiTheme.font_button)
-	_radio_name.add_theme_font_size_override("font_size", 20)
+	_radio_name.add_theme_font_size_override("font_size", _cap(20))
 	v.add_child(_radio_name)
 	_radio_text = Label.new()
 	_radio_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_radio_text.add_theme_font_override("font", UiTheme.font_body)
-	_radio_text.add_theme_font_size_override("font_size", 20)
+	_radio_text.add_theme_font_size_override("font_size", _cap(20))
 	_radio_text.add_theme_color_override("font_color", BONE)
 	_radio_text.custom_minimum_size = Vector2(0, 0)
 	v.add_child(_radio_text)

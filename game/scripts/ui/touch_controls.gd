@@ -57,8 +57,7 @@ func _ready() -> void:
 	stick_draw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stick_draw.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	stick_draw.set("host", self)
-	_left_handed = bool(GameState.settings.get("left_handed", false))
-	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
+	_read_settings()
 
 	btn_dash = _make_button("DASH", 58.0, UiTheme.TEAL)
 	btn_ability = _make_button("ABILITY", 40.0, UiTheme.AMBER,
@@ -74,6 +73,7 @@ func _ready() -> void:
 	_layout()
 	get_viewport().size_changed.connect(_layout)
 	TouchInput.sticks_cleared.connect(_reset_touches)
+	GameState.settings_changed.connect(_on_setting)
 	if not TouchInput.touch_primary:
 		## Desktop: keyboard. Keep pause visible, hide thumb controls.
 		for b in [btn_dash, btn_ability]:
@@ -91,9 +91,30 @@ func _make_button(text: String, r: float, tint: Color, icon_path: String = "") -
 	_buttons.append(b)
 	return b
 
+## Settings > Controls apply live (also from the pause menu).
+func _read_settings() -> void:
+	_left_handed = bool(GameState.settings.get("left_handed", false))
+	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
+
+
+func _on_setting(key: String) -> void:
+	if key in ["left_handed", "stick_scale", "stick_opacity"]:
+		_read_settings()
+		_layout()
+		if stick_draw:
+			stick_draw.queue_redraw()
+
+
+## Settings > Stick opacity (0.3..1).
+func stick_alpha() -> float:
+	return clampf(float(GameState.settings.get("stick_opacity", 1.0)), 0.3, 1.0)
+
+
 func _exit_tree() -> void:
 	if TouchInput.sticks_cleared.is_connected(_reset_touches):
 		TouchInput.sticks_cleared.disconnect(_reset_touches)
+	if GameState.settings_changed.is_connected(_on_setting):
+		GameState.settings_changed.disconnect(_on_setting)
 	TouchInput.clear_sticks()
 
 func _layout() -> void:
@@ -249,7 +270,7 @@ func paint_sticks(c: Control) -> void:
 	var o := c.get_global_transform_with_canvas().origin
 	var tint := Color(0.92, 0.88, 0.78)
 	if _fade > 0.0:
-		_paint_one(c, _move_origin - o, _move_knob - o, tint, _fade)
+		_paint_one(c, _move_origin - o, _move_knob - o, tint, _fade * stick_alpha())
 	elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
 		_paint_ghost(c, _ghost_pos() - o, tint, "MOVE")
 

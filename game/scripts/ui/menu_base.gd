@@ -128,7 +128,7 @@ func modal(title: String, lines: Array, buttons: Array, title_color: Color = UiT
 		btn.pressed.connect(b[2])
 		v.add_child(btn)
 	plate.pivot_offset = Vector2(w * 0.5, 200)
-	plate.scale = Vector2(0.92, 0.92)
+	plate.scale = Vector2(0.92, 0.92) if not SettingsDefs.reduce_motion() else Vector2.ONE
 	plate.modulate.a = 0.0
 	var tw := plate.create_tween().set_parallel(true)
 	tw.tween_property(plate, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

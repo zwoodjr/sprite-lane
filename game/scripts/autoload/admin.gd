@@ -59,6 +59,16 @@ func _ready() -> void:
 		set_process_input(false)
 
 
+## Settings > Video > Show FPS (works in release builds too; the admin
+## panel's FPS button flips the same setting).
+func set_fps_visible(on: bool) -> void:
+	_fps.visible = on
+	if on:
+		set_process(true)
+	elif not allowed:
+		set_process(false)
+
+
 static func admin_allowed() -> bool:
 	return OS.is_debug_build() or OS.has_feature("admin") or ADMIN_IN_RELEASE
 
@@ -126,7 +136,8 @@ func set_enabled(on: bool) -> void:
 	if not on:
 		close_panel()
 		god = false
-		_fps.visible = false
+		if not bool(GameState.settings.get("show_fps", false)):
+			_fps.visible = false
 	var cf := ConfigFile.new()
 	cf.set_value("admin", "enabled", on)
 	cf.save(CFG)
@@ -246,7 +257,7 @@ func open_panel() -> void:
 	])
 	_row(v, [
 		["FPS: %s" % ("ON" if _fps.visible else "OFF"), func() -> void:
-			_fps.visible = not _fps.visible
+			GameState.set_setting("show_fps", not _fps.visible)
 			_refresh()],
 		["Hide admin", func() -> void: set_enabled(false)],
 	])

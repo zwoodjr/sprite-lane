@@ -233,7 +233,8 @@ void fragment() {
 static func flash_material() -> ShaderMaterial:
 	if _flash_mat == null:
 		var sh := Shader.new()
-		sh.code = "shader_type canvas_item;\nvoid fragment() {\n\tvec4 t = texture(TEXTURE, UV);\n\tCOLOR = vec4(0.914, 0.875, 0.788, t.a * COLOR.a);\n}\n"
+		## `amount` = Settings > Flash & hit-flash intensity (0 = no flash).
+		sh.code = "shader_type canvas_item;\nuniform float amount = 1.0;\nvoid fragment() {\n\tvec4 t = texture(TEXTURE, UV);\n\tCOLOR = vec4(mix(t.rgb * COLOR.rgb, vec3(0.914, 0.875, 0.788), amount), t.a * COLOR.a);\n}\n"
 		_flash_mat = ShaderMaterial.new()
 		_flash_mat.shader = sh
 	return _flash_mat

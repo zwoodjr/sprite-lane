@@ -144,26 +144,10 @@ var live_run: Dictionary = {}
 var pending_resume: Dictionary = {}
 var _live_ctrl: WeakRef = null
 var _live_accum: float = 0.0
-var settings: Dictionary = {
-	"sfx": true,
-	"mute": false,
-	"vol_master": 1.0,
-	"vol_music": 0.7,
-	"vol_sfx": 1.0,
-	"vol_ambience": 0.8,
-	"vol_ui": 0.8,
-	"haptics": true,
-	"screen_shake": true,
-	"stick_scale": 1.0,
-	"left_handed": false,
-	"show_hints": true,
-	"heat_shimmer": false,
-	## Edge dither vignette (bible: no noise / film grain). Off by default.
-	"film_grain": false,
-	"dither_v1": true,
-	## Loot v2: salvage plain Commons automatically on extract (buy-back keeps them).
-	"auto_salvage_commons": false,
-}
+## Defaults + Settings layout live in SettingsDefs (migrated on load).
+var settings: Dictionary = _default_settings()
+## A setting changed through set_setting() (already applied live).
+signal settings_changed(key: String)
 var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.
 var migrated_v3: bool = false
@@ -406,13 +390,16 @@ func _keep_damaged() -> void:
 func apply_save(d: Dictionary) -> void:
 	var saved_settings: Variant = d.get("settings", {})
 	if typeof(saved_settings) == TYPE_DICTIONARY:
-		for k in (saved_settings as Dictionary).keys():
-			settings[k] = saved_settings[k]
+		var up: Dictionary = (saved_settings as Dictionary).duplicate()
+		SettingsDefs.upgrade_keys(up)
+		for k in up.keys():
+			settings[k] = up[k]
 		## The old film grain (default on) became the bible's edge dither,
 		## default off: older saves start with it off once.
 		if not (saved_settings as Dictionary).has("dither_v1"):
 			settings["film_grain"] = false
 	settings["dither_v1"] = true
+	SettingsDefs.migrate(settings)
 	tutorial_done = bool(d.get("tutorial_done", false))
 	live_run = _dict_or_empty(d.get("live_run", {})).duplicate(true)
 	account_scrap = int(d.get("account_scrap", 0))
@@ -1978,9 +1965,20 @@ func has_cosmetic(c: String) -> bool:
 			return true
 	return false
 
-func set_setting(key: String, value: Variant) -> void:
+func set_setting(key: String, value: Variant, save: bool = true) -> void:
 	settings[key] = value
-	save_profile()
+	SettingsDefs.apply(key)
+	settings_changed.emit(key)
+	if save:
+		save_profile()
+
+
+static func _default_settings() -> Dictionary:
+	var d: Dictionary = SettingsDefs.DEFAULTS.duplicate(true)
+	d["sfx"] = true
+	d["dither_v1"] = true
+	d["settings_v"] = SettingsDefs.VERSION
+	return d
 
 func reset_profile() -> void:
 	tutorial_done = false

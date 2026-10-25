@@ -52,7 +52,10 @@ static func _pool(radius: float, color: Color) -> Sprite2D:
 static func flash(parent: Node, pos: Vector2, radius: float, color: Color, life: float = 0.12) -> void:
 	if parent == null or not parent.is_inside_tree():
 		return
-	var s := _pool(radius, color)
+	var k := SettingsDefs.flash_k()
+	if k <= 0.01:
+		return
+	var s := _pool(radius, Color(color, color.a * k))
 	s.global_position = pos
 	parent.add_child(s)
 	s.global_position = pos

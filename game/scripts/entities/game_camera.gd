@@ -41,7 +41,7 @@ func _ready() -> void:
 ## Slow wind-blown dust drifting across the screen — sells the wasteland.
 func _add_ambient_dust() -> void:
 	var p := CPUParticles2D.new()
-	p.amount = 60
+	p.amount = maxi(8, int(60.0 * SettingsDefs.fx_mult()))
 	p.lifetime = 7.0
 	p.preprocess = 7.0
 	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
@@ -82,7 +82,7 @@ func _add_motes() -> void:
 	var col: Color = MOTES.get(zid, MOTES["haze"])
 	var p := CPUParticles2D.new()
 	p.name = "Motes"
-	p.amount = 70
+	p.amount = maxi(8, int(70.0 * SettingsDefs.fx_mult()))
 	p.lifetime = 9.0
 	p.preprocess = 9.0
 	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE

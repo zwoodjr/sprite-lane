@@ -19,7 +19,7 @@ func setup(cam: Camera2D) -> void:
 	z_index = -1 ## above the floor/props, under units
 	_rng.randomize()
 	_next = _rng.randf_range(5.0, 12.0)
-	if bool(GameState.settings.get("heat_shimmer", false)):
+	if SettingsDefs.heat_shimmer_on():
 		_add_shimmer()
 
 

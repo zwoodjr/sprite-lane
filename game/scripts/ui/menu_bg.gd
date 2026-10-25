@@ -43,6 +43,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	## Settings > Reduce motion: a still backdrop.
+	if SettingsDefs.reduce_motion():
+		return
 	_t += delta
 	queue_redraw()
 

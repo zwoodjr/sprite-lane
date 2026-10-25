@@ -694,7 +694,7 @@ func _readout(kind: String, label: String, sz: Vector2) -> Control:
 func _flash_hit() -> void:
 	if _hit_flash == null:
 		return
-	_hit_flash.modulate.a = 0.85
+	_hit_flash.modulate.a = 0.85 * SettingsDefs.flash_k()
 	var tw := _hit_flash.create_tween()
 	tw.tween_property(_hit_flash, "modulate:a", 0.0, 0.35)
 
@@ -973,7 +973,7 @@ func show_banner(title: String, sub: String = "", color: Color = UiTheme.AMBER) 
 ## by itself (BossBar polls the "bosses" group).
 func boss_intro(boss_name: String) -> void:
 	if _white_flash:
-		_white_flash.color.a = 0.55
+		_white_flash.color.a = 0.55 * SettingsDefs.flash_k()
 		var tw := _white_flash.create_tween()
 		tw.tween_property(_white_flash, "color:a", 0.0, 0.35).set_ease(Tween.EASE_OUT)
 	show_banner(boss_name.to_upper(), "BOSS INBOUND", UiTheme.DANGER)

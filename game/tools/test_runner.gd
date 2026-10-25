@@ -168,6 +168,7 @@ func _run() -> void:
 	await _test_safe_save()
 	await _test_wander_extras()
 	await _test_feedback()
+	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
 	GameState.pacts = keep_e7[2]
@@ -1044,7 +1045,7 @@ func _test_loot2() -> void:
 	_check(absf(float(mods) / 2000.0 - GearDefs.ELITE_MOD_CHANCE) < 0.05, "elite bonus mod rate %d" % mods)
 	_check((GearDefs.roll_role_reward("elite", "", 3, "ash_rook", 0.0, rng, false)["items"] as Array).size() == 1, "soft cap: no bonus mod")
 	## Toggle: default OFF, and an old save without the key loads OFF.
-	_check(((load("res://scripts/ui/settings_panel.gd") as GDScript).get_script_constant_map()["ROWS"] as Array).any(func(r: Dictionary) -> bool: return str(r["key"]) == "auto_salvage_commons"), "settings row")
+	_check(str(SettingsDefs.row("auto_salvage_commons").get("type", "")) == "toggle", "settings row")
 	GameState.settings.erase("auto_salvage_commons")
 	GameState.save_profile()
 	var old_save: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
@@ -3782,3 +3783,246 @@ func _test_wander_extras() -> void:
 	GameState.run_dust_mods = []
 	GameState.reset_loadout_to_defaults()
 	print("WANDER_EXTRAS_OK")
+
+
+## Settings rebuild: every setting round-trips through save / load, old
+## settings migrate, the audio buses follow the sliders, the fps cap / shake /
+## flash / effects settings take effect, and the tabbed screen opens and
+## closes from the main menu, the hangar and the pause menu.
+func _test_settings() -> void:
+	var keep: Dictionary = GameState.settings.duplicate(true)
+	var keep_fps := Engine.max_fps
+	var SettingsMenuS: GDScript = load("res://scripts/ui/settings_menu.gd")
+	## --- round trip: a non-default value for every key
+	var want := {}
+	for k in SettingsDefs.keys():
+		var d: Variant = SettingsDefs.DEFAULTS[k]
+		var r := SettingsDefs.row(k)
+		match typeof(d):
+			TYPE_BOOL:
+				want[k] = not bool(d)
+			TYPE_INT:
+				want[k] = (int(d) + 1) % (r["options"] as Array).size()
+			TYPE_FLOAT:
+				var lo := float(r.get("min", 0.0))
+				var hi := float(r.get("max", 1.0))
+				want[k] = snappedf(lerpf(lo, hi, 0.35), 0.01) if absf(lerpf(lo, hi, 0.35) - float(d)) > 0.02 else snappedf(lerpf(lo, hi, 0.8), 0.01)
+		GameState.set_setting(k, want[k], false)
+	GameState.save_profile()
+	var raw := _saved()
+	_check(typeof(raw.get("settings")) == TYPE_DICTIONARY, "settings: saved")
+	GameState.settings = GameState._default_settings()
+	_relaunch()
+	for k in want:
+		var got: Variant = GameState.settings.get(k)
+		var ok := false
+		if typeof(want[k]) == TYPE_FLOAT:
+			ok = typeof(got) == TYPE_FLOAT and absf(float(got) - float(want[k])) < 0.001
+		else:
+			ok = typeof(got) == typeof(want[k]) and got == want[k]
+		_check(ok, "settings: %s round-trips (%s -> %s)" % [k, str(want[k]), str(got)])
+	## --- migration from an old (pre-tabs) settings block
+	var old := {"settings": {"sfx": true, "mute": false, "vol_master": 0.6, "vol_music": 0.3, "vol_sfx": 0.9, "vol_ambience": 0.5,
+		"vol_ui": 0.4, "haptics": false, "screen_shake": false, "stick_scale": 1.2, "left_handed": true, "show_hints": false,
+		"text_size": 2.0, "auto_salvage_commons": true, "film_grain": true, "dither_v1": true}}
+	GameState.settings = GameState._default_settings()
+	GameState.apply_save(old)
+	var st := GameState.settings
+	_check(int(st["shake_level"]) == 0 and not st.has("screen_shake"), "settings: screen_shake off -> shake OFF")
+	_check(typeof(st["text_size"]) == TYPE_INT and int(st["text_size"]) == 2, "settings: text size kept (int)")
+	_check(absf(float(st["vol_music"]) - 0.3) < 0.001 and absf(float(st["vol_master"]) - 0.6) < 0.001 and absf(float(st["vol_ui"]) - 0.4) < 0.001, "settings: volumes kept")
+	_check(bool(st["left_handed"]) and not bool(st["haptics"]) and not bool(st["show_hints"]) and bool(st["auto_salvage_commons"]) and bool(st["film_grain"]), "settings: toggles kept")
+	_check(absf(float(st["stick_scale"]) - 1.2) < 0.001, "settings: stick size kept")
+	_check(absf(float(st["vol_voice"]) - 1.0) < 0.001 and bool(st["mute_background"]) and int(st["fps_cap"]) == 1 and int(st["fx_quality"]) == 2, "settings: new keys default")
+	(old["settings"] as Dictionary)["screen_shake"] = true
+	GameState.settings = GameState._default_settings()
+	GameState.apply_save(old)
+	_check(int(GameState.settings["shake_level"]) == 2, "settings: screen_shake on -> shake FULL")
+	GameState.settings = GameState._default_settings()
+	GameState.apply_save({"settings": {"vol_sfx": "loud", "fps_cap": 9, "brightness": -3}})
+	_check(absf(float(GameState.settings["vol_sfx"]) - 1.0) < 0.001 and int(GameState.settings["fps_cap"]) == 2 and float(GameState.settings["brightness"]) == 0.0, "settings: bad values sanitised")
+	GameState.settings = GameState._default_settings()
+	SettingsDefs.apply()
+	## --- audio buses follow the sliders
+	var bus_of := {"vol_master": "Master", "vol_music": "Music", "vol_sfx": "SFX", "vol_voice": "Voice", "vol_ui": "UI", "vol_ambience": "Ambience"}
+	_check(AudioServer.get_bus_index("Voice") >= 0, "settings: Voice bus exists")
+	for k in bus_of:
+		GameState.set_setting(k, 0.25, false)
+		var i := AudioServer.get_bus_index(str(bus_of[k]))
+		var db := AudioServer.get_bus_volume_db(i)
+		_check(i >= 0 and absf(db - linear_to_db(0.25)) < (8.0 if k == "vol_music" else 0.2), "settings: %s bus follows (%.1f dB)" % [bus_of[k], db])
+		GameState.set_setting(k, 0.0, false)
+		_check(AudioServer.is_bus_mute(i), "settings: %s at 0 mutes" % bus_of[k])
+		GameState.set_setting(k, 1.0, false)
+		_check(not AudioServer.is_bus_mute(i) or k == "vol_master" and bool(GameState.settings["mute"]), "settings: %s unmutes" % bus_of[k])
+	GameState.set_setting("mute", true, false)
+	_check(AudioServer.is_bus_mute(0), "settings: mute all mutes Master")
+	GameState.set_setting("mute", false, false)
+	_check(not AudioServer.is_bus_mute(0), "settings: unmute")
+	Juice.snd.call("set_background", true)
+	_check(AudioServer.is_bus_mute(0), "settings: muted in background")
+	Juice.snd.call("set_background", false)
+	_check(not AudioServer.is_bus_mute(0), "settings: sound back in front")
+	GameState.set_setting("mute_background", false, false)
+	Juice.snd.call("set_background", true)
+	_check(not AudioServer.is_bus_mute(0), "settings: background mute can be off")
+	Juice.snd.call("set_background", false)
+	GameState.set_setting("mute_background", true, false)
+	## --- frame-rate cap / battery saver
+	for i in range(3):
+		GameState.set_setting("fps_cap", i, false)
+		_check(Engine.max_fps == [30, 60, 0][i], "settings: fps cap %d -> max_fps %d" % [i, Engine.max_fps])
+	GameState.set_setting("battery_saver", true, false)
+	_check(Engine.max_fps == 30 and SettingsDefs.fx_level() == 0 and not SettingsDefs.heat_shimmer_on(), "settings: battery saver = 30 fps, low fx")
+	GameState.set_setting("battery_saver", false, false)
+	_check(Engine.max_fps == 0, "settings: battery saver off restores the cap")
+	## --- screen shake OFF / LOW / FULL, reduce motion
+	var shake_at := func(lvl: int, calm: bool) -> float:
+		GameState.set_setting("shake_level", lvl, false)
+		GameState.set_setting("reduce_motion", calm, false)
+		Juice.set("_trauma", 0.0)
+		Juice.shake(0.5)
+		return float(Juice.call("shake_trauma"))
+	_check(is_zero_approx(shake_at.call(0, false)), "settings: shake OFF")
+	_check(absf(float(shake_at.call(1, false)) - 0.225) < 0.001, "settings: shake LOW")
+	_check(absf(float(shake_at.call(2, false)) - 0.5) < 0.001, "settings: shake FULL")
+	_check(is_zero_approx(shake_at.call(2, true)), "settings: reduce motion = no shake")
+	Juice.set("_trauma", 0.0)
+	GameState.set_setting("reduce_motion", false, false)
+	## --- flash, effects, damage numbers, haptics, brightness
+	GameState.set_setting("flash_intensity", 0.3, false)
+	_check(absf(float(UnitAnim.flash_material().get_shader_parameter("amount")) - 0.3) < 0.001, "settings: unit hit flash follows")
+	var probe := ColorRect.new()
+	get_tree().root.add_child(probe)
+	Juice.flash(probe, Color(3, 3, 3), 0.5)
+	_check(absf(probe.modulate.r - lerpf(1.0, 3.0, 0.3)) < 0.01, "settings: Juice.flash scaled")
+	GameState.set_setting("flash_intensity", 0.0, false)
+	probe.modulate = Color.WHITE
+	Juice.flash(probe, Color(3, 3, 3), 0.5)
+	_check(probe.modulate == Color.WHITE, "settings: flash off")
+	probe.queue_free()
+	GameState.set_setting("flash_intensity", 1.0, false)
+	for i in range(3):
+		GameState.set_setting("fx_quality", i, false)
+		_check(is_equal_approx(SettingsDefs.fx_mult(), [0.35, 0.65, 1.0][i]), "settings: fx quality %d" % i)
+	GameState.set_setting("brightness", 0.5, false)
+	_check(is_equal_approx(SettingsDefs.gamma(), 1.0), "settings: brightness 50 = neutral gamma")
+	GameState.set_setting("brightness", 1.0, false)
+	_check(SettingsDefs.gamma() < 0.7, "settings: brightness up lowers gamma")
+	GameState.set_setting("brightness", 0.5, false)
+	_check(SettingsDefs.caption_scale() == 1.0, "settings: caption size default")
+	GameState.set_setting("caption_size", 2, false)
+	_check(SettingsDefs.caption_scale() == 1.5, "settings: caption size huge")
+	GameState.set_setting("caption_size", 0, false)
+	GameState.set_setting("cb_loot", true, false)
+	_check(UiTheme.rarity_tab("Rare", "rare").get_child(0).get("text") == "\u25b2 RARE", "settings: colour-blind rarity shape")
+	GameState.set_setting("cb_loot", false, false)
+	_check(UiTheme.rarity_tab("Rare", "rare").get_child(0).get("text") == "RARE", "settings: colour-blind off")
+	## --- the screen: from the main menu (overlay, unpaused)
+	var mm: Node = (load("res://scenes/ui/main_menu.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(mm)
+	get_tree().current_scene = mm
+	for i in range(4):
+		await get_tree().process_frame
+	mm.call("open_settings")
+	await get_tree().process_frame
+	var scr := get_tree().root.find_child("SettingsMenu", true, false)
+	_check(scr != null and bool(SettingsMenuS.call("is_open", get_tree())) and not get_tree().paused, "settings: opens from the main menu")
+	if scr:
+		for t in SettingsDefs.TABS:
+			scr.call("show_tab", str(t["id"]))
+			await get_tree().process_frame
+			_check(scr.find_child("Rows", true, false).get_child_count() > 0, "settings: tab %s has rows" % t["id"])
+		## A slider drives its setting + bus; Reset tab restores defaults.
+		scr.call("show_tab", "audio")
+		await get_tree().process_frame
+		var row := scr.find_child("Row_vol_sfx", true, false)
+		var sl := row.find_child("Slider", true, false) as HSlider if row else null
+		_check(sl != null, "settings: SFX slider")
+		if sl:
+			sl.value = 0.4
+			_check(absf(float(GameState.settings["vol_sfx"]) - 0.4) < 0.001 and absf(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("SFX")) - linear_to_db(0.4)) < 0.2, "settings: slider -> SFX bus")
+		scr.call("reset_tab")
+		await get_tree().process_frame
+		_check(absf(float(GameState.settings["vol_sfx"]) - 1.0) < 0.001, "settings: reset tab")
+		var tg := scr.find_child("Row_mute", true, false)
+		var tb := tg.find_child("Toggle", true, false) as Button if tg else null
+		if tb:
+			tb.button_pressed = true
+			_check(bool(GameState.settings["mute"]) and AudioServer.is_bus_mute(0), "settings: mute toggle")
+			tb.button_pressed = false
+		scr.call("show_credits")
+		await get_tree().process_frame
+		var cr := scr.find_child("Credits", true, false)
+		_check(cr != null and str(cr.get("text")).contains("AUDIO ATTRIBUTION") and str(cr.get("text")).contains("GODOT ENGINE") and str(cr.get("text")).contains("BARLOW"), "settings: credits + licences")
+		scr.call("show_tab", "about")
+		await get_tree().process_frame
+		var info := scr.find_child("Info", true, false)
+		_check(info != null and str(info.get("text")).begins_with("Wanderer "), "settings: build version")
+		scr.call("close")
+	for i in range(2):
+		await get_tree().process_frame
+	_check(not bool(SettingsMenuS.call("is_open", get_tree())) and is_instance_valid(mm) and get_tree().current_scene == mm and not get_tree().paused, "settings: closes back to the main menu")
+	mm.queue_free()
+	await get_tree().process_frame
+	## --- from the hangar
+	var hg: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(hg)
+	get_tree().current_scene = hg
+	for i in range(4):
+		await get_tree().process_frame
+	var cog := hg.find_child("SettingsButton", true, false) as Button
+	_check(cog != null, "settings: hangar cog")
+	if cog:
+		cog.pressed.emit()
+	await get_tree().process_frame
+	scr = get_tree().root.find_child("SettingsMenu", true, false)
+	_check(scr != null and not get_tree().paused, "settings: opens from the hangar")
+	if scr:
+		scr.call("close")
+	for i in range(2):
+		await get_tree().process_frame
+	_check(not bool(SettingsMenuS.call("is_open", get_tree())) and is_instance_valid(hg) and not get_tree().paused, "settings: closes back to the hangar")
+	hg.queue_free()
+	await get_tree().process_frame
+	## --- from the pause menu: stays paused, BACK returns to the pause menu
+	var keep_fin := GameState.run_finished
+	GameState.run_finished = false
+	var pm := CanvasLayer.new()
+	pm.set_script(load("res://scripts/ui/pause_menu.gd"))
+	get_tree().root.add_child(pm)
+	await get_tree().process_frame
+	pm.call("open")
+	await get_tree().process_frame
+	pm.call("_show_settings")
+	for i in range(2):
+		await get_tree().process_frame
+	scr = get_tree().root.find_child("SettingsMenu", true, false)
+	_check(scr != null and get_tree().paused, "settings: opens from pause, run stays paused")
+	if scr:
+		var rs := scr
+		rs.call("show_tab", "about")
+		await get_tree().process_frame
+		var rr := rs.find_child("Row_reset_save", true, false)
+		var rb := rr.find_child("Action", true, false) as Button if rr else null
+		_check(rb != null and rb.disabled, "settings: no save reset mid-run")
+		## Settings work while paused (processing ALWAYS).
+		rs.call("show_tab", "video")
+		await get_tree().process_frame
+		_check(str(rs.call("current_tab")) == "video", "settings: tabs work while paused")
+		rs.call("close")
+	for i in range(2):
+		await get_tree().process_frame
+	_check(not bool(SettingsMenuS.call("is_open", get_tree())) and get_tree().paused and pm.visible, "settings: back returns to the pause menu, still paused")
+	pm.call("close")
+	await get_tree().process_frame
+	_check(not get_tree().paused, "settings: resume unpauses")
+	pm.queue_free()
+	GameState.run_finished = keep_fin
+	## --- restore
+	GameState.settings = keep
+	SettingsDefs.apply()
+	Engine.max_fps = keep_fps
+	GameState.save_profile()
+	await get_tree().process_frame
+	print("SETTINGS_OK")

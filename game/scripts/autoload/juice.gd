@@ -51,6 +51,13 @@ func _ready() -> void:
 		GameState.run_level_up.connect(_on_run_level_up)
 	if ResourceLoader.exists("res://assets/fonts/PressStart2P.ttf"):
 		_pixel_font = load("res://assets/fonts/PressStart2P.ttf")
+	## Settings that live outside the scene tree: flash strength, FPS readout,
+	## and the frame-rate cap (not under the headless test runner, whose
+	## frame-count loops would crawl at 30 / 60 fps).
+	SettingsDefs.apply("flash_intensity")
+	SettingsDefs.apply.call_deferred("show_fps")
+	if DisplayServer.get_name() != "headless":
+		SettingsDefs.apply_fps()
 
 
 ## --- Audio -----------------------------------------------------------------
@@ -142,15 +149,24 @@ func haptic(ms: int = 20) -> void:
 	if now - _haptic_last_ms < HAPTIC_GAP_MS and ms < HAPTIC_EXTRACT:
 		return
 	_haptic_last_ms = now
-	Input.vibrate_handheld(ms)
+	## Settings > Vibration strength: shorter + softer taps.
+	var k := SettingsDefs.haptic_k()
+	Input.vibrate_handheld(maxi(5, int(round(float(ms) * k))), k)
 
 
 ## --- Screen shake ------------------------------------------------------------
 
 func shake(amount: float) -> void:
-	if not GameState.settings.get("screen_shake", true):
+	## Settings > Screen shake OFF / LOW / FULL (Reduce motion = off).
+	var k := SettingsDefs.shake_mult()
+	if k <= 0.0:
 		return
-	_trauma = clampf(_trauma + amount, 0.0, 1.0)
+	_trauma = clampf(_trauma + amount * k, 0.0, 1.0)
+
+
+## Current shake trauma (0..1), for tests.
+func shake_trauma() -> float:
+	return _trauma
 
 
 func hitstop(seconds: float) -> void:
@@ -193,6 +209,10 @@ const BURST_CAP := 10
 func burst(pos: Vector2, color: Color, amount: int = 10, speed: float = 160.0, life: float = 0.4, scale: float = 1.0) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
+		return
+	## Settings > Effects quality (Battery saver = LOW) thins the debris.
+	amount = int(round(float(amount) * SettingsDefs.fx_mult()))
+	if amount <= 0:
 		return
 	var col := pal(color)
 	var p := CPUParticles2D.new()
@@ -309,9 +329,9 @@ func _on_run_level_up(_lvl: int, _choices: Array) -> void:
 
 func dust_puff(pos: Vector2, amount: int = 4) -> void:
 	## Bigger puffs (landings, slams, spawns) get the lit pixel kick-up strip.
-	if amount >= 6:
+	if amount >= 6 and SettingsDefs.fx_level() > 0:
 		fx("fx_kickup", pos + Vector2(0, 4))
-		if amount >= 12:
+		if amount >= 12 and SettingsDefs.fx_level() > 1:
 			fx("fx_kickup", pos + Vector2(-14, 6))
 			fx("fx_kickup", pos + Vector2(14, 6))
 	burst(pos, Color(0.63, 0.53, 0.41), mini(amount, 6), 50.0, 0.45, 1.0)
@@ -357,7 +377,7 @@ var _dn_by_key: Dictionary = {}
 
 
 func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color = Color(1, 0.97, 0.9), target: Node2D = null) -> void:
-	if get_tree().current_scene == null:
+	if get_tree().current_scene == null or not bool(GameState.settings.get("damage_numbers", true)):
 		return
 	_ensure_dn_layer()
 	var key: Variant = null
@@ -454,10 +474,11 @@ func _tick_damage_numbers(delta: float) -> void:
 		var tgt: Node2D = wr.get_ref() if wr else null
 		if tgt and is_instance_valid(tgt) and tgt.is_inside_tree():
 			e["pos"] = tgt.global_position + (e["off"] as Vector2)
-		var rise := 26.0 * (1.0 - pow(1.0 - minf(t / DN_LIFE, 1.0), 2.0))
+		var calm := SettingsDefs.reduce_motion()
+		var rise := 0.0 if calm else 26.0 * (1.0 - pow(1.0 - minf(t / DN_LIFE, 1.0), 2.0))
 		var sp: Vector2 = xf * (e["pos"] as Vector2)
 		l.position = (sp - l.size * 0.5 + Vector2(0, -rise)).round()
-		var s := 1.0 + 0.35 * float(e["pop"]) * (1.4 if bool(e["crit"]) else 1.0)
+		var s := 1.0 if calm else 1.0 + 0.35 * float(e["pop"]) * (1.4 if bool(e["crit"]) else 1.0)
 		l.scale = Vector2(s, s)
 		l.modulate.a = clampf((DN_LIFE - t) / 0.25, 0.0, 1.0)
 		i += 1
@@ -486,7 +507,11 @@ func crit_stop() -> void:
 func flash(node: CanvasItem, color: Color = Color(3, 3, 3), dur: float = 0.07) -> void:
 	if node == null or not is_instance_valid(node):
 		return
-	node.modulate = color
+	## Settings > Flash & hit-flash intensity.
+	var k := SettingsDefs.flash_k()
+	if k <= 0.01:
+		return
+	node.modulate = Color.WHITE.lerp(color, k)
 	var tw := node.create_tween()
 	tw.tween_property(node, "modulate", Color.WHITE, dur)
 

@@ -55,7 +55,7 @@ const CFG := {
 	"boss_roar_plague": {"max": 1, "cd": 1500, "pitch": 0.02}, "boss_roar_machine": {"max": 1, "cd": 1500, "pitch": 0.02},
 	"elite_spawn": {"max": 1, "cd": 1200, "pitch": 0.03},
 	"lowhp_loop": {"max": 1, "pitch": 0.0},
-	"radio_chatter": {"max": 1, "cd": 1500, "pitch": 0.02}, "radio_blip": {"max": 2, "cd": 200},
+	"radio_chatter": {"max": 1, "cd": 1500, "pitch": 0.02, "bus": "Voice"}, "radio_blip": {"max": 2, "cd": 200},
 	"ext_open": {"max": 1, "cd": 1000, "pitch": 0.0}, "ext_last": {"max": 1, "cd": 1000, "pitch": 0.0},
 	"ext_close": {"max": 1, "cd": 1000, "pitch": 0.0}, "storm": {"max": 1, "cd": 2000, "pitch": 0.0},
 	"ext_success": {"max": 1, "cd": 2000, "pitch": 0.0}, "run_wipe": {"max": 1, "cd": 2000, "pitch": 0.0},
@@ -265,13 +265,48 @@ func _ensure_buses() -> void:
 
 func apply_settings() -> void:
 	var st: Dictionary = GameState.settings
-	var mute := bool(st.get("mute", false))
+	var mute := bool(st.get("mute", false)) or (_in_background and bool(st.get("mute_background", true)))
 	_set_bus("Master", float(st.get("vol_master", 1.0)), mute)
 	_set_bus("Music", float(st.get("vol_music", 0.7)), false)
 	var sfx_on := bool(st.get("sfx", true))
 	_set_bus("SFX", float(st.get("vol_sfx", 1.0)), not sfx_on)
 	_set_bus("UI", float(st.get("vol_ui", 0.8)), not sfx_on)
 	_set_bus("Ambience", float(st.get("vol_ambience", 0.8)), false)
+	ensure_voice_bus()
+	_set_bus(VOICE_BUS, float(st.get("vol_voice", 1.0)), false)
+
+
+## Settings > Voice drives a "Voice" bus (spoken lines / radio). Created here
+## when nothing else has made it yet, so voice players can just use it.
+const VOICE_BUS := "Voice"
+
+
+func ensure_voice_bus() -> int:
+	var i := AudioServer.get_bus_index(VOICE_BUS)
+	if i == -1:
+		AudioServer.add_bus()
+		i = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(i, VOICE_BUS)
+		AudioServer.set_bus_send(i, "Master")
+	return i
+
+
+## Settings > Mute in background: silence while the app is not in front.
+var _in_background: bool = false
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		set_background(true)
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_APPLICATION_RESUMED:
+		set_background(false)
+
+
+func set_background(on: bool) -> void:
+	if _in_background == on:
+		return
+	_in_background = on
+	apply_settings()
 
 
 func _set_bus(name: String, lin: float, muted: bool) -> void:

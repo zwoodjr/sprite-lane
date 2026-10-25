@@ -1,5 +1,7 @@
 extends "res://scripts/ui/menu_base.gd"
 
+const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
+
 ## The Hangar (home base). Top: the hangar itself, built from stacked painted
 ## layers that appear as ranks are bought (assets/sprites/hangar, see
 ## tools/gen_hangar_art.py). Below: tabs for the three upgrade layers + stash,
@@ -35,6 +37,14 @@ func build(c: VBoxContainer) -> void:
 	_scrap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_scrap_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_scrap_label)
+	## Settings cog (the same tabbed screen as the main menu / pause).
+	var cog := UiTheme.big_button("", UiTheme.LINE, 64, 20)
+	cog.name = "SettingsButton"
+	cog.icon = IconSet.tex("tab_workshop", true)
+	cog.custom_minimum_size = Vector2(UiTheme.MIN_TOUCH, UiTheme.MIN_TOUCH)
+	cog.tooltip_text = "Settings"
+	cog.pressed.connect(open_settings)
+	top.add_child(cog)
 	c.add_child(top)
 
 	_view = _build_view()
@@ -1187,3 +1197,11 @@ func _clamp_scroll() -> void:
 		return
 	var max_y := maxi(0, int(vbar.max_value - vbar.page))
 	_scroll.scroll_vertical = clampi(_scroll_y_keep, 0, max_y)
+
+
+func open_settings() -> void:
+	if not SettingsMenu.is_open(get_tree()):
+		SettingsMenu.open_overlay(self, func() -> void:
+			## Auto-salvage can change there: refresh the open tab.
+			if is_instance_valid(_list):
+				show_tab(_tab))

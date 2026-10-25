@@ -19,6 +19,9 @@ var _vel: Vector2 = Vector2.ZERO
 var _icon: Sprite2D
 var _frame: Sprite2D
 var _beam: Polygon2D
+var _mark: Node2D
+
+const RarityMark = preload("res://scripts/ui/rarity_mark.gd")
 
 
 static func spawn(parent: Node, pos: Vector2, it: Dictionary) -> GearPickup:
@@ -70,6 +73,12 @@ func _ready() -> void:
 		_icon.texture = load(ipath)
 		_icon.scale = Vector2.ONE * (ICON_WORLD / float(maxi(_icon.texture.get_width(), _icon.texture.get_height())))
 	add_child(_icon)
+	## Settings > Colour-blind loot: rarity shape badge on the frame corner.
+	if RarityMark.on() and material_id == "":
+		_mark = RarityMark.badge(rar, col, 6.0)
+		_mark.position = Vector2(-ICON_WORLD * 0.5, -ICON_WORLD * 0.5)
+		_mark.z_index = 3
+		add_child(_mark)
 	Juice.burst(global_position, col, 12, 140.0, 0.4)
 	## Rarity sparkle (4-frame loop, rarity colour; bible §6.3).
 	var sp := Juice.px_loop(self, "sp_" + rar if rar in ["rare", "epic", "legendary"] else "sp_common", Vector2(ICON_WORLD * 0.42, -ICON_WORLD * 0.42))
@@ -85,6 +94,8 @@ func _physics_process(delta: float) -> void:
 		_vel = _vel.move_toward(Vector2.ZERO, 520.0 * delta)
 	_icon.position.y = sin(_t * 4.0) * 3.0 - 4.0
 	_frame.position = _icon.position
+	if _mark:
+		_mark.position = _icon.position + Vector2(-ICON_WORLD * 0.5, -ICON_WORLD * 0.5)
 	if _beam:
 		_beam.modulate.a = 0.6 + 0.4 * sin(_t * 3.0)
 	if _player == null or not is_instance_valid(_player):
@@ -108,7 +119,7 @@ func _collect() -> void:
 	else:
 		GameState.add_run_loot(item)
 		var rar := str(item.get("rarity", "common"))
-		Juice.float_text(global_position + Vector2(0, -30), str(item.get("name", "Gear")), GearDefs.RARITY_COLOR.get(rar, Color.WHITE), 17 if rar in ["epic", "legendary"] else 14)
+		Juice.float_text(global_position + Vector2(0, -30), RarityMark.tag(str(item.get("name", "Gear")), rar), GearDefs.RARITY_COLOR.get(rar, Color.WHITE), 17 if rar in ["epic", "legendary"] else 14)
 	var rr := str(item.get("rarity", "common")) if material_id == "" else "common"
 	Juice.sfx({"rare": "pick_rare", "epic": "pick_epic", "legendary": "pick_legendary"}.get(rr, "pick_common"))
 	## Haptics only for rare+ (Commons are everywhere).

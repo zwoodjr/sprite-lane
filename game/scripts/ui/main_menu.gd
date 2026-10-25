@@ -1,5 +1,7 @@
 extends "res://scripts/ui/menu_base.gd"
 
+const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
+
 const LOGO := "res://assets/sprites/ui/logo_wanderer.png"
 const MenuFlow = preload("res://scripts/ui/menu_flow.gd")
 const Feedback = preload("res://scripts/ui/feedback.gd")
@@ -112,7 +114,7 @@ func build(c: VBoxContainer) -> void:
 	sub.add_theme_constant_override("separation", 16)
 	c.add_child(sub)
 	var items: Array = [["HANGAR", UiTheme.TEAL, GameState.go_hangar, "tab_camp"], ["HELP", UiTheme.LINE, GameState.go_how_to_play, "set_hints"],
-		["SETTINGS", UiTheme.LINE, GameState.go_settings, "tab_workshop"]]
+		["SETTINGS", UiTheme.LINE, open_settings, "tab_workshop"]]
 	if MobileLayout.is_desktop():
 		items.append(["QUIT", UiTheme.RUST, func() -> void: get_tree().quit(), "set_reset"])
 	for it in items:
@@ -230,7 +232,7 @@ func _sting(logo: Control) -> void:
 
 func _pulse(b: Control) -> void:
 	await get_tree().process_frame
-	if not is_instance_valid(b):
+	if not is_instance_valid(b) or SettingsDefs.reduce_motion():
 		return
 	b.pivot_offset = b.size * 0.5
 	var tw := b.create_tween().set_loops()
@@ -250,3 +252,9 @@ class _Shadow extends Control:
 				var a := TAU * i / 28.0
 				pts.append((c + Vector2(cos(a) * size.x * 0.5 * st[0], sin(a) * size.y * 0.5 * st[0])).floor())
 			draw_colored_polygon(pts, Color(0.078, 0.047, 0.055, st[1]))
+
+
+## Settings as an overlay: closing it comes straight back here.
+func open_settings() -> void:
+	if not SettingsMenu.is_open(get_tree()):
+		SettingsMenu.open_overlay(self)

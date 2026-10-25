@@ -7,6 +7,7 @@ extends Node
 ## Condensed for headings/buttons and Barlow Semi Condensed for body text.
 
 ## Colour roles (style bible §6.3), all from the master palette.
+const RarityMark = preload("res://scripts/ui/rarity_mark.gd")
 const BG := Color("1f1a1d")
 const PANEL := Color(0.122, 0.102, 0.114, 0.94)
 const PANEL_LIGHT := Color(0.106, 0.133, 0.173, 0.96)
@@ -500,7 +501,8 @@ func rarity_tab(text: String, rarity: String) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", sb)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var l := Label.new()
-	l.text = text.to_upper()
+	## Settings > Colour-blind loot: the rarity shape in front of the word.
+	l.text = RarityMark.tag(text.to_upper(), rarity)
 	l.add_theme_font_override("font", font_button)
 	l.add_theme_font_size_override("font_size", T_H3)
 	l.add_theme_color_override("font_color", INK)
@@ -678,6 +680,8 @@ func _on_btn_down(b: BaseButton) -> void:
 	if not is_instance_valid(b) or b.disabled:
 		return
 	Juice.haptic(8)
+	if SettingsDefs.reduce_motion():
+		return
 	var c := b as Control
 	c.pivot_offset = c.size * 0.5
 	var tw := c.create_tween()
@@ -753,7 +757,7 @@ var _wipe_tw: Tween
 
 ## New scene: scanline wipe up from INK so screen changes never hard-cut.
 func _fade_in() -> void:
-	if _fade == null:
+	if _fade == null or SettingsDefs.reduce_motion():
 		return
 	if _wipe_tw and _wipe_tw.is_valid():
 		_wipe_tw.kill()

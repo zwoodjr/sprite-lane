@@ -3,7 +3,7 @@ extends CanvasLayer
 ## In-run pause: Resume · How to play · Settings · Abandon run.
 ## Pauses the tree; this layer keeps processing.
 
-const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
+const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
 const HelpViewer = preload("res://scripts/ui/help_viewer.gd")
 const Feedback = preload("res://scripts/ui/feedback.gd")
 var _dim: ColorRect
@@ -64,7 +64,7 @@ func _show_main() -> void:
 	v.custom_minimum_size = Vector2(420, 0)
 	plate.add_child(v)
 	plate.pivot_offset = Vector2(240, 240)
-	plate.scale = Vector2(0.92, 0.92)
+	plate.scale = Vector2(0.92, 0.92) if not SettingsDefs.reduce_motion() else Vector2.ONE
 	plate.modulate.a = 0.0
 	var tw := plate.create_tween().set_parallel(true)
 	tw.tween_property(plate, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -256,25 +256,13 @@ func _show_help() -> void:
 	v.add_child(back)
 	_set_content(v)
 
+## The shared tabbed Settings screen on top; the run stays paused and BACK
+## returns here.
 func _show_settings() -> void:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	var head := HBoxContainer.new()
-	head.add_child(UiTheme.title_label("SETTINGS", 34))
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(sp)
-	var back := UiTheme.big_button("DONE", UiTheme.TEAL, 52, 20)
-	back.pressed.connect(_show_main)
-	head.add_child(back)
-	v.add_child(head)
-	v.add_child(UiTheme.body_label("Layout changes (stick size, left-handed) apply next run.", 13, UiTheme.TEXT_DIM))
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var panel: VBoxContainer = VBoxContainer.new()
-	panel.set_script(SettingsPanel)
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(panel)
-	v.add_child(scroll)
-	_set_content(v)
+	if SettingsMenu.is_open(get_tree()):
+		return
+	_frame.visible = false
+	SettingsMenu.open_overlay(self, func() -> void:
+		_frame.visible = true
+		if visible:
+			_show_main(), true)
