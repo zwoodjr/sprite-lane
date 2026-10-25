@@ -42,9 +42,20 @@ func build(c: VBoxContainer) -> void:
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list.add_theme_constant_override("separation", 8)
 	_scroll.add_child(_list)
+	var bottom := HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 8)
+	c.add_child(bottom)
+	var hist := UiTheme.big_button("RUN HISTORY", UiTheme.TEAL, 64, 20)
+	hist.name = "RunHistoryBtn"
+	hist.custom_minimum_size.x = 0
+	hist.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hist.pressed.connect(func() -> void: GameState.go_run_history("logbook", "runs"))
+	bottom.add_child(hist)
 	var back := UiTheme.big_button("BACK TO HANGAR", UiTheme.AMBER, 64, 20)
+	back.custom_minimum_size.x = 0
+	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back.pressed.connect(GameState.go_hangar)
-	c.add_child(back)
+	bottom.add_child(back)
 	show_tab("daily")
 
 

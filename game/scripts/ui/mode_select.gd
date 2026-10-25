@@ -21,6 +21,8 @@ var _cards: Dictionary = {}
 var _fast: Button
 
 var _detail: VBoxContainer
+var _extras: VBoxContainer
+var _opt_btn: Button
 var _list: Control
 var _scroll: ScrollContainer
 var _map: _Map
@@ -31,6 +33,12 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(header("CHOOSE THE DUST", GameState.go_main_menu))
 	if not GameState.is_tier_unlocked(int(GameState.get_mode()["tier"])):
 		GameState.selected_mode_id = ModeDefs.HAZE_ID
+	## Wander extras: today's Daily Run + this week's Dust modifiers.
+	_extras = VBoxContainer.new()
+	_extras.name = "WanderExtras"
+	_extras.add_theme_constant_override("separation", 8)
+	c.add_child(_extras)
+	_build_extras()
 	_detail = VBoxContainer.new()
 	c.add_child(_detail)
 	_scroll = ScrollContainer.new()
@@ -81,6 +89,131 @@ func build(c: VBoxContainer) -> void:
 	var b: Variant = _cards.get(GameState.selected_mode_id, {}).get("button", null)
 	if b is Control and is_instance_valid(b):
 		_scroll.ensure_control_visible(b)
+
+
+## DAILY RUN card (seed of the day, fixed survivor, today's standing) and the
+## WEEKLY DUST card (this week's modifiers, opt-in for normal runs).
+func _build_extras() -> void:
+	for ch in _extras.get_children():
+		_extras.remove_child(ch)
+		ch.queue_free()
+	var today := GameState.today()
+	var hero := DailyDefs.hero_for(today)
+	var hc := CharacterDefs.get_character(hero)
+	var dp := card(UiTheme.AMBER)
+	dp.name = "DailyCard"
+	_extras.add_child(dp)
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 4)
+	dp.add_child(dv)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	dv.add_child(top)
+	var pr := TextureRect.new()
+	pr.custom_minimum_size = Vector2(64, 64)
+	pr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var pp := "res://assets/sprites/portraits/%s.png" % hero
+	if ResourceLoader.exists(pp):
+		pr.texture = load(pp)
+	top.add_child(pr)
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 0)
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_child(tv)
+	var tl := HBoxContainer.new()
+	tl.add_theme_constant_override("separation", 8)
+	tv.add_child(tl)
+	var dn := UiTheme.head_label("DAILY RUN", UiTheme.T_H2, UiTheme.AMBER)
+	dn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tl.add_child(dn)
+	tl.add_child(UiTheme.pixel_label(today, UiTheme.PX_S, UiTheme.TEXT_DIM))
+	var who := UiTheme.body_label("%s · %s · %s — same map for everyone today" % [str(hc.get("display_name", hero)),
+		str(PetDefs.get_pet(DailyDefs.pet_for(today)).get("name", "")), str(ModeDefs.get_mode(DailyDefs.TIER_ID)["display_name"])],
+		UiTheme.T_SMALL, UiTheme.TEXT, false)
+	who.clip_text = true
+	who.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	tv.add_child(who)
+	var e := GameState.daily_entry(today)
+	var st := ""
+	var st_col := UiTheme.TEXT_DIM
+	if e.is_empty():
+		st = "Not played yet: your first finish counts."
+		st_col = UiTheme.TEAL
+	else:
+		st = "Today: %d (%s)%s" % [int(e["score"]), "extracted" if bool(e["extracted"]) else "went down",
+			"  ·  practice best %d" % int(e["practice_best"]) if int(e.get("attempts", 1)) > 1 else "  ·  more runs = practice"]
+		st_col = UiTheme.AMBER
+	var sl := UiTheme.body_label(st, UiTheme.T_SMALL, st_col, false)
+	sl.name = "DailyStatus"
+	sl.clip_text = true
+	sl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	dv.add_child(sl)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	dv.add_child(row)
+	var board := UiTheme.big_button("BOARD", UiTheme.TEAL, 64, 20)
+	board.name = "DailyBoard"
+	board.custom_minimum_size.x = 0
+	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board.size_flags_stretch_ratio = 0.6
+	board.pressed.connect(func() -> void: GameState.go_run_history("mode_select", "daily"))
+	row.add_child(board)
+	var play := UiTheme.big_button("PLAY DAILY" if e.is_empty() else "PRACTICE", UiTheme.AMBER, 64, 24)
+	play.name = "DailyPlay"
+	play.custom_minimum_size.x = 0
+	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	play.pressed.connect(GameState.go_daily)
+	row.add_child(play)
+
+	var mods := GameState.week_mods()
+	var wp := card(UiTheme.RUST)
+	wp.name = "WeeklyCard"
+	_extras.add_child(wp)
+	var wv := VBoxContainer.new()
+	wv.add_theme_constant_override("separation", 4)
+	wp.add_child(wv)
+	var wt := HBoxContainer.new()
+	wt.add_theme_constant_override("separation", 8)
+	wv.add_child(wt)
+	var wn := UiTheme.head_label("WEEKLY DUST", UiTheme.T_H2, UiTheme.RUST.lightened(0.25))
+	wn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wt.add_child(wn)
+	wt.add_child(UiTheme.pixel_label(DailyDefs.iso_week(today), UiTheme.PX_S, UiTheme.TEXT_DIM))
+	for id in mods:
+		var m := DustModDefs.mod(str(id))
+		var mr := HBoxContainer.new()
+		mr.add_theme_constant_override("separation", 8)
+		wv.add_child(mr)
+		mr.add_child(IconSet.rect(str(m.get("icon", "hud_threat")), 48))
+		var mv := VBoxContainer.new()
+		mv.add_theme_constant_override("separation", 0)
+		mv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mr.add_child(mv)
+		mv.add_child(UiTheme.head_label(str(m.get("name", id)).to_upper(), UiTheme.T_H3, UiTheme.AMBER))
+		var md := UiTheme.body_label(str(m.get("desc", "")), UiTheme.T_SMALL, UiTheme.TEXT)
+		md.custom_minimum_size.x = 120
+		mv.add_child(md)
+	_opt_btn = UiTheme.big_button("", UiTheme.LINE, 56, 20)
+	_opt_btn.name = "WeeklyOptIn"
+	_opt_btn.toggle_mode = true
+	_opt_btn.button_pressed = GameState.weekly_opt_in
+	_opt_btn.toggled.connect(func(on: bool) -> void:
+		GameState.set_weekly_opt_in(on)
+		Juice.sfx("ui_tap")
+		_sync_opt())
+	wv.add_child(_opt_btn)
+	_sync_opt()
+
+
+func _sync_opt() -> void:
+	if not is_instance_valid(_opt_btn):
+		return
+	var pct := int(round(DustModDefs.loot_bonus(GameState.week_mods()) * 100.0))
+	var on := GameState.weekly_opt_in
+	_opt_btn.text = ("WANDER RUNS: ON  (+%d%% PAYOUT)" if on else "USE IN WANDER RUNS  (+%d%% PAYOUT)") % pct
+	UiTheme.skin_button(_opt_btn, UiTheme.AMBER if on else UiTheme.LINE, 12.0)
 
 
 ## Stops zig-zag up the map: tier 1 bottom-left, alternating sides.

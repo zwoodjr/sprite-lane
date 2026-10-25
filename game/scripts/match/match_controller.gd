@@ -61,11 +61,14 @@ var _elite_side: int = 0
 var jobs: Node
 ## Depth E7: the tier's zone twists (ZoneDefs).
 var twists: Node
+## Spawns (kinds, sides, elites, opening waves) draw from their own RNG seeded
+## by the run seed, so a Daily Run's spawns repeat for everyone that day.
+var spawn_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_mode = GameState.get_mode()
 	## Depth E7 Dust Pacts: tougher / busier runs, narrower windows (loot bonus at extract).
-	if not GameState.active_pacts().is_empty():
+	if GameState.has_run_rules():
 		_mode["enemy_hp"] = float(_mode["enemy_hp"]) * GameState.pact_fx("enemy_hp")
 		_mode["enemy_damage"] = float(_mode["enemy_damage"]) * GameState.pact_fx("enemy_damage")
 		_mode["spawn_density"] = float(_mode["spawn_density"]) * GameState.pact_fx("spawn")
@@ -74,6 +77,10 @@ func _ready() -> void:
 		_mode["phases"] = ModeDefs.build_phases(_mode)
 	if GameState.run_seed == 0:
 		GameState.run_seed = int(Time.get_unix_time_from_system()) ^ randi()
+	spawn_rng.seed = GameState.run_seed * 92821 + 17
+	## Daily Run: events, jobs and drops follow the day's seed too.
+	if GameState.run_kind == "daily":
+		seed(GameState.run_seed)
 	_phases = []
 	for p in _mode["phases"]:
 		var phase: Dictionary = p.duplicate(true)
@@ -143,6 +150,16 @@ func _ready() -> void:
 		_next_boss_at = ModeDefs.BOSS_FIRST * ts
 	if tier >= FactionDefs.CREW_FROM_TIER:
 		_next_crew_at = FactionDefs.CREW_FIRST * ts
+	## Weekly Dust: Raider Week / Elite Pairs bring them to every tier, early.
+	if GameState.dust_mod_on("raiders"):
+		_next_crew_at = minf(_next_crew_at, DustModDefs.RAIDER_FIRST * ts)
+	if GameState.dust_mod_on("elites"):
+		_next_elite_at = minf(_next_elite_at, DustModDefs.ELITE_FIRST * ts)
+	if not GameState.dust_mods().is_empty():
+		var names: PackedStringArray = []
+		for id in GameState.dust_mods():
+			names.append(DustModDefs.mod_name(str(id)))
+		hud.show_toast("WEEKLY DUST: " + ", ".join(names), UiTheme.AMBER)
 	## Cheap event stub: one radio toast mid-lockout (no quest log).
 	_radio_ping_done = false
 	_radio_ping_at = 18.0 * GameState.timer_scale()
@@ -249,17 +266,17 @@ func _tick_opening_waves() -> void:
 	## Three groups from three sides, a little quicker on the approach, so a
 	## kiting ranged hero can't clear every lane before contact. T1 mobs hit
 	## for ~8% of hero HP: a scare, not a wipe.
-	var base := randf() * TAU
+	var base := spawn_rng.randf() * TAU
 	var n := int(w[1])
 	for i in range(n):
-		var side := base + TAU / 3.0 * float(i % 3) + randf_range(-0.3, 0.3)
-		var e := _spawn_pack_mob(Vector2.RIGHT.rotated(side + randf_range(-0.25, 0.25)), 1.0, str(WAVE_KINDS[(i + _wave_i) % WAVE_KINDS.size()]))
+		var side := base + TAU / 3.0 * float(i % 3) + spawn_rng.randf_range(-0.3, 0.3)
+		var e := _spawn_pack_mob(Vector2.RIGHT.rotated(side + spawn_rng.randf_range(-0.25, 0.25)), 1.0, str(WAVE_KINDS[(i + _wave_i) % WAVE_KINDS.size()]))
 		if e:
 			e.set("speed", float(e.get("speed")) * 1.25)
 	## Plus a two-spitter ambush that burrows up close (dust telegraph first),
 	## so even a hero who out-ranges every lane has to dodge something.
 	for j in range(AMBUSH_PER_WAVE):
-		var at := player.global_position + Vector2.RIGHT.rotated(base + PI / 3.0 + TAU / float(AMBUSH_PER_WAVE) * float(j)) * randf_range(190.0, 230.0)
+		var at := player.global_position + Vector2.RIGHT.rotated(base + PI / 3.0 + TAU / float(AMBUSH_PER_WAVE) * float(j)) * spawn_rng.randf_range(190.0, 230.0)
 		if not _spot_free(at, 26.0):
 			continue
 		Juice.dust_puff(at, 12)
@@ -405,6 +422,7 @@ func _process(delta: float) -> void:
 		hud.set_schedule_clock(_elapsed_in_phases)
 		return
 	_match_time += delta
+	GameState.run_time = _match_time
 	_update_spawns(delta)
 	_tick_opening_waves()
 	_tick_specials()
@@ -569,7 +587,7 @@ func _tick_specials() -> void:
 	var ts := GameState.timer_scale()
 	if _match_time >= _next_elite_at:
 		_next_elite_at += ModeDefs.ELITE_EVERY * ts
-		var n := 2 if int(_mode.get("tier", 1)) >= ModeDefs.DOUBLE_ELITE_FROM_TIER else 1
+		var n := 2 if int(_mode.get("tier", 1)) >= ModeDefs.DOUBLE_ELITE_FROM_TIER or GameState.dust_mod_on("elites") else 1
 		for i in range(n):
 			_mark_scheduled(spawn_special("elite"))
 	if _match_time >= _next_boss_at:
@@ -600,8 +618,8 @@ func spawn_special(role: String, kind: String = "") -> Node:
 			## Elites alternate sides so both factions' traits show up.
 			_elite_side += 1
 			pool = FactionDefs.ELITE_POOL["plague" if _elite_side % 2 == 0 else "machine"]
-		k = str(pool[randi() % pool.size()])
-	var ang := randf() * TAU
+		k = str(pool[spawn_rng.randi() % pool.size()])
+	var ang := spawn_rng.randf() * TAU
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
 	var tl := ModeDefs.tl_table(GameState.threat_level)
 	var step := float(_mode.get("tl_step_size", 1.0))
@@ -638,7 +656,7 @@ func spawn_at(role: String, kind: String, at: Vector2) -> Node:
 
 ## A regular spawn that ignores the soft cap (stay-or-go swarm stake).
 func _spawn_enemy_force() -> void:
-	var ang := randf() * TAU
+	var ang := spawn_rng.randf() * TAU
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
 	var tl := ModeDefs.tl_table(GameState.threat_level)
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
@@ -655,7 +673,10 @@ func spawn_crew(at: Vector2 = Vector2.INF) -> Node:
 	c.add_to_group("raider_crews")
 	add_child(c)
 	c.call("setup", self, player, world, hud)
-	c.call("spawn", int(_mode.get("tier", 1)), at)
+	var ct := int(_mode.get("tier", 1))
+	if GameState.dust_mod_on("raiders"):
+		ct = maxi(ct, DustModDefs.RAIDER_MIN_TIER)
+	c.call("spawn", ct, at)
 	return c
 
 func _spawn_enemy() -> void:
@@ -673,10 +694,10 @@ func _spawn_enemy() -> void:
 		return
 	## Spawn just outside the visible area so enemies walk in, biased toward
 	## where the player is heading (so you meet them instead of being chased).
-	var ang := randf() * TAU
+	var ang := spawn_rng.randf() * TAU
 	var heading: Vector2 = player.velocity
-	if heading.length() > 40.0 and randf() < 0.6:
-		ang = heading.angle() + randf_range(-1.1, 1.1)
+	if heading.length() > 40.0 and spawn_rng.randf() < 0.6:
+		ang = heading.angle() + spawn_rng.randf_range(-1.1, 1.1)
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
 	var tl := ModeDefs.tl_table(GameState.threat_level)
 	var step := float(_mode.get("tl_step_size", 1.0))
@@ -755,7 +776,7 @@ func _roll_enemy_kind() -> String:
 	elif tl >= 2.0:
 		w3 = 0.04 + 0.06 * (tl - 1.0)
 	var w1 := 1.0 - w2 - w3
-	var r := randf()
+	var r := spawn_rng.randf()
 	var tier := 1
 	if r < w3:
 		tier = 3
@@ -766,7 +787,7 @@ func _roll_enemy_kind() -> String:
 	var pool: Array[String] = EnemyDefs.ids_for_tier(tier)
 	if pool.is_empty():
 		pool = EnemyDefs.ids_for_tier(1)
-	return pool[randi() % pool.size()]
+	return pool[spawn_rng.randi() % pool.size()]
 
 ## Pad Heat: the next window opens within `open_in` s, with guards on the pads.
 func heat_next_window(open_in: float, guards: int) -> void:
@@ -850,12 +871,16 @@ func request_auto_pause() -> void:
 		hud.call("open_pause")
 
 func _on_player_died() -> void:
+	if GameState.run_death_cause == "" and is_instance_valid(player):
+		GameState.run_death_cause = str(player.get("last_hit_by"))
 	_finish_wipe("You went down in the dust.")
 
 func _finish_wipe(reason: String) -> void:
 	if _ended:
 		return
 	_ended = true
+	if GameState.run_death_cause == "":
+		GameState.run_death_cause = "Dust storm" if "storm" in reason else reason
 	GameState.on_wipe()
 	GameState.result_summary = reason + "\n" + GameState.result_summary
 	Juice.sfx("wipe")

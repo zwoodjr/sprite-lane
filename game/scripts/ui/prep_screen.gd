@@ -15,7 +15,9 @@ func build(c: VBoxContainer) -> void:
 	_hero = GameState.selected_character_id
 	## Recompute the deploy kit so what this screen shows is what the match applies.
 	GameState.reset_loadout_to_defaults()
-	c.add_child(header("LOADOUT", GameState.go_character_select))
+	## Daily Run: the day picks the survivor, so BACK leaves the daily.
+	c.add_child(header("DAILY LOADOUT" if GameState.daily_armed else "LOADOUT",
+		GameState.go_mode_select if GameState.daily_armed else GameState.go_character_select))
 	_scroll = ScrollContainer.new()
 	_scroll.name = "PrepScroll"
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -70,7 +72,10 @@ func _rebuild() -> void:
 	var nm := UiTheme.title_label(str(c.get("display_name", _hero)), UiTheme.T_TITLE, c.get("accent", UiTheme.AMBER))
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	tv.add_child(nm)
-	tv.add_child(UiTheme.head_label(str(GameState.get_mode().get("display_name", "")).to_upper(), UiTheme.T_H3, UiTheme.TEXT_DIM))
+	var where := str(GameState.get_mode().get("display_name", "")).to_upper()
+	if GameState.daily_armed:
+		where = "DAILY RUN · %s · %s" % [GameState.today(), where]
+	tv.add_child(UiTheme.head_label(where, UiTheme.T_H3, UiTheme.AMBER if GameState.daily_armed else UiTheme.TEXT_DIM))
 
 	## Gear: exactly what this survivor deploys with (tap = Gear screen).
 	_build_gear_row()

@@ -67,6 +67,10 @@ func setup(ctl: Node, p: Node2D, w: Node2D, h: Node) -> void:
 	tier = GameState.zone_tier()
 	power = ZoneDefs.strength(tier)
 	twists = (ZoneDefs.zone(tier)["twists"] as Array).duplicate()
+	## Weekly Dust modifiers can switch on extra twists (Heavy Dust, Blackout Nights).
+	for t in DustModDefs.twists_of(GameState.dust_mods()):
+		if not t in twists:
+			twists.append(t)
 	rng.seed = GameState.run_seed * 31 + 7
 	_origin = player.global_position if is_instance_valid(player) else Vector2.ZERO
 	if has("smog"):

@@ -169,8 +169,15 @@ func _ready() -> void:
 		GameState.reset_loadout_to_defaults()
 		print("KIT %s style=%s ability=%s quirk=%s" % [hero, GameState.kit_style(hero), GameState.kit_ability(hero), GameState.kit_quirk(hero)])
 	_headless = DisplayServer.get_name() == "headless"
+	## arg 17 (Wander extras): "daily" = today's Daily Run, "weekly" = opt into the week's Dust.
+	var extra := a[17] if a.size() > 17 else ""
+	GameState.weekly_opt_in = extra == "weekly"
+	if extra == "daily":
+		GameState.arm_daily()
 	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
 	GameState.begin_run()
+	if extra != "":
+		print("EXTRAS kind=%s seed=%d mods=%s" % [GameState.run_kind, GameState.run_seed, str(GameState.run_dust_mods)])
 	if fixed_seed != 0:
 		GameState.run_seed = fixed_seed
 		seed(fixed_seed)
@@ -644,6 +651,10 @@ func _summary() -> void:
 	print("BAL first_hit=%.1f hp_lost=%.0f max_hp=%.0f reload_frac=%.2f" % [_first_hit_t, _hp_lost, float(_p.get("max_hp")) if is_instance_valid(_p) else -1.0, _reload_s / maxf(1.0, _t)])
 	print("STUCK total=%.1f max_streak=%.2f at=(%.0f,%.0f)" % [_stuck_s, _stuck_max, _stuck_at.x, _stuck_at.y])
 	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])
+	if not GameState.last_daily.is_empty():
+		print("DAILY score=%d practice=%s parts=%s" % [int(GameState.last_daily["parts"]["total"]), str(GameState.last_daily["practice"]), str(GameState.last_daily["parts"])])
+	if not GameState.run_history.is_empty():
+		print("HISTORY n=%d last=%s" % [GameState.run_history.size(), str(GameState.run_history[0])])
 	print("LOOT common=%d rare=%d epic=%d legendary=%d total=%d auto=%d" % [int(_loot_by.get("common", 0)), int(_loot_by.get("rare", 0)),
 		int(_loot_by.get("epic", 0)), int(_loot_by.get("legendary", 0)), _loot_n, int(GameState.get("result_auto_salvaged_n") if "result_auto_salvaged_n" in GameState else 0)])
 	print("GEAR found=%d lost=%d carried=%d" % [GameState.result_found.size(), GameState.result_lost_items.size(), GameState.run_loot.size()])

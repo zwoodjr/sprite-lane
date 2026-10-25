@@ -196,6 +196,36 @@ var last_phase_label: String = ""
 var run_seed: int = 0
 var extract_pad_info: Array = []
 
+## --- Wander extras (DailyDefs / DustModDefs) --------------------------------
+## "wander" | "daily" | "campaign" — fixed at begin_run.
+var run_kind: String = "wander"
+## Daily Run: the calendar day this run belongs to (fixed at begin_run, so a
+## run that crosses midnight still counts for the day it started).
+var run_daily_date: String = ""
+## Weekly Dust modifiers active this run (fixed at begin_run).
+var run_dust_mods: Array = []
+## Seconds of run time (the match controller keeps it current).
+var run_time: float = 0.0
+## What put the hero down (the match fills it in; "" while alive).
+var run_death_cause: String = ""
+## The DAILY button was pressed: the next runs use the day's seed, tier, hero
+## and pet until the player leaves for the mode select / hangar / menu.
+var daily_armed: bool = false
+## The player's own tier / hero / pet, put back when the daily is disarmed.
+var _daily_restore: Dictionary = {}
+## Opted into the week's Dust modifiers for normal Wander runs (saved).
+var weekly_opt_in: bool = false
+## Daily board: {date: {score, hero, pet, extracted, kills, seconds, scrap,
+## attempts, practice_best, mods}} — the first finished attempt counts.
+var daily_runs: Dictionary = {}
+## Last RUN_HISTORY_MAX finished Wander / Daily runs, newest first.
+var run_history: Array = []
+const RUN_HISTORY_MAX := 50
+## The finished daily run the result screen shows ({} for other runs).
+var last_daily: Dictionary = {}
+## Where the Run History screen's BACK goes ("logbook" | "mode_select" | "hangar").
+var history_from: String = "logbook"
+
 ## In-run leveling (temporary power)
 var run_xp: int = 0 ## toward next run level
 var run_level: int = 1
@@ -281,7 +311,15 @@ func save_profile() -> void:
 		"pacts": pacts,
 		"campaign": campaign,
 		"live_run": live_run,
+		"weekly_opt_in": weekly_opt_in,
+		"daily_runs": daily_runs,
+		"run_history": run_history,
 	}
+	## A daily run borrows the day's tier / hero / pet: save the player's own.
+	if daily_armed and not _daily_restore.is_empty():
+		data["selected_mode_id"] = str(_daily_restore.get("mode", selected_mode_id))
+		data["selected_character_id"] = str(_daily_restore.get("hero", selected_character_id))
+		data["selected_pet_id"] = str(_daily_restore.get("pet", selected_pet_id))
 	if not _atomic_write(SAVE_PATH, JSON.stringify(data, "\t"), true):
 		push_warning("Save failed: %s" % SAVE_PATH)
 
@@ -493,7 +531,63 @@ func apply_save(d: Dictionary) -> void:
 		selected_pet_id = pet_id
 	_load_depth(d)
 	_load_campaign(d.get("campaign", {}))
+	_load_extras(d)
 	_migrate_hangar_v4()
+
+## Wander extras (old saves: no keys → opt-out, empty board, empty history).
+## Entries are cleaned field by field so a hand-edited / partial save can't
+## put a wrong type in front of the UI.
+func _load_extras(d: Dictionary) -> void:
+	weekly_opt_in = bool(d.get("weekly_opt_in", false))
+	daily_runs = {}
+	var dr := _dict_or_empty(d.get("daily_runs", {}))
+	for k in dr.keys():
+		var e: Variant = dr[k]
+		if typeof(e) != TYPE_DICTIONARY or str(k).length() != 10:
+			continue
+		daily_runs[str(k)] = _clean_daily(e)
+	_prune_daily()
+	run_history = []
+	var rh: Variant = d.get("run_history", [])
+	if typeof(rh) == TYPE_ARRAY:
+		for e in (rh as Array):
+			if typeof(e) == TYPE_DICTIONARY and run_history.size() < RUN_HISTORY_MAX:
+				run_history.append(_clean_history(e))
+
+
+func _clean_daily(e: Dictionary) -> Dictionary:
+	var mods: Array = []
+	var raw: Variant = e.get("mods", [])
+	if raw is Array:
+		for m in raw:
+			mods.append(str(m))
+	return {
+		"date": str(e.get("date", "")), "score": maxi(0, int(e.get("score", 0))), "hero": str(e.get("hero", "")),
+		"pet": str(e.get("pet", "")), "extracted": bool(e.get("extracted", false)), "kills": maxi(0, int(e.get("kills", 0))),
+		"seconds": maxi(0, int(e.get("seconds", 0))), "scrap": maxi(0, int(e.get("scrap", 0))),
+		"attempts": maxi(1, int(e.get("attempts", 1))), "practice_best": maxi(0, int(e.get("practice_best", 0))),
+		"mods": mods,
+	}
+
+
+func _clean_history(e: Dictionary) -> Dictionary:
+	return {
+		"date": str(e.get("date", "")), "kind": str(e.get("kind", "wander")), "tier": clampi(int(e.get("tier", 1)), 1, 10),
+		"mode": str(e.get("mode", "")), "hero": str(e.get("hero", "")), "pet": str(e.get("pet", "")),
+		"extracted": bool(e.get("extracted", false)), "seconds": maxi(0, int(e.get("seconds", 0))),
+		"kills": maxi(0, int(e.get("kills", 0))), "scrap": maxi(0, int(e.get("scrap", 0))),
+		"best_item": str(e.get("best_item", "")), "best_rarity": str(e.get("best_rarity", "")),
+		"cause": str(e.get("cause", "")), "score": maxi(0, int(e.get("score", 0))),
+		"mods": (e.get("mods", []) as Array).duplicate() if e.get("mods", []) is Array else [],
+	}
+
+
+## Keep the daily board to the last DailyDefs.BOARD_DAYS days (by date).
+func _prune_daily() -> void:
+	var keys: Array = daily_runs.keys()
+	keys.sort()
+	while keys.size() > DailyDefs.BOARD_DAYS:
+		daily_runs.erase(keys.pop_front())
 
 ## Depth Update keys (old saves: all missing → empty, safe defaults).
 func _load_depth(d: Dictionary) -> void:
@@ -686,13 +780,15 @@ func twist_on(twist: String) -> bool:
 	## Campaign levels are handcrafted: no zone twists.
 	if in_campaign_run():
 		return false
-	return ZoneDefs.has_twist(zone_tier(), twist)
+	return ZoneDefs.has_twist(zone_tier(), twist) or twist in DustModDefs.twists_of(dust_mods())
 
 func pacts_unlocked() -> bool:
 	return best_tier_extracted >= ZoneDefs.PACTS_FROM_TIER
 
 ## Active pacts for this run (only once unlocked).
 func active_pacts() -> Array:
+	if run_kind == "daily" and not in_campaign_run():
+		return []
 	return pacts if pacts_unlocked() else []
 
 func toggle_pact(id: String) -> bool:
@@ -707,13 +803,37 @@ func toggle_pact(id: String) -> bool:
 
 ## Multiplicative pact effect (1.0 = none); "window" is additive seconds.
 func pact_fx(key: String) -> float:
-	var add := key in ["window", "no_tonics", "window_elite"]
+	var add := key in DustModDefs.ADD_KEYS
 	var v := 0.0 if add else 1.0
 	for id in active_pacts():
 		var fx: Dictionary = ZoneDefs.pact(str(id)).get("fx", {})
 		if fx.has(key):
 			v = v + float(fx[key]) if add else v * float(fx[key])
-	return v
+	## Weekly Dust modifiers ride the same keys.
+	var dm := DustModDefs.fx_of(dust_mods(), key)
+	return v + dm if add else v * dm
+
+## Weekly Dust modifiers on this run (none in the campaign).
+func dust_mods() -> Array:
+	return [] if in_campaign_run() else run_dust_mods
+
+func dust_mod_on(flag: String) -> bool:
+	return DustModDefs.has_flag(dust_mods(), flag)
+
+func dust_loot_bonus() -> float:
+	return DustModDefs.loot_bonus(dust_mods())
+
+## Any run rule (pact or weekly modifier) that bends the tier's numbers.
+func has_run_rules() -> bool:
+	return not active_pacts().is_empty() or not dust_mods().is_empty()
+
+## The week's modifiers as of today (mode select).
+func week_mods() -> Array:
+	return DustModDefs.for_date(today())
+
+func set_weekly_opt_in(on: bool) -> void:
+	weekly_opt_in = on
+	save_profile()
 
 func pact_loot_bonus() -> float:
 	var b := 0.0
@@ -864,7 +984,7 @@ func dash_cooldown_mult() -> float:
 		r += float(GearDefs.GENERAL_SETS["night_runner"]["dash_cd"])
 	if has_set("smugglers_wraps", 2):
 		r += float(GearDefs.SURVIVOR_SETS["smugglers_wraps"]["dash_cd"])
-	return maxf(0.45, 1.0 - r)
+	return maxf(0.45, 1.0 - r) * pact_fx("dash_cd")
 
 ## Field Salvager (6): extract bonus per set piece worn.
 func extract_payout_mult() -> float:
@@ -895,7 +1015,7 @@ func move_speed_bonus() -> float:
 	var m := gear_stat("move")
 	if has_set("night_runner", 2):
 		m += float(GearDefs.GENERAL_SETS["night_runner"]["move"])
-	return m
+	return m + pact_fx("move")
 
 func pickup_radius_bonus() -> float:
 	return gear_stat("pickup")
@@ -1895,6 +2015,9 @@ func reset_profile() -> void:
 	tier_extracts = {}
 	total_runs = 0
 	campaign = _fresh_campaign()
+	weekly_opt_in = false
+	daily_runs = {}
+	run_history = []
 	save_profile()
 	meta_changed.emit()
 
@@ -1944,6 +2067,27 @@ func begin_run(drink_tonics: bool = true) -> void:
 	run_seed = int(Time.get_unix_time_from_system()) ^ (randi() << 1) ^ Time.get_ticks_msec()
 	if run_seed == 0:
 		run_seed = 1
+	run_time = 0.0
+	run_death_cause = ""
+	last_daily = {}
+	run_daily_date = ""
+	run_dust_mods = []
+	if in_campaign_run():
+		run_kind = "campaign"
+		daily_armed = false
+	elif daily_armed:
+		## Daily Run: the day's seed, tier, hero, pet and the week's Dust.
+		run_kind = "daily"
+		run_daily_date = today()
+		run_seed = DailyDefs.seed_for(run_daily_date)
+		selected_mode_id = DailyDefs.TIER_ID
+		selected_character_id = DailyDefs.hero_for(run_daily_date)
+		selected_pet_id = DailyDefs.pet_for(run_daily_date)
+		run_dust_mods = DustModDefs.for_date(run_daily_date)
+	else:
+		run_kind = "wander"
+		if weekly_opt_in:
+			run_dust_mods = DustModDefs.for_date(today())
 	extract_pad_info = []
 	run_loot = []
 	run_materials = {}
@@ -2020,7 +2164,7 @@ func total_find_mult() -> float:
 
 ## Add bag scrap with every find bonus applied.
 func add_scrap(amount: int) -> int:
-	var gained := maxi(0, int(round(float(amount) * total_find_mult() * event_scrap_mult)))
+	var gained := maxi(0, int(round(float(amount) * total_find_mult() * event_scrap_mult * pact_fx("scrap"))))
 	scrap_found += gained
 	return gained
 
@@ -2028,6 +2172,8 @@ func add_scrap(amount: int) -> int:
 func add_run_xp(amount: int) -> void:
 	if amount <= 0 or extracted or wiped:
 		return
+	if not dust_mods().is_empty():
+		amount = int(round(float(amount) * pact_fx("run_xp")))
 	if run_level >= Progression.RUN_LEVEL_CAP:
 		run_xp_changed.emit(run_xp, run_level)
 		return
@@ -2237,10 +2383,14 @@ func on_extract_success() -> void:
 	## payout; flat bonuses (jobs, Ambush Bounty) scale with the tier (ModeDefs).
 	var base := ModeDefs.BAG_STIPEND + bag_value()
 	payout_this_run = int(
-		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult() * (1.0 + pact_loot_bonus())
+		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult() * (1.0 + pact_loot_bonus() + dust_loot_bonus())
 	) + extract_bonus_payout()
 	if pact_loot_bonus() > 0.0:
 		result_unlocks_pending.append("Dust Pacts: payout +%d%%" % int(round(pact_loot_bonus() * 100.0)))
+	if dust_loot_bonus() > 0.0:
+		result_unlocks_pending.append("Weekly Dust: payout +%d%%" % int(round(dust_loot_bonus() * 100.0)))
+	var hauled := int(round(float(base) * loot_mult))
+	var best := _best_found(run_loot)
 	_record_tier_clear(int(mode.get("tier", 1)))
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
@@ -2279,6 +2429,7 @@ func on_extract_success() -> void:
 	]
 	best_payout = maxi(best_payout, payout_this_run)
 	total_runs += 1
+	_record_run(true, hauled, best)
 	## In-run power dies here — only banked scrap/meta remain.
 	_reset_run_power_after_end()
 	for m in check_milestones():
@@ -2313,6 +2464,7 @@ func on_wipe() -> void:
 	if result_levels_gained > 0:
 		result_unlocks.append("Account prestige Lv %d" % account_level)
 	var kept_item := stash_item(int(insured.get(selected_character_id, -1)))
+	var best := _best_found(run_loot)
 	_lose_run_loot()
 	result_unlocks.append_array(result_unlocks_pending)
 	result_unlocks_pending = PackedStringArray()
@@ -2331,12 +2483,95 @@ func on_wipe() -> void:
 		", ".join(result_lost_keys) if result_lost_keys.size() else "(nothing)",
 	]
 	total_runs += 1
+	_record_run(false, 0, best)
 	_reset_run_power_after_end()
 	for m in check_milestones():
 		result_unlocks.append("Milestone: %s" % str(m["name"]))
 	result_scrap_after = account_scrap
 	_clear_live_run()
 	save_profile()
+
+## Best piece in a list of found items: {name, rarity} ({} if none).
+func _best_found(items: Array) -> Dictionary:
+	var best: Dictionary = {}
+	var br := -1
+	for it in items:
+		if typeof(it) != TYPE_DICTIONARY:
+			continue
+		var r := GearDefs.RARITIES.find(str((it as Dictionary).get("rarity", "common")))
+		if r > br:
+			br = r
+			best = {"name": str((it as Dictionary).get("name", "item")), "rarity": str((it as Dictionary).get("rarity", "common"))}
+	return best
+
+## A Wander / Daily run just ended: add it to the run history and, for a
+## daily, to the day's board (first finished attempt counts, later ones are
+## practice). Campaign levels aren't extraction runs and stay out of it.
+func _record_run(did_extract: bool, hauled: int, best: Dictionary, cause: String = "") -> void:
+	if in_campaign_run() or run_kind == "campaign":
+		return
+	var mode := get_mode()
+	var secs := int(floor(maxf(run_time, 0.0)))
+	var entry := {
+		"date": run_daily_date if run_kind == "daily" else today(), "kind": run_kind,
+		"tier": int(mode.get("tier", 1)), "mode": str(mode.get("id", "")),
+		"hero": selected_character_id, "pet": selected_pet_id, "extracted": did_extract,
+		"seconds": secs, "kills": kills, "scrap": hauled if did_extract else 0,
+		"best_item": str(best.get("name", "")), "best_rarity": str(best.get("rarity", "")),
+		"cause": "" if did_extract else (cause if cause != "" else (run_death_cause if run_death_cause != "" else "Went down in the dust")),
+		"score": 0, "mods": run_dust_mods.duplicate(),
+	}
+	if run_kind == "daily":
+		var parts := DailyDefs.score_parts(hauled, kills, run_time, did_extract)
+		entry["score"] = int(parts["total"])
+		last_daily = _record_daily(entry, parts)
+	push_history(entry)
+
+func push_history(entry: Dictionary) -> void:
+	run_history.push_front(_clean_history(entry))
+	while run_history.size() > RUN_HISTORY_MAX:
+		run_history.pop_back()
+
+## Returns what the result screen shows: the breakdown, counted or practice,
+## the day's counted score and share text.
+func _record_daily(entry: Dictionary, parts: Dictionary) -> Dictionary:
+	var date := str(entry["date"])
+	var score := int(parts["total"])
+	var practice := daily_runs.has(date)
+	if practice:
+		var d: Dictionary = daily_runs[date]
+		d["attempts"] = int(d.get("attempts", 1)) + 1
+		d["practice_best"] = maxi(int(d.get("practice_best", 0)), score)
+	else:
+		daily_runs[date] = _clean_daily({
+			"date": date, "score": score, "hero": entry["hero"], "pet": entry["pet"], "extracted": entry["extracted"],
+			"kills": entry["kills"], "seconds": entry["seconds"], "scrap": int(parts["scrap"]), "attempts": 1,
+			"practice_best": 0, "mods": entry["mods"]})
+		_prune_daily()
+	var share := entry.duplicate()
+	share["practice"] = practice
+	return {"date": date, "parts": parts, "practice": practice, "counted": int(daily_runs.get(date, {}).get("score", 0)),
+		"share": DailyDefs.share_text(share)}
+
+## The day's board entry ({} if not played yet).
+func daily_entry(date: String = "") -> Dictionary:
+	return daily_runs.get(today() if date == "" else date, {})
+
+## Totals for the Run History screen.
+func history_totals() -> Dictionary:
+	var n := run_history.size()
+	var ext := 0
+	var best_by_hero := {}
+	for e in run_history:
+		if bool(e.get("extracted", false)):
+			ext += 1
+		var h := str(e.get("hero", ""))
+		var cur: Dictionary = best_by_hero.get(h, {})
+		var key := int(e.get("scrap", 0)) + (100000 if bool(e.get("extracted", false)) else 0)
+		var ck := int(cur.get("scrap", -1)) + (100000 if bool(cur.get("extracted", false)) else 0)
+		if cur.is_empty() or key > ck:
+			best_by_hero[h] = e
+	return {"runs": n, "extracts": ext, "rate": (float(ext) / float(n)) if n > 0 else 0.0, "best_by_hero": best_by_hero}
 
 func _reset_run_power_after_end() -> void:
 	## Permanent power never comes from run levels — clear after banking rewards.
@@ -2348,13 +2583,59 @@ func _reset_run_power_after_end() -> void:
 func timer_scale() -> float:
 	return FAST_TIMER_SCALE if fast_timers else 1.0
 
+## DAILY: borrow the day's tier / hero / pet (the player's own come back on
+## disarm_daily) and head to the pre-run loadout.
+func arm_daily() -> void:
+	if not daily_armed:
+		_daily_restore = {"mode": selected_mode_id, "hero": selected_character_id, "pet": selected_pet_id}
+	daily_armed = true
+	var d := today()
+	selected_mode_id = DailyDefs.TIER_ID
+	selected_character_id = DailyDefs.hero_for(d)
+	selected_pet_id = DailyDefs.pet_for(d)
+	reset_loadout_to_defaults()
+
+func disarm_daily() -> void:
+	if not daily_armed:
+		return
+	daily_armed = false
+	if not _daily_restore.is_empty():
+		var m := str(_daily_restore.get("mode", selected_mode_id))
+		if ModeDefs.is_exposed(m) and is_tier_unlocked(int(ModeDefs.get_mode(m)["tier"])):
+			selected_mode_id = m
+		var h := str(_daily_restore.get("hero", selected_character_id))
+		if CharacterDefs.is_playable(h):
+			selected_character_id = h
+		var pid := str(_daily_restore.get("pet", selected_pet_id))
+		if PetDefs.is_equipable(pid) and pet_available(pid):
+			selected_pet_id = pid
+	_daily_restore = {}
+	reset_loadout_to_defaults()
+
+func go_daily() -> void:
+	leave_campaign_run()
+	play_mode = "wander"
+	arm_daily()
+	go_prep()
+
+## Run History (logbook / mode select / hangar); `tab` = "runs" | "daily".
+var history_tab: String = "runs"
+
+func go_run_history(from: String = "logbook", tab: String = "runs") -> void:
+	history_from = from
+	history_tab = tab
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/run_history.tscn")
+
 func go_main_menu() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
+	disarm_daily()
 	leave_campaign_run()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 func go_mode_select() -> void:
+	disarm_daily()
 	leave_campaign_run()
 	play_mode = "wander"
 	get_tree().change_scene_to_file("res://scenes/ui/mode_select.tscn")
@@ -2388,6 +2669,7 @@ func go_logbook() -> void:
 func go_hangar() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
+	disarm_daily()
 	leave_campaign_run()
 	get_tree().change_scene_to_file("res://scenes/ui/hangar.tscn")
 
@@ -2710,6 +2992,7 @@ func go_campaign_level(id: String, hero: String = "") -> void:
 func prepare_campaign_level(id: String, hero: String = "") -> bool:
 	if not CampaignDefs.is_playable(id):
 		return false
+	disarm_daily()
 	if play_mode != "campaign" or _wander_hero == "":
 		_wander_hero = selected_character_id
 		_wander_pet = selected_pet_id
@@ -2735,6 +3018,7 @@ func prepare_campaign_level(id: String, hero: String = "") -> bool:
 
 func go_mode_choice() -> void:
 	get_tree().paused = false
+	disarm_daily()
 	leave_campaign_run()
 	get_tree().change_scene_to_file("res://scenes/ui/mode_choice.tscn")
 
@@ -2888,6 +3172,7 @@ const LIVE_RUN_KEYS := {
 	"run_materials": "d", "run_pack": "d", "run_job_rewards": "d",
 	"run_picks_taken": "a", "run_loot": "a", "run_tonics": "a",
 	"extract_bonus_notes": "s", "result_unlocks_pending": "s",
+	"run_time": "f", "run_dust_mods": "a", "run_kind": "t", "run_daily_date": "t",
 }
 
 
@@ -2924,6 +3209,10 @@ func live_run_begin(ctrl: Node) -> void:
 		"pet": selected_pet_id,
 		"started": int(Time.get_unix_time_from_system()),
 		"resumes": resumes,
+		"kind": run_kind,
+		"daily_date": run_daily_date,
+		"dust_mods": run_dust_mods.duplicate(),
+		"restore": _daily_restore.duplicate(),
 	}
 	save_profile()
 	live_run_snapshot()
@@ -3029,10 +3318,30 @@ func abandon_live_run() -> Dictionary:
 	run_loot = []
 	run_materials = {}
 	total_runs += 1
+	if str(mk.get("mode", "")) != "campaign":
+		_record_abandoned(mk)
 	_clear_live_run()
 	reset_loadout_to_defaults()
 	save_profile()
 	return {"hero": hero, "lost": lost, "kept": str(stash_item(keep).get("name", ""))}
+
+
+## A run abandoned from the RUN INTERRUPTED prompt: a death in the history
+## (and the day's counted daily, score 0, if it was the first attempt).
+func _record_abandoned(mk: Dictionary) -> void:
+	var kind := str(mk.get("kind", "wander"))
+	var date := str(mk.get("daily_date", today()))
+	var tm := ModeDefs.get_mode(str(mk.get("tier_mode", selected_mode_id)))
+	var info := read_live_snapshot()
+	var run := _dict_or_empty(info.get("run", {}))
+	var mods: Array = mk.get("dust_mods", []) if mk.get("dust_mods", []) is Array else []
+	var entry := {"date": date if kind == "daily" else today(), "kind": kind, "tier": int(tm.get("tier", 1)), "mode": str(tm.get("id", "")),
+		"hero": str(mk.get("hero", "")), "pet": str(mk.get("pet", "")), "extracted": false,
+		"seconds": int(float(run.get("run_time", 0.0))), "kills": int(run.get("kills", 0)), "scrap": 0,
+		"best_item": "", "best_rarity": "", "cause": "Abandoned", "score": 0, "mods": mods}
+	if kind == "daily":
+		_record_daily(entry, DailyDefs.score_parts(0, int(entry["kills"]), float(entry["seconds"]), false))
+	push_history(entry)
 
 
 ## RESUME: rebuild the run from the snapshot and return the scene to load
@@ -3075,6 +3384,9 @@ func prepare_resume() -> String:
 		TouchInput.clear_sticks()
 		begin_run(false)
 	_apply_run_state(_dict_or_empty(snap.get("run", {})))
+	if run_kind == "daily" and mode != "campaign":
+		daily_armed = true
+		_daily_restore = _dict_or_empty(mk.get("restore", {}))
 	run_finished = false
 	extracted = false
 	wiped = false
@@ -3128,6 +3440,9 @@ func _apply_run_state(r: Dictionary) -> void:
 			"a":
 				if typeof(v) == TYPE_ARRAY:
 					set(k, (v as Array).duplicate(true))
+			"t":
+				if typeof(v) == TYPE_STRING:
+					set(k, str(v))
 			"s":
 				if typeof(v) == TYPE_ARRAY:
 					var ps := PackedStringArray()

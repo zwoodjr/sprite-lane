@@ -19,6 +19,7 @@ const MENUS := [
 	"res://scenes/ui/logbook.tscn",
 	"res://scenes/ui/mode_choice.tscn",
 	"res://scenes/ui/campaign_map.tscn",
+	"res://scenes/ui/run_history.tscn",
 ]
 
 var _bad: int = 0
@@ -164,6 +165,7 @@ func _run() -> void:
 	await _test_depth_e7()
 	await _test_p2_ui()
 	await _test_safe_save()
+	await _test_wander_extras()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
 	GameState.pacts = keep_e7[2]
@@ -3421,3 +3423,204 @@ func _test_safe_save() -> void:
 	GameState.fast_timers = false
 	GameState.reset_loadout_to_defaults()
 	print("SAFE_SAVE_OK")
+
+
+## Wander extras: Daily Run (seed, spawns, scoring, board), weekly Dust
+## modifiers (rotation, effects), run history (cap, save/load), old saves.
+func _first_spawns(n: int) -> Array:
+	var m: Node = await _depth_match("drift", "ash_rook")
+	var out: Array = []
+	var world: Node = m.get_node("World")
+	## Zero the camera lead so only the seed decides where mobs come in.
+	var cam := m.get_node("World/Player").get_node_or_null("Camera2D") as Camera2D
+	if cam:
+		cam.offset = Vector2.ZERO
+	for i in range(n):
+		var before := {}
+		for e in get_tree().get_nodes_in_group("enemies"):
+			before[e.get_instance_id()] = true
+		m.call("_spawn_enemy")
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if not before.has(e.get_instance_id()) and e.get_parent() == world:
+				var p: Vector2 = (e as Node2D).global_position - (m.get_node("World/Player") as Node2D).global_position
+				out.append("%s@%d,%d" % [str(e.get("kind")), int(round(p.x / 4.0)), int(round(p.y / 4.0))])
+	await _end_depth_match(m)
+	return out
+
+
+func _rows(root: Node, kind: String) -> int:
+	return root.find_children("*", "", true, false).filter(func(n: Node) -> bool: return str(n.get_meta("history_row", "")) == kind).size()
+
+
+func _test_wander_extras() -> void:
+	var keep := [GameState.daily_runs.duplicate(true), GameState.run_history.duplicate(true), GameState.weekly_opt_in,
+		GameState.selected_mode_id, GameState.selected_character_id, GameState.selected_pet_id, GameState.account_scrap,
+		GameState.tier_extracts.duplicate(), GameState.successful_extracts, GameState.total_runs, GameState.best_payout,
+		GameState.camp.duplicate()]
+	## --- daily seed: same per date, different across dates
+	_check(DailyDefs.seed_for("2026-10-25") == DailyDefs.seed_for("2026-10-25"), "daily: seed is deterministic per date")
+	var seen := {}
+	for i in range(60):
+		seen[DailyDefs.seed_for(DailyDefs.date_add("2026-10-25", -i))] = true
+	_check(seen.size() == 60, "daily: 60 dates give 60 different seeds")
+	_check(DailyDefs.fnv32("a") == 0xE40C292C, "daily: FNV-1a matches the reference value")
+	_check(DailyDefs.hero_for("2026-10-25") == DailyDefs.hero_for("2026-10-25") and CharacterDefs.is_playable(DailyDefs.hero_for("2026-10-25")), "daily: hero of the day fixed + playable")
+	var heroes := {}
+	for i in range(40):
+		heroes[DailyDefs.hero_for(DailyDefs.date_add("2026-10-25", -i))] = true
+	_check(heroes.size() >= 4, "daily: the hero rotates across days (%d)" % heroes.size())
+	## --- ISO weeks + weekly rotation
+	_check(DailyDefs.iso_week("2026-10-25") == "2026-W43" and DailyDefs.iso_week("2026-10-26") == "2026-W44", "weekly: ISO week of Sun/Mon")
+	_check(DailyDefs.iso_week("2021-01-03") == "2020-W53" and DailyDefs.iso_week("2024-12-30") == "2025-W01", "weekly: ISO year edges")
+	_check(DailyDefs.week_start("2026-10-25") == "2026-10-19", "weekly: Monday start")
+	_check(DustModDefs.for_week("2026-W43") == DustModDefs.for_week("2026-W43"), "weekly: rotation deterministic")
+	_check(DustModDefs.for_date("2026-10-19") == DustModDefs.for_date("2026-10-25"), "weekly: same mods all week")
+	var combos := {}
+	var bad_week := ""
+	for w in range(1, 53):
+		var mods := DustModDefs.for_week("2026-W%02d" % w)
+		combos[str(mods)] = true
+		if mods.size() < 1 or mods.size() > 2:
+			bad_week = "size %d" % mods.size()
+		for id in mods:
+			if DustModDefs.mod(str(id)).is_empty():
+				bad_week = "unknown " + str(id)
+			for o in mods:
+				if str(o) in (DustModDefs.mod(str(id)).get("clash", []) as Array):
+					bad_week = "clash %s/%s" % [id, o]
+	_check(bad_week == "", "weekly: 1-2 valid, non-clashing mods every week (%s)" % bad_week)
+	_check(combos.size() >= 12, "weekly: rotation varies across the year (%d combos)" % combos.size())
+	_check(DustModDefs.MODS.size() >= 10, "weekly: designed list of ~10")
+	## --- modifier effects ride existing systems
+	GameState.run_kind = "wander"
+	GameState.run_dust_mods = ["glass_hero", "blackout_nights"]
+	_check(is_equal_approx(GameState.pact_fx("max_hp"), 0.5) and is_equal_approx(GameState.pact_fx("hero_damage"), 1.4), "weekly: Glass Hero fx")
+	_check(GameState.twist_on("night") and GameState.has_run_rules(), "weekly: Blackout Nights switches the night twist on")
+	_check(is_equal_approx(GameState.dust_loot_bonus(), 0.4), "weekly: loot bonus sums")
+	GameState.run_dust_mods = []
+	GameState.weekly_opt_in = true
+	GameState.daily_armed = false
+	GameState.begin_run()
+	_check(GameState.run_kind == "wander" and GameState.run_dust_mods == DustModDefs.for_date(GameState.today()), "weekly: opt-in applies the week's mods")
+	GameState.weekly_opt_in = false
+	GameState.begin_run()
+	_check(GameState.run_dust_mods.is_empty(), "weekly: off by default")
+
+	## --- same seed, same first spawns (daily) / a different seed differs
+	GameState.arm_daily()
+	var a: Array = await _first_spawns(8)
+	GameState.arm_daily()
+	var b: Array = await _first_spawns(8)
+	_check(a.size() == 8 and a == b, "daily: same seed -> same first 8 spawns %s / %s" % [str(a.slice(0, 2)), str(b.slice(0, 2))])
+	_check(GameState.run_kind == "daily" and GameState.run_seed == DailyDefs.seed_for(GameState.today()), "daily: run uses the day's seed")
+	_check(GameState.selected_character_id == DailyDefs.hero_for(GameState.today()) and GameState.selected_mode_id == DailyDefs.TIER_ID, "daily: fixed hero + tier")
+	_check(GameState.run_dust_mods == DustModDefs.for_date(GameState.today()) and GameState.active_pacts().is_empty(), "daily: week's mods, no pacts")
+	GameState.disarm_daily()
+	_check(GameState.selected_character_id == str(keep[4]) and not GameState.daily_armed, "daily: disarm gives the player's hero back")
+	var c: Array = await _first_spawns(8)
+	_check(c != a, "daily: a different seed spawns differently")
+
+	## --- scoring + board: first finish counts, then practice
+	GameState.daily_runs.erase(GameState.today())
+	var hist_n := GameState.run_history.size()
+	GameState.arm_daily()
+	GameState.begin_run()
+	GameState.kills = 10
+	GameState.run_time = 100.5
+	GameState.scrap_found = 0
+	GameState.on_extract_success()
+	var d1 := GameState.daily_entry()
+	var parts: Dictionary = GameState.last_daily.get("parts", {})
+	_check(not d1.is_empty() and not bool(GameState.last_daily.get("practice", true)), "daily: first finish counts")
+	_check(int(parts.get("kills", 0)) == 10 * DailyDefs.KILL_POINTS and int(parts.get("time", 0)) == 100 * DailyDefs.TIME_POINTS
+		and int(d1["score"]) == int(parts["scrap"]) + 10 * DailyDefs.KILL_POINTS + 100 * DailyDefs.TIME_POINTS and int(parts["scrap"]) > 0,
+		"daily: score = scrap + kills + time (%s)" % str(parts))
+	_check(GameState.run_history.size() == hist_n + 1 and str(GameState.run_history[0]["kind"]) == "daily", "history: daily run logged")
+	## result screen: breakdown + share
+	var rs: Node = (load("res://scenes/ui/result_screen.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(rs)
+	for k in range(4):
+		await get_tree().process_frame
+	var share := rs.find_child("DailyShare", true, false) as Button
+	_check(rs.find_child("DailyScore", true, false) != null and share != null, "daily: result breakdown + SHARE")
+	if share:
+		share.pressed.emit()
+	_check("WANDERER DAILY" in str(GameState.last_daily.get("share", "")) and "Score %d" % int(d1["score"]) in str(GameState.last_daily.get("share", "")), "daily: share card text")
+	rs.queue_free()
+	await get_tree().process_frame
+	GameState.begin_run()
+	GameState.kills = 99
+	GameState.run_death_cause = "Rad Gator"
+	GameState.on_wipe()
+	var d2 := GameState.daily_entry()
+	_check(bool(GameState.last_daily.get("practice", false)) and int(d2["score"]) == int(d1["score"]) and int(d2["attempts"]) == 2, "daily: second run is practice")
+	_check(str(GameState.run_history[0]["cause"]) == "Rad Gator" and not bool(GameState.run_history[0]["extracted"]), "history: cause of death")
+	_check(int(GameState.last_daily["parts"]["total"]) == 0, "daily: going down scores 0")
+	GameState.disarm_daily()
+	## abandoned (RUN INTERRUPTED) counts as a down run in the history
+	GameState.live_run = {"mode": "wander", "kind": "wander", "hero": GameState.selected_character_id, "tier_mode": "haze"}
+	GameState.abandon_live_run()
+	_check(str(GameState.run_history[0]["cause"]) == "Abandoned", "history: abandon logged")
+
+	## --- history: cap 50, survives save + load
+	for i in range(60):
+		GameState.push_history({"date": "2026-10-%02d" % (1 + i % 28), "kind": "wander", "tier": 1 + i % 10, "mode": "haze",
+			"hero": "pebble", "pet": "noel", "extracted": i % 2 == 0, "seconds": i * 10, "kills": i, "scrap": i * 3,
+			"best_item": "Thing %d" % i, "best_rarity": "rare", "cause": "", "score": 0, "mods": []})
+	_check(GameState.run_history.size() == 50 and int(GameState.run_history[0]["kills"]) == 59, "history: capped at 50, newest first")
+	var tot := GameState.history_totals()
+	_check(int(tot["runs"]) == 50 and float(tot["rate"]) > 0.0 and (tot["best_by_hero"] as Dictionary).has("pebble"), "history: totals")
+	GameState.save_profile()
+	GameState.run_history = []
+	GameState.daily_runs = {}
+	GameState.load_profile()
+	_check(GameState.run_history.size() == 50 and int(GameState.run_history[0]["kills"]) == 59, "history: survives save/load")
+	_check(not GameState.daily_entry().is_empty(), "daily board: survives save/load")
+	## the Run History screen builds both tabs
+	GameState.history_tab = "runs"
+	var hs: Node = (load("res://scenes/ui/run_history.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(hs)
+	for k in range(3):
+		await get_tree().process_frame
+	_check(_rows(hs, "run") == 50 and hs.find_child("Totals", true, false) != null, "history screen: 50 rows + totals")
+	hs.call("show_tab", "daily")
+	await get_tree().process_frame
+	_check(_rows(hs, "day") == DailyDefs.BOARD_DAYS, "history screen: 30-day board")
+	hs.queue_free()
+	var ms: Node = (load("res://scenes/ui/mode_select.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(ms)
+	for k in range(3):
+		await get_tree().process_frame
+	_check(ms.find_child("DailyCard", true, false) != null and ms.find_child("WeeklyCard", true, false) != null and ms.find_child("WeeklyOptIn", true, false) != null,
+		"mode select: daily + weekly cards")
+	ms.queue_free()
+	await get_tree().process_frame
+
+	## --- old saves migrate (no keys / wrong types) with safe defaults
+	GameState.save_profile()
+	var old := {"version": 4, "account_scrap": 5, "selected_character_id": "pebble"}
+	GameState.apply_save(old)
+	_check(not GameState.weekly_opt_in and GameState.daily_runs.is_empty() and GameState.run_history.is_empty(), "migrate: old save -> extras defaults")
+	GameState.apply_save({"version": 4, "weekly_opt_in": true, "daily_runs": [1, 2], "run_history": "junk"})
+	_check(GameState.weekly_opt_in and GameState.daily_runs.is_empty() and GameState.run_history.is_empty(), "migrate: wrong types are dropped")
+	GameState.apply_save({"version": 4, "run_history": [{"kills": "7", "hero": "nyx_caldera"}, 3], "daily_runs": {"2026-10-01": {"score": 12}}})
+	_check(GameState.run_history.size() == 1 and int(GameState.run_history[0]["kills"]) == 7 and int(GameState.daily_runs["2026-10-01"]["score"]) == 12, "migrate: partial entries get defaults")
+	GameState.load_profile()
+
+	GameState.daily_runs = keep[0]
+	GameState.run_history = keep[1]
+	GameState.weekly_opt_in = keep[2]
+	GameState.daily_armed = false
+	GameState.selected_mode_id = keep[3]
+	GameState.selected_character_id = keep[4]
+	GameState.selected_pet_id = keep[5]
+	GameState.account_scrap = keep[6]
+	GameState.tier_extracts = keep[7]
+	GameState.successful_extracts = keep[8]
+	GameState.total_runs = keep[9]
+	GameState.best_payout = keep[10]
+	GameState.camp = keep[11]
+	GameState.run_kind = "wander"
+	GameState.run_dust_mods = []
+	GameState.reset_loadout_to_defaults()
+	print("WANDER_EXTRAS_OK")

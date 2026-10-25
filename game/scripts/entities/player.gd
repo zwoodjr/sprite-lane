@@ -8,6 +8,8 @@ signal dashed
 signal ability_used(name: String)
 ## Fired when this player actually loses HP to an enemy (pets listen — Noel enrages).
 signal attacked(attacker: Node)
+## Who landed the last hit (Run History's cause of death).
+var last_hit_by: String = ""
 ## Fired when the player takes damage (HUD red edge flash).
 signal hurt(amount: float)
 
@@ -226,7 +228,8 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 	max_hp *= GameState.pact_fx("max_hp")
 	damage_mult = (1.0 + GameState.quirk_fx("damage")) * float(_char.get("damage_mult", 1.0)) \
 		* (1.0 + GameState.starting_damage_bonus()) \
-		* (1.0 + float(rm.get("damage", 0.0)))
+		* (1.0 + float(rm.get("damage", 0.0))) \
+		* GameState.pact_fx("hero_damage")
 	move_mult = float(_char.get("move_speed_mult", 1.0)) \
 		* (1.0 + float(rm.get("move", 0.0))) \
 		* (1.0 + GameState.move_speed_bonus() + GameState.tonic_fx("move") + GameState.quirk_fx("move"))
@@ -1470,6 +1473,14 @@ func _reload_time() -> float:
 func take_damage(amount: float, attacker: Node = null) -> void:
 	if _iframes > 0.0 or hp <= 0.0:
 		return
+	## Run history: what landed the last hit (cause of death).
+	if attacker != null and is_instance_valid(attacker):
+		var an: Variant = attacker.get("display_name")
+		if (an == null or str(an) == "") and attacker.get("kind") != null:
+			an = EnemyDefs.get_kind(str(attacker.get("kind"))).get("display_name", attacker.get("kind"))
+		last_hit_by = str(an).replace("_", " ").capitalize() if an != null and str(an) != "" else "Enemy"
+	else:
+		last_hit_by = "Hazard / stray shot"
 	## Dust Sidestep — full avoid (soft-capped in GameState).
 	if randf() < GameState.dodge_chance():
 		_iframes = 0.2

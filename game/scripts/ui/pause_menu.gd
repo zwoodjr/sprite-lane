@@ -122,6 +122,7 @@ func _show_main() -> void:
 			quit.text = "TAP AGAIN: COUNTS AS A WIPE"
 			return
 		if not GameState.run_finished:
+			GameState.run_death_cause = "Abandoned"
 			GameState.on_wipe()
 			GameState.result_summary = "Abandoned the run.\n" + GameState.result_summary
 		GameState.go_result()

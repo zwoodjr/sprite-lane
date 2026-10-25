@@ -56,10 +56,17 @@ func build(c: VBoxContainer) -> void:
 	tt.tween_property(title, "scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tt.tween_property(title, "modulate:a", 1.0, 0.12)
 
+	## Daily Run: the score breakdown (and SHARE) leads the screen.
+	var daily := GameState.last_daily
+	if not daily.is_empty():
+		c.add_child(_daily_card(daily))
+
 	## Stage: the hero, lit by the outcome.
 	var stage := _Stage.new()
 	stage.won = _won
 	stage.custom_minimum_size = Vector2(0, 232 if get_viewport_rect().size.y < 1400 else 280)
+	if not daily.is_empty():
+		stage.custom_minimum_size.y = 144
 	c.add_child(stage)
 	var hid := GameState.selected_character_id
 	var hero := StripAnim.make("res://assets/sprites/characters/%s/%s_%s.png" % [hid, hid, "idle" if _won else "death"], 256, 8.0 if _won else 10.0)
@@ -213,7 +220,7 @@ func build(c: VBoxContainer) -> void:
 		eqg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		eqg.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
 		_continue_row.add_child(eqg)
-	var again := UiTheme.big_button("RUN AGAIN", UiTheme.TEAL, 64, 24)
+	var again := UiTheme.big_button("PRACTICE" if not daily.is_empty() else "RUN AGAIN", UiTheme.TEAL, 64, 24)
 	again.custom_minimum_size.x = 0
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again.pressed.connect(GameState.go_match)
@@ -228,6 +235,68 @@ func build(c: VBoxContainer) -> void:
 	_set_actions_live(false)
 
 	_sequence()
+
+
+## DAILY SCORE: scrap hauled + kills + time (0 if down), counted or practice.
+func _daily_card(d: Dictionary) -> Control:
+	var parts: Dictionary = d.get("parts", {})
+	var practice := bool(d.get("practice", false))
+	var p := card(UiTheme.AMBER)
+	p.name = "DailyScore"
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	p.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	v.add_child(top)
+	var hl := UiTheme.head_label("DAILY · %s%s" % [str(d.get("date", "")), "  ·  PRACTICE" if practice else ""], UiTheme.T_H3,
+		UiTheme.TEXT_DIM if practice else UiTheme.AMBER)
+	hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hl.clip_text = true
+	top.add_child(hl)
+	var total := UiTheme.pixel_label(str(int(parts.get("total", 0))), UiTheme.PX_L, UiTheme.AMBER if _won else UiTheme.DANGER)
+	total.name = "DailyTotal"
+	top.add_child(total)
+	var ext := bool(parts.get("extracted", false))
+	_score_line(v, "Scrap hauled", "+%d" % int(parts.get("scrap", 0)), ext)
+	_score_line(v, "Kills  %d × %d" % [int(parts.get("kill_n", 0)), DailyDefs.KILL_POINTS], "+%d" % int(parts.get("kills", 0)), ext)
+	_score_line(v, "Time  %s × %d/s" % [DailyDefs.fmt_time(float(parts.get("seconds", 0))), DailyDefs.TIME_POINTS], "+%d" % int(parts.get("time", 0)), ext)
+	if not ext:
+		v.add_child(UiTheme.body_label("Went down: a daily only scores if you extract.", UiTheme.T_SMALL, UiTheme.DANGER))
+	var note := ("Practice: today's counted score stays %d." % int(d.get("counted", 0))) if practice else "Counted for today. More runs today are practice."
+	v.add_child(UiTheme.body_label(note, UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+	var share := UiTheme.big_button("SHARE RESULT", UiTheme.TEAL, 56, 20)
+	share.name = "DailyShare"
+	share.pressed.connect(func() -> void:
+		var how := share_result(str(d.get("share", "")))
+		share.text = "SHARED" if how == "share" else "COPIED TO CLIPBOARD")
+	v.add_child(share)
+	return p
+
+
+func _score_line(parent: Control, label: String, value: String, live: bool) -> void:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	parent.add_child(h)
+	var l := UiTheme.body_label(label, UiTheme.T_SMALL, UiTheme.TEXT if live else UiTheme.TEXT_DIM, false)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(l)
+	var r := UiTheme.pixel_label(value if live else "0", UiTheme.PX_S, UiTheme.TEXT if live else UiTheme.TEXT_DIM)
+	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(r)
+
+
+## Web: the system share sheet (navigator.share) when the browser has one,
+## otherwise the clipboard; native builds: the clipboard. Returns "share" |
+## "clipboard". (Game Center boards come later.)
+static func share_result(text: String) -> String:
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var js := "(function(t){if(navigator.share){navigator.share({text:t}).catch(function(){});return 'share';}" \
+			+ "if(navigator.clipboard){navigator.clipboard.writeText(t);}return 'clipboard';})(%s)" % JSON.stringify(text)
+		var r: Variant = JavaScriptBridge.eval(js, true)
+		return "share" if str(r) == "share" else "clipboard"
+	DisplayServer.clipboard_set(text)
+	return "clipboard"
 
 
 func _scrap_after() -> int:
