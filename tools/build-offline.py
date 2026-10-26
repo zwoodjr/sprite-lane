@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +90,17 @@ def build_endgame_js() -> str:
     return re.sub(r"assets/hero/(?:models/)?[A-Za-z0-9._-]+\.png", repl, src)
 
 
+def build_hires_js() -> str:
+    """Inline assets/models/hires.js with its PNG paths as data URLs."""
+    src = (ROOT / "assets" / "models" / "hires.js").read_text(encoding="utf-8")
+
+    def repl(match: re.Match[str]) -> str:
+        path = ROOT / match.group(0)
+        return data_url(path) if path.exists() else match.group(0)
+
+    return re.sub(r"assets/models/[A-Za-z0-9_-]+/[A-Za-z0-9._-]+\.png", repl, src)
+
+
 def build_html() -> str:
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
@@ -123,6 +135,10 @@ def build_html() -> str:
     html = html.replace(
         '<script src="assets/hero/endgame-art.js"></script>',
         f"<script>\n{endgame}\n</script>",
+    )
+    html = html.replace(
+        '<script src="assets/models/hires.js"></script>',
+        f"<script>\n{build_hires_js()}\n</script>",
     )
     html = html.replace(
         '<script src="game.js"></script>',

@@ -23,6 +23,9 @@
     throw new Error("Canvas 2D unavailable in this browser.");
   }
   ctx.imageSmoothingEnabled = false;
+  // Backing store is RES× the 640×352 world so hi-res models stay sharp.
+  // All drawing stays in world units via setTransform in frame().
+  const RES = 3;
 
   // Size the 640×352 buffer to fill the stage (map-first layout).
   function fitDisplay() {
@@ -67,9 +70,9 @@
     canvas.style.width = "100%";
     canvas.style.height = "100%";
 
-    if (canvas.width !== W || canvas.height !== H) {
-      canvas.width = W;
-      canvas.height = H;
+    if (canvas.width !== W * RES || canvas.height !== H * RES) {
+      canvas.width = W * RES;
+      canvas.height = H * RES;
     }
     ctx.imageSmoothingEnabled = false;
   }
@@ -610,6 +613,7 @@
 
   const SS = window.SpiritSprites || null;
   const EA = window.SpiritEndgameArt || null;
+  const HR = window.SpiritHiRes || null;
   const MOB_KINDS = (SS && SS.MOB_KINDS) || [
     "quirling",
     "multifist",
@@ -1824,6 +1828,18 @@
     actx.fillStyle = "rgba(10, 8, 6, 0.65)";
     actx.fillRect(6, size - 5, size - 12, 2);
 
+    const hiFrame = HR ? HR.shopFrame(id, tick) : null;
+    if (hiFrame) {
+      const iw = hiFrame.naturalWidth || hiFrame.width;
+      const ih = hiFrame.naturalHeight || hiFrame.height;
+      const h = size - 8;
+      const w = Math.min(size - 4, h * (iw / ih));
+      const hh = w * (ih / iw);
+      actx.imageSmoothingEnabled = true;
+      actx.imageSmoothingQuality = "high";
+      actx.drawImage(hiFrame, (size - w) / 2, size - 5 - hh, w, hh);
+      return;
+    }
     // Keep the endgame look, but as a moving model stage (never a static face card).
     const endgameFrame =
       EA && EA.shopFrame ? EA.shopFrame(id, tick) : null;
@@ -1865,8 +1881,8 @@
       btn.dataset.series = u.series || "";
       const art = document.createElement("canvas");
       art.className = "art art-model";
-      art.width = 48;
-      art.height = 48;
+      art.width = 96;
+      art.height = 96;
       art.setAttribute("aria-hidden", "true");
       paintShopModel(art, id, state.tick);
       shopModelCanvases.push({ canvas: art, id });
@@ -2673,8 +2689,29 @@
   const UNIT_DRAW_ANIM = TILE;
   const UNIT_DRAW_HERO = TILE;
 
+  // Tall hi-res model: aspect kept, feet planted near the tile's bottom edge.
+  function drawTallModel(f, cx, footY, scale = 1) {
+    const img = f.img;
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    const h = TILE * f.h * scale;
+    const w = h * (iw / ih);
+    // contact shadow
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath();
+    ctx.ellipse(cx, footY, Math.min(w * 0.38, TILE * 0.45), TILE * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, cx - w / 2, footY - h + (f.bob || 0), w, h);
+    ctx.imageSmoothingEnabled = false;
+    return h;
+  }
+
   function drawUnits() {
-    state.units.forEach((u) => {
+    // Back rows first so tall models overlap correctly.
+    const order = state.units.slice().sort((a, b) => a.ty - b.ty || a.tx - b.tx);
+    order.forEach((u) => {
       const def = UNIT_MAP[u.type];
       const c = unitCenter(u);
       if (state.selectedUnit === u) {
@@ -2695,6 +2732,12 @@
         }
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
+      }
+      const hr = HR ? HR.unitFrame(u.type, u, state.tick) : null;
+      if (hr) {
+        const lift = u.attackAnim > 8 ? 1.04 : 1;
+        drawTallModel(hr, c.x, u.ty * TILE + TILE - 3, lift);
+        return;
       }
       // My Hero: card-matched full-body packs from SpiritEndgameArt.
       // Other series: SpiritSprites. Shop cards stay on endgame portraits.
@@ -2740,6 +2783,18 @@
 
   function drawEnemies() {
     state.enemies.forEach((en) => {
+      const hrm = HR ? HR.mobFrame(en.kind, en.pathIndex) : null;
+      if (hrm) {
+        const sc = en.boss ? 1.5 : en.elite ? 1.2 : 1;
+        const h = drawTallModel(hrm, en.x, en.y + TILE * 0.4, sc);
+        const w = TILE * 0.9 * sc;
+        const top = en.y + TILE * 0.4 - h - 3;
+        ctx.fillStyle = "#1a120e";
+        ctx.fillRect(en.x - w / 2, top, w, 2);
+        ctx.fillStyle = "#ff5555";
+        ctx.fillRect(en.x - w / 2, top, w * (en.hp / en.maxHp), 2);
+        return;
+      }
       const heroMob =
         !!(HERO_MOB_KINDS && HERO_MOB_KINDS.indexOf(en.kind) >= 0);
       const heroAnim =
@@ -2957,6 +3012,8 @@
       state.tick++;
       if (state.mode === "wave") updateWave();
     }
+    ctx.setTransform(RES, 0, 0, RES, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = "#14100c";
     ctx.fillRect(0, 0, W, H);
     drawMap();
@@ -3463,6 +3520,11 @@
     node.classList.add("hide");
     setTimeout(() => node.remove(), 350);
   });
+  if (HR && HR.whenReady) {
+    HR.whenReady(() => {
+      renderShop();
+    });
+  }
   if (EA && EA.whenReady) {
     EA.whenReady(() => {
       renderShop();

@@ -1,5 +1,5 @@
 /* Spirit Lane — cache shell for offline replay after first online visit. */
-const CACHE = "spirit-lane-v28";
+const CACHE = "spirit-lane-v29";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./game.js",
   "./sprites.js",
   "./assets/hero/endgame-art.js",
+  "./assets/models/hires.js",
   "./assets/hero/hero-sparkfist-endgame.png",
   "./assets/hero/hero-blastcrown-endgame.png",
   "./assets/hero/hero-bakugo-endgame.png",
