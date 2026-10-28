@@ -152,6 +152,8 @@ var tutorial_done: bool = false
 ## One-time v1/v2 → v3 save migration (garage tokens → scrap) already applied.
 var migrated_v3: bool = false
 var best_payout: int = 0
+## Result screen: this extract beat the previous best payout (not saved).
+var result_new_best: bool = false
 ## Highest Dust tier extracted on (unlocks the next one).
 var best_tier_extracted: int = 0
 ## Extracts per tier ({"3": 2, ...}); tiers unlock on ModeDefs.UNLOCK_EXTRACTS.
@@ -2121,6 +2123,7 @@ func begin_run(drink_tonics: bool = true) -> void:
 	run_xp_changed.emit(run_xp, run_level)
 
 func _clear_result_meta() -> void:
+	result_new_best = false
 	result_death_kept = []
 	result_scrap_before = 0
 	result_scrap_banked = 0
@@ -2428,6 +2431,8 @@ func on_extract_success() -> void:
 	result_summary = "Extracted. +%d scrap banked (×%.1f loot) · run Lv %d · Threat %d" % [
 		payout_this_run, loot_mult, run_level, threat_level,
 	]
+	## First extract counts as a best only if it paid something.
+	result_new_best = payout_this_run > best_payout and payout_this_run > 0 and total_runs > 0
 	best_payout = maxi(best_payout, payout_this_run)
 	total_runs += 1
 	_record_run(true, hauled, best)

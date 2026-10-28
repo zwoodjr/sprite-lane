@@ -153,6 +153,7 @@ func _run() -> void:
 	GameState.loot_mult = 1.8
 	GameState.result_run_level_reached = 9
 	GameState.run_best_chain = 37
+	GameState.result_new_best = true
 	GameState.result_scrap_before = 1240
 	GameState.result_scrap_banked = 486
 	GameState.account_scrap = 1726

@@ -390,6 +390,42 @@ func _count_scrap() -> void:
 		_scrap_label.text = "+%d" % gain
 		_bank_label.text = str(total)
 		_punch(_scrap_label)
+		if _won and GameState.result_new_best:
+			_stamp_best()
+
+
+## "NEW BEST HAUL" stamp slammed over the scrap plate.
+func _stamp_best() -> void:
+	var host := _scrap_label.get_parent() as Control
+	if host == null:
+		return
+	var st := UiTheme.pixel_label("NEW BEST HAUL", UiTheme.PX_M, UiTheme.AMBER)
+	st.add_theme_constant_override("outline_size", 6)
+	st.top_level = true
+	add_child(st)
+	await get_tree().process_frame
+	if not is_instance_valid(st) or not is_instance_valid(_scrap_label):
+		return
+	## Centred on the scrap plate's bottom rim, like a rubber stamp.
+	var plate: Control = _scrap_label
+	var n: Node = _scrap_label
+	while n != null and n != self:
+		if n is PanelContainer:
+			plate = n as Control
+			break
+		n = n.get_parent()
+	var r := plate.get_global_rect()
+	st.reset_size()
+	st.global_position = Vector2(r.position.x + r.size.x * 0.5 - st.size.x * 0.5, r.position.y + r.size.y - st.size.y * 0.5)
+	st.pivot_offset = st.size * 0.5
+	st.rotation = -0.08
+	st.scale = Vector2(2.2, 2.2)
+	st.modulate.a = 0.0
+	var tw := st.create_tween().set_parallel(true)
+	tw.tween_property(st, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(st, "modulate:a", 1.0, 0.1)
+	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_BIG)
 
 
 func _fill_xp() -> void:
