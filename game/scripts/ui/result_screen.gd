@@ -97,6 +97,12 @@ func build(c: VBoxContainer) -> void:
 		var xl := UiTheme.body_label("+%d from salvage & rewards" % extra, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 		xl.name = "ScrapExtraLine"
 		sv.add_child(xl)
+	elif not _won and GameState.result_scrap_lost > 0:
+		## Teach the loop on the loss screen: what you kept, and how not to lose it.
+		var keep := int(round(float(GameState.get_mode().get("death_keep", 0.1)) * 100.0))
+		var kl := UiTheme.body_label("Kept %d%% of the bag. Extract to keep it all." % keep, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+		kl.name = "KeepLine"
+		sv.add_child(kl)
 	var right := VBoxContainer.new()
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
 	right.add_theme_constant_override("separation", 8)
