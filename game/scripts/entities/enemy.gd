@@ -776,6 +776,14 @@ func _die() -> void:
 			GameState.on_boss_killed(kind)
 			var gained := GameState.boss_loot_bonus - bb
 			Juice.float_text(global_position + Vector2(0, -60), ("BOSS DOWN  +×%.1f LOOT" % gained) if gained > 0.0 else "BOSS DOWN", UiTheme.AMBER, 22)
+			## The payoff beat: slow-mo, a warm flash, a big blast where it fell.
+			Juice.slowmo(0.3, 0.9)
+			Juice.shake(0.6)
+			Juice.fx_explosion(global_position, 140.0)
+			var sc := get_tree().current_scene
+			var hud := sc.get_node_or_null("HUD") if sc else null
+			if hud and hud.has_method("screen_flash"):
+				hud.call("screen_flash", Color(1.0, 0.85, 0.5), 0.5, 0.6)
 	else:
 		GearPickup.maybe_drop(parent, global_position, GearDefs.KILL_DROP_CHANCE)
 	var pl := get_tree().get_first_node_in_group("player")
