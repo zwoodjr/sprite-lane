@@ -1,5 +1,12 @@
 # MVP status (repo mirror)
 
+**Latest (overnight polish pass):** In progress — performance + feel + UI polish. Changes so far:
+
+- Perf: kill loot is capped at 70 live drops; overflow value merges into the nearest same-kind drop (a horde used to leave 400+ drops ticking each frame). Magnet radius lookup throttled.
+- Perf: enemy separation uses a shared per-frame enemy list and recomputes every 3rd frame per mob (was O(n²) array allocs every frame).
+
+Test on device: big hordes (Last Extract, Dustfall) — scrap/XP should still all arrive; frame pacing should hold steadier.
+
 **Latest (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
 
 **Prior (Hangar scroll):** Full meta catalog was hard to drag / stuck on iPhone·Xogot portrait. `hangar.gd` now uses a touch-friendly ScrollContainer (no horizontal steal, deadzone, follow-focus), rows pass drag to the scroller, list width syncs for autowrap height, rebuild frees rows immediately and clamps scroll, portrait chrome tightened + end pad for Xogot bottom toolbar. Re-pull PR #10.

@@ -18,6 +18,11 @@ const SIZE := {"scrap": 14.0, "xp": 12.0, "xp_big": 16.0, "tonic": 22.0}
 const MAGNET_RADIUS := 120.0
 const COLLECT_RADIUS := 18.0
 const LIFETIME := 30.0
+## Mobile budget: past this many drops on the ground, new kill loot merges its
+## value into an existing drop of the same kind instead of adding nodes (a
+## horde could otherwise leave 400+ live drops ticking every frame).
+const LIVE_CAP := 70
+static var _live: Array = []
 
 var kind: String = "scrap"
 var value: float = 1.0
@@ -28,11 +33,20 @@ var _age: float = 0.0
 var _magnet: bool = false
 var _player: Node2D
 var _sprite: Sprite2D
+var _radius: float = MAGNET_RADIUS
+var _radius_t: float = 0.0
 
 
 static func spawn_burst(parent: Node, at: Vector2, kind_id: String, count: int, total_value: float) -> void:
 	if count <= 0 or parent == null:
 		return
+	_live = _live.filter(func(n: Variant) -> bool: return is_instance_valid(n))
+	if _live.size() >= LIVE_CAP and kind_id != "tonic":
+		var host := _merge_host(at, kind_id)
+		if host != null:
+			host.value += total_value
+			return
+	count = mini(count, maxi(1, LIVE_CAP - _live.size()))
 	var each := total_value / float(count)
 	for i in range(count):
 		var d := Node2D.new()
@@ -41,6 +55,30 @@ static func spawn_burst(parent: Node, at: Vector2, kind_id: String, count: int, 
 		d.set("value", each)
 		d.position = at
 		parent.add_child.call_deferred(d)
+
+
+## Nearest live drop of `kind_id` (any distance) to absorb overflow value.
+static func _merge_host(at: Vector2, kind_id: String) -> LootDrop:
+	var best: LootDrop = null
+	var bd := INF
+	for n in _live:
+		var d := n as LootDrop
+		if d == null or d.kind != kind_id or d.is_queued_for_deletion():
+			continue
+		var dd := d.global_position.distance_squared_to(at)
+		if dd < bd:
+			bd = dd
+			best = d
+	return best
+
+
+func _enter_tree() -> void:
+	if not _live.has(self):
+		_live.append(self)
+
+
+func _exit_tree() -> void:
+	_live.erase(self)
 
 
 func _ready() -> void:
@@ -88,11 +126,16 @@ func _physics_process(delta: float) -> void:
 		return
 	var to := _player.global_position - global_position
 	var d := to.length()
-	var radius := MAGNET_RADIUS + GameState.pickup_radius_bonus()
-	if _player.has_method("get_active_buffs") and (_player.call("get_active_buffs") as Dictionary).has("magnet"):
-		radius *= 3.0
-	if d < radius:
-		_magnet = true
+	if not _magnet:
+		## Radius lookup is a few dictionary hits: refresh it ~8x a second.
+		_radius_t -= delta
+		if _radius_t <= 0.0:
+			_radius_t = 0.12
+			_radius = MAGNET_RADIUS + GameState.pickup_radius_bonus()
+			if _player.has_method("get_active_buffs") and (_player.call("get_active_buffs") as Dictionary).has("magnet"):
+				_radius *= 3.0
+		if d < _radius:
+			_magnet = true
 	if _magnet:
 		var spd := 260.0 + 900.0 * clampf(_age * 0.5, 0.0, 1.0)
 		global_position += to.normalized() * minf(d, spd * delta)

@@ -523,14 +523,39 @@ func _update_anim(_attacking: bool) -> void:
 	else:
 		_anim.set_locomotion("idle")
 
-## Mobs push apart (size-aware) so hordes flow around each other.
+## Shared per-physics-frame snapshot of the "enemies" group: every mob used to
+## call get_nodes_in_group (a fresh Array) each frame — O(n) allocs of O(n).
+static var _roster: Array = []
+static var _roster_frame: int = -1
+
+static func roster(tree: SceneTree) -> Array:
+	var f := Engine.get_physics_frames()
+	if f != _roster_frame:
+		_roster_frame = f
+		_roster = tree.get_nodes_in_group("enemies")
+	return _roster
+
+var _sep_cache: Vector2 = Vector2.ZERO
+var _sep_phase: int = -1
+
+## Mobs push apart (size-aware) so hordes flow around each other. Recomputed
+## every 3rd physics frame per mob (staggered); the push is smooth enough that
+## nobody can tell, and it cuts the O(n²) cost by two thirds.
 func _separation() -> Vector2:
+	if _sep_phase < 0:
+		_sep_phase = int(get_instance_id() % 3)
+	if (Engine.get_physics_frames() + _sep_phase) % 3 != 0:
+		return _sep_cache
 	var push := Vector2.ZERO
-	for n in get_tree().get_nodes_in_group("enemies"):
-		if n == self or not (n is Node2D):
+	var me := global_position
+	for n in roster(get_tree()):
+		if n == self or not is_instance_valid(n) or not (n is Node2D):
 			continue
 		var other := n as Node2D
-		var d := global_position - other.global_position
+		var d := me - other.global_position
+		## Cheap reject before the sqrt (largest body_scale is ~2.2).
+		if absf(d.x) > 130.0 or absf(d.y) > 130.0:
+			continue
 		var l := d.length()
 		var reach := SEPARATION_PX * (body_scale + float(other.get("body_scale"))) * 0.5
 		if l < 0.1:
@@ -538,7 +563,8 @@ func _separation() -> Vector2:
 			l = 0.1
 		if l < reach:
 			push += d / l * (1.0 - l / reach)
-	return push.limit_length(1.5)
+	_sep_cache = push.limit_length(1.5)
+	return _sep_cache
 
 func _attack(dir: Vector2) -> void:
 	_fire_cd = float(_def["cooldown"]) * randf_range(0.85, 1.2)
