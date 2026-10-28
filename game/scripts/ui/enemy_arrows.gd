@@ -34,13 +34,16 @@ func _draw() -> void:
 	var xform: Transform2D = get_viewport().get_canvas_transform()
 	var hero_screen: Vector2 = xform * _player.global_position
 	var list: Array = []
+	var hp := _player.global_position
+	var r2 := SHOW_WITHIN * SHOW_WITHIN
 	for n in get_tree().get_nodes_in_group("enemies"):
 		if not (n is Node2D) or not is_instance_valid(n):
 			continue
 		var e := n as Node2D
-		var d := e.global_position.distance_to(_player.global_position)
-		if d > SHOW_WITHIN:
+		var d2 := e.global_position.distance_squared_to(hp)
+		if d2 > r2:
 			continue
+		var d := sqrt(d2)
 		var s: Vector2 = xform * e.global_position
 		if s.x > 0.0 and s.y > 0.0 and s.x < vp.x and s.y < vp.y:
 			continue

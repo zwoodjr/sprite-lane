@@ -114,13 +114,18 @@ func spawn_zone(at: Vector2, r: float = -1.0) -> Node2D:
 	return z
 
 
+var _pack_t: float = 0.0
+
 func _process(delta: float) -> void:
 	if _player == null or not is_instance_valid(_player) or GameState.run_finished:
 		return
 	if _active:
 		_tick_zones(delta)
 		_tick_exposure(delta)
-	if _hud and _hud.has_method("set_pack"):
+	## Pack readout: 5 Hz is plenty (it walked the pack + pouch every frame).
+	_pack_t -= delta
+	if _pack_t <= 0.0 and _hud and _hud.has_method("set_pack"):
+		_pack_t = 0.2
 		_hud.call("set_pack", GameState.pack_weight(), GameState.pack_capacity(), GameState.medicine_carried())
 
 
