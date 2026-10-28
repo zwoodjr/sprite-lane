@@ -724,7 +724,7 @@ func set_campaign() -> void:
 	_phase_label.clip_text = true
 	_phase_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_phase_label.add_theme_font_size_override("font_size", 22)
-	_phase_label.add_theme_color_override("font_color", UiTheme.TEAL)
+	_set_col(_phase_label, UiTheme.TEAL)
 	_phase_hint.visible = true
 	_phase_hint.text = ""
 	_phase_hint.add_theme_constant_override("outline_size", 5)
@@ -776,7 +776,7 @@ func _process(delta: float) -> void:
 			var cells := int(round(hr * 10.0))
 			_ammo_label.text = ("OVERHEAT " if over else "HEAT ") + "|".repeat(cells) + ".".repeat(10 - cells)
 			_ammo_label.visible = true
-			_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if over or hr > 0.8 else (UiTheme.AMBER if hr > 0.5 else UiTheme.TEXT))
+			_set_col(_ammo_label, UiTheme.DANGER if over or hr > 0.8 else (UiTheme.AMBER if hr > 0.5 else UiTheme.TEXT))
 	_phase_shown_t += delta
 	if _phase_hint and not campaign:
 		_phase_hint.modulate.a = clampf((6.0 - _phase_shown_t) / 0.8, 0.0, 1.0)
@@ -813,8 +813,8 @@ func ping_pads() -> void:
 func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, player: Node) -> void:
 	var is_open0 := bool(phase.get("extract_open", false))
 	var is_last0 := bool(phase.get("is_last", false))
-	_phase_label.text = "LAST CHANCE" if is_last0 else ("EXTRACT OPEN" if is_open0 else "EXTRACT IN")
-	_timer_label.text = _fmt_time(time_left)
+	_set_text(_phase_label, "LAST CHANCE" if is_last0 else ("EXTRACT OPEN" if is_open0 else "EXTRACT IN"))
+	_set_text(_timer_label, _fmt_time(time_left))
 	var pid0 := str(phase.get("id", ""))
 	if pid0 != _phase_id:
 		_phase_id = pid0
@@ -826,27 +826,27 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	var urgent := time_left <= 10.0
 	if is_open:
 		var oc := UiTheme.DANGER if is_last else Color(0.55, 1.0, 0.6)
-		_phase_label.add_theme_color_override("font_color", oc)
+		_set_col(_phase_label, oc)
 		if _phase_bar.get_meta("fill_col", Color.BLACK) != oc:
 			_phase_bar.set_meta("fill_col", oc)
 			UiTheme.skin_bar(_phase_bar, oc)
 		if is_last:
-			_phase_hint.text = "Reach a red pad before the storm"
+			_set_text(_phase_hint, "Reach a red pad before the storm")
 		elif urgent:
-			_phase_hint.text = "Closing! Leave at ×%.1f or stay" % loot
+			_set_text(_phase_hint, "Closing! Leave at ×%.1f or stay" % loot)
 		else:
-			_phase_hint.text = "Hold a pad 3s to leave at ×%.1f" % loot
+			_set_text(_phase_hint, "Hold a pad 3s to leave at ×%.1f" % loot)
 	else:
-		_phase_label.add_theme_color_override("font_color", UiTheme.AMBER)
+		_set_col(_phase_label, UiTheme.AMBER)
 		if _phase_bar.get_meta("fill_col", Color.BLACK) != UiTheme.AMBER:
 			_phase_bar.set_meta("fill_col", UiTheme.AMBER)
 			UiTheme.skin_bar(_phase_bar, UiTheme.AMBER)
 		var pid := str(phase.get("id", ""))
 		if pid == "lockout":
-			_phase_hint.text = "Survive & loot until the first window"
+			_set_text(_phase_hint, "Survive & loot until the first window")
 		else:
-			_phase_hint.text = "Sealed — loot climbs while you stay"
-	_timer_label.add_theme_color_override("font_color", UiTheme.DANGER if urgent and (is_open or is_last) else UiTheme.TEXT)
+			_set_text(_phase_hint, "Sealed — loot climbs while you stay")
+	_set_col(_timer_label, UiTheme.DANGER if urgent and (is_open or is_last) else UiTheme.TEXT)
 	if urgent:
 		var p := 1.0 + 0.06 * absf(sin(_t * 6.0))
 		_timer_label.pivot_offset = _timer_label.size * 0.5
@@ -854,19 +854,19 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	else:
 		_timer_label.scale = Vector2.ONE
 	## Loot multiplier (big) + Threat (rises with it)
-	_threat_label.text = "LOOT x%.1f" % loot
+	_set_text(_threat_label, "LOOT x%.1f" % loot)
 	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
-	_threat_label.add_theme_color_override("font_color", tl_col)
-	_threat_sub.text = "THREAT %d +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)]
+	_set_col(_threat_label, tl_col)
+	_set_text(_threat_sub, "THREAT %d +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)])
 	if tl != _last_tl:
 		_last_tl = tl
 		_pulse(_threat_panel)
-	_counter_label.text = "BAG %d  KILLS %d" % [GameState.bag_value(), GameState.kills]
+	_set_text(_counter_label, "BAG %d  KILLS %d" % [GameState.bag_value(), GameState.kills])
 	var rp: Dictionary = GameState.run_bar_state()
-	_run_level_label.text = "LV %d%s" % [
+	_set_text(_run_level_label, "LV %d%s" % [
 		int(rp["level"]),
 		"  MAX" if bool(rp.get("capped", false)) else "",
-	]
+	])
 	_run_xp_bar.value = float(rp["ratio"])
 	if _xp_line:
 		_xp_line.call("set_ratio", float(rp["ratio"]))
@@ -879,6 +879,18 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	if player and is_instance_valid(player) and not bool(player.call("is_reloading")):
 		_refresh_ammo()
 
+## Theme overrides invalidate the control's theme cache and re-shape text;
+## update_match runs every frame, so only touch them when the value changes.
+func _set_col(c: Control, col: Color) -> void:
+	if c.get_meta("_fc", Color(0, 0, 0, 0)) == col:
+		return
+	c.set_meta("_fc", col)
+	c.add_theme_color_override("font_color", col)
+
+func _set_text(l: Label, t: String) -> void:
+	if l.text != t:
+		l.text = t
+
 func _refresh_ammo() -> void:
 	if _player == null or not is_instance_valid(_player):
 		return
@@ -886,8 +898,8 @@ func _refresh_ammo() -> void:
 		return
 	var a: int = _player.call("get_ammo")
 	var m: int = _player.call("get_mag_size")
-	_ammo_label.text = ""
-	_ammo_label.add_theme_color_override("font_color", UiTheme.DANGER if a <= m / 5 else UiTheme.TEXT)
+	_set_text(_ammo_label, "")
+	_set_col(_ammo_label, UiTheme.DANGER if a <= m / 5 else UiTheme.TEXT)
 
 func set_extract_open(is_open: bool) -> void:
 	if is_open != _extract_open:
@@ -937,14 +949,17 @@ func _refresh_buffs(buffs: Dictionary) -> void:
 		var def_raw = entry.get("def", {})
 		var def: Dictionary = def_raw if def_raw is Dictionary else {}
 		var chip := _buff_row.get_child(i) as Label
-		chip.text = "%s %ds" % [str(def.get("name", id)), int(ceil(float(entry.get("time_left", 0))))]
+		var txt := "%s %ds" % [str(def.get("name", id)), int(ceil(float(entry.get("time_left", 0))))]
 		var col_raw = def.get("color", UiTheme.AMBER)
 		var col: Color = col_raw if col_raw is Color else UiTheme.AMBER
-		chip.add_theme_color_override("font_color", col)
+		_set_col(chip, col)
 		## Special ammo (Phase 4): bigger chip outlined in the ammo colour.
 		var is_ammo := str(id) == "ammo"
-		chip.text = chip.text.to_upper() if is_ammo else chip.text
-		chip.add_theme_font_size_override("font_size", UiTheme.font_px(UiTheme.MIN_FONT))
+		_set_text(chip, txt.to_upper() if is_ammo else txt)
+		var fpx := UiTheme.font_px(UiTheme.MIN_FONT)
+		if int(chip.get_meta("_fs", -1)) != fpx:
+			chip.set_meta("_fs", fpx)
+			chip.add_theme_font_size_override("font_size", fpx)
 		if chip.get_meta("chip_col", Color.BLACK) != col:
 			chip.set_meta("chip_col", col)
 			chip.add_theme_stylebox_override("normal", UiTheme.plate("hud", 8.0, Color.WHITE.lerp(col, 0.45) if is_ammo else Color.WHITE))
