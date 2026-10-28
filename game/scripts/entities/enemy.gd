@@ -871,6 +871,8 @@ func _tick_status(delta: float) -> void:
 			take_damage(dps * UpgradeDefs.POISON_TICK, Vector2.ZERO, 0.0, false, col)
 	_apply_status_tint()
 
+var _status_fx_on: bool = false
+
 func _apply_status_tint() -> void:
 	if body == null:
 		return
@@ -884,7 +886,13 @@ func _apply_status_tint() -> void:
 		if _status.has(id):
 			c = STATUS_TINT[id]
 			break
-	body.modulate = c
+	if body.modulate != c:
+		body.modulate = c
+	## Only touch the status overlay while there is (or just was) a status:
+	## the idle case used to do a node-path lookup per mob per physics frame.
+	if _status.is_empty() and not _status_fx_on:
+		return
+	_status_fx_on = not _status.is_empty()
 	Juice.status_fx(self, _status, FEET_Y * body_scale - _anim.world_frame_px() * 0.62 - 6.0)
 
 ## Rubble Wall: a mob flying from a big knockback smashes the ones it meets.
