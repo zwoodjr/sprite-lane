@@ -45,6 +45,38 @@ void fragment() {
 }
 """
 
+## Cheap path (no screen read): after the audit pass the grade is just a ~10%
+## tint + soft vignette (+ optional dither), which a multiply blend can draw
+## without copying the back buffer — a full-screen copy + read every frame is
+## one of the costliest things a tile GPU (iPhone) can do. The luminance split
+## (cool shadows / warm highlights) is folded to its midpoint (<= 1, since a
+## multiply can't brighten); the screen-read shader stays for Brightness != 1.
+const SHADER_MUL := """
+shader_type canvas_item;
+render_mode blend_mul;
+uniform vec3 cool = vec3(0.80, 0.84, 0.96);
+uniform vec3 warm = vec3(1.08, 0.97, 0.84);
+uniform float vignette = 0.62;
+uniform float dither = 0.0;
+
+void fragment() {
+	vec3 c = min(mix(cool, warm, 0.5), vec3(1.0));
+	vec2 d = (SCREEN_UV - vec2(0.5, 0.46)) * vec2(1.25, 1.0);
+	float v = smoothstep(0.30, 0.82, length(d));
+	if (dither > 0.0) {
+		float cell = max(1.0, floor((1.0 / SCREEN_PIXEL_SIZE.x) / 360.0));
+		vec2 q = floor(FRAGCOORD.xy / cell);
+		bool chk = mod(q.x + q.y, 2.0) < 1.0;
+		float dk = 0.0;
+		if (v > 0.82) { dk = 1.0; } else if (v > 0.5 && chk) { dk = 1.0; }
+		c *= 1.0 - dither * dk;
+	} else {
+		c *= 1.0 - vignette * v * v;
+	}
+	COLOR = vec4(c, 1.0);
+}
+"""
+
 ## Default look (The Haze / The Drift) and per-zone overrides (ZoneDefs id).
 const LOOK := {"cool": Vector3(0.80, 0.84, 0.96), "warm": Vector3(1.08, 0.97, 0.84), "contrast": 1.16,
 	"pivot": 0.46, "sat": 0.88, "vignette": 0.62, "lift": 0.0}
@@ -69,6 +101,9 @@ const PIVOT := 0.36
 var _mat: ShaderMaterial
 var _grain_on: bool = false
 var _gamma: float = 1.0
+var _sh_full: Shader
+var _sh_mul: Shader
+var _look: Dictionary = {}
 
 
 func _ready() -> void:
@@ -77,10 +112,12 @@ func _ready() -> void:
 	rect.name = "Grade"
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sh := Shader.new()
-	sh.code = SHADER
+	_sh_full = Shader.new()
+	_sh_full.code = SHADER
+	_sh_mul = Shader.new()
+	_sh_mul.code = SHADER_MUL
 	_mat = ShaderMaterial.new()
-	_mat.shader = sh
+	_mat.shader = _sh_mul
 	rect.material = _mat
 	add_child(rect)
 	var look := LOOK.duplicate()
@@ -97,12 +134,21 @@ func _ready() -> void:
 	look["sat"] = 1.0
 	look["lift"] = 0.0
 	look["pivot"] = PIVOT
-	for k in look:
-		var v: Variant = look[k]
-		_mat.set_shader_parameter(k, v)
-	_apply_grain()
+	_look = look
 	_gamma = SettingsDefs.gamma()
+	_pick_shader()
+
+
+## Screen-read shader only when Brightness is moved off 1.0.
+func _pick_shader() -> void:
+	var want := _sh_full if absf(_gamma - 1.0) > 0.001 else _sh_mul
+	if _mat.shader != want:
+		_mat.shader = want
+	for k in _look:
+		var v: Variant = _look[k]
+		_mat.set_shader_parameter(k, v)
 	_mat.set_shader_parameter("gamma", _gamma)
+	_apply_grain()
 
 
 func _process(_delta: float) -> void:
@@ -112,7 +158,7 @@ func _process(_delta: float) -> void:
 	var g := SettingsDefs.gamma()
 	if absf(g - _gamma) > 0.001:
 		_gamma = g
-		_mat.set_shader_parameter("gamma", g)
+		_pick_shader()
 
 
 func gamma_value() -> float:

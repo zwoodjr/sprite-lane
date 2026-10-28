@@ -72,6 +72,7 @@ var _hit_flash: TextureRect
 var _boss_bar: Control
 var _white_flash: ColorRect
 var _kill_chain: Control
+var _beat_t: float = 0.0
 ## center
 var _banner: Label
 var _banner_sub: Label
@@ -776,6 +777,15 @@ func _process(delta: float) -> void:
 	## Low HP is an edge pulse only (audit: the full-screen red flood hid the fight).
 	var low := clampf((0.4 - _hp_ratio) / 0.4, 0.0, 1.0)
 	_vignette.modulate.a = low * (0.5 + 0.5 * sin(_t * (4.0 + low * 4.0))) * 0.6
+	## Heartbeat in the hand below 25% HP: a double tap, quicker as it drops.
+	if _hp_ratio > 0.0 and _hp_ratio < 0.25 and not get_tree().paused:
+		_beat_t -= delta
+		if _beat_t <= 0.0:
+			_beat_t = lerpf(0.75, 1.3, _hp_ratio / 0.25)
+			Juice.haptic(Juice.HAPTIC_TICK)
+			get_tree().create_timer(0.16, false).timeout.connect(func() -> void: Juice.haptic(Juice.HAPTIC_TICK))
+	else:
+		_beat_t = 0.0
 	if _player and is_instance_valid(_player) and _player.has_method("is_reloading"):
 		var rel: bool = _player.call("is_reloading")
 		if rel:
