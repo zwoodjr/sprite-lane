@@ -421,29 +421,68 @@ func dust_puff(pos: Vector2, amount: int = 4) -> void:
 	burst(pos, Color(0.63, 0.53, 0.41), mini(amount, 6), 50.0, 0.45, 1.0)
 
 
+## Floating callouts ("BLOCKED", "+12", "NOEL RAMPAGE!") from a small per-scene
+## label pool (oldest recycled). Each label keeps its last font size / colour
+## so a reuse only touches overrides that changed.
+const FT_POOL := 24
+var _ft_pool: Array[Label] = []
+var _ft_tw: Array = []
+var _ft_i: int = 0
+var _ft_scene: Node = null
+
 func float_text(pos: Vector2, text: String, color: Color = Color.WHITE, size: int = 18) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
-	var l := Label.new()
+	if scene != _ft_scene:
+		_ft_scene = scene
+		_ft_pool.clear()
+		_ft_tw.clear()
+		_ft_i = 0
+	var l: Label
+	var slot := -1
+	if _ft_pool.size() < FT_POOL:
+		l = Label.new()
+		l.z_index = 50
+		l.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03))
+		l.add_theme_constant_override("outline_size", 5)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.size = Vector2(120, 30)
+		l.pivot_offset = Vector2(60, 15)
+		scene.add_child(l)
+		_ft_pool.append(l)
+		_ft_tw.append(null)
+		slot = _ft_pool.size() - 1
+	else:
+		slot = _ft_i
+		_ft_i = (_ft_i + 1) % FT_POOL
+		l = _ft_pool[slot]
+		if not is_instance_valid(l):
+			_ft_pool.clear()
+			_ft_tw.clear()
+			return
+		var old: Variant = _ft_tw[slot]
+		if old is Tween and (old as Tween).is_valid():
+			(old as Tween).kill()
 	l.text = text
-	l.z_index = 50
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03))
-	l.add_theme_constant_override("outline_size", 5)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.size = Vector2(120, 30)
+	if int(l.get_meta("fs", -1)) != size:
+		l.set_meta("fs", size)
+		l.add_theme_font_size_override("font_size", size)
+	if l.get_meta("fc", Color(0, 0, 0, 0)) != color:
+		l.set_meta("fc", color)
+		l.add_theme_color_override("font_color", color)
+	l.visible = true
+	l.modulate.a = 1.0
 	l.position = pos - Vector2(60, 30) + Vector2(randf_range(-10, 10), 0)
-	l.pivot_offset = Vector2(60, 15)
 	l.scale = Vector2(0.6, 0.6)
-	scene.add_child(l)
 	var tw := l.create_tween()
+	_ft_tw[slot] = tw
 	tw.set_parallel(true)
 	tw.tween_property(l, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(l, "position:y", l.position.y - 38.0, 0.7).set_ease(Tween.EASE_OUT)
 	tw.tween_property(l, "modulate:a", 0.0, 0.3).set_delay(0.45)
-	tw.chain().tween_callback(l.queue_free)
+	tw.chain().tween_callback(func() -> void: l.visible = false)
 
 
 ## Damage numbers (audit quick win #4): ONE number per target that sums every

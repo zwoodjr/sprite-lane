@@ -488,6 +488,10 @@ func _test_music() -> void:
 	await get_tree().process_frame
 	var centre := cam.get_screen_center_position()
 	_check(float(snd.call("pan_at", centre + Vector2(-250, 0))) < 0.0, "pan: world sound left of camera")
+	## Free the voice pool + cooldown first (earlier sections may still be playing hits).
+	(snd.get("_last_ms") as Dictionary).erase("hit_metal")
+	for pv in snd.call("_pos_voices"):
+		pv.call("stop")
 	var v: Variant = snd.call("play", "hit_metal", 0.0, -1.0, centre + Vector2(-250, 0))
 	_check(v is AudioStreamPlayer and str((v as AudioStreamPlayer).bus).begins_with("SfxPanL"), "pan: voice routed to a left bus")
 	var ui: Variant = snd.call("play", "ui_tap", 0.0, -1.0, Vector2.INF)
