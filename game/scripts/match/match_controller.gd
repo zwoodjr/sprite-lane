@@ -845,16 +845,34 @@ func _on_extract_requested() -> void:
 	Juice.sfx("extract_win")
 	Juice.haptic(Juice.HAPTIC_EXTRACT)
 	hud.show_banner("EXTRACTED", "Payout %d scrap (×%.1f)" % [GameState.payout_this_run, GameState.loot_mult], Color(0.55, 1.0, 0.6))
+	if hud.has_method("screen_flash"):
+		hud.call("screen_flash", Color(1.0, 0.95, 0.8), 0.6, 0.5)
+	_camera_punch(1.1)
+	Juice.shake(0.35)
+	Juice.slowmo(0.45, 0.6)
 	if is_instance_valid(player):
 		Juice.burst(player.global_position, Color(1, 0.85, 0.4), 40, 260.0, 0.9, 1.4)
-		var tw := player.create_tween()
-		tw.tween_property(player, "modulate:a", 0.0, 0.8)
+		Juice.fx("fx_heal_small", player.global_position + Vector2(0, 12))
+		## Lifted out: stretch up and fade, like the pad's beam pulls you in.
+		var tw := player.create_tween().set_parallel(true)
+		tw.tween_property(player, "modulate", Color(2.0, 1.9, 1.5, 0.0), 0.8).set_ease(Tween.EASE_IN)
+		tw.tween_property(player, "scale", Vector2(0.7, 1.6), 0.8).set_ease(Tween.EASE_IN)
 	_go_result_after(1.6)
+
+## Leaving the match (result screen, abandon, tests) always restores real time.
+func _exit_tree() -> void:
+	Juice.cancel_slowmo()
+
+func _camera_punch(k: float) -> void:
+	var cam := get_viewport().get_camera_2d()
+	if cam and "punch" in cam:
+		cam.set("punch", k)
 
 ## Timer callback bound to this node: if the scene is already gone (Abandon,
 ## quit), the connection dies with it — no double go_result.
 func _go_result_after(sec: float) -> void:
-	get_tree().create_timer(sec).timeout.connect(_go_result_now)
+	## Real time: the death / extract slow-mo must not stretch the wait.
+	get_tree().create_timer(sec, true, false, true).timeout.connect(_go_result_now)
 
 func _go_result_now() -> void:
 	if is_inside_tree() and get_tree().current_scene == self:
@@ -885,7 +903,13 @@ func _finish_wipe(reason: String) -> void:
 	GameState.result_summary = reason + "\n" + GameState.result_summary
 	Juice.sfx("wipe")
 	hud.show_banner("WIPED", reason, UiTheme.DANGER)
-	_go_result_after(1.8)
+	if hud.has_method("screen_flash"):
+		hud.call("screen_flash", Color(0.75, 0.05, 0.02), 0.55, 0.9)
+	_camera_punch(1.18)
+	Juice.shake(0.5)
+	Juice.slowmo(0.25, 1.1)
+	Juice.haptic(Juice.HAPTIC_EXTRACT)
+	_go_result_after(2.0)
 
 func get_phase_progress() -> float:
 	var dur := float(_phases[_phase_index]["duration"])

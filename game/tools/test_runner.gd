@@ -453,6 +453,9 @@ func _test_music() -> void:
 	_check(str(snd.call("pick_run_track", "combat", 0.3, 0, false, true)) == "boss", "music: last window -> boss")
 	## Live state machine: escalation is immediate, calming waits out the hold.
 	snd.call("set_music", "run")
+	## Start from a known calm state (earlier sections may have left the hold timer high).
+	snd.set("run_track", "explore")
+	snd.set("_run_track_t", 0.0)
 	snd.call("update_run_music", 0.9, 0, false, false, 0.25)
 	_check(str(snd.get("run_track")) == "combat", "music: live run -> combat")
 	snd.call("update_run_music", 0.1, 0, false, false, 0.25)
@@ -2277,9 +2280,12 @@ func _test_quickwins() -> void:
 	_check(not (foe.get("hp_bar") as Control).visible, "qw mob bar hides after a while")
 	## Boss bar appears for a boss.
 	var boss: Node = m.call("spawn_special", "boss")
-	for k in range(30):
-		await get_tree().process_frame
 	var bb: Control = m.get_node("HUD").get("_boss_bar")
+	## The bar polls every 0.25 s and fades in: wait for it (frame-rate independent).
+	for k in range(240):
+		await get_tree().process_frame
+		if bb != null and bb.visible:
+			break
 	_check(bb != null and bb.visible and is_instance_valid(boss), "qw boss bar shows")
 	## Pets are drawn smaller than the hero.
 	var pet := get_tree().get_first_node_in_group("pets")

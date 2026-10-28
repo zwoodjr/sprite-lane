@@ -969,6 +969,14 @@ func show_banner(title: String, sub: String = "", color: Color = UiTheme.AMBER) 
 	tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
 	tw.tween_property(_banner_sub, "modulate:a", 0.0, 0.4)
 
+## Full-screen colour pop that fades out (extract white, wipe red).
+func screen_flash(col: Color, alpha: float, dur: float) -> void:
+	if _white_flash == null:
+		return
+	_white_flash.color = Color(col, alpha * SettingsDefs.flash_k())
+	var tw := _white_flash.create_tween()
+	tw.tween_property(_white_flash, "color:a", 0.0, dur).set_ease(Tween.EASE_OUT)
+
 ## Boss arrival: white pop, camera punch-in, name title. The top bar appears
 ## by itself (BossBar polls the "bosses" group).
 func boss_intro(boss_name: String) -> void:

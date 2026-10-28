@@ -173,13 +173,58 @@ func hitstop(seconds: float) -> void:
 	_hitstop_left = maxf(_hitstop_left, seconds)
 
 
+## Dramatic slow motion for `real_seconds` of wall time (death, extract): time
+## runs at `scale`, then eases back to 1. Hitstop still wins while it runs.
+var _slowmo_left: float = 0.0
+var _slowmo_total: float = 0.0
+var _slowmo_scale: float = 1.0
+var _slowmo_scene: Node = null
+
+func slowmo(scale: float, real_seconds: float) -> void:
+	if SettingsDefs.shake_mult() <= 0.0 and scale < 1.0:
+		## Reduce motion: keep it short.
+		real_seconds *= 0.4
+	_slowmo_scale = clampf(scale, 0.05, 1.0)
+	_slowmo_left = real_seconds
+	_slowmo_total = maxf(real_seconds, 0.01)
+	_slowmo_scene = get_tree().current_scene
+
+func cancel_slowmo() -> void:
+	_slowmo_left = 0.0
+	_hitstop_left = 0.0
+	Engine.time_scale = 1.0
+
+func slowmo_active() -> bool:
+	return _slowmo_left > 0.0
+
+## Time scale outside of hitstop: the slow-mo curve (last 35% ramps back to 1).
+func _base_time_scale() -> float:
+	if _slowmo_left <= 0.0:
+		return 1.0
+	var k := _slowmo_left / _slowmo_total
+	if k > 0.35:
+		return _slowmo_scale
+	return lerpf(1.0, _slowmo_scale, k / 0.35)
+
+
 func _process(delta: float) -> void:
 	_stop_cd -= delta / maxf(Engine.time_scale, 0.01)
 	_tick_damage_numbers(delta)
+	var real_dt := delta / maxf(Engine.time_scale, 0.01)
+	if _slowmo_left > 0.0:
+		## Scene changed (result screen, menu): drop the slow-mo with it.
+		var cs := get_tree().current_scene
+		if cs != _slowmo_scene:
+			_slowmo_left = 0.0
+			_hitstop_left = 0.0
+			Engine.time_scale = 1.0
+		_slowmo_left -= real_dt
+		if _hitstop_left <= 0.0:
+			Engine.time_scale = _base_time_scale()
 	## Hitstop: briefly slow time on big hits for weight.
 	if _hitstop_left > 0.0:
-		_hitstop_left -= delta / maxf(Engine.time_scale, 0.01)
-		Engine.time_scale = 0.08 if _hitstop_left > 0.0 else 1.0
+		_hitstop_left -= real_dt
+		Engine.time_scale = 0.08 if _hitstop_left > 0.0 else _base_time_scale()
 	var cam := _camera()
 	if cam == null:
 		_trauma = 0.0
