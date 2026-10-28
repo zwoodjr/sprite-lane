@@ -180,7 +180,36 @@ func _live_begin() -> void:
 	if not res.is_empty():
 		set_meta("resumed", true)
 		_apply_resume(res)
+	elif not GameState.in_campaign_run():
+		_drop_in_landing()
 	GameState.live_run_begin(self)
+
+
+## DROP IN: the hero's sprite falls in from above the frame and lands with a
+## dust ring, shake and thud (visual only — the body is already in place).
+func _drop_in_landing() -> void:
+	if not is_instance_valid(player) or SettingsDefs.reduce_motion():
+		return
+	var spr := player.get_node_or_null("Body") as Node2D
+	if spr == null:
+		return
+	var y0 := spr.position.y
+	spr.position.y = y0 - 420.0
+	var tw := spr.create_tween()
+	tw.tween_interval(0.15)
+	tw.tween_property(spr, "position:y", y0, 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		if not is_instance_valid(player):
+			return
+		Juice.shake(0.32)
+		Juice.haptic(Juice.HAPTIC_BIG)
+		Juice.sfx("crate_land")
+		Juice.dust_puff(player.global_position + Vector2(0, 14), 12)
+		RunFx.ring(world, player.global_position + Vector2(0, 14), 70.0, Color(1.0, 0.9, 0.7), 0.3, 4.0)
+		var an: Variant = player.get("_anim")
+		if an is Object and (an as Object).has_method("squash"):
+			(an as Object).call("squash", 0.22))
+
 
 
 ## Match bits for the live-run snapshot (INF schedule times stored as -1).
