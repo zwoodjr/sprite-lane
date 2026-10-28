@@ -53,9 +53,15 @@ func _build_ui() -> void:
 	_radio = PanelContainer.new()
 	_radio.add_theme_stylebox_override("panel", UiTheme.plate("panel_steel", 14.0, Color(0.85, 1.0, 0.85, 0.95)))
 	_radio.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_radio.offset_left = 24
-	_radio.offset_right = -24
-	_radio.offset_top = 272
+	## Left of the minimap / loot / kill-chain column so it never covers them.
+	var sm := MobileLayout.control_safe_margin()
+	var vpw := 720.0
+	if get_viewport():
+		vpw = get_viewport().get_visible_rect().size.x
+	var col_w := minf(135.0, vpw * 0.3) + 40.0 + 12.0
+	_radio.offset_left = sm.position.x
+	_radio.offset_right = -(col_w + (vpw - sm.position.x - sm.size.x))
+	_radio.offset_top = sm.position.y + 150.0
 	_radio.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_radio.visible = false
 	_layer.add_child(_radio)
