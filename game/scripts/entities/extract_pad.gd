@@ -136,10 +136,15 @@ func _process(delta: float) -> void:
 			_chan_snd = Juice.sfx("pad_channel")
 			if _chan_snd:
 				_chan_snd.set("pitch_scale", clampf(3.0 / maxf(_need(), 0.1), 0.7, 2.5))
+		var before := _channel
 		_channel += delta
 		channel_changed.emit(_channel / _need())
-		if int(_channel * 10.0) % 3 == 0:
-			Juice.burst(global_position + Vector2(randf_range(-40, 40), 10), Color(1, 0.85, 0.4, 0.8), 2, 60.0, 0.6)
+		## Sparks + a haptic tick that quickens toward the lift (tension).
+		var k := _channel / _need()
+		var step := 0.5 if k < 0.6 else (0.25 if k < 0.85 else 0.12)
+		if floorf(_channel / step) != floorf(before / step):
+			Juice.haptic(Juice.HAPTIC_TICK)
+			Juice.burst(global_position + Vector2(randf_range(-40, 40), 10), Color(1, 0.85, 0.4, 0.8), 3, 60.0 + 80.0 * k, 0.6)
 		if _channel >= _need():
 			_fired = true
 			extract_requested.emit()

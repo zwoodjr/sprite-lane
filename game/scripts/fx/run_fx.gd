@@ -95,14 +95,20 @@ static func explosion(player: Node2D, pos: Vector2, radius: float, dmg: float, c
 
 ## Expanding ground ring (squashed for the 3/4 view): a 1-texel palette line
 ## that steps down in alpha (no additive glow, bible §5).
+static var _ring_unit := PackedVector2Array()
+
 static func ring(parent: Node, pos: Vector2, radius: float, color: Color, life: float = 0.3, width: float = 5.0) -> void:
 	if parent == null:
 		return
 	var l := Line2D.new()
-	var pts := PackedVector2Array()
-	for i in range(41):
-		var a := TAU * i / 40.0
-		pts.append(Vector2(cos(a), sin(a) * 0.6) * radius)
+	if _ring_unit.is_empty():
+		for i in range(41):
+			var a := TAU * i / 40.0
+			_ring_unit.append(Vector2(cos(a), sin(a) * 0.6))
+	## Unit ellipse cached once (no per-call trig); scaled to the radius.
+	var pts := PackedVector2Array(_ring_unit)
+	for i in range(pts.size()):
+		pts[i] *= radius
 	l.points = pts
 	l.width = UnitAnim.TEXEL * (2.0 if width >= 4.0 else 1.0)
 	l.default_color = Juice.pal(color)
