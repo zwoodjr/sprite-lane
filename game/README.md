@@ -13,7 +13,7 @@ Solo top-down extraction shooter. **Portrait** (survivor FOV). PC keyboard/mouse
 | Pause cap (top-right) | Pause · How to play · Settings · Abandon run |
 | Stand on an open gold pad | Extract |
 
-Settings: stick size, left-handed (mirrors stick zone and buttons), hints, sound, vibration, shake.
+Settings (tabbed): audio, video (frame cap, effects quality, edge dither, brightness), controls (stick size, left-handed), accessibility (text size, reduce motion, shake / flash strength), vibration.
 
 **PC:** WASD move · Space dash · Q ability · R reload · Esc pause.
 
@@ -27,19 +27,20 @@ Portrait **720×1280**, camera zoom **1.35**, hero ~45% down the screen with a 1
 
 ## What's in
 
-- First-run interactive tutorial (move → run-and-shoot → dash); replay from Settings
-- How to Play pages (menu + pause)
-- 3 enemy types with visible wind-up warnings: raider, charger, brute
-- Juice: SFX, screen shake, hitstop, hit flashes, damage numbers, particles, recoil, muzzle flash, dash afterimages, low-HP vignette
-- HUD explains itself: phase card says what to do now; Threat badge shows the cost/reward
-- Save file (`user://wanderer_save.json`): settings, banked scrap, Hangar ranks, account prestige, extracts, unlocks
-- Dual-track progression: **run levels** (temporary loadout picks mid-match) + **Hangar scrap** (permanent between runs — stretched costs; insurance buy hidden until loadout UI)
-- Event stubs: `EventDefs` radio/world/extract_side catalog + one mid-run radio toast (no quest log)
-- Endless chunk map with terrain variation, varied decor, extract beams + arrows + minimap
+- **First run:** PLAY on a fresh save drops the default survivor straight into Haze; the interactive tutorial (move → run-and-shoot → dash) runs in-match; replay from Settings
+- **Onboarding phase-in:** run 1 is move / shoot / level up / extract. Each finished run switches on one more system (radio events → medicine & backpack → radio jobs → Daily / Weekly), announced on the result screen (`GameState.ONBOARD`). Saves with 4+ runs or a tier past Haze see everything
+- **8 survivors** with distinct weapons, abilities, kits and quirks; pets Noel, Bentley, Lillie (+ buildable mech pets)
+- **Roster:** ~30 enemy kinds across plague / machine / raider factions, elites with traits, bosses, raider crews, the Dust Warden
+- **Stay-or-go:** extract windows open on a schedule; the loot multiplier climbs while you stay. **Greed pressure** (`ModeDefs.greed`): every window you let close makes mobs tougher / harder-hitting / denser, raises the live cap, and sends a punish wave + a Greed elite. HUD shows AT STAKE (what extracting now pays)
+- **10 tiers** (Haze → Dustfall) with zone twists, Dust Pacts, tier loot; plus a story campaign (prologue, 12 levels, epilogue)
+- **Level-ups:** rarity cards with tags, rerolls, evolutions (BUILD PATHS overlay shows every recipe)
+- **Meta:** scrap is the only lasting currency; death keeps 10% of the bag at Haze (+5% per tier), extracting pays it all × multiplier. Hangar (shared camp, per-survivor stations, kennel, stash, backpack, brew, workshop), gear with sets and Legendaries, logbook, trophies. Main menu shows the next upgrade and how close you are
+- **Juice:** hitstop, shake, flashes, merged damage numbers, kill chain, slow-mo beats on death / extract / bosses, haptics
+- Save file `user://wanderer_save.json` (atomic, with backup) and a live-run snapshot so a force-quit can resume
 
-## Not in yet (waiting on design doc)
+## Not in yet
 
-Other 8 characters, full armor/weapon/pet/mount trees, Hard+ modes, deep skill trees. MVP pets: **Noel** (Territorial Rampage) + Dust Hound.
+Insurance purchase UI (insured items already survive a death; the buy flow is intentionally hidden). Full mount trees.
 
 ## Tools
 

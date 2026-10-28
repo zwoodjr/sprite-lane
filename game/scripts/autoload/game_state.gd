@@ -22,7 +22,9 @@ var fast_timers: bool = false
 var dev_tools: bool = false
 const FAST_TIMER_SCALE := 0.12
 
-## Classic insurance stub — slots from mode + meta; marks brought-in items.
+## Insurance: the buy UI stays hidden (design decision, Oct 2026) — slots come
+## from mode + meta and an insured item already survives a death; only the
+## purchase flow is unexposed.
 var insured_slots: Array[String] = []
 
 ## --- Meta (survives wipe) ---
@@ -1024,9 +1026,6 @@ func dash_cooldown_mult() -> float:
 func extract_payout_mult() -> float:
 	if has_set("field_salvager", 6):
 		return 1.0 + float(GearDefs.GENERAL_SETS["field_salvager"]["extract_per_piece"]) * float(set_count("field_salvager"))
-	return 1.0
-
-func endurance_iframe_mult() -> float:
 	return 1.0
 
 func crit_chance() -> float:

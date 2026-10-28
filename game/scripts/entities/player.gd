@@ -637,8 +637,7 @@ func _try_dash() -> void:
 	_dash_dir = dir.normalized()
 	_dash_left = DASH_TIME
 	_dash_cd = DASH_COOLDOWN * GameState.dash_cooldown_mult()
-	## Dust Lungs (endurance stub) stretches dash i-frames modestly.
-	_iframes = maxf(_iframes, DASH_IFRAMES * GameState.endurance_iframe_mult())
+	_iframes = maxf(_iframes, DASH_IFRAMES)
 	Juice.sfx("dash")
 	Juice.dust_puff(global_position + Vector2(0, 16), 8)
 	if absf(_dash_dir.x) > 0.1:
