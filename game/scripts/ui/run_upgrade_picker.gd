@@ -10,6 +10,18 @@ signal chosen(upgrade: Dictionary)
 ## Ignore taps for a moment so the thumb that was steering can't mis-pick.
 const TAP_GUARD := 0.35
 const CARD_H := 176.0
+## Card frame colours by rarity (Crazy Gunner style: the rarity reads from the
+## whole card, not just the tab). Common and uncommon are split here even
+## though gear shares one grey for both.
+const CARD_RIM := {
+	"common": Color("8f877e"), "uncommon": Color("7fae4a"), "rare": Color("5cd2c0"),
+	"epic": Color("c08aa0"), "legendary": Color("ffc040"), "evolution": Color("ffc040"),
+}
+## Panel tint per rarity (multiplies the worn plate art).
+const CARD_TINT := {
+	"common": Color(1, 1, 1), "uncommon": Color(0.95, 1.04, 0.92), "rare": Color(0.9, 1.05, 1.06),
+	"epic": Color(1.06, 0.93, 1.02), "legendary": Color(1.12, 1.04, 0.86), "evolution": Color(1.12, 1.04, 0.86),
+}
 
 var _root: Control
 var _open: bool = false
@@ -18,6 +30,7 @@ var _choices: Array = []
 var _guard: float = 0.0
 var _cards_box: VBoxContainer
 var _reroll_btn: Button
+var _picking: bool = false
 
 func _ready() -> void:
 	layer = 40
@@ -153,7 +166,8 @@ func _card(u: Dictionary, w: float) -> Button:
 	var rarity := str(u.get("rarity", "common"))
 	var evo := bool(u.get("evolution", false))
 	var rkey := "evolution" if evo else rarity
-	var col := IconSet.rarity_color(rkey)
+	var col: Color = CARD_RIM.get(rkey, CARD_RIM["common"])
+	var tint: Color = CARD_TINT.get(rkey, Color.WHITE)
 	var id := str(u.get("id", ""))
 	var rank := GameState.run_rank(id)
 	var max_rank := int(u.get("max_rank", 1))
@@ -163,8 +177,8 @@ func _card(u: Dictionary, w: float) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(w, CARD_H)
-	var n := UiTheme.plate("panel_hi" if evo else "panel", 0.0)
-	var pr := UiTheme.plate("panel_hi", 0.0, Color(1.12, 1.08, 1.0))
+	var n := UiTheme.plate("panel_hi" if evo else "panel", 0.0, tint)
+	var pr := UiTheme.plate("panel_hi", 0.0, tint * Color(1.12, 1.08, 1.0))
 	b.add_theme_stylebox_override("normal", n)
 	b.add_theme_stylebox_override("hover", n)
 	b.add_theme_stylebox_override("pressed", pr)
@@ -182,6 +196,29 @@ func _card(u: Dictionary, w: float) -> Button:
 	rim.offset_right = 12
 	rim.offset_top = 8
 	rim.offset_bottom = -8
+
+	## Rarity frame: a hard 2–4 px border in the rarity colour over the plate
+	## (thicker for rare and up), so the tier reads at a glance on a phone.
+	var hi := rkey in ["rare", "epic", "legendary", "evolution"]
+	var frame := Panel.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fsb := StyleBoxFlat.new()
+	fsb.draw_center = false
+	fsb.border_color = Color(col, 0.9 if hi else 0.55)
+	fsb.set_border_width_all(4 if hi else 2)
+	fsb.set_corner_radius_all(6)
+	frame.add_theme_stylebox_override("panel", fsb)
+	b.add_child(frame)
+	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	frame.offset_left = 2
+	frame.offset_top = 2
+	frame.offset_right = -2
+	frame.offset_bottom = -2
+	if rkey in ["epic", "legendary", "evolution"]:
+		## Slow breathing glow on the frame for the big pulls.
+		var gt := frame.create_tween().set_loops()
+		gt.tween_property(frame, "modulate:a", 0.45, 0.6).set_trans(Tween.TRANS_SINE)
+		gt.tween_property(frame, "modulate:a", 1.0, 0.6).set_trans(Tween.TRANS_SINE)
 
 	var row := HBoxContainer.new()
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -315,9 +352,30 @@ func _lbl(text: String, size: int, color: Color) -> Label:
 	return l
 
 func _try_pick(u: Dictionary) -> void:
-	if _guard > 0.0:
+	if _guard > 0.0 or _picking:
 		return
-	_pick(u)
+	## Short "stamp" on the chosen card while the others drop away, then pick.
+	_picking = true
+	Juice.sfx("card_pick")
+	Juice.haptic(25)
+	var i := _choices.find(u)
+	if _cards_box != null and i >= 0 and i < _cards_box.get_child_count():
+		for k in range(_cards_box.get_child_count()):
+			var c := _cards_box.get_child(k) as Control
+			if c == null:
+				continue
+			c.pivot_offset = c.size * 0.5
+			var tw := c.create_tween().set_parallel(true)
+			if k == i:
+				tw.tween_property(c, "scale", Vector2(1.05, 1.05), 0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+				tw.tween_property(c, "modulate", Color(1.5, 1.4, 1.2), 0.08)
+			else:
+				tw.tween_property(c, "modulate:a", 0.0, 0.12)
+				tw.tween_property(c, "scale", Vector2(0.94, 0.94), 0.12)
+		await get_tree().create_timer(0.2, true, false, true).timeout
+	_picking = false
+	if _open:
+		_pick(u, false)
 
 ## Bot / test hooks.
 func pick_index(i: int) -> void:
@@ -325,7 +383,7 @@ func pick_index(i: int) -> void:
 		_pick(_choices[i])
 
 func reroll() -> bool:
-	if not _open or not GameState.use_reroll():
+	if not _open or _picking or not GameState.use_reroll():
 		return false
 	var ids: Array = []
 	for u in _choices:
@@ -337,10 +395,11 @@ func reroll() -> bool:
 	_build()
 	return true
 
-func _pick(upgrade: Dictionary) -> void:
+func _pick(upgrade: Dictionary, feedback: bool = true) -> void:
 	GameState.apply_run_upgrade(upgrade)
-	Juice.sfx("card_pick")
-	Juice.haptic(25)
+	if feedback:
+		Juice.sfx("card_pick")
+		Juice.haptic(25)
 	chosen.emit(upgrade)
 	close()
 
