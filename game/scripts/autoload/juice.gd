@@ -251,6 +251,15 @@ func _camera() -> Camera2D:
 ## Pixel debris: hard 2x2-texel squares in the nearest palette colour, fading
 ## in 4 alpha steps (bible §5; replaces the old soft tinted spark).
 const BURST_CAP := 10
+## Debris bursts come from a small pool of one-shot emitters owned by the
+## current scene (reused oldest-first) with one cached colour ramp per colour,
+## instead of a fresh CPUParticles2D + Gradient + timer per call.
+const BURST_POOL := 16
+var _burst_pool: Array[CPUParticles2D] = []
+var _burst_i: int = 0
+var _burst_scene: Node = null
+var _ramp_cache: Dictionary = {}
+
 func burst(pos: Vector2, color: Color, amount: int = 10, speed: float = 160.0, life: float = 0.4, scale: float = 1.0) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
@@ -259,17 +268,41 @@ func burst(pos: Vector2, color: Color, amount: int = 10, speed: float = 160.0, l
 	amount = int(round(float(amount) * SettingsDefs.fx_mult()))
 	if amount <= 0:
 		return
+	if scene != _burst_scene:
+		_burst_scene = scene
+		_burst_pool.clear()
+		_burst_i = 0
+	var p: CPUParticles2D = null
+	if _burst_pool.size() < BURST_POOL:
+		p = CPUParticles2D.new()
+		p.texture = _spark_tex
+		p.one_shot = true
+		p.explosiveness = 1.0
+		p.direction = Vector2.UP
+		p.spread = 180.0
+		p.gravity = Vector2(0, 120)
+		p.z_index = 20
+		p.emitting = false
+		scene.add_child(p)
+		_burst_pool.append(p)
+	else:
+		## Prefer an idle emitter; otherwise recycle the oldest.
+		for k in range(_burst_pool.size()):
+			var c := _burst_pool[(_burst_i + k) % _burst_pool.size()]
+			if is_instance_valid(c) and not c.emitting:
+				p = c
+				_burst_i = (_burst_i + k + 1) % _burst_pool.size()
+				break
+		if p == null:
+			p = _burst_pool[_burst_i]
+			_burst_i = (_burst_i + 1) % _burst_pool.size()
+		if not is_instance_valid(p):
+			_burst_pool.clear()
+			return
 	var col := pal(color)
-	var p := CPUParticles2D.new()
-	p.texture = _spark_tex
 	p.emitting = false
-	p.one_shot = true
-	p.explosiveness = 1.0
 	p.amount = clampi(amount, 1, BURST_CAP)
 	p.lifetime = life
-	p.direction = Vector2.UP
-	p.spread = 180.0
-	p.gravity = Vector2(0, 120)
 	p.initial_velocity_min = speed * 0.4
 	p.initial_velocity_max = speed
 	p.damping_min = speed * 1.2
@@ -277,20 +310,26 @@ func burst(pos: Vector2, color: Color, amount: int = 10, speed: float = 160.0, l
 	var tx := UnitAnim.TEXEL * (2.0 if scale >= 1.4 else 1.0)
 	p.scale_amount_min = tx
 	p.scale_amount_max = tx
+	var a := 1.0 if color.a > 0.85 else (0.75 if color.a > 0.6 else 0.5)
+	p.color_ramp = _burst_ramp(col, a)
+	p.global_position = pos
+	p.restart()
+	p.emitting = true
+
+
+func _burst_ramp(col: Color, a: float) -> Gradient:
+	var key := Color(col, a).to_rgba32()
+	if _ramp_cache.has(key):
+		return _ramp_cache[key]
 	var ramp := Gradient.new()
 	ramp.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
-	var a := 1.0 if color.a > 0.85 else (0.75 if color.a > 0.6 else 0.5)
 	ramp.set_color(0, Color(col, a))
 	ramp.set_offset(1, 0.4)
 	ramp.set_color(1, Color(col, a * 0.75))
 	ramp.add_point(0.65, Color(col, a * 0.5))
 	ramp.add_point(0.85, Color(col, a * 0.25))
-	p.color_ramp = ramp
-	p.global_position = pos
-	p.z_index = 20
-	scene.add_child(p)
-	p.emitting = true
-	get_tree().create_timer(life + 0.2).timeout.connect(p.queue_free)
+	_ramp_cache[key] = ramp
+	return ramp
 
 
 ## Master palette (style bible §2) for snapping code colours to it.
