@@ -71,6 +71,7 @@ var _boss_bar: Control
 var _white_flash: ColorRect
 var _kill_chain: Control
 var _beat_t: float = 0.0
+var _stake_t: float = 0.0
 ## center
 var _banner: Label
 var _banner_sub: Label
@@ -387,8 +388,9 @@ func _build() -> void:
 	_threat_sub.visible = false
 	_threat_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_threat_sub)
-	_counter_label = _px("", 8, Color(0.86, 0.75, 0.52, 0.85))
-	_counter_label.visible = false
+	## AT STAKE: what extracting now pays (and what a death throws away).
+	_counter_label = _px("AT STAKE 0", 8, Color(0.86, 0.75, 0.52, 0.85))
+	_counter_label.visible = true
 	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tv.add_child(_counter_label)
 
@@ -851,7 +853,11 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	if tl != _last_tl:
 		_last_tl = tl
 		_pulse(_threat_panel)
-	_set_text(_counter_label, "BAG %d  KILLS %d" % [GameState.bag_value(), GameState.kills])
+	_stake_t -= get_process_delta_time()
+	if _stake_t <= 0.0:
+		_stake_t = 0.25
+		_set_text(_counter_label, "AT STAKE %d" % GameState.extract_estimate())
+		_set_col(_counter_label, UiTheme.DANGER if GameState.windows_skipped >= 2 else (UiTheme.RUST if GameState.windows_skipped == 1 else Color(0.86, 0.75, 0.52, 0.85)))
 	var rp: Dictionary = GameState.run_bar_state()
 	_set_text(_run_level_label, "LV %d%s" % [
 		int(rp["level"]),

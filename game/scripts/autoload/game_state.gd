@@ -154,6 +154,8 @@ var migrated_v3: bool = false
 var best_payout: int = 0
 ## Result screen: this extract beat the previous best payout (not saved).
 var result_new_best: bool = false
+## Wipe: what extracting at that moment would have paid (result screen sting).
+var result_would_have: int = 0
 ## Highest Dust tier extracted on (unlocks the next one).
 var best_tier_extracted: int = 0
 ## Extracts per tier ({"3": 2, ...}); tiers unlock on ModeDefs.UNLOCK_EXTRACTS.
@@ -2124,6 +2126,7 @@ func begin_run(drink_tonics: bool = true) -> void:
 
 func _clear_result_meta() -> void:
 	result_new_best = false
+	result_would_have = 0
 	result_death_kept = []
 	result_scrap_before = 0
 	result_scrap_banked = 0
@@ -2143,6 +2146,13 @@ func _clear_result_meta() -> void:
 	result_overflow_n = 0
 	result_held_n = 0
 	result_scrap_after = -1
+
+## What extracting right now would pay (the HUD's AT STAKE line; on_extract_success).
+func extract_estimate() -> int:
+	var base := ModeDefs.BAG_STIPEND + bag_value()
+	return int(
+		base * loot_mult * float(get_mode()["payout_mult"]) * extract_payout_mult() * (1.0 + pact_loot_bonus() + dust_loot_bonus())
+	) + extract_bonus_payout()
 
 func on_window_skipped() -> void:
 	windows_skipped += 1
@@ -2385,15 +2395,12 @@ func on_extract_success() -> void:
 	var mode := get_mode()
 	## Extract pays the full bag (plus a small stipend) × loot multiplier × tier
 	## payout; flat bonuses (jobs, Ambush Bounty) scale with the tier (ModeDefs).
-	var base := ModeDefs.BAG_STIPEND + bag_value()
-	payout_this_run = int(
-		base * loot_mult * float(mode["payout_mult"]) * extract_payout_mult() * (1.0 + pact_loot_bonus() + dust_loot_bonus())
-	) + extract_bonus_payout()
+	payout_this_run = extract_estimate()
 	if pact_loot_bonus() > 0.0:
 		result_unlocks_pending.append("Dust Pacts: payout +%d%%" % int(round(pact_loot_bonus() * 100.0)))
 	if dust_loot_bonus() > 0.0:
 		result_unlocks_pending.append("Weekly Dust: payout +%d%%" % int(round(dust_loot_bonus() * 100.0)))
-	var hauled := int(round(float(base) * loot_mult))
+	var hauled := int(round(float(ModeDefs.BAG_STIPEND + bag_value()) * loot_mult))
 	var best := _best_found(run_loot)
 	_record_tier_clear(int(mode.get("tier", 1)))
 	result_scrap_before = account_scrap
@@ -2452,6 +2459,7 @@ func on_wipe() -> void:
 	wiped = true
 	_clear_result_meta()
 	var mode := get_mode()
+	result_would_have = extract_estimate()
 	result_scrap_before = account_scrap
 	## Death keeps a slice of the carried bag (Haze 10%, Drift 15%), no multiplier.
 	var keep := int(round(float(bag_value()) * float(mode.get("death_keep", 0.1))))

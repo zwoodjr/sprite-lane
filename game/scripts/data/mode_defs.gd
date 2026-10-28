@@ -234,13 +234,13 @@ static func threat_for_mult(mult: float) -> int:
 ## cap, a punish wave the moment the window seals, and a Greed elite (every
 ## tier, not just Smog+). Values per window skipped, capped at GREED_MAX.
 const GREED_MAX := 4
-const GREED_HP := 0.25
+const GREED_HP := 0.45
 const GREED_DAMAGE := 0.28
-const GREED_SPAWN := 0.35
+const GREED_SPAWN := 0.5
 const GREED_CAP := 5
 ## Punish wave on a skip: BASE + PER × windows skipped mobs, from two sides.
-const GREED_WAVE_BASE := 5
-const GREED_WAVE_PER := 3
+const GREED_WAVE_BASE := 6
+const GREED_WAVE_PER := 4
 ## Live enemy soft cap (perf headroom from the overnight pass: 60-mob hordes
 ## hold frame budget). Last Extract keeps fewer but heavier T3 units.
 const ENEMY_CAP := 18
