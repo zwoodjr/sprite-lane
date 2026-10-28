@@ -846,7 +846,8 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	_set_text(_threat_label, "LOOT x%.1f" % loot)
 	var tl_col: Color = [UiTheme.AMBER, UiTheme.AMBER, UiTheme.RUST, UiTheme.DANGER][clampi(tl, 0, 3)]
 	_set_col(_threat_label, tl_col)
-	_set_text(_threat_sub, "THREAT %d +%d%%" % [tl, int((float(ModeDefs.tl_table(tl)["hp"]) - 1.0) * 100.0)])
+	var gs := GameState.windows_skipped
+	_set_text(_threat_sub, ("THREAT %d +%d%%" % [tl, int((float(ModeDefs.run_table(tl, gs)["hp"]) - 1.0) * 100.0)]) + ("  GREED %d" % gs if gs > 0 else ""))
 	if tl != _last_tl:
 		_last_tl = tl
 		_pulse(_threat_panel)

@@ -139,7 +139,7 @@ func _prop(name: String, at: Vector2, size: float) -> Sprite2D:
 func _mob(at: Vector2, kind: String = "") -> Node:
 	var e: CharacterBody2D = (load("res://scenes/entities/enemy.tscn") as PackedScene).instantiate()
 	var mode := GameState.get_mode()
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	e.setup(at, float(tl["hp"]) * float(mode.get("enemy_hp", 1.0)), float(tl["damage"]) * float(mode.get("enemy_damage", 1.0)), 1.0,
 		kind if kind != "" else str(match_ctl.call("_roll_enemy_kind")))
 	world.add_child(e)

@@ -13,9 +13,9 @@ static func default_armor() -> Dictionary:
 			"chest": {"name": "Oilplate Vest", "rarity": "Uncommon", "armor": 10},
 			"legs": {"name": "Rivet Greaves", "rarity": "Common", "armor": 6},
 		},
-		"set_bonus_3": "+2 HP/s out of combat (stub)",
+		"set_bonus_3": "+1 HP/s while standing still",
 		"flat_armor": 20,
-		"regen_oos": 2.0,
+		"regen_oos": 1.0,
 	}
 
 

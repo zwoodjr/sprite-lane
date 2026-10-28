@@ -337,7 +337,7 @@ func _tick_opening_waves() -> void:
 func _ambush_pop(at: Vector2, kind: String) -> void:
 	if _ended or not is_instance_valid(player):
 		return
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	## Tough enough to survive one volley, so the spitter gets its shot off.
 	enemy.setup(at, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * AMBUSH_HP, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, kind)
@@ -352,7 +352,7 @@ func _spawn_pack_mob(dir: Vector2, hp_k: float, kind: String = "") -> Node:
 	if not is_instance_valid(player):
 		return null
 	var spot := _spawn_point_outside_view(dir)
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	var k := kind if kind != "" and not EnemyDefs.get_kind(kind).is_empty() else _roll_enemy_kind()
 	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * hp_k, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, k)
@@ -560,6 +560,7 @@ func _advance_phase() -> void:
 	var was_last := bool(_phases[_phase_index].get("is_last", false))
 	if _current_window_was_open and not was_last:
 		GameState.on_window_skipped()
+		_greed_punish()
 		if jobs:
 			jobs.call("on_window_close")
 			jobs.call("apply_stake")
@@ -569,6 +570,23 @@ func _advance_phase() -> void:
 		_start_dust_storm()
 		return
 	_start_phase(_phase_index + 1)
+
+## Greed pressure: the window you let close sends a wave from two sides and a
+## Greed elite (every tier). The banner says why, once per skip.
+func _greed_punish() -> void:
+	var skips := GameState.windows_skipped
+	var n := ModeDefs.GREED_WAVE_BASE + ModeDefs.GREED_WAVE_PER * mini(skips, ModeDefs.GREED_MAX)
+	var base := spawn_rng.randf() * TAU
+	for i in range(n):
+		var side := base + (PI if i % 2 == 1 else 0.0) + spawn_rng.randf_range(-0.5, 0.5)
+		var e := _spawn_pack_mob(Vector2.RIGHT.rotated(side), 1.0)
+		if e:
+			e.set("speed", float(e.get("speed")) * 1.15)
+	var el := spawn_special("elite")
+	if el:
+		el.set_meta("greed", true)
+	hud.show_toast("THEY SMELL THE LOOT — Greed %d: tougher, harder-hitting, more of them" % skips, UiTheme.RUST)
+	Juice.shake(0.25)
 
 ## Last chance closed: the Dust storm rolls in and ends the run as a death.
 func _start_dust_storm() -> void:
@@ -606,7 +624,7 @@ func _set_pads_open(is_open: bool) -> void:
 			pad.set_open(is_open)
 
 func _update_spawns(delta: float) -> void:
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var step := float(_mode.get("tl_step_size", 1.0))
 	var spawn_mult := 1.0 + (float(tl["spawn"]) - 1.0) * step
 	spawn_mult *= float(_mode.get("spawn_density", 1.0))
@@ -659,7 +677,7 @@ func spawn_special(role: String, kind: String = "") -> Node:
 		k = str(pool[spawn_rng.randi() % pool.size()])
 	var ang := spawn_rng.randf() * TAU
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var step := float(_mode.get("tl_step_size", 1.0))
 	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
 	var dmg_m := (1.0 + (float(tl["damage"]) - 1.0) * step) * float(_mode.get("enemy_damage", 1.0))
@@ -689,7 +707,7 @@ func spawn_special(role: String, kind: String = "") -> Node:
 
 ## An elite / boss of a given kind at a given spot (Dust Warden on the pads).
 func spawn_at(role: String, kind: String, at: Vector2) -> Node:
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	enemy.setup(at, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)), float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, kind)
 	enemy.call("set_role", role)
@@ -700,7 +718,7 @@ func spawn_at(role: String, kind: String, at: Vector2) -> Node:
 func _spawn_enemy_force() -> void:
 	var ang := spawn_rng.randf() * TAU
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
 	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)), float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, _roll_enemy_kind())
 	world.add_child(enemy)
@@ -727,11 +745,12 @@ func _spawn_enemy() -> void:
 	_cull_far_enemies()
 	var live := get_tree().get_nodes_in_group("enemies")
 	## Soft cap — sheet-detail sprites are heavier; keep pressure without stutter.
-	var cap := 12
+	var cap := ModeDefs.ENEMY_CAP
 	if GameState.threat_level >= 2:
-		cap = 14
+		cap = ModeDefs.ENEMY_CAP_THREAT2
 	if bool(_phases[_phase_index].get("is_last", false)) if _phase_index < _phases.size() else false:
-		cap = 10 ## fewer but heavier T3 units on Last Extract
+		cap = ModeDefs.ENEMY_CAP_LAST ## fewer but heavier T3 units on Last Extract
+	cap = mini(ModeDefs.ENEMY_CAP_MAX, cap + int(ModeDefs.greed(GameState.windows_skipped)["cap"]))
 	if live.size() >= cap:
 		return
 	## Spawn just outside the visible area so enemies walk in, biased toward
@@ -741,7 +760,7 @@ func _spawn_enemy() -> void:
 	if heading.length() > 40.0 and spawn_rng.randf() < 0.6:
 		ang = heading.angle() + spawn_rng.randf_range(-1.1, 1.1)
 	var spot := _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var step := float(_mode.get("tl_step_size", 1.0))
 	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
 	var dmg_m := (1.0 + (float(tl["damage"]) - 1.0) * step) * float(_mode.get("enemy_damage", 1.0))
@@ -842,7 +861,7 @@ func _spawn_pad_guards() -> void:
 		return
 	var n := _pad_guards
 	_pad_guards = 0
-	var tl := ModeDefs.tl_table(GameState.threat_level)
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	for pad in _pads:
 		if not is_instance_valid(pad):
 			continue

@@ -107,7 +107,8 @@ const FEET_Y := 16.0
 const LUNGE_SPEED_MULT := 3.4
 const LUNGE_HIT_RADIUS := 38.0
 ## Health tonic drop chance by tier (normal / elite / boss) and heal amount.
-const TONIC_CHANCE := [0.06, 0.15, 0.4]
+## Difficulty pass: tonics were ~9 free heals a run on Haze.
+const TONIC_CHANCE := [0.03, 0.1, 0.35]
 const TONIC_HEAL := 12.0
 const SEPARATION_PX := 54.0
 const TELEGRAPH_TEX := "res://assets/sprites/fx/telegraph_ring.png"
@@ -751,8 +752,11 @@ func _die() -> void:
 	## sometimes a small health tonic (more often from elites/bosses).
 	var parent := get_parent()
 	var xp := int(_def.get("xp", 3))
-	LootDrop.spawn_burst(parent, global_position, "scrap", clampi(scrap, 1, 4), float(scrap))
-	LootDrop.spawn_burst(parent, global_position, "xp", clampi(xp / 4 + 1, 1, 4), float(xp))
+	## One shard of each per normal kill (two from elites / bosses): same value,
+	## a quarter of the nodes — kills used to shower up to 8 pickups each.
+	var nd := 2 if role != "" or tier >= 3 else 1
+	LootDrop.spawn_burst(parent, global_position, "scrap", nd, float(scrap))
+	LootDrop.spawn_burst(parent, global_position, "xp", nd, float(xp))
 	HaulPickup.drop_kill(parent, global_position + Vector2(randf_range(-10, 10), 6), faction, role)
 	if GameState.pact_fx("no_tonics") <= 0.0 and randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)

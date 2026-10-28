@@ -227,6 +227,46 @@ static func threat_for_mult(mult: float) -> int:
 	return clampi(int(floor((mult - 1.0) / 0.5 + 0.001)), 0, 8)
 
 
+## --- Greed pressure (difficulty pass, Oct 2026) ----------------------------
+## Bots never died on Haze: 24/24 runs extracted, ~97% HP at the pad, even after
+## staying three windows. Every extract window you let close now makes the
+## rest of the run meaner: tougher, harder-hitting, denser mobs, a higher live
+## cap, a punish wave the moment the window seals, and a Greed elite (every
+## tier, not just Smog+). Values per window skipped, capped at GREED_MAX.
+const GREED_MAX := 4
+const GREED_HP := 0.25
+const GREED_DAMAGE := 0.28
+const GREED_SPAWN := 0.35
+const GREED_CAP := 5
+## Punish wave on a skip: BASE + PER × windows skipped mobs, from two sides.
+const GREED_WAVE_BASE := 5
+const GREED_WAVE_PER := 3
+## Live enemy soft cap (perf headroom from the overnight pass: 60-mob hordes
+## hold frame budget). Last Extract keeps fewer but heavier T3 units.
+const ENEMY_CAP := 18
+const ENEMY_CAP_THREAT2 := 21
+const ENEMY_CAP_LAST := 16
+const ENEMY_CAP_MAX := 36
+
+
+static func greed(skips: int) -> Dictionary:
+	var s := clampi(skips, 0, GREED_MAX)
+	return {
+		"hp": 1.0 + GREED_HP * s,
+		"damage": 1.0 + GREED_DAMAGE * s,
+		"spawn": 1.0 + GREED_SPAWN * s,
+		"cap": GREED_CAP * s,
+	}
+
+
+## Threat table with greed pressure folded in (what the match actually uses).
+static func run_table(tl: int, skips: int) -> Dictionary:
+	var t := tl_table(tl)
+	var g := greed(skips)
+	return {"hp": float(t["hp"]) * float(g["hp"]), "damage": float(t["damage"]) * float(g["damage"]),
+		"spawn": float(t["spawn"]) * float(g["spawn"])}
+
+
 ## Threat Level multipliers. Higher tiers keep stacking.
 static func tl_table(tl: int) -> Dictionary:
 	var t := clampi(tl, 0, 8)
