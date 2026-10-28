@@ -149,8 +149,136 @@ func _build() -> void:
 	_reroll_btn.expand_icon = false
 	UiTheme.skin_button(_reroll_btn, UiTheme.LINE, 16.0)
 	_reroll_btn.pressed.connect(reroll)
-	v.add_child(_reroll_btn)
+	_reroll_btn.custom_minimum_size = Vector2(280, 64)
+	## Bottom row: REROLL + BUILD PATHS (where your picks lead: every evolution).
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	v.add_child(row)
+	row.add_child(_reroll_btn)
+	var paths := Button.new()
+	paths.focus_mode = Control.FOCUS_NONE
+	paths.custom_minimum_size = Vector2(200, 64)
+	paths.text = "BUILD PATHS"
+	paths.add_theme_font_override("font", UiTheme.font_button)
+	paths.add_theme_font_size_override("font_size", UiTheme.T_H2)
+	UiTheme.skin_button(paths, UiTheme.AMBER, 16.0)
+	paths.pressed.connect(_open_paths)
+	row.add_child(paths)
 	_refresh_reroll()
+
+## Build paths overlay: every evolution this hero can reach, with both parts
+## (rank owned / max, or "have it" for ammo) and what it turns into. Ready
+## recipes sort first and glow gold; ones you've started come next.
+var _paths: Control
+
+func _open_paths() -> void:
+	if _guard > 0.0 or _picking:
+		return
+	Juice.sfx("ui_open")
+	if _paths and is_instance_valid(_paths):
+		_paths.queue_free()
+	var hero := GameState.selected_character_id
+	var vp := _root.get_viewport_rect().size
+	var w := minf(vp.x - 2.0 * UiTheme.MARGIN, 672.0)
+	_paths = Control.new()
+	_paths.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_paths.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_child(_paths)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(UiTheme.INK, 0.96)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_paths.add_child(dim)
+	var m := MobileLayout.control_safe_margin()
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	col.position = Vector2((vp.x - w) * 0.5, m.position.y + 24.0)
+	col.size = Vector2(w, vp.y - m.position.y - 24.0 - (vp.y - m.position.y - m.size.y) - 24.0)
+	_paths.add_child(col)
+	var title := UiTheme.title_label("BUILD PATHS", UiTheme.T_TITLE, UiTheme.AMBER)
+	col.add_child(title)
+	var sub := UiTheme.head_label("Max the first part + own the second = an EVOLUTION card", UiTheme.T_H3, UiTheme.TEXT_DIM)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(sub)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.scroll_deadzone = 18
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(sc)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 8)
+	sc.add_child(list)
+	var rows: Array = []
+	for r in RecipeDefs.all():
+		if r.has("hero") and str(r["hero"]) != hero:
+			continue
+		var nd: Array = r["needs"]
+		var a := str(nd[0])
+		var b := str(nd[1])
+		var a_max := int(UpgradeDefs.get_def(a).get("max_rank", 1))
+		var a_rank := GameState.run_rank(a)
+		var b_have := _part_owned(b)
+		var done := GameState.has_evo(str(r["id"]))
+		var ready := not done and a_rank >= a_max and b_have
+		var score := 0 if ready else (1 if (a_rank > 0 or b_have) and not done else (3 if done else 2))
+		rows.append([score, r, a, a_rank, a_max, b, b_have, done, ready])
+	rows.sort_custom(func(x: Array, y: Array) -> bool: return int(x[0]) < int(y[0]))
+	for e in rows:
+		list.add_child(_path_row(e, w))
+	var close := UiTheme.big_button("BACK TO CARDS", UiTheme.LINE, 72.0, UiTheme.T_H2)
+	close.pressed.connect(func() -> void:
+		Juice.sfx("ui_back")
+		if _paths and is_instance_valid(_paths):
+			_paths.queue_free()
+		_paths = null)
+	col.add_child(close)
+
+
+func _part_owned(id: String) -> bool:
+	if id.begins_with("ammo:"):
+		return bool(GameState.run_ammo_seen.get(id.substr(5), false))
+	return GameState.run_rank(id) > 0
+
+
+func _path_row(e: Array, w: float) -> Control:
+	var r: Dictionary = e[1]
+	var done: bool = e[7]
+	var ready: bool = e[8]
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UiTheme.plate("panel_hi" if ready else "inset", 14.0, Color(1.12, 1.04, 0.86) if ready else Color.WHITE))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	if done:
+		p.modulate = Color(1, 1, 1, 0.55)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	p.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	v.add_child(top)
+	var parts := "%s %d/%d  +  %s %s" % [RecipeDefs.part_name(str(e[2])), int(e[3]), int(e[4]),
+		RecipeDefs.part_name(str(e[5])), "(have)" if bool(e[6]) else ""]
+	var pl := _lbl(parts, UiTheme.T_SMALL, UiTheme.TEXT if (int(e[3]) > 0 or bool(e[6])) else UiTheme.TEXT_DIM)
+	pl.add_theme_font_override("font", UiTheme.font_body_bold)
+	pl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	top.add_child(pl)
+	var tag := "OWNED" if done else ("READY" if ready else "")
+	if r.has("hero"):
+		tag = (tag + "  CLASS").strip_edges()
+	if tag != "":
+		top.add_child(UiTheme.chip(tag, UiTheme.AMBER))
+	var nm := _lbl("→ " + str(r["name"]).to_upper(), UiTheme.T_H2, RecipeDefs.COLOR)
+	nm.add_theme_font_override("font", UiTheme.font_display)
+	v.add_child(nm)
+	var d := _lbl(str((r["desc"] as Array)[0]) if r["desc"] is Array else str(r["desc"]), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(w - 40.0, 0)
+	v.add_child(d)
+	return p
+
 
 func _refresh_reroll() -> void:
 	if _reroll_btn == null:
@@ -404,6 +532,7 @@ func _pick(upgrade: Dictionary, feedback: bool = true) -> void:
 	close()
 
 func close() -> void:
+	_paths = null
 	_open = false
 	_choices = []
 	TouchInput.clear_sticks()

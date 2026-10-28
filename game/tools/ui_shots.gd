@@ -124,6 +124,13 @@ func _run() -> void:
 			pk.call("open", 4, Progression.roll_run_choices())
 			await _wait(30)
 			await _snap("12b_levelup")
+			GameState.run_ranks["dust_rounds"] = 3
+			GameState.run_ranks["spore_mines"] = 1
+			GameState.run_ranks["ricochet"] = 1
+			pk.set("_guard", 0.0)
+			pk.call("_open_paths")
+			await _wait(15)
+			await _snap("12c_build_paths")
 			pk.call("pick_index", 1)
 			await _wait(5)
 		m.get_node("HUD").call("_open_pause")
