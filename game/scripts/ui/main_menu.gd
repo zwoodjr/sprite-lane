@@ -100,6 +100,11 @@ func build(c: VBoxContainer) -> void:
 	scrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(scrap)
 
+	## Headline goal: the next Hangar upgrade and how close the bank is.
+	if not MenuFlow.is_first_wander():
+		var goal := MenuFlow.goal_card()
+		if goal:
+			c.add_child(goal)
 	## Actions — bottom of the screen, under the thumb.
 	## QUICK DEPLOY (after the first run): last hero / gear / pet / tier, one tap.
 	if MenuFlow.can_quick_deploy():
@@ -107,7 +112,12 @@ func build(c: VBoxContainer) -> void:
 	## PLAY -> CAMPAIGN (the story) or WANDER (the endless runs).
 	var play := UiTheme.big_button("PLAY", UiTheme.AMBER, 96, 40)
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	play.pressed.connect(GameState.go_mode_choice)
+	if MenuFlow.is_first_wander():
+		## First run: straight into Haze with the default survivor.
+		play.name = "FirstPlay"
+		play.pressed.connect(MenuFlow.first_run_deploy)
+	else:
+		play.pressed.connect(GameState.go_mode_choice)
 	c.add_child(play)
 	_pulse(play)
 	var sub := HBoxContainer.new()

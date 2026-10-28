@@ -90,6 +90,24 @@ static func prepare_quick_deploy() -> void:
 	GameState.reset_loadout_to_defaults()
 
 
+## Fresh save: the very first PLAY skips mode / hero / loadout and drops the
+## default survivor into Haze (the tutorial runs in the match).
+static func is_first_wander() -> bool:
+	return GameState.total_runs == 0 and GameState.successful_extracts == 0
+
+
+static func first_run_deploy() -> void:
+	GameState.leave_campaign_run()
+	GameState.play_mode = "wander"
+	GameState.selected_mode_id = ModeDefs.HAZE_ID
+	if not GameState.dev_tools:
+		GameState.fast_timers = false
+	if not GameState.pet_available(GameState.selected_pet_id):
+		GameState.selected_pet_id = PetDefs.default_id()
+	GameState.reset_loadout_to_defaults()
+	GameState.go_match()
+
+
 static func quick_deploy() -> void:
 	prepare_quick_deploy()
 	GameState.go_match()
@@ -118,4 +136,86 @@ static func quick_button(height: float = UiTheme.MIN_TOUCH) -> Button:
 	v.add_child(s)
 	b.custom_minimum_size.y = maxf(b.custom_minimum_size.y, 96.0 * UiTheme.text_scale)
 	b.pressed.connect(quick_deploy)
+	return b
+
+
+## Main-menu headline goal: the cheapest Hangar upgrade still to buy among the
+## shared camp upgrades, the backpack and this survivor's station.
+## Returns {} when everything there is maxed.
+static func headline_goal() -> Dictionary:
+	var best := {}
+	var ids: Array = HangarDefs.ids_for("shared") + ["backpack", HangarDefs.station_id(GameState.selected_character_id)]
+	for id in ids:
+		var cost := GameState.camp_cost(str(id))
+		if cost < 0:
+			continue
+		if best.is_empty() or cost < int(best["cost"]):
+			var rk := GameState.camp_rank(str(id))
+			best = {"id": str(id), "cost": cost, "rank": rk + 1, "name": HangarDefs.display_name(str(id)),
+				"text": HangarDefs.rank_text(str(id), rk + 1)}
+	return best
+
+
+## Tappable NEXT UPGRADE card: name + effect, scrap bar toward its price.
+static func goal_card() -> Control:
+	var g := headline_goal()
+	if g.is_empty():
+		return null
+	var b := Button.new()
+	b.name = "GoalCard"
+	b.focus_mode = Control.FOCUS_NONE
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(0, 88)
+	var pl := UiTheme.plate("inset", 12.0)
+	b.add_theme_stylebox_override("normal", pl)
+	b.add_theme_stylebox_override("hover", pl)
+	b.add_theme_stylebox_override("pressed", UiTheme.plate("inset", 12.0, Color(1.15, 1.1, 1.0)))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.pressed.connect(GameState.go_hangar)
+	var h := HBoxContainer.new()
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	h.offset_left = 14
+	h.offset_right = -14
+	h.offset_top = 8
+	h.offset_bottom = -8
+	h.add_theme_constant_override("separation", 12)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(h)
+	var id := str(g["id"])
+	var icon_id := "camp_" + id if not id.begins_with("station_") else IconSet.ability(GameState.selected_character_id, "a")
+	h.add_child(IconSet.rect(icon_id, 64))
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 4)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(v)
+	var have := GameState.account_scrap
+	var cost := int(g["cost"])
+	var ready := have >= cost
+	var top := HBoxContainer.new()
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(top)
+	var t := UiTheme.head_label(("READY: " if ready else "NEXT: ") + str(g["name"]).to_upper(), UiTheme.T_H3, UiTheme.AMBER if ready else UiTheme.TEXT)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.clip_text = true
+	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	top.add_child(t)
+	var n := UiTheme.pixel_label("%d/%d" % [mini(have, cost), cost], UiTheme.PX_S, UiTheme.AMBER)
+	n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(n)
+	var bar := ProgressBar.new()
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = clampf(float(have) / maxf(float(cost), 1.0), 0.0, 1.0)
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 12)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiTheme.skin_bar(bar, UiTheme.AMBER if ready else UiTheme.TEAL)
+	v.add_child(bar)
+	var d := UiTheme.body_label(str(g["text"]), UiTheme.T_SMALL, UiTheme.TEXT_DIM, false)
+	d.clip_text = true
+	d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(d)
 	return b
