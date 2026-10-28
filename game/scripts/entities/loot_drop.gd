@@ -23,6 +23,8 @@ const LIFETIME := 30.0
 ## horde could otherwise leave 400+ live drops ticking every frame).
 const LIVE_CAP := 70
 static var _live: Array = []
+static var _xp_streak: int = 0
+static var _xp_last_ms: int = -100000
 
 var kind: String = "scrap"
 var value: float = 1.0
@@ -150,7 +152,14 @@ func _collect() -> void:
 			Juice.sfx("pick_scrap")
 		"xp":
 			GameState.add_run_xp(maxi(1, int(round(value))))
-			Juice.sfx("pick_xp")
+			## Pickup streak: shards collected back to back climb in pitch
+			## (a run of 10 rises about a fifth), resets after a short gap.
+			var now := Time.get_ticks_msec()
+			_xp_streak = _xp_streak + 1 if now - _xp_last_ms < 450 else 0
+			_xp_last_ms = now
+			var v := Juice.sfx("pick_xp", 0.0, 0.0)
+			if v != null:
+				v.set("pitch_scale", 1.0 + 0.045 * float(mini(_xp_streak, 14)))
 		"tonic":
 			if _player.has_method("heal"):
 				_player.call("heal", value)

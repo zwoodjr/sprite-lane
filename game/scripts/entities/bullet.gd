@@ -49,6 +49,7 @@ var _smoke_on: bool = false
 var _px_n: int = 1
 var _px_t: float = 0.0
 var _max_pts: int = 5
+var _spin: float = 0.0
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -99,7 +100,7 @@ func _apply_team_collision() -> void:
 func _ready() -> void:
 	_apply_team_collision()
 	body_entered.connect(_on_body_entered)
-	var look: Dictionary = (STYLES.get(style, STYLES["pistol"]) as Dictionary).duplicate() if from_player else {}
+	var look: Dictionary = STYLES.get(style, STYLES["pistol"]) if from_player else {}
 	var px_id := str(look.get("px", "pj_pistol"))
 	var tail: Color = look.get("tail", Color("e9dfc9"))
 	if from_player and ammo != "" and not vial and AMMO_PX.has(ammo) and style != "rocket":
@@ -117,7 +118,22 @@ func _ready() -> void:
 	_trail.top_level = true
 	_trail.z_index = 4
 	_trail.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	## Hard tail: four alpha steps toward the round, no soft glow.
+	_trail.gradient = _tail_gradient(tail)
+	_max_pts = int(look.get("len", 5))
+	_trail.visible = float(look.get("w", 0.0)) > 0.0
+	add_child(_trail)
+	_smoke_on = from_player and bool(look.get("smoke", false))
+	_spin = float(look.get("spin", 0.0)) if from_player else 0.0
+
+
+## Hard tail: four alpha steps toward the round, no soft glow. One shared
+## Gradient per tail colour (every shot used to build its own).
+static var _grad_cache: Dictionary = {}
+
+static func _tail_gradient(tail: Color) -> Gradient:
+	var key := tail.to_rgba32()
+	if _grad_cache.has(key):
+		return _grad_cache[key]
 	var g := Gradient.new()
 	g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
 	g.set_color(0, Color(tail, 0.25))
@@ -125,11 +141,8 @@ func _ready() -> void:
 	g.set_color(1, Color(tail, 1.0))
 	g.add_point(0.25, Color(tail, 0.5))
 	g.add_point(0.5, Color(tail, 0.75))
-	_trail.gradient = g
-	_max_pts = int(look.get("len", 5))
-	_trail.visible = float(look.get("w", 0.0)) > 0.0
-	add_child(_trail)
-	_smoke_on = from_player and bool(look.get("smoke", false))
+	_grad_cache[key] = g
+	return g
 
 
 ## Projectile strip on the Sprite child: texel scale, anchored at the round's head.
@@ -175,8 +188,8 @@ func _physics_process(delta: float) -> void:
 			direction = direction.rotated(step).normalized()
 			rotation = direction.angle()
 	global_position += direction * speed * delta
-	if sprite and from_player and STYLES.has(style) and (STYLES[style] as Dictionary).has("spin"):
-		sprite.rotation += float(STYLES[style]["spin"]) * delta
+	if _spin != 0.0 and sprite:
+		sprite.rotation += _spin * delta
 	_trail.add_point(global_position)
 	while _trail.get_point_count() > _max_pts:
 		_trail.remove_point(0)
