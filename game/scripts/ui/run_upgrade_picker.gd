@@ -416,6 +416,12 @@ func _card(u: Dictionary, w: float) -> Button:
 		var hl := _lbl(hint, UiTheme.T_SMALL, UiTheme.AMBER)
 		hl.add_theme_font_override("font", UiTheme.font_body_bold)
 		foot.add_child(hl)
+	## Long effect text wraps to 2 lines and pushed the tag row past the
+	## bottom edge: grow the card to fit its content (row is anchored full-rect).
+	row.minimum_size_changed.connect(func() -> void:
+		var need := row.get_combined_minimum_size().y + 48.0
+		if need > b.custom_minimum_size.y:
+			b.custom_minimum_size.y = need)
 	if evo:
 		## Gold glow pulse on evolution cards.
 		var tw := b.create_tween().set_loops()

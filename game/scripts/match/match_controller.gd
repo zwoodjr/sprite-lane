@@ -446,13 +446,13 @@ func _process(delta: float) -> void:
 		## Banked elsewhere (e.g. Abandon from the pause menu) — stop the sim here.
 		_ended = true
 		return
+	_tick_warm()
 	if quiet:
 		hud.update_match(_phases[_phase_index], _phase_time_left, GameState.threat_level, GameState.loot_mult, player)
 		hud.set_schedule_clock(_elapsed_in_phases)
 		return
 	_match_time += delta
 	GameState.run_time = _match_time
-	_tick_warm()
 	_update_spawns(delta)
 	_tick_opening_waves()
 	_tick_specials()

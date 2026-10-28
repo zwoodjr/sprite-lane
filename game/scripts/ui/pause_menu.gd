@@ -84,6 +84,42 @@ func _show_main() -> void:
 		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(l)
 		info.add_child(h)
+	## This run's build: every upgrade picked, icon + rank, evolutions in gold.
+	var owned: Array = []
+	for id in GameState.run_ranks.keys():
+		var rk := int(GameState.run_ranks[id])
+		if rk <= 0:
+			continue
+		var d := UpgradeDefs.get_def(str(id))
+		if d.is_empty():
+			d = RecipeDefs.get_recipe(str(id))
+		if d.is_empty():
+			continue
+		owned.append([d, rk])
+	if not owned.is_empty():
+		var bl := UiTheme.head_label("YOUR BUILD", UiTheme.T_H3, UiTheme.TEXT_DIM)
+		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(bl)
+		var grid := HFlowContainer.new()
+		grid.alignment = FlowContainer.ALIGNMENT_CENTER
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 6)
+		grid.custom_minimum_size = Vector2(420, 0)
+		v.add_child(grid)
+		for e in owned:
+			var d: Dictionary = e[0]
+			var evo := bool(d.get("evolution", false))
+			var cell := VBoxContainer.new()
+			cell.add_theme_constant_override("separation", 0)
+			cell.tooltip_text = str(d.get("name", ""))
+			var ic := IconSet.rect(IconSet.upgrade(d), 48)
+			if evo:
+				ic.self_modulate = Color(1.15, 1.05, 0.8)
+			cell.add_child(ic)
+			var rl := UiTheme.pixel_label("EVO" if evo else "%d/%d" % [int(e[1]), int(d.get("max_rank", 1))], UiTheme.PX_S, RecipeDefs.COLOR if evo else UiTheme.TEXT)
+			rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			cell.add_child(rl)
+			grid.add_child(cell)
 	var resume := UiTheme.big_button("RESUME", UiTheme.AMBER, 80, 32)
 	resume.pressed.connect(close)
 	v.add_child(resume)
