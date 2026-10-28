@@ -1,6 +1,17 @@
 # MVP status (repo mirror)
 
-**Latest (overnight polish pass):** Performance + feel + UI polish (parse-checked on Godot 4.3 and 4.6; full test suite passes on both).
+**Latest (difficulty + onboarding pass):** Fixes from the overnight critique.
+
+- **Greed pressure** (`ModeDefs.greed`, `match_controller._greed_punish`): every extract window you let close → mobs +45% HP, +28% damage, +50% spawn rate, +5 live cap (stacks to 4), plus a two-sided punish wave and a Greed elite on every tier. Base live cap 12 → 18. Tonic drops cut (T1 6% → 3%), idle regen 2 → 1 HP/s. HUD: AT STAKE (what extracting now pays; turns rust/red with greed) and GREED n on the threat line. Wipe result: "Extracting would have paid N."
+- **Kill-drop firehose:** one scrap + one XP shard per kill (two from elites/bosses), same value.
+- **Bot numbers, Haze, 8 heroes × clean/sloppy driver:** stay 3 windows — before 0/16 deaths, ~96% HP at the pad; after 4/16 deaths (25%), mean end HP 65% incl. deaths (survivors bottom out ~62%). Leave at window 1 — still 0 deaths, ~94% (gentle first run). Frail ranged heroes (Vesper, Helm) die most. 60-mob horde profile unchanged (~13.7 / 12.4 ms).
+- **Onboarding phase-in** (`GameState.ONBOARD`): run 1 = move/shoot/level/extract. Then one per finished run: radio events → medicine & backpack (+ kill ingredients) → radio jobs → Daily/Weekly cards. NEW card on the result screen + a toast at the next run's start. Saves with 4+ runs or a tier past Haze see everything; campaign untouched.
+- **Fast start:** first PLAY on a fresh save goes straight into Haze with the default survivor (tutorial runs in-match). Main menu shows NEXT/READY: cheapest Hangar upgrade with a scrap bar (tap → Hangar). Note: a brand-new install still auto-plays the campaign prologue first (existing design).
+- **Cleanups:** removed the duplicate mid-lockout radio stub, dead combat-tips code, unused `Juice.LEGACY` ids, the no-op Endurance hook (Endurance was already refund-only); `film_grain` setting → `edge_dither` (old saves migrate); insurance purchase stays hidden (noted in code + README); README refreshed. There is no iOS export preset (Xogot loads the folder; the Web preset already excludes `tools/`), so every tools scene is parse-checked instead.
+
+Test on device: (1) Haze, stay past 2–3 windows — the seal should hit hard (punish wave + Greed elite), AT STAKE climbing; (2) fresh install / cleared save → PLAY lands in Haze, then NEW cards over the next 4 runs; (3) main-menu NEXT/READY card + Settings → Edge dither keeps its old value.
+
+**Prior (overnight polish pass):** Performance + feel + UI polish (parse-checked on Godot 4.3 and 4.6; full test suite passes on both).
 
 Performance
 - Kill loot capped at 70 live drops; overflow value merges into the nearest same-kind drop (a horde used to leave 400+ drops ticking every frame).
