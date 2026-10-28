@@ -1011,6 +1011,8 @@ func screen_flash(col: Color, alpha: float, dur: float) -> void:
 		return
 	_white_flash.color = Color(col, alpha * SettingsDefs.flash_k())
 	var tw := _white_flash.create_tween()
+	## Keeps fading while the level-up picker pauses the tree.
+	tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	tw.tween_property(_white_flash, "color:a", 0.0, dur).set_ease(Tween.EASE_OUT)
 
 ## Boss arrival: white pop, camera punch-in, name title. The top bar appears

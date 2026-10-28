@@ -409,6 +409,10 @@ func _on_run_level_up(_lvl: int, _choices: Array) -> void:
 	var pl := get_tree().get_first_node_in_group("player") as Node2D if get_tree() else null
 	if pl:
 		fx("fx_levelup", pl.global_position + Vector2(0, 30), {"follow": pl})
+		## Warm gold pop behind the cards (the HUD flash layer keeps running).
+		var hud := get_tree().current_scene.get_node_or_null("HUD") if get_tree().current_scene else null
+		if hud and hud.has_method("screen_flash"):
+			hud.call("screen_flash", Color(1.0, 0.8, 0.3), 0.35, 0.4)
 
 
 func dust_puff(pos: Vector2, amount: int = 4) -> void:
