@@ -71,6 +71,7 @@ var _extract_bar: Control = null
 var _hit_flash: TextureRect
 var _boss_bar: Control
 var _white_flash: ColorRect
+var _kill_chain: Control
 ## center
 var _banner: Label
 var _banner_sub: Label
@@ -446,6 +447,10 @@ func _build() -> void:
 	_white_flash.color = Color(1.0, 0.95, 0.88, 0.0)
 	_white_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_white_flash)
+	_kill_chain = Control.new()
+	_kill_chain.name = "KillChain"
+	_kill_chain.set_script(load("res://scripts/ui/kill_chain.gd"))
+	root.add_child(_kill_chain)
 
 func _layout() -> void:
 	if root == null:
@@ -515,6 +520,9 @@ func _layout() -> void:
 		var bw := clampf(vp.x - 2.0 * (map_s + m.position.x + 12.0), 220.0, 420.0)
 		_boss_bar.size = Vector2(bw, 44)
 		_boss_bar.position = Vector2(vp.x * 0.5 - bw * 0.5, m.position.y + 74.0)
+	if _kill_chain:
+		_kill_chain.size = Vector2(map_s + 40.0, 76)
+		_kill_chain.position = Vector2(right - _kill_chain.size.x, _threat_panel.position.y + _threat_panel.size.y + 10.0)
 	var below := maxf(_threat_panel.position.y + _threat_panel.size.y, m.position.y + vit.size.y + 60.0) + 10.0
 	below = maxf(below, _phase_card.position.y + _phase_card.size.y + 54.0)
 	if campaign:
@@ -717,6 +725,9 @@ var campaign: bool = false
 func set_campaign() -> void:
 	campaign = true
 	_threat_panel.visible = false
+	if _kill_chain:
+		_kill_chain.queue_free()
+		_kill_chain = null
 	if _extract_bar:
 		_extract_bar.visible = false
 	_phase_label.text = ""

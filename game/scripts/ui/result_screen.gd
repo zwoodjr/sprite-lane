@@ -145,6 +145,12 @@ func build(c: VBoxContainer) -> void:
 	_stat(st, "cur_xp", "LV %d" % GameState.result_run_level_reached, UiTheme.TEAL)
 	_stat(st, "hud_kills", str(GameState.kills), UiTheme.TEXT)
 	_stat(st, "hud_loot", "x%.1f" % GameState.loot_mult, UiTheme.AMBER)
+	if GameState.run_best_chain >= 10:
+		var ch := UiTheme.pixel_label("BEST KILL CHAIN  x%d" % GameState.run_best_chain, UiTheme.PX_M, UiTheme.RUST)
+		ch.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ch.add_theme_constant_override("outline_size", 6)
+		ch.add_theme_color_override("font_outline_color", Color(0.06, 0.03, 0.02, 0.95))
+		c.add_child(ch)
 
 	## Loot + unlocks scroll so a long list never pushes the buttons off.
 	var scroll := ScrollContainer.new()

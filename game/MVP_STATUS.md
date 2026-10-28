@@ -1,13 +1,18 @@
 # MVP status (repo mirror)
 
-**Latest (overnight polish pass):** In progress — performance + feel + UI polish. Changes so far:
+**Latest (overnight polish pass):** In progress — performance + feel + UI polish.
 
 - Perf: kill loot is capped at 70 live drops; overflow value merges into the nearest same-kind drop (a horde used to leave 400+ drops ticking each frame). Magnet radius lookup throttled.
-- Perf: enemy separation uses a shared per-frame enemy list and recomputes every 3rd frame per mob (was O(n²) array allocs every frame).
+- Perf: enemy separation uses a shared per-frame enemy list and recomputes every 3rd frame per mob (was O(n²) array allocs every frame). Physics time in a 60-mob horde dropped ~12 ms → ~8.5 ms headless.
+- Perf: HUD only touches theme overrides / label text when the value changes (was every frame for ~10 labels + buff chips).
+- Level-up cards: rarity-coloured frame + panel tint (uncommon green, rare teal, epic mauve, evolution gold), slow glow on epic+, chosen card "stamps" while the others drop away.
+- Death: red flash, camera punch-in, 1 s slow-mo, heavy haptic. Extract: warm flash, punch, short slow-mo, hero stretches up and fades into the beam. Result screen waits in real time.
+- KILL CHAIN readout under LOOT: kills within 2.2 s stack (shows from x5), heats bone→amber→rust→red, calls RAMPAGE / CARNAGE / MASSACRE / WASTELAND LEGEND at 10/25/50/100. Best chain shows on the result screen (≥10).
+- Tests: two timing-flaky checks (boss bar poll, music hold) now wait on the condition.
 
-Test on device: big hordes (Last Extract, Dustfall) — scrap/XP should still all arrive; frame pacing should hold steadier.
+Test on device: big hordes (frame pacing, scrap/XP all still arrive); level-up card colours; die once and extract once to feel the new moments; kill chain position next to the minimap on a notched phone.
 
-**Latest (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
+**Prior (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
 
 **Prior (Hangar scroll):** Full meta catalog was hard to drag / stuck on iPhone·Xogot portrait. `hangar.gd` now uses a touch-friendly ScrollContainer (no horizontal steal, deadzone, follow-focus), rows pass drag to the scroller, list width syncs for autowrap height, rebuild frees rows immediately and clamps scroll, portrait chrome tightened + end pad for Xogot bottom toolbar. Re-pull PR #10.
 

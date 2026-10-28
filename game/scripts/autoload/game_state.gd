@@ -171,6 +171,8 @@ var extract_windows_seen: int = 0
 var loot_mult: float = 1.0
 var scrap_found: int = 0
 var kills: int = 0
+## Longest kill chain this run (HUD KillChain; result screen shows it).
+var run_best_chain: int = 0
 var extracted: bool = false
 var wiped: bool = false
 ## True once this run has been banked (extract / wipe / abandon). Guards double-counting.
@@ -2055,6 +2057,7 @@ func begin_run(drink_tonics: bool = true) -> void:
 	loot_mult = 1.0
 	scrap_found = 0
 	kills = 0
+	run_best_chain = 0
 	extracted = false
 	wiped = false
 	run_finished = false
