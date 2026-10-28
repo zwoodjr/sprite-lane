@@ -181,7 +181,7 @@ var _slowmo_scale: float = 1.0
 var _slowmo_scene: Node = null
 
 func slowmo(scale: float, real_seconds: float) -> void:
-	if SettingsDefs.shake_mult() <= 0.0 and scale < 1.0:
+	if SettingsDefs.reduce_motion() and scale < 1.0:
 		## Reduce motion: keep it short.
 		real_seconds *= 0.4
 	_slowmo_scale = clampf(scale, 0.05, 1.0)
