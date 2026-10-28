@@ -775,6 +775,47 @@ func twist_on(twist: String) -> bool:
 		return false
 	return ZoneDefs.has_twist(zone_tier(), twist) or twist in DustModDefs.twists_of(dust_mods())
 
+## --- Onboarding phase-in (Oct 2026) ------------------------------------------
+## Run 1 is just move, shoot, level up, extract. Each finished Wander run turns
+## on one more system, announced on the result screen ("NEW: ...") and again
+## with a toast when the next run starts. Saves that already have runs (or a
+## tier beyond Haze) see everything; campaign levels are handcrafted, always on.
+## [runs finished needed, id, name, one-line pitch]
+const ONBOARD := [
+	[1, "events", "Radio events", "Helm calls in trouble mid-run — and pays for it."],
+	[2, "medicine", "Medicine & backpack", "Carry medicine crates out for big scrap. Mobs drop brew ingredients."],
+	[3, "jobs", "Radio jobs", "Survivors send contracts and services while you're out."],
+	[4, "modes", "Daily Run & Weekly Dust", "A shared daily map and weekly modifiers on the mode screen."],
+]
+## Tests / bots that need every system regardless of the save.
+var onboard_skip: bool = false
+
+func onboarding_done() -> bool:
+	return onboard_skip or total_runs >= int(ONBOARD[ONBOARD.size() - 1][0]) or best_tier_extracted >= 2
+
+func feature_on(id: String) -> bool:
+	if onboarding_done() or in_campaign_run():
+		return true
+	for f in ONBOARD:
+		if str(f[1]) == id:
+			return total_runs >= int(f[0])
+	return true
+
+## The feature that turned on with exactly `runs` finished runs ([] if none).
+func onboard_at(runs: int) -> Array:
+	for f in ONBOARD:
+		if int(f[0]) == runs:
+			return f
+	return []
+
+## After a run ends: queue the "NEW:" line if this run unlocked something.
+func _onboard_result_line() -> void:
+	if onboard_skip or in_campaign_run():
+		return
+	var f := onboard_at(total_runs)
+	if not f.is_empty() and best_tier_extracted < 2:
+		result_unlocks.append("NEW: %s — %s" % [str(f[2]), str(f[3])])
+
 func pacts_unlocked() -> bool:
 	return best_tier_extracted >= ZoneDefs.PACTS_FROM_TIER
 
@@ -2442,6 +2483,7 @@ func on_extract_success() -> void:
 	result_new_best = payout_this_run > best_payout and payout_this_run > 0 and total_runs > 0
 	best_payout = maxi(best_payout, payout_this_run)
 	total_runs += 1
+	_onboard_result_line()
 	_record_run(true, hauled, best)
 	## In-run power dies here — only banked scrap/meta remain.
 	_reset_run_power_after_end()
@@ -2497,6 +2539,7 @@ func on_wipe() -> void:
 		", ".join(result_lost_keys) if result_lost_keys.size() else "(nothing)",
 	]
 	total_runs += 1
+	_onboard_result_line()
 	_record_run(false, 0, best)
 	_reset_run_power_after_end()
 	for m in check_milestones():

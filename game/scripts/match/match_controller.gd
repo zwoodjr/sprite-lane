@@ -86,6 +86,7 @@ func _ready() -> void:
 		_phases.append(phase)
 
 	_build_warm_queue()
+	_onboard_toast.call_deferred()
 	## Endless wasteland chunks
 	wasteland.setup(GameState.run_seed, player)
 	_clear_pads()
@@ -277,6 +278,15 @@ func release_cold_open() -> void:
 		if e:
 			e.set("damage", float(e.get("damage")) * 0.5)
 
+
+## Onboarding: the system this run is the first to have gets one toast.
+func _onboard_toast() -> void:
+	if GameState.onboarding_done() or GameState.in_campaign_run() or not is_instance_valid(hud):
+		return
+	var f: Array = GameState.onboard_at(GameState.total_runs)
+	if f.is_empty() or str(f[1]) == "modes":
+		return
+	hud.show_toast("NEW: %s — %s" % [str(f[2]), str(f[3])], UiTheme.TEAL)
 
 ## Warm the mob art cache (one kind per frame, likeliest first): a mob kind's
 ## first spawn used to load ~10 strips from disk mid-fight (8–30 ms hitch,

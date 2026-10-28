@@ -37,6 +37,8 @@ func _run() -> void:
 	var save_backup := FileAccess.get_file_as_string(GameState.SAVE_PATH) if FileAccess.file_exists(GameState.SAVE_PATH) else ""
 	_bak_backup = FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH) if FileAccess.file_exists(GameState.SAVE_BAK_PATH) else ""
 	_had_damaged = FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH)
+	## Every system on regardless of how many runs this save has (onboarding).
+	GameState.onboard_skip = true
 	## `-- only=depth_e1`: run just one section (fast iteration), then finish.
 	for a in OS.get_cmdline_user_args():
 		if str(a).begins_with("only="):
@@ -168,6 +170,7 @@ func _run() -> void:
 	await _test_safe_save()
 	await _test_wander_extras()
 	await _test_feedback()
+	await _test_onboarding()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4037,3 +4040,28 @@ func _test_settings() -> void:
 	GameState.save_profile()
 	await get_tree().process_frame
 	print("SETTINGS_OK")
+
+
+## Onboarding phase-in: run 1 is core only; each finished run adds a system;
+## veteran saves (runs or a tier past Haze) see everything.
+func _test_onboarding() -> void:
+	var keep := [GameState.total_runs, GameState.best_tier_extracted, GameState.onboard_skip]
+	GameState.onboard_skip = false
+	GameState.best_tier_extracted = 0
+	GameState.total_runs = 0
+	_check(not GameState.feature_on("events") and not GameState.feature_on("medicine") and not GameState.feature_on("jobs") and not GameState.feature_on("modes"), "onboard: run 1 core only")
+	GameState.total_runs = 1
+	_check(GameState.feature_on("events") and not GameState.feature_on("medicine"), "onboard: run 2 adds radio events")
+	GameState.total_runs = 2
+	_check(GameState.feature_on("medicine") and not GameState.feature_on("jobs"), "onboard: run 3 adds medicine")
+	GameState.total_runs = 3
+	_check(GameState.feature_on("jobs") and not GameState.feature_on("modes"), "onboard: run 4 adds jobs")
+	GameState.total_runs = 4
+	_check(GameState.onboarding_done() and GameState.feature_on("modes"), "onboard: run 5 everything")
+	GameState.total_runs = 0
+	GameState.best_tier_extracted = 2
+	_check(GameState.onboarding_done(), "onboard: veteran save sees everything")
+	GameState.total_runs = int(keep[0])
+	GameState.best_tier_extracted = int(keep[1])
+	GameState.onboard_skip = bool(keep[2])
+	print("ONBOARD_OK")

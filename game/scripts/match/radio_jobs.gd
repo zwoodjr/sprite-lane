@@ -57,6 +57,10 @@ func setup(ctl: Node, p: Node2D, w: Node2D, h: Node, ev: Node) -> void:
 		var at2: Vector2 = RadioDefs.SERVICE_AT[mini(i, RadioDefs.SERVICE_AT.size() - 1)]
 		_queue.append([rng.randf_range(at2.x, at2.y) * ts, id2])
 	_queue.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	## Onboarding: contracts / services switch on after the third finished run.
+	if not GameState.feature_on("jobs"):
+		_queue.clear()
+		_market_id = ""
 	_layer = CanvasLayer.new()
 	_layer.layer = 6
 	add_child(_layer)

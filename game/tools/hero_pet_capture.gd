@@ -11,6 +11,7 @@ var _pet: String = "noel"
 
 
 func _ready() -> void:
+	GameState.onboard_skip = true ## dev tool: every system on
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		_out = args[0]

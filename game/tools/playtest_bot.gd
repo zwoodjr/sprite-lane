@@ -118,6 +118,7 @@ func _give_kit(hero: String) -> void:
 
 
 func _ready() -> void:
+	GameState.onboard_skip = OS.get_environment("WANDERER_ONBOARD") == "" ## every system on unless testing onboarding
 	var a := OS.get_cmdline_user_args()
 	if a.size() > 0: _out = a[0]
 	if a.size() > 1: _secs = float(a[1])

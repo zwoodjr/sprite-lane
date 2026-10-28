@@ -43,6 +43,9 @@ func setup(ctl: Node, p: Node2D, w: Node2D, h: Node) -> void:
 	_times = [rng.randf_range(EventDefs.FIRST_EVENT_AT.x, EventDefs.FIRST_EVENT_AT.y) * ts]
 	if n >= 2:
 		_times.append(rng.randf_range(EventDefs.SECOND_EVENT_AT.x, EventDefs.SECOND_EVENT_AT.y) * ts)
+	## Onboarding: radio events switch on after the first finished run.
+	if not GameState.feature_on("events"):
+		_times.clear()
 	_build_ui()
 
 

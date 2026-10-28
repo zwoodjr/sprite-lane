@@ -11,6 +11,7 @@ var _pts: Array[Vector2] = [Vector2.ZERO]
 
 
 func _ready() -> void:
+	GameState.onboard_skip = true ## dev tool: every system on
 	var a := OS.get_cmdline_user_args()
 	if a.size() > 0: _out = a[0]
 	if a.size() > 1: _seed = int(a[1])

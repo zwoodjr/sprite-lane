@@ -536,6 +536,11 @@ func _unlock_card(s: String) -> Control:
 		icon = "tab_goals"
 		kind = "MILESTONE"
 		text = s.get_slice(":", 1).strip_edges()
+	elif s.begins_with("NEW: "):
+		## Onboarding phase-in: a system turns on next run.
+		icon = "tab_goals"
+		kind = "NEW NEXT RUN"
+		text = s.substr(5)
 	elif s.begins_with("Hero unlocked:"):
 		icon = "tab_crew"
 		kind = "NEW HERO"

@@ -97,6 +97,10 @@ func _build_extras() -> void:
 	for ch in _extras.get_children():
 		_extras.remove_child(ch)
 		ch.queue_free()
+	## Onboarding: Daily / Weekly appear after the fourth finished run.
+	_extras.visible = GameState.feature_on("modes")
+	if not _extras.visible:
+		return
 	var today := GameState.today()
 	var hero := DailyDefs.hero_for(today)
 	var hc := CharacterDefs.get_character(hero)

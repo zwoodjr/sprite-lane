@@ -42,6 +42,9 @@ static func spawn(parent: Node, pos: Vector2, item_id: String, count: int = 1, p
 
 ## Kill drops by faction; elites / bosses also drop Dust shards and maybe medicine.
 static func drop_kill(parent: Node, pos: Vector2, faction: String, role: String) -> void:
+	## Onboarding: ingredients / cores drop once medicine & backpack are on.
+	if not GameState.feature_on("medicine"):
+		return
 	var table: Dictionary = MedicineDefs.KILL_DROP.get(faction, {})
 	for k in table.keys():
 		if randf() < float(table[k]):

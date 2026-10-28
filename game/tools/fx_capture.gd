@@ -12,6 +12,7 @@ var _hero := "ash_rook"
 
 
 func _ready() -> void:
+	GameState.onboard_skip = true ## dev tool: every system on
 	var a := OS.get_cmdline_user_args()
 	if a.size() > 0:
 		_out = a[0]

@@ -36,7 +36,7 @@ func setup(match_node: Node, player: Node2D, world: Node2D, hud: Node) -> void:
 
 ## Medicine crates in clear spots around the drop-in.
 func _place_crates() -> void:
-	if not is_instance_valid(_player):
+	if not is_instance_valid(_player) or not GameState.feature_on("medicine"):
 		return
 	var n := MedicineDefs.crates_at_start(int(GameState.get_mode().get("tier", 1)))
 	_crates_placed = n
@@ -54,6 +54,8 @@ func _place_crates() -> void:
 
 ## Each extract window: Helm marks one more medicine crate (up to the tier's total).
 func on_window_open(_index: int) -> void:
+	if not GameState.feature_on("medicine"):
+		return
 	if not is_instance_valid(_player) or _crates_placed >= MedicineDefs.crates_for_tier(int(GameState.get_mode().get("tier", 1))):
 		return
 	for i in range(MedicineDefs.CRATES_PER_WINDOW):
