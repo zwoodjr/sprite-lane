@@ -1700,8 +1700,9 @@ func _test_depth_e1() -> void:
 		await get_tree().physics_frame
 	_check(GameState.exposure > 1.0, "e1 fog builds exposure %.1f" % GameState.exposure)
 	GameState.exposure = 75.0
-	await get_tree().physics_frame
-	await get_tree().physics_frame
+	## The plague ticks in _process: wait for idle frames, not just physics ones.
+	await get_tree().process_frame
+	await get_tree().process_frame
 	_check(is_equal_approx(float(player.get("exposure_move")), -0.14), "e1 sick slows")
 	var hp0 := float(player.get("hp"))
 	for k in range(30):
@@ -3841,7 +3842,7 @@ func _test_settings() -> void:
 	_check(int(st["shake_level"]) == 0 and not st.has("screen_shake"), "settings: screen_shake off -> shake OFF")
 	_check(typeof(st["text_size"]) == TYPE_INT and int(st["text_size"]) == 2, "settings: text size kept (int)")
 	_check(absf(float(st["vol_music"]) - 0.3) < 0.001 and absf(float(st["vol_master"]) - 0.6) < 0.001 and absf(float(st["vol_ui"]) - 0.4) < 0.001, "settings: volumes kept")
-	_check(bool(st["left_handed"]) and not bool(st["haptics"]) and not bool(st["show_hints"]) and bool(st["auto_salvage_commons"]) and bool(st["film_grain"]), "settings: toggles kept")
+	_check(bool(st["left_handed"]) and not bool(st["haptics"]) and not bool(st["show_hints"]) and bool(st["auto_salvage_commons"]) and bool(st["edge_dither"]) and not st.has("film_grain"), "settings: toggles kept (film_grain -> edge_dither)")
 	_check(absf(float(st["stick_scale"]) - 1.2) < 0.001, "settings: stick size kept")
 	_check(absf(float(st["vol_voice"]) - 1.0) < 0.001 and bool(st["mute_background"]) and int(st["fps_cap"]) == 1 and int(st["fx_quality"]) == 2, "settings: new keys default")
 	(old["settings"] as Dictionary)["screen_shake"] = true

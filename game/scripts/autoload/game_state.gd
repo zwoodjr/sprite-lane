@@ -401,7 +401,7 @@ func apply_save(d: Dictionary) -> void:
 		## The old film grain (default on) became the bible's edge dither,
 		## default off: older saves start with it off once.
 		if not (saved_settings as Dictionary).has("dither_v1"):
-			settings["film_grain"] = false
+			settings["edge_dither"] = false
 	settings["dither_v1"] = true
 	SettingsDefs.migrate(settings)
 	tutorial_done = bool(d.get("tutorial_done", false))

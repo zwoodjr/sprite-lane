@@ -21,8 +21,6 @@ var _mode: Dictionary = {}
 var _ping_done_for_window: bool = false
 var _pads: Array = []
 var _match_time: float = 0.0
-var _radio_ping_at: float = -1.0
-var _radio_ping_done: bool = false
 ## Stay-or-go bookkeeping
 var _elapsed_in_phases: float = 0.0 ## run clock along the phase schedule
 var _window_index: int = 0          ## how many windows have opened
@@ -161,11 +159,6 @@ func _ready() -> void:
 		for id in GameState.dust_mods():
 			names.append(DustModDefs.mod_name(str(id)))
 		hud.show_toast("WEEKLY DUST: " + ", ".join(names), UiTheme.AMBER)
-	## Cheap event stub: one radio toast mid-lockout (no quest log).
-	_radio_ping_done = false
-	_radio_ping_at = 18.0 * GameState.timer_scale()
-	if GameState.fast_timers:
-		_radio_ping_at = 1.2
 	if not GameState.tutorial_done and not GameState.fast_timers:
 		quiet = true
 		for e in get_tree().get_nodes_in_group("enemies"):
@@ -248,7 +241,6 @@ func _restore_hp(res: Dictionary) -> void:
 ## window restarts from its beginning (a fresh pad pair if it was open).
 func _apply_resume(res: Dictionary) -> void:
 	quiet = false
-	_radio_ping_done = true
 	_match_time = maxf(0.0, float(res.get("match_time", 0.0)))
 	_wave_i = clampi(int(res.get("wave_i", 0)), 0, OPENING_WAVES.size())
 	_elite_side = int(res.get("elite_side", 0))
@@ -490,7 +482,6 @@ func _process(delta: float) -> void:
 		return
 	_phase_time_left -= delta
 	_elapsed_in_phases += delta
-	_maybe_radio_stub()
 	## Loot multiplier climbs with run time; Threat follows it.
 	var before_tl := GameState.threat_level
 	GameState.set_loot_mult(ModeDefs.loot_mult_at(_mode, _match_time / GameState.timer_scale()))
@@ -509,18 +500,6 @@ func _process(delta: float) -> void:
 	hud.set_extract_open(_extract_open)
 	if _phase_time_left <= 0.0:
 		_advance_phase()
-
-func _maybe_radio_stub() -> void:
-	if _radio_ping_done or _radio_ping_at < 0.0:
-		return
-	if _match_time < _radio_ping_at:
-		return
-	_radio_ping_done = true
-	var ping := EventDefs.debug_radio_ping()
-	if ping.is_empty():
-		return
-	hud.show_toast(str(ping.get("toast", "Radio static…")), UiTheme.AMBER)
-	Juice.sfx("radio_chatter")
 
 func _start_phase(index: int) -> void:
 	_phase_index = index

@@ -9,10 +9,8 @@ const PxFxScript = preload("res://scripts/fx/px_fx.gd")
 
 ## Legacy one-word ids (pre sound pass) -> new ids. "@x" = per-hero lookup.
 const LEGACY := {
-	"shot": "@fire", "shoot": "fire_helm", "enemy_shot": "machine_shot", "hit": "hit_flesh", "enemy_die": "plague_die",
-	"hurt": "@hurt", "dash": "dash", "reload": "@reload", "break": "break_wood", "pickup": "pick_common",
-	"extract_open": "ext_open", "seal": "ext_close", "extract_win": "ext_success", "wipe": "run_wipe",
-	"threat_up": "threat_up", "ability": "@ability", "empty": "dry_fire", "mount": "dash",
+	"shot": "@fire", "hurt": "@hurt", "reload": "@reload", "ability": "@ability", "pickup": "pick_common",
+	"seal": "ext_close", "extract_win": "ext_success", "wipe": "run_wipe", "empty": "dry_fire",
 }
 ## Per-hero sound kit.
 const HERO_SFX := {

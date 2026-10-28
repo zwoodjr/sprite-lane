@@ -15,7 +15,7 @@ const DEFAULTS := {
 	"mute": false, "mute_background": true,
 	## VIDEO
 	"fps_cap": 1, "battery_saver": false, "shake_level": 2, "flash_intensity": 1.0, "fx_quality": 2,
-	"damage_numbers": true, "brightness": 0.5, "heat_shimmer": false, "film_grain": false, "show_fps": false,
+	"damage_numbers": true, "brightness": 0.5, "heat_shimmer": false, "edge_dither": false, "show_fps": false,
 	## CONTROLS
 	"left_handed": false, "stick_scale": 1.0, "stick_opacity": 1.0, "haptics": true, "haptic_strength": 1.0,
 	## ACCESSIBILITY / GAME
@@ -55,7 +55,7 @@ const TABS := [
 		{"key": "damage_numbers", "type": "toggle", "label": "Damage numbers", "icon": "hud_kills"},
 		{"key": "brightness", "type": "slider", "label": "Brightness", "icon": "set_shimmer", "fmt": "signed", "desc": "Match world gamma. Make the left swatch barely visible.", "swatch": true},
 		{"key": "heat_shimmer", "type": "toggle", "label": "Heat shimmer", "icon": "set_shimmer", "desc": "Faint heat haze over the map."},
-		{"key": "film_grain", "type": "toggle", "label": "Edge dither", "icon": "set_grain", "desc": "Pixel-dither shading at the screen edges."},
+		{"key": "edge_dither", "type": "toggle", "label": "Edge dither", "icon": "set_grain", "desc": "Pixel-dither shading at the screen edges."},
 		{"key": "show_fps", "type": "toggle", "label": "Show FPS", "icon": "hud_timer"},
 	]},
 	{"id": "controls", "label": "CONTROLS", "icon": "set_stick", "rows": [
@@ -145,6 +145,10 @@ static func upgrade_keys(st: Dictionary) -> void:
 	if st.has("screen_shake") and not st.has("shake_level"):
 		st["shake_level"] = 2 if bool(st["screen_shake"]) else 0
 	st.erase("screen_shake")
+	## The old "film_grain" key has driven the edge dither since the style pass.
+	if st.has("film_grain") and not st.has("edge_dither"):
+		st["edge_dither"] = bool(st["film_grain"])
+	st.erase("film_grain")
 
 
 ## Default values for one tab's stored keys.

@@ -78,6 +78,9 @@ var _loot_by := {}
 ## driver (arg 16) that steers late and noisily and often forgets to dash.
 var _first_hit_t := -1.0
 var _hp_lost := 0.0
+## Balance: HP as a fraction of max (last seen, lowest seen) — survives extract.
+var _mx_hp := 1.0
+var _min_frac := 1.0
 var _sloppy := false
 var _sl_t := 0.0
 var _sl_v := Vector2.ZERO
@@ -190,7 +193,10 @@ func _ready() -> void:
 	_apply_grants()
 	_last_hp = float(_p.get("hp"))
 	_p.died.connect(func() -> void: print("EVENT died t=%.1f" % _t))
+	_mx_hp = float(_p.get("max_hp"))
 	_p.health_changed.connect(func(c: float, mx: float) -> void:
+		_mx_hp = maxf(mx, 1.0)
+		_min_frac = minf(_min_frac, c / _mx_hp)
 		if c < _last_hp:
 			_dmg_events += 1
 			_hp_lost += _last_hp - c
@@ -648,6 +654,7 @@ func _summary() -> void:
 		"EXTRACT" if GameState.extracted else ("DIED" if GameState.wiped else "ALIVE"),
 		GameState.payout_this_run, GameState.loot_mult, hp_end, _min_hp, GameState.kills, GameState.bag_value(),
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
+	print("HPF end=%.2f min=%.2f windows=%d skipped=%d" % [clampf(_last_hp / maxf(_mx_hp, 1.0), 0.0, 1.0), maxf(_min_frac, 0.0), GameState.extract_windows_seen, GameState.windows_skipped])
 	print("BAL first_hit=%.1f hp_lost=%.0f max_hp=%.0f reload_frac=%.2f" % [_first_hit_t, _hp_lost, float(_p.get("max_hp")) if is_instance_valid(_p) else -1.0, _reload_s / maxf(1.0, _t)])
 	print("STUCK total=%.1f max_streak=%.2f at=(%.0f,%.0f)" % [_stuck_s, _stuck_max, _stuck_at.x, _stuck_at.y])
 	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])

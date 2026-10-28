@@ -32,8 +32,6 @@ const PAUSE_ROW := 64.0
 const PIXEL_FONT := "res://assets/fonts/PressStart2P.ttf"
 const XpLineScript := preload("res://scripts/ui/xp_line.gd")
 const PANEL_ALPHA := 0.5
-const HINT_SHOW := 4.0
-const SHOW_COMBAT_TIPS := false
 ## Locked "smashed readout" bars (scripts/ui/readout_bar.gd).
 const ReadoutScript := preload("res://scripts/ui/readout_bar.gd")
 const HP_READOUT := Vector2(300, 48)
@@ -79,7 +77,6 @@ var _banner_sub: Label
 var _toast_box: VBoxContainer
 var _extract_prompt: Label
 var _vignette: TextureRect
-var _hint_label: Label
 ## Depth Update E1: backpack, medicine, plague exposure, tonics drunk.
 var _pack_row: HBoxContainer
 var _pack_label: Label
@@ -102,26 +99,15 @@ var _hp_ratio: float = 1.0
 var _last_tl: int = 0
 var _extract_open: bool = false
 var _t: float = 0.0
-var _hint_cycle_t: float = 0.0
 var _pack_panel: PanelContainer
 var _hp_readout: Control
 var _xp_readout: Control
-var _hint_index: int = 0
 var _pixel: Font = null
 var _xp_line: Control = null
 var _run_lv: int = 1
 var _phase_id: String = ""
 var _phase_shown_t: float = 0.0
 
-const ROTATING_HINTS := [
-	"Gold arrows on the screen edge point to extract pads.",
-	"DASH makes you briefly invincible — dash through red bullets.",
-	"Red ring on the ground = an attack is coming. Move or dash!",
-	"Your hero attacks the closest enemy in range — just steer.",
-	"Crates sometimes drop timed buffs. Shoot them open.",
-	"Loot climbs ×0.1 every 30s you stay — and so does Threat.",
-	"Hold an open pad for 3s to extract. Getting hit resets it.",
-]
 
 func _ready() -> void:
 	layer = 10
@@ -429,9 +415,6 @@ func _build() -> void:
 	_extract_prompt.add_theme_constant_override("outline_size", 6)
 	_extract_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_extract_prompt)
-	_hint_label = _label("", 11, Color(0.85, 0.78, 0.65, 0.75))
-	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(_hint_label)
 	## Red screen-edge flash when the hero takes a hit.
 	_hit_flash = TextureRect.new()
 	_hit_flash.texture = _make_vignette()
@@ -537,8 +520,6 @@ func _layout() -> void:
 	_toast_box.size = Vector2(toast_w, 120)
 	_extract_prompt.position = Vector2(0, vp.y * 0.58)
 	_extract_prompt.size = Vector2(vp.x, 34)
-	_hint_label.position = Vector2(vp.x * 0.1, m.position.y + m.size.y - 22)
-	_hint_label.size = Vector2(vp.x * 0.8, 20)
 
 ## Pack (weight / room), medicine count, tonics drunk, plague exposure meter.
 func _build_depth(vb: VBoxContainer) -> void:
@@ -801,19 +782,6 @@ func _process(delta: float) -> void:
 	_phase_shown_t += delta
 	if _phase_hint and not campaign:
 		_phase_hint.modulate.a = clampf((6.0 - _phase_shown_t) / 0.8, 0.0, 1.0)
-	## Rotating tips (when the tutorial isn't talking)
-	## Rotating tip bar removed from combat (audit: text wall); tips live in
-	## the tutorial and How to Play.
-	if SHOW_COMBAT_TIPS:
-		_hint_cycle_t += delta
-		if _hint_cycle_t > 14.0 or _hint_label.text == "":
-			_hint_cycle_t = 0.0
-			_hint_label.text = ROTATING_HINTS[_hint_index % ROTATING_HINTS.size()]
-			_hint_index += 1
-		## Each hint shows briefly, then fades away until the next one.
-		_hint_label.modulate.a = clampf((HINT_SHOW - _hint_cycle_t) / 0.8, 0.0, 1.0)
-	else:
-		_hint_label.text = ""
 	## Buff timers tick visibly
 	if _player and is_instance_valid(_player) and _player.has_method("get_active_buffs"):
 		_refresh_buffs(_player.call("get_active_buffs"))

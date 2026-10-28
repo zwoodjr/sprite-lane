@@ -5,7 +5,8 @@ extends CanvasLayer
 ## a slight desaturation so loot / telegraph / hero accents pop, a soft
 ## vignette, or (Settings → Edge dither, default off) a static pixel-checker
 ## dither vignette instead. The bible bans noise, so there is no film grain:
-## the old "film_grain" setting key now drives the dither.
+## the setting key is "edge_dither" (saves with the old "film_grain" key are
+## migrated by SettingsDefs.upgrade_keys).
 ## One full-screen pass over the screen texture — fine on iPhone.
 
 const SHADER := """
@@ -152,7 +153,7 @@ func _pick_shader() -> void:
 
 
 func _process(_delta: float) -> void:
-	if bool(GameState.settings.get("film_grain", false)) != _grain_on:
+	if bool(GameState.settings.get("edge_dither", false)) != _grain_on:
 		_apply_grain()
 	## Settings > Brightness (gamma on the world, under the HUD).
 	var g := SettingsDefs.gamma()
@@ -166,5 +167,5 @@ func gamma_value() -> float:
 
 
 func _apply_grain() -> void:
-	_grain_on = bool(GameState.settings.get("film_grain", false))
+	_grain_on = bool(GameState.settings.get("edge_dither", false))
 	_mat.set_shader_parameter("dither", DITHER if _grain_on else 0.0)
