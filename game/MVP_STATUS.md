@@ -4,15 +4,18 @@
 
 Performance
 - Kill loot capped at 70 live drops; overflow value merges into the nearest same-kind drop (a horde used to leave 400+ drops ticking every frame).
-- Enemy separation: shared per-frame enemy list, recomputed every 3rd frame per mob (was O(n²) with an array alloc per mob per frame). 60-mob horde physics ~12 → ~8.5 ms headless.
+- Enemy separation: shared per-frame enemy list, recomputed every 3rd frame per mob (was O(n²) with an array alloc per mob per frame).
 - Mob art warm-up: one enemy kind's strips load per frame at run start (likeliest tiers first, then elites/bosses/raiders). First spawn of a kind was an 8–30 ms hitch; now ~1 ms.
 - Attack JSON + telegraph frames cached (were re-read/parsed per spawn). Bullet tail gradients shared (no Gradient/dict per shot).
 - Pools: debris bursts (16 emitters/scene, cached ramps) and floating callouts (24 labels/scene) — no node+timer per effect.
-- HUD only touches theme overrides / label text on change (was every frame); mobs skip the status-overlay lookup when they have none.
+- HUD only touches theme overrides / label text on change (was every frame); mobs skip the status-overlay lookup when they have none; pack/pouch readout at 5 Hz.
+- GPU: the world colour grade now draws as a multiply blend (no full-screen back-buffer copy + read every frame); the screen-read shader only comes back if Brightness is moved off default. Same look (mean diff ~1/255).
+- Same-seed 60-mob horde, headless 4.3, before → after: physics ~16 → ~11.5 ms, process ~14.7 → ~13.3 ms. 4-minute run: node/object counts flat (no leaks).
 
 Feel
 - DROP IN: hero falls into frame and lands with dust ring, shake, thud, haptic.
-- Death: red flash, camera punch-in, 1 s slow-mo, heavy haptic. Extract: warm flash, punch, short slow-mo, hero stretches up into the beam. Boss arrival: half-speed beat + heavy haptic.
+- Death: red flash, camera punch-in, 1 s slow-mo, heavy haptic. Extract: warm flash, punch, short slow-mo, hero stretches up into the beam. Boss arrival: half-speed beat + heavy haptic. Boss kill: slow-mo, big blast, warm flash. Level-up: gold screen pop.
+- Low HP (<25%): heartbeat double-tap haptic, quicker as HP drops.
 - KILL CHAIN readout under LOOT (from x5; RAMPAGE / CARNAGE / MASSACRE / WASTELAND LEGEND at 10/25/50/100), best chain on results.
 - Damage numbers scale with size (chip / 80+ / 250+), crits get "!". XP pickup streak climbs in pitch.
 - Extract channel: haptic ticks + sparks quicken toward lift-off.
@@ -21,7 +24,7 @@ UI
 - Level-up cards: rarity-coloured frame + tint (uncommon green, rare teal, epic mauve, evolution gold), glow on epic+, chosen card stamps; cards grow to fit 2-line text (evolution tags were spilling out).
 - BUILD PATHS button on the level-up screen: every evolution for this hero with part progress, READY first.
 - Pause shows YOUR BUILD (icons + ranks).
-- Result: NEW BEST HAUL stamp; best kill chain line.
+- Result: NEW BEST HAUL stamp; best kill chain line; wipe explains "Kept N% of the bag. Extract to keep it all."
 - Hangar: scrap total rolls down on purchase; red squash when you can't afford.
 - Helm radio panel sits left of the minimap/loot column (it covered both).
 - Tests: three timing-flaky checks now wait on the condition (boss bar poll, music hold, pan voice).
