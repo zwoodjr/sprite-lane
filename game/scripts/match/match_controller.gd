@@ -670,9 +670,13 @@ func spawn_special(role: String, kind: String = "") -> Node:
 		Juice.sfx("threat_up")
 		Juice.mob_sfx("roar", enemy)
 		Juice.shake(0.3)
+		Juice.haptic(Juice.HAPTIC_EXTRACT)
+		## A held breath as the name slams in.
+		Juice.slowmo(0.5, 0.7)
 	else:
 		hud.show_toast("ELITE: %s inbound — it carries good gear" % nm, UiTheme.RUST)
 		Juice.mob_sfx("roar", enemy)
+		Juice.haptic(Juice.HAPTIC_BIG)
 	return enemy
 
 ## An elite / boss of a given kind at a given spot (Dust Warden on the pads).
