@@ -224,16 +224,21 @@ func _spawn_entrance() -> void:
 	var tw := create_tween()
 	tw.tween_property(self, "modulate:a", 1.0, 0.3)
 
+## Telegraph frames are identical for every mob: cut them once.
+static var _tele_shared: Array[Texture2D] = []
+
 func _build_telegraph() -> void:
-	if not ResourceLoader.exists(TELEGRAPH_TEX):
-		return
-	var tex := load(TELEGRAPH_TEX) as Texture2D
-	var fw := tex.get_height()
-	for i in range(maxi(1, tex.get_width() / fw)):
-		var at := AtlasTexture.new()
-		at.atlas = tex
-		at.region = Rect2(i * fw, 0, fw, fw)
-		_tele_frames.append(at)
+	if _tele_shared.is_empty():
+		if not ResourceLoader.exists(TELEGRAPH_TEX):
+			return
+		var tex := load(TELEGRAPH_TEX) as Texture2D
+		var fw := tex.get_height()
+		for i in range(maxi(1, tex.get_width() / fw)):
+			var at := AtlasTexture.new()
+			at.atlas = tex
+			at.region = Rect2(i * fw, 0, fw, fw)
+			_tele_shared.append(at)
+	_tele_frames = _tele_shared
 	_tele = Sprite2D.new()
 	_tele.top_level = true
 	_tele.z_index = -2
@@ -281,7 +286,7 @@ func _apply_look() -> void:
 			_variant_mat = UnitAnim.variant_material(fac, _variant)
 		_anim.base_material = _variant_mat
 		body.material = _variant_mat
-		_atk = UnitAnim.load_json(prefix + "_attack.json")
+		_atk = UnitAnim.load_json_cached(prefix + "_attack.json")
 		var sh := get_node_or_null("ContactShadow") as Sprite2D
 		if sh:
 			sh.queue_free()

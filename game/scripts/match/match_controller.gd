@@ -87,6 +87,7 @@ func _ready() -> void:
 		phase["duration"] = float(phase["duration"]) * GameState.timer_scale()
 		_phases.append(phase)
 
+	_build_warm_queue()
 	## Endless wasteland chunks
 	wasteland.setup(GameState.run_seed, player)
 	_clear_pads()
@@ -256,6 +257,34 @@ func release_cold_open() -> void:
 			e.set("damage", float(e.get("damage")) * 0.5)
 
 
+## Warm the mob art cache (one kind per frame, likeliest first): a mob kind's
+## first spawn used to load ~10 strips from disk mid-fight (8–30 ms hitch,
+## worse on iPhone with the GPU upload). Elites / bosses come last.
+var _warm_queue: Array = []
+
+func _build_warm_queue() -> void:
+	var seen := {}
+	for t in [1, 2, 3]:
+		for id in EnemyDefs.ids_for_tier(t):
+			if not seen.has(id):
+				seen[id] = true
+				_warm_queue.append(id)
+	var late: Array = FactionDefs.ELITE_POOL["plague"] + FactionDefs.ELITE_POOL["machine"] + EnemyDefs.CREW_KINDS + EnemyDefs.BOSS_KINDS + [RadioDefs.WARDEN_KIND]
+	for id in late:
+		if not seen.has(str(id)):
+			seen[str(id)] = true
+			_warm_queue.append(str(id))
+
+func _tick_warm() -> void:
+	if _warm_queue.is_empty():
+		return
+	var id := str(_warm_queue.pop_front())
+	var def: Dictionary = EnemyDefs.get_kind(id)
+	var prefix := str(def.get("anim", ""))
+	if prefix != "":
+		UnitAnim.load_states(prefix)
+		UnitAnim.load_json_cached(prefix + "_attack.json")
+
 func _tick_opening_waves() -> void:
 	if _wave_i >= OPENING_WAVES.size() or GameState.fast_timers:
 		return
@@ -423,6 +452,7 @@ func _process(delta: float) -> void:
 		return
 	_match_time += delta
 	GameState.run_time = _match_time
+	_tick_warm()
 	_update_spawns(delta)
 	_tick_opening_waves()
 	_tick_specials()

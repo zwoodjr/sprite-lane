@@ -487,10 +487,25 @@ func _dn_take() -> Label:
 func _dn_style(e: Dictionary) -> void:
 	var l: Label = e["label"]
 	var crit: bool = e["crit"]
-	l.text = str(maxi(1, int(round(float(e["total"])))))
-	l.add_theme_font_size_override("font_size", 24 if crit else 16)
-	l.add_theme_constant_override("outline_size", 8 if crit else 6)
-	l.add_theme_color_override("font_color", Color(1.0, 0.72, 0.2) if crit else (e["color"] as Color))
+	var n := maxi(1, int(round(float(e["total"]))))
+	l.text = ("%d!" % n) if crit else str(n)
+	## Size tiers: chip damage stays small so big hits (and aggregated bursts)
+	## read at a glance. Pixel font: keep to multiples of 4.
+	var fs := 16
+	if n >= 250:
+		fs = 24
+	elif n >= 80:
+		fs = 20
+	if crit:
+		fs += 8
+	if int(e.get("fs", -1)) != fs:
+		e["fs"] = fs
+		l.add_theme_font_size_override("font_size", fs)
+		l.add_theme_constant_override("outline_size", 8 if fs >= 24 else 6)
+	var col: Color = Color(1.0, 0.72, 0.2) if crit else (e["color"] as Color)
+	if e.get("fc", Color(0, 0, 0, 0)) != col:
+		e["fc"] = col
+		l.add_theme_color_override("font_color", col)
 	l.size = Vector2(160, 32)
 	l.pivot_offset = l.size * 0.5
 

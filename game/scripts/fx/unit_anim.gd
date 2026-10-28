@@ -197,6 +197,18 @@ static func load_json(path: String) -> Dictionary:
 	return parsed if parsed is Dictionary else {}
 
 
+static var _json_cache: Dictionary = {}
+
+## Same as load_json, but parsed once per path and shared (treat as read-only).
+## Mob spawns used to hit the disk + JSON parser every time.
+static func load_json_cached(path: String) -> Dictionary:
+	if _json_cache.has(path):
+		return _json_cache[path]
+	var d := load_json(path)
+	_json_cache[path] = d
+	return d
+
+
 static var _rim_mat: ShaderMaterial = null
 
 
