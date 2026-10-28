@@ -1,16 +1,32 @@
 # MVP status (repo mirror)
 
-**Latest (overnight polish pass):** In progress — performance + feel + UI polish.
+**Latest (overnight polish pass):** Performance + feel + UI polish (parse-checked on Godot 4.3 and 4.6; full test suite passes on both).
 
-- Perf: kill loot is capped at 70 live drops; overflow value merges into the nearest same-kind drop (a horde used to leave 400+ drops ticking each frame). Magnet radius lookup throttled.
-- Perf: enemy separation uses a shared per-frame enemy list and recomputes every 3rd frame per mob (was O(n²) array allocs every frame). Physics time in a 60-mob horde dropped ~12 ms → ~8.5 ms headless.
-- Perf: HUD only touches theme overrides / label text when the value changes (was every frame for ~10 labels + buff chips).
-- Level-up cards: rarity-coloured frame + panel tint (uncommon green, rare teal, epic mauve, evolution gold), slow glow on epic+, chosen card "stamps" while the others drop away.
-- Death: red flash, camera punch-in, 1 s slow-mo, heavy haptic. Extract: warm flash, punch, short slow-mo, hero stretches up and fades into the beam. Result screen waits in real time.
-- KILL CHAIN readout under LOOT: kills within 2.2 s stack (shows from x5), heats bone→amber→rust→red, calls RAMPAGE / CARNAGE / MASSACRE / WASTELAND LEGEND at 10/25/50/100. Best chain shows on the result screen (≥10).
-- Tests: two timing-flaky checks (boss bar poll, music hold) now wait on the condition.
+Performance
+- Kill loot capped at 70 live drops; overflow value merges into the nearest same-kind drop (a horde used to leave 400+ drops ticking every frame).
+- Enemy separation: shared per-frame enemy list, recomputed every 3rd frame per mob (was O(n²) with an array alloc per mob per frame). 60-mob horde physics ~12 → ~8.5 ms headless.
+- Mob art warm-up: one enemy kind's strips load per frame at run start (likeliest tiers first, then elites/bosses/raiders). First spawn of a kind was an 8–30 ms hitch; now ~1 ms.
+- Attack JSON + telegraph frames cached (were re-read/parsed per spawn). Bullet tail gradients shared (no Gradient/dict per shot).
+- Pools: debris bursts (16 emitters/scene, cached ramps) and floating callouts (24 labels/scene) — no node+timer per effect.
+- HUD only touches theme overrides / label text on change (was every frame); mobs skip the status-overlay lookup when they have none.
 
-Test on device: big hordes (frame pacing, scrap/XP all still arrive); level-up card colours; die once and extract once to feel the new moments; kill chain position next to the minimap on a notched phone.
+Feel
+- DROP IN: hero falls into frame and lands with dust ring, shake, thud, haptic.
+- Death: red flash, camera punch-in, 1 s slow-mo, heavy haptic. Extract: warm flash, punch, short slow-mo, hero stretches up into the beam. Boss arrival: half-speed beat + heavy haptic.
+- KILL CHAIN readout under LOOT (from x5; RAMPAGE / CARNAGE / MASSACRE / WASTELAND LEGEND at 10/25/50/100), best chain on results.
+- Damage numbers scale with size (chip / 80+ / 250+), crits get "!". XP pickup streak climbs in pitch.
+- Extract channel: haptic ticks + sparks quicken toward lift-off.
+
+UI
+- Level-up cards: rarity-coloured frame + tint (uncommon green, rare teal, epic mauve, evolution gold), glow on epic+, chosen card stamps; cards grow to fit 2-line text (evolution tags were spilling out).
+- BUILD PATHS button on the level-up screen: every evolution for this hero with part progress, READY first.
+- Pause shows YOUR BUILD (icons + ranks).
+- Result: NEW BEST HAUL stamp; best kill chain line.
+- Hangar: scrap total rolls down on purchase; red squash when you can't afford.
+- Helm radio panel sits left of the minimap/loot column (it covered both).
+- Tests: three timing-flaky checks now wait on the condition (boss bar poll, music hold, pan voice).
+
+Test on device: (1) a big horde on Dustfall/Last Extract — frame pacing, and all scrap/XP still arrive; (2) die once + extract once + meet a boss — slow-mo beats must always return to full speed; (3) level-up card colours, BUILD PATHS overlay scroll, pause YOUR BUILD row on a notched phone.
 
 **Prior (per-hero guns):** Playtest “everyone feels like the same SMG” — `LoadoutStubs.weapon_for_character` now gives each of the 8 heroes distinct fire rate / mag / reload / spread / damage (launcher splash, sniper, melee maul, gauntlet burst, medic SMG, dual blades, AR, pistol+drone stub). `GameState.reset_loadout_to_defaults` no longer stamps the shared Scrap SMG. Character select shows kit stats. Re-pull PR #10.
 
