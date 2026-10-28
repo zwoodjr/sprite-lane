@@ -306,13 +306,44 @@ func get_tab() -> String:
 	return _tab
 
 
+## Scrap readout rolls down to the new total after a purchase (and shakes red
+## when you can't afford something), so spending reads as spending.
+var _scrap_shown: int = -1
+var _scrap_tw: Tween
+
+func _set_scrap_shown(v: int) -> void:
+	if _scrap_shown < 0 or v >= _scrap_shown or not is_inside_tree():
+		_scrap_shown = v
+		_scrap_label.text = "%d" % v
+		return
+	if _scrap_tw and _scrap_tw.is_valid():
+		_scrap_tw.kill()
+	var from := _scrap_shown
+	_scrap_shown = v
+	_scrap_tw = _scrap_label.create_tween()
+	_scrap_tw.tween_method(func(x: float) -> void: _scrap_label.text = "%d" % int(round(x)), float(from), float(v), 0.45).set_ease(Tween.EASE_OUT)
+	_scrap_label.pivot_offset = _scrap_label.size * 0.5
+	_scrap_label.scale = Vector2(1.18, 1.18)
+	_scrap_label.create_tween().tween_property(_scrap_label, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _deny_shake() -> void:
+	## Containers own the label's position: flash red + a quick squash instead.
+	Juice.haptic(Juice.HAPTIC_TICK)
+	_scrap_label.pivot_offset = _scrap_label.size * 0.5
+	_scrap_label.modulate = Color(1.6, 0.35, 0.3)
+	var tw := _scrap_label.create_tween()
+	tw.tween_property(_scrap_label, "scale", Vector2(1.2, 0.85), 0.05)
+	tw.tween_property(_scrap_label, "scale", Vector2(0.9, 1.1), 0.05)
+	tw.tween_property(_scrap_label, "scale", Vector2.ONE, 0.08)
+	tw.tween_property(_scrap_label, "modulate", Color.WHITE, 0.25)
+
 func _rebuild() -> void:
 	if _scroll != null:
 		_scroll_y_keep = _scroll.scroll_vertical
 	for c in _list.get_children():
 		_list.remove_child(c)
 		c.queue_free()
-	_scrap_label.text = "%d" % GameState.account_scrap
+	_set_scrap_shown(GameState.account_scrap)
 	match _tab:
 		"camp":
 			_list.add_child(_note("Shared upgrades help every survivor."))
@@ -432,8 +463,10 @@ func _pips(rank: int, max_r: int) -> HBoxContainer:
 func buy(id: String) -> bool:
 	if not GameState.try_buy_camp(id):
 		Juice.sfx("ui_denied")
+		_deny_shake()
 		return false
 	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_HIT)
 	for m in GameState.check_milestones():
 		_toast("Milestone: %s — the hangar changes" % str(m["name"]))
 		GameState.save_profile()
