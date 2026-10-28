@@ -56,7 +56,15 @@ static func spawn_burst(parent: Node, at: Vector2, kind_id: String, count: int, 
 		d.set("kind", kind_id)
 		d.set("value", each)
 		d.position = at
+		## Counted now (added next idle frame) so one big blast can't overshoot.
+		_live.append(d)
 		parent.add_child.call_deferred(d)
+		## Parent gone before the deferred add: free the orphan (else it leaks).
+		(func() -> void:
+			if is_instance_valid(d) and not d.is_inside_tree():
+				_live.erase(d)
+				d.free()
+		).call_deferred()
 
 
 ## Nearest live drop of `kind_id` (any distance) to absorb overflow value.
@@ -65,7 +73,7 @@ static func _merge_host(at: Vector2, kind_id: String) -> LootDrop:
 	var bd := INF
 	for n in _live:
 		var d := n as LootDrop
-		if d == null or d.kind != kind_id or d.is_queued_for_deletion():
+		if d == null or d.kind != kind_id or d.is_queued_for_deletion() or not d.is_inside_tree():
 			continue
 		var dd := d.global_position.distance_squared_to(at)
 		if dd < bd:
