@@ -1,5 +1,7 @@
 # MVP status (repo mirror)
 
+**Fix (Choose Your Wanderer, iPhone):** the ADMIN chip moved into the top safe band, right-aligned, so it can no longer cover the hero strip. Hero tiles now shrink to fit the width (76 → min 56 px, scrolling past that), so all 8 heroes and the pet tiles are reachable at 390x844 and 375x667 with a notch and XL text. Review tool: `tools/charsel_shots.tscn`.
+
 **Latest (combat, hangar, insurance pass):**
 
 - **Abilities:** every survivor already had an active ability on the ability cap, with a cooldown ring and an icon: Rook RUSH, Vesper VIAL, Pebble SLAM, Juno ZAP (Overload chain stun), Cinder HEAL (Field Draught), Quill MARK (Dissect), Nyx SLASH (Blade Rush; the B version is Back Way Out), Helm DRONE. Each has a B version on the Loadout screen. New: **Settings → Controls → Aim with the stick** (off by default). Auto-fire still triggers itself but picks the enemy within ±35° of the direction you're steering.

@@ -42,7 +42,19 @@ func _ready() -> void:
 	_chip.text = "ADMIN"
 	_chip.focus_mode = Control.FOCUS_NONE
 	_chip.add_theme_font_size_override("font_size", 13)
-	_chip.custom_minimum_size = Vector2(70, 30)
+	_chip.custom_minimum_size = Vector2(64, 24)
+	## Slim flat chip (theme buttons have tall content margins).
+	for st in ["normal", "hover", "pressed"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.08, 0.06, 0.05, 0.85) if st != "pressed" else Color(0.3, 0.2, 0.1, 0.9)
+		sb.border_color = Color(1.0, 0.75, 0.25, 0.8)
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(4)
+		sb.content_margin_left = 4
+		sb.content_margin_right = 4
+		sb.content_margin_top = 1
+		sb.content_margin_bottom = 1
+		_chip.add_theme_stylebox_override(st, sb)
 	_chip.modulate = Color(1, 1, 1, 0.75)
 	_chip.pressed.connect(open_panel)
 	add_child(_chip)
@@ -75,9 +87,17 @@ static func admin_allowed() -> bool:
 
 func _place_chip() -> void:
 	var m := MobileLayout.control_safe_margin()
-	## Below the HUD vitals + pack chip so it never covers the bars.
-	_chip.position = Vector2(m.position.x, m.position.y + 196)
-	_fps.position = _chip.position + Vector2(78, 6)
+	var vp := get_viewport().get_visible_rect().size
+	## Top bar, right side, inside the safe band ABOVE every screen's header row
+	## (it used to sit 196 px down and covered the hero strip on Choose Your
+	## Wanderer). Right-aligned so it clears a centred notch / Dynamic Island.
+	var h := clampf(m.position.y - 4.0, 18.0, 28.0)
+	_chip.custom_minimum_size = Vector2(64, h)
+	_chip.size = _chip.custom_minimum_size
+	_chip.add_theme_font_size_override("font_size", 11 if h < 24.0 else 13)
+	var right := m.position.x + m.size.x
+	_chip.position = Vector2(right - _chip.size.x, maxf(0.0, m.position.y - h - 2.0))
+	_fps.position = Vector2(_chip.position.x - 72.0, _chip.position.y + 2.0)
 
 
 func _process(_delta: float) -> void:

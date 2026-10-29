@@ -31,6 +31,10 @@ static func safe_margin() -> Rect2:
 	return control_safe_margin()
 
 
+## Review tools only: simulated notch / home-bar insets in UI px (l, t, r, b).
+static var sim_safe := Vector4.ZERO
+
+
 static func control_safe_margin() -> Rect2:
 	## Extra padding for thumbs / notch / home indicator - used by controls & HUD text only.
 	## Game world should still render edge-to-edge behind the HUD.
@@ -55,6 +59,11 @@ static func control_safe_margin() -> Rect2:
 		top = maxf(top, float(wa.position.y) * k.y + 6.0)
 		right = maxf(right, (win_size.x - float(wa.position.x + wa.size.x)) * k.x + 8.0)
 		bottom = maxf(bottom, (win_size.y - float(wa.position.y + wa.size.y)) * k.y + 10.0)
+	if sim_safe != Vector4.ZERO:
+		left = maxf(left, sim_safe.x)
+		top = maxf(top, sim_safe.y)
+		right = maxf(right, sim_safe.z)
+		bottom = maxf(bottom, sim_safe.w)
 	return Rect2(left, top, vp_size.x - left - right, vp_size.y - top - bottom)
 
 

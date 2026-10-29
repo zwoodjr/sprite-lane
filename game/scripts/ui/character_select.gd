@@ -31,12 +31,16 @@ func build(c: VBoxContainer) -> void:
 	strip_scroll.custom_minimum_size = Vector2(0, 86)
 	c.add_child(strip_scroll)
 	var strip := HBoxContainer.new()
-	strip.add_theme_constant_override("separation", 6)
+	strip.add_theme_constant_override("separation", STRIP_SEP)
 	strip.alignment = BoxContainer.ALIGNMENT_CENTER
 	strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	strip_scroll.add_child(strip)
 	for id in CharacterDefs.all_known_ids():
 		strip.add_child(_roster_tile(id))
+	## Narrow portrait (iPhone SE / notched safe area): shrink the tiles so the
+	## whole roster fits; past the minimum the strip scrolls instead.
+	strip_scroll.resized.connect(func() -> void: _fit_strip(strip_scroll, strip))
+	_fit_strip.call_deferred(strip_scroll, strip)
 
 	## Big hero stage: the idle at an integer x2/x3 on a lit pad, name over it.
 	var stage := _HeroStage.new()
@@ -183,6 +187,22 @@ func _first_frame(path: String) -> Texture2D:
 	at.atlas = tex
 	at.region = Rect2(0, 0, h, h)
 	return at
+
+const STRIP_SEP := 6
+const TILE_MAX := 76.0
+const TILE_MIN := 56.0
+
+func _fit_strip(sc: ScrollContainer, strip: HBoxContainer) -> void:
+	if not is_instance_valid(sc) or not is_instance_valid(strip):
+		return
+	var n := strip.get_child_count()
+	if n <= 0 or sc.size.x <= 0.0:
+		return
+	var t := floorf((sc.size.x - float(STRIP_SEP * (n - 1))) / float(n))
+	t = clampf(t, TILE_MIN, TILE_MAX)
+	for ch in strip.get_children():
+		(ch as Control).custom_minimum_size = Vector2(t, t)
+	sc.custom_minimum_size.y = t + 10.0
 
 func _roster_tile(id: String) -> Control:
 	var def := CharacterDefs.get_character(id)
