@@ -306,7 +306,9 @@ class Icon:
     def _local(self, p0, p1):
         x0, y0 = p0
         x1, y1 = p1
-        L = math.hypot(x1 - x0, y1 - y0)
+        L = max(1e-3, math.hypot(x1 - x0, y1 - y0))
+        if L <= 1e-3:
+            x1 = x0 + 1e-3
         dx, dy = (x1 - x0) / L, (y1 - y0) / L
         u = (self.xx - x0) * dx + (self.yy - y0) * dy
         v = -(self.xx - x0) * dy + (self.yy - y0) * dx
