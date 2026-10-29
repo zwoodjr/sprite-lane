@@ -13,6 +13,10 @@ IconSet ids written (48 + 24 px; 24 px is the bold simplified variant):
 96 px world-pickup icons: icons/gear/icon_slot_<slot>.png, icon_acc_<slot>.png.
 
     python3 tools/gen_gear_icons.py      (from game/)
+
+Painted art from Zach's sheet (tools/slice_armor_sheet.py) replaces these for
+every item it covers; this script runs the slicer at the end so it stays the
+fallback only.
 """
 import math
 import os
@@ -1260,3 +1264,6 @@ if __name__ == "__main__":
     with mp.Pool(min(4, os.cpu_count() or 1)) as pool:
         for nm in pool.imap_unordered(run, js):
             print("ok", nm)
+    # Zach's painted sheet wins wherever it has the item (this script is the fallback)
+    import slice_armor_sheet
+    slice_armor_sheet.main(tuple(o for o in only))
