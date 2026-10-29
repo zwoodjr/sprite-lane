@@ -134,8 +134,10 @@ static func _table() -> Dictionary:
 				"cloud_radius": 85.0, "cloud_dps": 12.0, "cloud_time": 3.5,
 				"coat_time": 4.0, "coat_mult": 1.35, "coat_dps": 6.0, "coat_poison_time": 3.0,
 			},
-			"move_speed_mult": 1.0,
+			"move_speed_mult": 1.12, ## balance: kites better (bot data)
 			"max_hp_bonus": 25, ## balance: died 2-3x as often as the others at Greed 2+ (bot data)
+			## Rifle-coat padding: she can't kite like the others (bot data).
+			"damage_taken_mult": 0.85,
 			"damage_mult": 1.08,
 			"heal_amount": 0,
 			"heal_cd": 999.0,

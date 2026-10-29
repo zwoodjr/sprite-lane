@@ -85,7 +85,7 @@ static func _weapon_table() -> Dictionary:
 			## Balance pass: 5-vial clip, faster chamber (~20-25% reloading, was ~40%);
 			## still a slow, heavy sniper shot.
 			"damage": 44,
-			"fire_rate": 1.05,
+			"fire_rate": 1.3, ## balance: 1.05 couldn't hold Greed waves
 			"spread_deg": 0.6,
 			"projectile_speed": 1150.0,
 			"lifetime": 0.6,

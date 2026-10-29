@@ -1526,7 +1526,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.fx("fx_shield_hit", global_position + Vector2(0, -6), {"follow": self})
 		Juice.sfx("shield_block")
 		return
-	var dmg := float(amount) * resist_mult
+	var dmg := float(amount) * resist_mult * float(_char.get("damage_taken_mult", 1.0))
 	## Dust Surge: enemies hit harder while it lasts.
 	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("enemies"):
 		dmg *= GameState.event_enemy_damage

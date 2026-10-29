@@ -1,5 +1,27 @@
 # MVP status (repo mirror)
 
+**Latest (combat, hangar, insurance pass):**
+
+- **Abilities:** every survivor already had an active ability on the ability cap, with a cooldown ring and an icon: Rook RUSH, Vesper VIAL, Pebble SLAM, Juno ZAP (Overload chain stun), Cinder HEAL (Field Draught), Quill MARK (Dissect), Nyx SLASH (Blade Rush; the B version is Back Way Out), Helm DRONE. Each has a B version on the Loadout screen. New: **Settings → Controls → Aim with the stick** (off by default). Auto-fire still triggers itself but picks the enemy within ±35° of the direction you're steering.
+- **Survivability:** Helm +20 max HP. Vesper +25 max HP, +12% move speed, takes 15% less damage; her Vial Rifle fires 1.3 shots/s (was 1.05) and its slugs pierce 2. Sloppy-driver Vesper deaths 7/8 → 4/8; careful-driver 1/8.
+- **Late healing:** each skipped window cuts all healing by 20% (heals, regen, tonics, tonic drops), down to a floor of 30%.
+- **Bot table (Haze, stay 3 windows, 8 heroes × clean/sloppy driver, 32 runs, same seeds):**
+  - Before: 25% deaths, survivors ended at 86% HP.
+  - After: 18% deaths, survivors end at 69% and dip to ~47% at their lowest.
+  - Leaving at window 1 is unchanged: 0 deaths, 93%.
+- **Hangar v5:** shared camp upgrades and survivor stations now have 3 big ranks instead of 5 small ones, for the same total cost.
+  - Generator +16/32/50 HP, Radio Tower 5/10/15 s, Scrap Press +12/25/40%, Ammo Bench 3 tiers.
+  - Stations give +10/20/32% weapon damage, −7/13/20% ability cooldown, +12/27/45% ability power. Kit styles unlock at station 1/2; ability B at 2.
+  - Old saves merge ranks pairwise (5→3, 4→2, 3→2, 2→1, 1→1); scrap paid beyond the merged rank is refunded, with a Hangar notice.
+  - The hangar art still builds out: rank 1/2/3 shows art stage 1/3/5.
+- **Insurance finished:** CAMP sells an **Insurance Locker** (400 scrap, one-time). It enables INSURE on one worn piece per survivor, and that piece survives death. Saves that already had insured gear get the locker free.
+- **Deepened systems:**
+  - **Medicine, drink or bank:** BACKPACK → DRINK heals 45% (Cinder's dose 70%) but gives up the crate's scrap and Cinder's brewing stock.
+  - **Radio jobs:** a finished contract takes Greed −1, and each contract announces its reward up front.
+  - The rest (events, lore, bestiary, pacts, weekly) stay light and phase in via onboarding.
+- **Bullet pooling skipped:** a bullet costs ~0.11 ms to spawn, roughly 2–3 ms per second of heavy fire. A safe reset would cover about 30 fields plus `_ready`-time dressing and the trail tween, which isn't worth the risk.
+
+Test on device: (1) Hangar on an old save shows the merge/refund notice, 3-rank pips, and art that still builds out; (2) buy the Insurance Locker, INSURE a piece, die, and confirm it came home; (3) a Haze run past window 2 — healing feels scarce, BACKPACK → DRINK works, and finishing a radio contract drops GREED.
 **Art pass 4 (every weapon icon):** Common→Epic weapon icons repainted in the legendary style by `tools/gen_legendary_icons.py` (one drawing per survivor, finished per rarity): Common = rusted through + a rag tied on; Rare = worn teal service paint/wraps; Epic = element finish (fire scorched black + ember veins, poison toxic-green paint + venom drips, shock blued steel + arcs, frost pale paint + ice blade + rime); Legendary keeps red/brass furniture + its own attachment (bell, censer, coin, live arcs — non-legendaries no longer show them). Element medallions are gone; the frame colour + finish carry rarity. 24 px icons are a simplified variant (thin parts ~2x bolder, no rivets/welds/scratches) and 48/24 px icons auto-shrink until the outline keeps a 1 px margin (fixes Last Shift touching the frame). `icons/weapons/weapon_<hero>.png` (96 px base pickups) come from the same script; `gen_weapon_icons.py` now just runs it. Mob wear retried frame-stably (silhouette-column dirt bands): stable, but invisible at phone size, so not shipped. Hangar camp upgrades already have worn art for every stage (5 each, Kennel 3 per dog); unchanged.
 
 **Art pass 3 (weapons + art audit):**
@@ -9,7 +31,7 @@
 - **Tried and dropped:** a palette-stepped grime/rust pass on the mob roster. The mob strips are painted per frame, so procedural marks crawl between frames and read as noise; not shipped.
 - **Texture memory:** unchanged, 506 MiB if every PNG were resident (all lossless, no mipmaps; icon sizes kept). Typical run: hero ~5.6 MiB, pet ~7 MiB, regular mob ~5-7 MiB per kind, elite ~11, boss ~22.
 
-**Latest (difficulty + onboarding pass):** Fixes from the overnight critique.
+**Prior (difficulty + onboarding pass):** Fixes from the overnight critique.
 
 - **Greed pressure** (`ModeDefs.greed`, `match_controller._greed_punish`): every extract window you let close → mobs +45% HP, +28% damage, +50% spawn rate, +5 live cap (stacks to 4), plus a two-sided punish wave and a Greed elite on every tier. Base live cap 12 → 18. Tonic drops cut (T1 6% → 3%), idle regen 2 → 1 HP/s. HUD: AT STAKE (what extracting now pays; turns rust/red with greed) and GREED n on the threat line. Wipe result: "Extracting would have paid N."
 - **Kill-drop firehose:** one scrap + one XP shard per kill (two from elites/bosses), same value.
