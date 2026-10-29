@@ -1,20 +1,32 @@
-"""Legendary weapon icons (art pass 3), painted to match the guns on the hero
-sprites: gunmetal with worn edges, red-rust paint chipped back to metal, oiled
-wood and tape wraps, welded patch plates, rivets, grime in the recesses.
+"""Weapon icons, every rarity (art passes 3-4), painted to match the guns on the
+hero sprites: gunmetal with worn edges, paint chipped back to metal, oiled wood
+and tape wraps, welded patch plates, rivets, grime in the recesses.
+
+One drawing per survivor weapon, finished per rarity so the tier reads at a
+glance even before the frame colour:
+  Common (patched)  rusted through, red paint gone to rust, a rag tied on
+  Rare              worn teal service paint, teal wraps
+  Epic              element finish: fire = scorched black + ember veins,
+                    poison = toxic green paint + dripping venom, shock = blued
+                    steel + arcs, frost = pale paint + rime on the top edges
+  Legendary         red/brass furniture + its own attachment (bell, censer,
+                    coin, live arcs) + gold halo on the 96 px pickup icon
 
 Each weapon is a stack of parts in a 96-unit box, painted at 4x and box-filtered
-down to 96 px (the hero sprites read as painted-then-downsampled, so the icons
-do too). Light from the top-left, 1 px INK outline, hard alpha. A faint gold
-legendary halo is drawn under the weapon at alpha < 230 (gen_weapon_icons.py
-strips it when it derives the Common-Epic icons from these).
+down. Light from the top-left, 1 px INK outline, hard alpha (the 96 px
+legendary halo is alpha < 230). The 24 px icons are a simplified variant: thin
+parts drawn ~1.8x bolder, no rivets / welds / scratches, lower coverage
+threshold, values lifted. 48 / 24 px icons are auto-fitted so the outline keeps
+a 1 px margin.
 
-Writes icons/legendary/legendary_<id>.png (96, pickups) and the IconSet
-icons/set/{48,24}/leg_<id>.png + wpn_<hero>_<id>.png (stash / gear / loadout).
-gen_icons.py runs this at its end so a full icon rebuild keeps these.
+Writes
+  icons/legendary/legendary_<id>.png      96 px legendary pickups (with halo)
+  icons/weapons/weapon_<hero>.png         96 px base weapon pickups
+  icons/set/{48,24}/wpn_<hero>_<variant>.png and leg_<id>.png (stash / gear /
+  loadout; IconSet)
+gen_icons.py runs this at its end so a full icon rebuild keeps them.
 
     python3 tools/gen_legendary_icons.py      (from game/)
-then
-    python3 tools/gen_weapon_icons.py
 """
 import math
 import os
@@ -25,13 +37,37 @@ from PIL import Image, ImageDraw, ImageFilter
 GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(GAME, "assets", "sprites", "icons", "legendary")
 SET = os.path.join(GAME, "assets", "sprites", "icons", "set")
+WPN = os.path.join(GAME, "assets", "sprites", "icons", "weapons")
 LEG_HERO = {"last_shift": "ash_rook", "bellwether": "vesper_thorn", "gravedigger": "pebble",
             "live_line": "bolt_juno", "censer": "sister_cinder", "bonesaw": "quill_marrow",
             "twin_debts": "nyx_caldera", "mayday": "helm_wisp"}
 SS = 4
-FIT = 0.88  # 96 px: room for the halo; the IconSet pass draws at FIT_SET
+FIT = 0.88  # 96 px: room for the halo; the IconSet sizes are auto-fitted
 FIT_SET = 0.9
-MODE = "hd"
+MODE = "hd"      # hd (96) / s48 / s24
+KIND = "legendary"  # base / patched / rare / epic / legendary
+ELEMENT = ""
+## (variant id, kind, element) per survivor, matching GearDefs.WEAPON_VARIANTS
+VARIANTS = {
+    "ash_rook": [("patched", "patched", ""), ("long_fuse", "rare", ""), ("cluster", "epic", "fire")],
+    "vesper_thorn": [("patched", "patched", ""), ("bell_tuned", "rare", ""), ("hollowpoint", "epic", "poison")],
+    "pebble": [("patched", "patched", ""), ("rebar", "rare", ""), ("quarry", "epic", "shock")],
+    "bolt_juno": [("patched", "patched", ""), ("coiled", "rare", ""), ("arc", "epic", "shock")],
+    "sister_cinder": [("patched", "patched", ""), ("chapel", "rare", ""), ("thurible", "epic", "fire")],
+    "quill_marrow": [("patched", "patched", ""), ("surgical", "rare", ""), ("autopsy", "epic", "poison")],
+    "nyx_caldera": [("patched", "patched", ""), ("night", "rare", ""), ("smuggler", "epic", "frost")],
+    "helm_wisp": [("patched", "patched", ""), ("flight", "rare", ""), ("flare", "epic", "fire")],
+}
+## material swaps per finish
+REMAP = {
+    "patched": {"red": "rust", "olive": "rust", "brass": "rust", "signal": "rust", "blade": "steel", "bone": "leather"},
+    "rare": {"red": "tealp", "signal": "tealp", "olive": "tealp", "tape": "tealwrap", "cloth": "tealwrap"},
+    "epic:fire": {"red": "scorch", "olive": "scorch", "signal": "scorch", "tape": "leather", "wood": "scorch"},
+    "epic:poison": {"red": "toxicp", "olive": "toxicp", "signal": "toxicp", "tape": "cloth"},
+    "epic:shock": {"red": "voltp", "olive": "voltp", "signal": "voltp", "brass": "steel"},
+    "epic:frost": {"red": "frostp", "olive": "frostp", "signal": "frostp", "tape": "leather",
+                   "blade": "iceblade", "cloth": "frostp"},
+}
 N = 96
 W = N * SS
 INK = np.array([20, 12, 14], np.float32)
@@ -63,6 +99,14 @@ MAT = {
     "ember": dict(c=hx("#e8761c"), spec=1.0, grime=0.0, rust=0.0, glow=1),
     "signal": dict(c=hx("#d8661a"), spec=0.5, grime=0.5, rust=0.3, chip="steel"),
     "arc": dict(c=hx("#7fe6ff"), spec=1.0, grime=0.0, rust=0.0, glow=1),
+    "tealp": dict(c=hx("#3f857b"), spec=0.4, grime=0.5, rust=0.3, chip="steel"),
+    "tealwrap": dict(c=hx("#3a6e68"), spec=0.1, grime=0.6, rust=0.0, wrap=1),
+    "scorch": dict(c=hx("#3a2622"), spec=0.3, grime=0.3, rust=0.2, chip="dark"),
+    "toxicp": dict(c=hx("#5c7a26"), spec=0.35, grime=0.5, rust=0.3, chip="steel"),
+    "voltp": dict(c=hx("#2f4f78"), spec=0.6, grime=0.4, rust=0.15, chip="steel"),
+    "frostp": dict(c=hx("#9db4c2"), spec=0.6, grime=0.35, rust=0.1, chip="steel"),
+    "frost": dict(c=hx("#dff2ff"), spec=1.0, grime=0.0, rust=0.0, glow=1),
+    "iceblade": dict(c=hx("#8fd0ea"), spec=1.1, grime=0.15, rust=0.0),
 }
 
 
@@ -74,6 +118,23 @@ def _scr(x, y):
 
 def _fit():
     return FIT if MODE == "hd" else FIT_SET
+
+
+def _bold():
+    """Small icons draw thin parts thicker (simplified 24 px variant)."""
+    return {"hd": 1.0, "s48": 1.25, "s24": 2.2}[MODE]
+
+
+def _detail():
+    return MODE != "s24"
+
+
+def _remap():
+    if KIND in ("patched", "rare"):
+        return REMAP[KIND]
+    if KIND == "epic":
+        return REMAP["epic:" + ELEMENT]
+    return {}
 
 
 def noise(seed, scale, octaves=3):
@@ -105,11 +166,16 @@ class Icon:
         self.n_fine = noise(seed + 2, 4, 2)
         self.k = 0
         self.edges = np.zeros((W, W), np.float32)
+        self.leg = KIND == "legendary"
+        self.remap = _remap()
 
     # ---------------------------------------------------------- core painter
     def _paint(self, mask, nrm, mat, u=None, flat=False):
         """mask: float coverage, nrm: (nx, ny, nz) normal field, mat: MAT key."""
-        m = MAT[mat]
+        m = dict(MAT[self.remap.get(mat, mat)])
+        if KIND == "patched" and not m.get("glow") and m["spec"] > 0.12:
+            m["rust"] = min(1.0, m["rust"] * 1.6 + 0.25)
+            m["grime"] = min(1.0, m["grime"] * 1.3)
         self.k += 1
         nx, ny, nz = nrm
         lam = np.clip(nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2], 0, 1)
@@ -176,6 +242,11 @@ class Icon:
     def bar(self, p0, p1, w0, mat, w1=None, prof="box", bevel=0.35, cap=0.0):
         """Rotated bar from p0 to p1, width w0 (tapering to w1). prof: cyl / box."""
         w1 = w0 if w1 is None else w1
+        b = _bold()
+        if b != 1.0:
+            # thin parts thicken most; big bodies stay close to their size
+            w0 = w0 + (b - 1.0) * min(w0, 6.0)
+            w1 = w1 + (b - 1.0) * min(w1, 6.0)
         u, v, L, dx, dy = self._local(p0, p1)
         t = np.clip(u / L, 0, 1)
         hw = (w0 + (w1 - w0) * t) / 2
@@ -231,11 +302,15 @@ class Icon:
 
     # ------------------------------------------------------------- details
     def rivet(self, x, y, r=1.7, mat="steel"):
+        if not _detail():
+            return
         self.ellipse(x + 0.4, y + 0.5, r * 1.15, r * 1.15, "dark", dome=0.3)
         self.ellipse(x, y, r, r, mat, dome=0.95)
 
     def weld(self, p0, p1, w=1.4):
         """Beaded weld seam: lumpy bright/dark beads along a line."""
+        if not _detail():
+            return
         L = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
         self.bar(p0, p1, w * 2.4, "rust", prof="cyl")
         n = max(2, int(L / (w * 0.8)))
@@ -247,6 +322,8 @@ class Icon:
 
     def patch(self, cx, cy, w, h, ang, mat="steel"):
         """Welded patch plate with corner rivets."""
+        if not _detail():
+            return
         c, s = math.cos(ang), math.sin(ang)
         pts = []
         for ox, oy in ((-w / 2, -h / 2), (w / 2, -h / 2 + 0.6), (w / 2, h / 2), (-w / 2 + 0.7, h / 2)):
@@ -256,6 +333,8 @@ class Icon:
             self.rivet(cx + (x - cx) * 0.72, cy + (y - cy) * 0.72, 0.9)
 
     def scratches(self, region_mask_fn=None, count=26, seed=0):
+        if not _detail():
+            return
         rng = np.random.default_rng(self.seed * 7 + seed)
         im = Image.new("L", (W, W), 0)
         d = ImageDraw.Draw(im)
@@ -274,17 +353,95 @@ class Icon:
 
     # ---------------------------------------------------------------- output
     def save(self, name, halo=hx("#ffb030"), extra_glows=()):
-        """96 px pickup / HD icon (with the legendary halo) plus the IconSet
-        48 / 24 px icons the stash, gear and loadout screens actually show
-        (hard alpha, no halo: the legendary frame carries the rarity)."""
-        if MODE == "hd":
-            Image.fromarray(self._render(N, halo, extra_glows), "RGBA").save(os.path.join(OUT, "legendary_%s.png" % name))
-            return
-        hero = LEG_HERO[name]
-        for n in (48, 24):
-            im = Image.fromarray(self._render(n, None, ()), "RGBA")
-            for stem in ("leg_%s" % name, "wpn_%s_%s" % (hero, name)):
-                im.save(os.path.join(SET, str(n), stem + ".png"))
+        """Apply the rarity finish overlays and hand the result to the driver
+        (main), which renders it at the current MODE size."""
+        global RESULT
+        if KIND == "patched":
+            self._rag()
+        if KIND == "epic":
+            extra_glows = list(extra_glows) + self._element(ELEMENT)
+        RESULT = (self, halo if (KIND == "legendary" and MODE == "hd") else None, extra_glows)
+
+    def _axis(self):
+        ys, xs = np.nonzero(self.a > 0.5)
+        cy, cx = ys.mean() / SS, xs.mean() / SS
+        cov = np.cov(np.stack([xs / SS, ys / SS]))
+        w, v = np.linalg.eigh(cov)
+        ax = v[:, 1]
+        return cx, cy, ax
+
+    def _rag(self):
+        """Common: a filthy rag knotted round the middle, two tails hanging."""
+        cx, cy, ax = self._axis()
+        # layout coords of the screen centroid
+        fit = _fit()
+        lx, ly = (cx - N / 2) / fit + N / 2, (cy - N / 2) / fit + N / 2
+        px_, py_ = -ax[1], ax[0]
+        L = 7.0
+        self.bar((lx - px_ * L, ly - py_ * L), (lx + px_ * L, ly + py_ * L), 6.5, "cloth", prof="cyl")
+        self.bar((lx + px_ * 3, ly + py_ * 3 + 2), (lx + px_ * 2 + 3, ly + py_ * 2 + 13), 3.2, "cloth", w1=2.0, prof="cyl")
+        self.bar((lx + px_ * 4, ly + py_ * 4 + 2), (lx + px_ * 6 + 1, ly + py_ * 6 + 11), 2.8, "cloth", w1=1.6, prof="cyl")
+
+    def _element(self, el):
+        """Epic element finish on top of the painted weapon. Returns extra glows."""
+        sil = self.a > 0.5
+        from scipy import ndimage as ndi
+        rng = np.random.default_rng(self.seed + 500)
+        zero = np.zeros((W, W))
+        flatn = (zero, zero, np.ones((W, W)))
+        inner = ndi.binary_erosion(sil, iterations=int(1.5 * SS))
+        if el == "fire":
+            n = noise(self.seed + 50, 22, 1)
+            vein = inner & (np.abs(n - 0.5) < 0.02)
+            it = {"hd": 0, "s48": 1, "s24": 2}[MODE]
+            if it:
+                vein = ndi.binary_dilation(vein, iterations=it)
+            self._paint(vein.astype(np.float32), flatn, "ember")
+            return [(ndi.gaussian_filter(vein.astype(np.float32), 6) * 3.0, hx("#ff8a2a"))]
+        if el == "poison":
+            n = noise(self.seed + 51, 12, 2)
+            vein = inner & (np.abs(n - 0.5) < 0.016)
+            self._paint(vein.astype(np.float32), flatn, "glass")
+            # venom drips under the lowest edge points
+            ys, xs = np.nonzero(sil)
+            cols = rng.choice(np.unique(xs), size=4, replace=False)
+            drops = np.zeros((W, W), np.float32)
+            for c in cols:
+                yb = ys[xs == c].max()
+                ux, uy = c / SS, yb / SS
+                fit = _fit()
+                lx, ly = (ux - N / 2) / fit + N / 2, (uy - N / 2) / fit + N / 2
+                ln = rng.uniform(3, 7)
+                self.bar((lx, ly - 1), (lx, ly + ln), 1.6, "glass", w1=1.0, prof="cyl")
+                self.ellipse(lx, ly + ln + 1.2, 1.7 * _bold(), 2.0 * _bold(), "glass")
+            return [(ndi.gaussian_filter((self.a > 0.5).astype(np.float32), 5) * 0.0, hx("#9ccf3e"))]
+        if el == "shock":
+            im = Image.new("L", (W, W), 0)
+            d = ImageDraw.Draw(im)
+            ys, xs = np.nonzero(sil)
+            for k in range(3):
+                i = rng.integers(len(xs))
+                x, y = float(xs[i]), float(ys[i])
+                path = [(x, y)]
+                for j in range(5):
+                    x += rng.uniform(-2, 4) * SS
+                    y += rng.uniform(-4, 1) * SS
+                    path.append((x, y))
+                d.line(path, fill=255, width=SS + (1 if MODE == "hd" else SS))
+            arc = np.asarray(im, np.float32) / 255.0
+            self._paint(arc, flatn, "arc")
+            return [(ndi.gaussian_filter(arc, 6) * 3.0, hx("#5cd2c0"))]
+        if el == "frost":
+            up = np.zeros_like(sil)
+            sh = int(2.0 * SS)
+            up[sh:] = sil[:-sh]
+            rime = sil & ~up
+            n = noise(self.seed + 52, 3, 1)
+            rime = rime & (n > 0.35)
+            rime = ndi.binary_opening(rime, iterations=1)
+            self._paint(rime.astype(np.float32) * 0.9, flatn, "frost")
+            return [(ndi.gaussian_filter(rime.astype(np.float32), 6) * 2.0, hx("#bfe8ff"))]
+        return []
 
     def _render(self, n, halo, extra_glows):
         from scipy import ndimage as ndi
@@ -299,11 +456,11 @@ class Icon:
         col = np.where(a[..., None] > 1e-3, pm[..., :3] / np.maximum(a[..., None], 1e-3), 0)
         if n < N:
             # small sizes lose contrast in the box filter: push it back
-            mean = col[a > 0.42].mean(axis=0) if (a > 0.42).any() else 0
+            mean = col[a > 0.3].mean(axis=0) if (a > 0.3).any() else 0
             col = np.clip((col - mean) * 1.25 + mean, 0, 255)
             # and lift the values: dark gunmetal sinks into the dark wells
             col = np.clip(255 * (col / 255) ** 0.8 + 6, 0, 255)
-        solid = a > 0.42
+        solid = a > (0.3 if n <= 24 else 0.42)
         # outline: 1 px INK ring, 8-connected, plus darkening the outermost body px
         ring = ndi.binary_dilation(solid, structure=np.ones((3, 3))) & ~solid
         inner_edge = solid & ~ndi.binary_erosion(solid, structure=np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]))
@@ -385,9 +542,10 @@ def bellwether():
     # trigger guard
     ic.bar((34, 56), (33, 63), 2.0, "dark")
     # bell on a cord
-    ic.bar((62, 42), (63, 52), 1.0, "leather")
-    ic.poly([(60, 52), (66, 52), (68, 60), (58, 60)], "brass", bevel=1.6)
-    ic.ellipse(63, 61, 1.6, 1.4, "dark")
+    if ic.leg:
+        ic.bar((62, 42), (63, 52), 1.0, "leather")
+        ic.poly([(60, 52), (66, 52), (68, 60), (58, 60)], "brass", bevel=1.6)
+        ic.ellipse(63, 61, 1.6, 1.4, "dark")
     ic.patch(27, 64, 6, 4.5, -0.6, "steel")
     ic.scratches(count=22)
     g = ic.glow(46, 59, 9, "#9ccf3e")
@@ -471,6 +629,9 @@ def live_line():
     # capacitor coil on the wrist
     ic.bar((40, 62), (50, 52), 4.8, "brass", prof="cyl")
     ic.scratches(count=26)
+    if not ic.leg:
+        ic.save("live_line")
+        return
     # arcs between the claw tips
     im = Image.new("L", (W, W), 0)
     d = ImageDraw.Draw(im)
@@ -511,6 +672,12 @@ def censer():
     # top rail + sight
     ic.bar((30, 49), (52, 37), 2.4, "steel")
     ic.poly([(40, 43), (45, 40), (47, 43), (42, 46)], "dark")
+    ic.patch(34, 49, 7, 5, -0.48, "steel")
+    ic.weld((54, 40), (60, 36.5), 0.9)
+    ic.scratches(count=26)
+    if not ic.leg:
+        ic.save("censer")
+        return
     # chain + censer
     for i, (x, y) in enumerate(((60, 42), (61, 46), (62, 50), (63, 54))):
         if i % 2:
@@ -521,9 +688,6 @@ def censer():
     ic.bar((57.5, 61), (70.5, 61), 2.0, "dark")
     for x in (61, 64, 67):
         ic.ellipse(x, 63.5, 0.9, 0.9, "ember")
-    ic.patch(34, 49, 7, 5, -0.48, "steel")
-    ic.weld((54, 40), (60, 36.5), 0.9)
-    ic.scratches(count=26)
     # smoke wisps (soft, under alpha 230: halo layer)
     sm = np.zeros((W, W), np.float32)
     for k in range(5):
@@ -592,8 +756,9 @@ def twin_debts():
         ic.bar(Q(32, -0.6), Q(78, -0.4), 1.2, "gun")
         ic.rivet(*Q(15), 1.0, "brass")
     # coin pinned at the cross
-    ic.ellipse(48, 48, 6.5, 6.5, "brass")
-    ic.ellipse(48, 48, 3.2, 3.2, "rust", dome=0.4)
+    if ic.leg:
+        ic.ellipse(48, 48, 6.5, 6.5, "brass")
+        ic.ellipse(48, 48, 3.2, 3.2, "rust", dome=0.4)
     ic.scratches(count=26)
     ic.save("twin_debts")
 
@@ -634,9 +799,57 @@ def mayday():
     ic.save("mayday", extra_glows=[g])
 
 
+HERO_FN = {"ash_rook": last_shift, "vesper_thorn": bellwether, "pebble": gravedigger,
+           "bolt_juno": live_line, "sister_cinder": censer, "quill_marrow": bonesaw,
+           "nyx_caldera": twin_debts, "helm_wisp": mayday}
+RESULT = None
+
+
+def _margin(arr):
+    ys, xs = np.nonzero(arr[..., 3] == 255)
+    n = arr.shape[0]
+    return min(xs.min(), ys.min(), n - 1 - xs.max(), n - 1 - ys.max())
+
+
+def build(hero, kind, element=""):
+    """Paint one weapon finish at the current MODE; for set sizes shrink the
+    layout until the outline keeps a 1 px margin. Returns the RGBA array."""
+    global KIND, ELEMENT, FIT_SET
+    KIND, ELEMENT = kind, element
+    n = {"hd": 96, "s48": 48, "s24": 24}[MODE]
+    FIT_SET = 1.0
+    while True:
+        HERO_FN[hero]()
+        ic, halo, glows = RESULT
+        arr = ic._render(n, halo, glows)
+        if MODE == "hd" or _margin(arr) >= 1 or FIT_SET < 0.7:
+            return arr
+        FIT_SET -= 0.03
+
+
+def save(arr, path):
+    Image.fromarray(arr, "RGBA").save(path)
+
+
+def job(hero):
+    global MODE
+    leg = HERO_FN[hero].__name__
+    for MODE in ("hd", "s48", "s24"):
+        if MODE == "hd":
+            save(build(hero, "legendary"), os.path.join(OUT, "legendary_%s.png" % leg))
+            save(build(hero, "base"), os.path.join(WPN, "weapon_%s.png" % hero))
+            continue
+        sz = MODE[1:]
+        arr = build(hero, "legendary")
+        save(arr, os.path.join(SET, sz, "leg_%s.png" % leg))
+        save(arr, os.path.join(SET, sz, "wpn_%s_%s.png" % (hero, leg)))
+        for vid, kind, el in VARIANTS[hero]:
+            save(build(hero, kind, el), os.path.join(SET, sz, "wpn_%s_%s.png" % (hero, vid)))
+    return hero
+
+
 if __name__ == "__main__":
-    WEAPONS = (last_shift, bellwether, gravedigger, live_line, censer, bonesaw, twin_debts, mayday)
-    for MODE in ("hd", "set"):
-        for fn in WEAPONS:
-            fn()
-        print("ok", MODE, len(WEAPONS))
+    import multiprocessing as mp
+    with mp.Pool(min(8, os.cpu_count() or 1)) as pool:
+        for h in pool.imap_unordered(job, list(HERO_FN)):
+            print("ok", h)
