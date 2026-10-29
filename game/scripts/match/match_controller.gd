@@ -490,8 +490,10 @@ func _process(delta: float) -> void:
 	if _storm_left >= 0.0:
 		_tick_storm(delta)
 		return
-	_phase_time_left -= delta
-	_elapsed_in_phases += delta
+	## Admin > Pause timer: windows / schedule hold, the fight goes on.
+	if not Admin.freeze_timer:
+		_phase_time_left -= delta
+		_elapsed_in_phases += delta
 	## Loot multiplier climbs with run time; Threat follows it.
 	var before_tl := GameState.threat_level
 	GameState.set_loot_mult(ModeDefs.loot_mult_at(_mode, _match_time / GameState.timer_scale()))
@@ -617,7 +619,8 @@ func _start_dust_storm() -> void:
 	layer.add_child(_storm_overlay)
 
 func _tick_storm(delta: float) -> void:
-	_storm_left -= delta
+	if not Admin.freeze_timer:
+		_storm_left -= delta
 	if _storm_overlay:
 		_storm_overlay.color.a = clampf(1.0 - _storm_left / ModeDefs.STORM_SECONDS, 0.0, 0.92)
 	Juice.shake(0.05)
@@ -808,7 +811,7 @@ func _spawn_enemy() -> void:
 	if bool(_phases[_phase_index].get("is_last", false)) if _phase_index < _phases.size() else false:
 		cap = ModeDefs.ENEMY_CAP_LAST ## fewer but heavier T3 units on Last Extract
 	cap = mini(ModeDefs.ENEMY_CAP_MAX, cap + int(ModeDefs.greed(GameState.windows_skipped)["cap"]))
-	if live.size() >= cap:
+	if live.size() >= cap and not (Admin.no_cap and live.size() < ModeDefs.ENEMY_CAP_MAX * 4):
 		return
 	## Spawn just outside the visible area so enemies walk in, biased toward
 	## where the player is heading (so you meet them instead of being chased).

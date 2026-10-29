@@ -601,6 +601,7 @@ func _clean_history(e: Dictionary) -> Dictionary:
 		"best_item": str(e.get("best_item", "")), "best_rarity": str(e.get("best_rarity", "")),
 		"cause": str(e.get("cause", "")), "score": maxi(0, int(e.get("score", 0))),
 		"mods": (e.get("mods", []) as Array).duplicate() if e.get("mods", []) is Array else [],
+		"admin": bool(e.get("admin", false)),
 	}
 
 
@@ -2184,6 +2185,7 @@ func reset_loadout_to_defaults() -> void:
 
 ## `drink_tonics` false = resuming a run whose tonics were already drunk.
 func begin_run(drink_tonics: bool = true) -> void:
+	Admin.on_run_begin()
 	threat_level = 0
 	windows_skipped = 0
 	## Ascension 8+: the Dust already smells you at the drop.
@@ -2533,7 +2535,12 @@ func on_extract_success() -> void:
 		result_unlocks_pending.append("Weekly Dust: payout +%d%%" % int(round(dust_loot_bonus() * 100.0)))
 	var hauled := int(round(float(ModeDefs.BAG_STIPEND + bag_value()) * loot_mult))
 	var best := _best_found(run_loot)
-	_record_tier_clear(int(mode.get("tier", 1)))
+	## Admin switches were used: bank the payout, record no bests / clears.
+	var admin_run: bool = Admin.run_tainted
+	if admin_run:
+		result_unlocks.append("ADMIN RUN: bests, tier clears and Ascension not recorded")
+	else:
+		_record_tier_clear(int(mode.get("tier", 1)))
 	result_scrap_before = account_scrap
 	account_scrap += payout_this_run
 	result_scrap_banked = payout_this_run
@@ -2558,7 +2565,7 @@ func on_extract_success() -> void:
 	quest_event("extract", 1, {"tier": int(mode.get("tier", 1)), "mult": loot_mult})
 	var tier_n := int(mode.get("tier", 1))
 	var asc := ascension_now()
-	if not in_campaign_run():
+	if not in_campaign_run() and not admin_run:
 		tier_extracts[str(tier_n)] = int(tier_extracts.get(str(tier_n), 0)) + 1
 		if asc > 0:
 			ascension_best[selected_character_id] = maxi(int(ascension_best.get(selected_character_id, 0)), asc)
@@ -2570,7 +2577,7 @@ func on_extract_success() -> void:
 					result_unlocks.append("Milestone: Ascension 10 cleared — the Dust is yours")
 		elif tier_n >= ModeDefs.EXPOSED_TIERS and ascension_cleared == 0 and tier_extracts_at(tier_n) == 1:
 			result_unlocks.append("Milestone: Ascension unlocked — pick A1 on Dustfall")
-	if tier_n > best_tier_extracted:
+	if tier_n > best_tier_extracted and not admin_run:
 		var before := highest_unlocked_tier()
 		_advance_tier_clears()
 		if highest_unlocked_tier() > before:
@@ -2581,8 +2588,9 @@ func on_extract_success() -> void:
 		payout_this_run, loot_mult, run_level, threat_level,
 	]
 	## First extract counts as a best only if it paid something.
-	result_new_best = payout_this_run > best_payout and payout_this_run > 0 and total_runs > 0
-	best_payout = maxi(best_payout, payout_this_run)
+	result_new_best = payout_this_run > best_payout and payout_this_run > 0 and total_runs > 0 and not admin_run
+	if not admin_run:
+		best_payout = maxi(best_payout, payout_this_run)
 	total_runs += 1
 	_onboard_result_line()
 	_record_run(true, hauled, best)
@@ -2679,6 +2687,8 @@ func _record_run(did_extract: bool, hauled: int, best: Dictionary, cause: String
 		"cause": "" if did_extract else (cause if cause != "" else (run_death_cause if run_death_cause != "" else "Went down in the dust")),
 		"score": 0, "mods": run_dust_mods.duplicate(),
 	}
+	if Admin.run_tainted:
+		entry["admin"] = true
 	if run_kind == "daily":
 		var parts := DailyDefs.score_parts(hauled, kills, run_time, did_extract)
 		entry["score"] = int(parts["total"])
@@ -2695,8 +2705,11 @@ func push_history(entry: Dictionary) -> void:
 func _record_daily(entry: Dictionary, parts: Dictionary) -> Dictionary:
 	var date := str(entry["date"])
 	var score := int(parts["total"])
-	var practice := daily_runs.has(date)
-	if practice:
+	## Admin runs never take the day's counted slot.
+	var practice := daily_runs.has(date) or bool(entry.get("admin", false))
+	if practice and not daily_runs.has(date):
+		pass
+	elif practice:
 		var d: Dictionary = daily_runs[date]
 		d["attempts"] = int(d.get("attempts", 1)) + 1
 		d["practice_best"] = maxi(int(d.get("practice_best", 0)), score)

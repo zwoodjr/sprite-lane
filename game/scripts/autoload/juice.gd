@@ -197,12 +197,17 @@ func slowmo_active() -> bool:
 
 ## Time scale outside of hitstop: the slow-mo curve (last 35% ramps back to 1).
 func _base_time_scale() -> float:
+	## Admin > DEBUG > Game speed (1.0 outside a match / when off).
+	var g: float = Admin.game_speed()
 	if _slowmo_left <= 0.0:
-		return 1.0
+		return g
 	var k := _slowmo_left / _slowmo_total
 	if k > 0.35:
-		return _slowmo_scale
-	return lerpf(1.0, _slowmo_scale, k / 0.35)
+		return _slowmo_scale * g
+	return lerpf(1.0, _slowmo_scale, k / 0.35) * g
+
+func hitstop_active() -> bool:
+	return _hitstop_left > 0.0
 
 
 func _process(delta: float) -> void:

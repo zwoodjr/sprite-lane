@@ -172,6 +172,7 @@ func _run() -> void:
 	await _test_feedback()
 	await _test_onboarding()
 	await _test_ascension()
+	await _test_admin()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4097,3 +4098,78 @@ func _test_ascension() -> void:
 	GameState.ascension = int(keep[1])
 	GameState.ascension_cleared = int(keep[2])
 	print("ASCENSION_OK")
+
+## Admin panel: every tab builds, god / defense / damage / timer freeze hook in,
+## and switches flag the run so bests are not recorded.
+func _test_admin() -> void:
+	GameState.play_mode = "wander"
+	GameState.selected_mode_id = ModeDefs.HAZE_ID
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for i in range(10):
+		await get_tree().physics_frame
+	var pl: Node = m.get_node("World/Player")
+	_check(not Admin.run_tainted, "admin: clean run starts untainted")
+	for t in Admin.TABS:
+		Admin.set("_tab", t)
+		Admin.open_panel()
+		await get_tree().process_frame
+		_check(Admin.get("_panel") != null, "admin tab builds: " + str(t))
+		Admin.close_panel()
+	await get_tree().process_frame
+	Admin.god = true
+	pl.set("_iframes", 0.0)
+	var hp0 := float(pl.get("hp"))
+	pl.call("take_damage", 50.0, null)
+	pl.call("drain", 20.0)
+	_check(is_equal_approx(float(pl.get("hp")), hp0), "admin: god mode takes no damage")
+	await get_tree().process_frame
+	_check(Admin.run_tainted, "admin: god mode flags the run")
+	Admin.god = false
+	Admin.def_pct = 50
+	pl.set("_iframes", 0.0)
+	pl.set("hp", float(pl.get("max_hp")))
+	var full := float(pl.get("hp"))
+	pl.call("take_damage", 20.0, null)
+	var lost_half := full - float(pl.get("hp"))
+	Admin.def_pct = 0
+	pl.set("_iframes", 0.0)
+	pl.set("hp", full)
+	pl.call("take_damage", 20.0, null)
+	var lost_full := full - float(pl.get("hp"))
+	_check(lost_full > 0.0 and absf(lost_half - lost_full * 0.5) < 0.6, "admin: +50%% defense halves damage (%.1f vs %.1f)" % [lost_half, lost_full])
+	Admin.dmg_pct = 100
+	_check(is_equal_approx(Admin.dmg_mult(), 2.0), "admin: +100% damage doubles")
+	Admin.dmg_pct = 0
+	Admin.freeze_timer = true
+	var tl := float(m.get("_phase_time_left"))
+	for i in range(20):
+		await get_tree().process_frame
+	_check(is_equal_approx(float(m.get("_phase_time_left")), tl), "admin: pause timer holds the window clock")
+	Admin.freeze_timer = false
+	for i in range(5):
+		await get_tree().process_frame
+	_check(float(m.get("_phase_time_left")) < tl, "admin: timer runs again")
+	Admin.hitboxes = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(Admin.get("_hitbox_node") != null, "admin: hitbox overlay attaches")
+	Admin.hitboxes = false
+	await get_tree().process_frame
+	## A tainted extract banks scrap but records no clear / best.
+	var keep := [GameState.best_payout, GameState.tier_extracts.duplicate(), GameState.best_tier_extracted, GameState.account_scrap, GameState.tier_clears.duplicate(true)]
+	GameState.call("on_extract_success")
+	_check(GameState.best_payout == int(keep[0]) and GameState.tier_extracts == keep[1], "admin: flagged run keeps bests clean")
+	_check(bool(GameState.run_history[0].get("admin", false)), "admin: history entry flagged")
+	GameState.best_payout = int(keep[0])
+	GameState.account_scrap = int(keep[3])
+	GameState.tier_clears = keep[4]
+	GameState.run_history.pop_front()
+	GameState.begin_run()
+	_check(not Admin.run_tainted, "admin: next run starts clean")
+	m.queue_free()
+	for i in range(5):
+		await get_tree().process_frame
+	print("ADMIN_OK")

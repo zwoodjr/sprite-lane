@@ -1509,7 +1509,7 @@ func _reload_time() -> float:
 ## Damage
 
 func take_damage(amount: float, attacker: Node = null) -> void:
-	if _iframes > 0.0 or hp <= 0.0:
+	if _iframes > 0.0 or hp <= 0.0 or Admin.god:
 		return
 	## Run history: what landed the last hit (cause of death).
 	if attacker != null and is_instance_valid(attacker):
@@ -1541,6 +1541,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	var dmg := float(amount) * resist_mult * float(_char.get("damage_taken_mult", 1.0))
 	if _brace_left > 0.0:
 		dmg *= float(_ability.get("brace_mult", 1.0))
+	dmg *= Admin.def_mult()
 	## Dust Surge: enemies hit harder while it lasts.
 	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("enemies"):
 		dmg *= GameState.event_enemy_damage
@@ -1609,7 +1610,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 
 ## HP lost to sickness (plague exposure): no i-frames, no flinch.
 func drain(amount: float) -> void:
-	if _dead or hp <= 0.0 or amount <= 0.0:
+	if _dead or hp <= 0.0 or amount <= 0.0 or Admin.god:
 		return
 	hp -= amount
 	if hp <= 0.0:
@@ -1684,7 +1685,7 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 		return
 	if bool(e.get("_dead")):
 		return
-	dmg *= _damage_vs(e as Node2D, src)
+	dmg *= _damage_vs(e as Node2D, src) * Admin.dmg_mult()
 	## Depth E2: plague burns, machines short out.
 	var weak := FactionDefs.weakness(str(e.get("faction")), hit_element(src))
 	if weak > 1.0:
