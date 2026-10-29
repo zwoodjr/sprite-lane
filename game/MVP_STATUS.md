@@ -3,12 +3,13 @@
 **Latest (combat, hangar, insurance pass):**
 
 - **Abilities:** every survivor already had an active ability on the ability cap, with a cooldown ring and an icon: Rook RUSH, Vesper VIAL, Pebble SLAM, Juno ZAP (Overload chain stun), Cinder HEAL (Field Draught), Quill MARK (Dissect), Nyx SLASH (Blade Rush; the B version is Back Way Out), Helm DRONE. Each has a B version on the Loadout screen. New: **Settings → Controls → Aim with the stick** (off by default). Auto-fire still triggers itself but picks the enemy within ±35° of the direction you're steering.
-- **Survivability:** Helm +20 max HP. Vesper +25 max HP, +12% move speed, takes 15% less damage; her Vial Rifle fires 1.3 shots/s (was 1.05) and its slugs pierce 2. Sloppy-driver Vesper deaths 7/8 → 4/8; careful-driver 1/8.
+- **Survivability:** Helm +20 max HP; Rook +25 max HP, 9-rocket drum, 420 reach. Vesper +25 max HP, +12% move speed, takes 15% less damage; her Vial Rifle fires 1.3 shots/s (was 1.05) and its slugs pierce 2. Sloppy-driver Vesper deaths 7/8 → 4/8; careful-driver 1/8.
 - **Late healing:** each skipped window cuts all healing by 20% (heals, regen, tonics, tonic drops), down to a floor of 30%.
-- **Bot table (Haze, stay 3 windows, 8 heroes × clean/sloppy driver, 32 runs, same seeds):**
-  - Before: 25% deaths, survivors ended at 86% HP.
-  - After: 18% deaths, survivors end at 69% and dip to ~47% at their lowest.
-  - Leaving at window 1 is unchanged: 0 deaths, 93%.
+- **Bot table (Haze, stay 3 windows, 8 heroes × clean/sloppy driver, same seeds):**
+  - Before this pass: 25% deaths, survivors ended at 86% HP.
+  - Final: 13% deaths (4/30), survivors end at 65% and dip to ~54% at their lowest.
+  - By hero: Vesper 0/4 (was 2/2), Helm 1/3, Rook 2/4 (still the most fragile; she also got +25 HP, a 9-rocket drum and 420 reach).
+  - Leaving at window 1: 0 deaths, ~95% HP.
 - **Hangar v5:** shared camp upgrades and survivor stations now have 3 big ranks instead of 5 small ones, for the same total cost.
   - Generator +16/32/50 HP, Radio Tower 5/10/15 s, Scrap Press +12/25/40%, Ammo Bench 3 tiers.
   - Stations give +10/20/32% weapon damage, −7/13/20% ability cooldown, +12/27/45% ability power. Kit styles unlock at station 1/2; ability B at 2.
