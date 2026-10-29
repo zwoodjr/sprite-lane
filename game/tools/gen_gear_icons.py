@@ -178,23 +178,12 @@ def stripes(ic, x0, y0, x1, y1, w, n):
 
 
 # ------------------------------------------------------------------- shapes
-def s_hardhat(ic, st):
-    ic.ellipse(48, 50, 30, 26, st["plate"], dome=1.0)
-    ic.poly([(10, 54), (86, 54), (88, 62), (8, 62)], st["plate"], bevel=1.8)
-    ic.bar((48, 24), (48, 54), 5.0, st["plate"], prof="cyl")
-    ic.bar((20, 52), (76, 52), 3.0, "reflect")
-    ic.ellipse(48, 40, 7, 5, "dark", dome=0.2)
-    ic.ellipse(48, 40, 5, 3.4, "ember", dome=0.6)
-    rivets(ic, [(24, 46), (72, 46)], 1.2)
-    ic.scratches(count=16)
-
-
 def s_gasmask(ic, st):
     # refinery gas mask: rubber face piece, twin canisters, two glass lenses, valve
     ic.poly([(24, 28), (36, 14), (60, 14), (72, 28), (74, 56), (62, 74), (34, 74), (22, 56)], "rubber", bevel=5.0, dome=0.9)
     for cx in (36, 60):
         ic.ellipse(cx, 36, 9.5, 9, "steel", dome=0.9)
-        ic.ellipse(cx, 36, 7, 6.6, "glass", dome=1.0)
+        ic.ellipse(cx, 36, 7, 6.6, "glassc", dome=1.0)
         ic.bar((cx - 4, 33), (cx - 1, 31), 1.1, "frost")
         rivets(ic, [(cx - 7, 36), (cx + 7, 36)], 0.8)
     for (x0, x1) in ((40, 22), (56, 74)):
@@ -220,25 +209,6 @@ def s_lampcoat(ic, st):
     ic.bar((58, 60), (74, 60), 2.0, "dark")
     ic.bar((58, 78), (74, 78), 2.0, "dark")
     rivets(ic, [(30, 50), (40, 50)], 1.0, "brass")
-
-
-def s_plate(ic, st):
-    body = [(24, 14), (40, 18), (56, 18), (72, 14), (80, 30), (76, 66), (62, 84), (34, 84), (20, 66), (16, 30)]
-    ic.poly(body, st["plate"], bevel=6.0, dome=0.95)
-    ic.bar((48, 20), (48, 82), 3.0, st["plate"], prof="cyl")
-    ic.poly([(30, 62), (66, 62), (60, 82), (36, 82)], st["plate"], bevel=3.0)
-    rivets(ic, [(24, 24), (72, 24), (20, 44), (76, 44), (24, 62), (72, 62), (36, 78), (60, 78)], 1.3)
-    strap(ic, (14, 36), (24, 32), 4.0, st)
-    strap(ic, (72, 32), (82, 36), 4.0, st)
-    ic.weld((26, 50), (40, 52), 1.0)
-    ic.patch(60, 40, 10, 8, 0.15, "steel")
-    if st["motif"] == "hazard":
-        stripes(ic, 28, 70, 68, 70, 5.0, 8)
-    elif st["motif"] == "stone":
-        for (x, y, r) in ((30, 34, 3), (62, 56, 2.4), (40, 70, 2.0)):
-            ic.ellipse(x, y, r, r * 0.8, "ash", dome=0.5)
-        ic.bar((22, 50), (34, 56), 1.0, "dark")
-    ic.scratches(count=20)
 
 
 def s_spiked(ic, st):
@@ -315,36 +285,6 @@ def s_gauntlets(ic, st):
 
 
 # accessories
-def s_rabbit(ic, st):
-    for i in range(3):
-        y = 24 + i * 4.4
-        if i % 2:
-            ic.ellipse(48, y, 1.2, 2.4, "steel", dome=0.6)
-        else:
-            ic.ellipse(48, y, 2.2, 1.4, "steel", dome=0.6)
-    ic.bar((44, 36), (52, 36), 4.0, "brass", prof="cyl")
-    ic.poly([(40, 38), (56, 38), (60, 64), (56, 82), (40, 82), (36, 64)], "fur", bevel=6.0, dome=0.9)
-    for (x, y) in ((42, 80), (48, 84), (54, 80)):
-        ic.ellipse(x, y, 4, 3.4, "fur")
-        ic.ellipse(x, y + 1.5, 1.4, 1.0, "leather")
-    ic.bar((40, 52), (56, 52), 1.0, "thread")
-
-
-def s_bottlecap(ic, st):
-    ic.bar((48, 6), (48, 24), 1.2, "leather")
-    ic.bar((30, 10), (48, 24), 1.2, "leather")
-    pts = []
-    for k in range(42):
-        a = k / 42 * math.tau
-        r = 24 if k % 2 else 21
-        pts.append((48 + math.cos(a) * r, 52 + math.sin(a) * r))
-    ic.poly(pts, "brass", bevel=3.0, dome=0.9)
-    ic.ellipse(48, 52, 15, 15, "red", dome=0.4)
-    ic.ellipse(48, 52, 9, 9, "brass", dome=0.6)
-    ic.bar((42, 52), (54, 52), 2.0, "dark")
-    ic.scratches(count=10)
-
-
 def s_dogtags(ic, st):
     pts = [(20, 10), (30, 30), (40, 44), (48, 50), (56, 44), (66, 30), (76, 10)]
     for (x0, y0), (x1, y1) in zip(pts[:-1], pts[1:]):
@@ -530,7 +470,7 @@ def frayed(ic, x, y, ang, mat, n=4, ln=5.0):
 def s_hood(ic, st):
     d = st["dye"]
     lining = tone(d, 1.35, "lin")
-    deep = tone(d, 0.7, "deep")
+    deep = tone(d, 0.5, "deep")
     ridge = tone(d, 1.25, "ridge")
     fold = tone(d, 0.62, "fold")
     # cowl / shoulders the hood drapes onto
@@ -547,7 +487,7 @@ def s_hood(ic, st):
     rim = bez((26, 66), (14, 42), (30, 22), 12) + bez((30, 22), (44, 12), (54, 26), 10) + bez((54, 26), (60, 50), (48, 66), 10) + bez((48, 66), (36, 72), (26, 66), 8)
     ic.poly(rim, lining, bevel=2.4, dome=0.6)
     inner = [(x * 0.8 + 39 * 0.2 + 3.0, y * 0.84 + 44 * 0.16 + 1.0) for (x, y) in rim]
-    ic.poly(inner, tone(d, 0.78, "in1"), bevel=3.0, dome=-0.4)
+    ic.poly(inner, tone(d, 0.68, "in1"), bevel=3.0, dome=-0.4)
     inner2 = [(x * 0.55 + 41 * 0.45 + 6, y * 0.66 + 46 * 0.34 + 3) for (x, y) in rim]
     ic.poly(inner2, deep, bevel=5.0, dome=-0.5)
     # rolled hem along the opening with running stitch
@@ -585,8 +525,8 @@ def s_beak(ic, st):
     head = bez((40, 30), (36, 52), (48, 74), 10) + bez((48, 74), (66, 88), (84, 72), 10) + bez((84, 72), (92, 46), (78, 30), 10)
     ic.poly(head, lea, bevel=6.0, dome=0.9)
     # beak: long, curved, tapering, slightly downturned, comes to a point
-    top = bez((48, 40), (26, 42), (6, 70), 16, p3=None)
-    bot = bez((4, 72), (26, 58), (54, 62), 16)
+    top = bez((48, 40), (22, 40), (2, 74), 16, p3=None)
+    bot = bez((1, 76), (26, 58), (54, 62), 16)
     ic.poly(top + bot, lea, bevel=3.4, dome=0.8)
     # stitched seam along the ridge of the beak, panel seams across it
     stitch(ic, bez((47, 42), (27, 45), (9, 68), 14), 1.5)
@@ -604,7 +544,6 @@ def s_beak(ic, st):
     ic.bar((53.5, 43.5), (55.5, 41.5), 1.1, "frost")
     ic.ellipse(78, 44, 4.0, 6.4, "brass", dome=0.9)
     ic.ellipse(78, 44, 2.6, 4.6, "glassc", dome=1.0)
-    rivets(ic, [(64, 46), (57, 39)], 0.7, "brass")
     # strap round the back of the head with a buckle
     ic.bar((66, 60), (90, 56), 3.6, tone(lea, 0.7, "strap"))
     buckle(ic, 84, 57, 5, 5, "brass")
@@ -1140,6 +1079,118 @@ def s_greaves(ic, st):
     elif st["motif"] == "stone":
         ic.ellipse(28, 56, 2.6, 2.0, "ash", dome=0.5)
     ic.scratches(count=14)
+
+
+def s_hardhat(ic, st):
+    """Construction hard hat, 3/4 view: tall dome with a raised centre ridge,
+    short peaked brim at the front, narrow rim round the sides, suspension
+    strap inside, reflective band, scuffs."""
+    pl = st["plate"]
+    dome = bez((14, 70), (10, 18), (50, 14), 14) + bez((50, 14), (86, 14), (86, 66), 14) + [(14, 70)]
+    ic.poly(dome, pl, bevel=8.0, dome=0.95)
+    # raised ridge running front to back
+    crease(ic, bez((40, 16), (32, 40), (30, 66), 10), 1.6, tone(pl, 0.6, "hr"), tone(pl, 1.3, "hh"))
+    crease(ic, bez((58, 15), (62, 40), (64, 64), 10), 1.0, tone(pl, 0.7, "hr2"))
+    # peaked front brim + narrow side rim
+    brim = bez((6, 70), (2, 80), (20, 84), 8) + bez((20, 84), (60, 86), (90, 70), 10) + [(86, 64), (14, 68)]
+    ic.poly(brim, tone(pl, 0.92, "brim"), bevel=2.0, dome=0.8)
+    ic.bar((10, 70), (88, 66), 1.2, tone(pl, 0.55, "rimsh"))
+    # reflective band + inner suspension strap glimpse
+    ic.bar((20, 58), (84, 54), 3.4, "reflect")
+    ic.bar((24, 80), (60, 82), 2.0, "rubber")
+    ic.poly([(70, 30), (80, 28), (82, 38), (72, 40)], "reflect", bevel=0.8)
+    ic.scratches(count=18)
+
+
+def s_plate(ic, st):
+    """Steel cuirass: rolled neck guard, concave arm openings, centre ridge,
+    riveted fauld lames at the waist, shoulder straps with buckles."""
+    pl = st["plate"]
+    body = bez((24, 18), (34, 22), (40, 22), 4) + [(56, 22)] + bez((56, 22), (62, 22), (72, 18), 4) + bez((72, 18), (58, 34), (80, 46), 8) + [(74, 70), (22, 70)] + bez((16, 46), (38, 34), (24, 18), 8)
+    ic.poly(body, pl, bevel=7.0, dome=0.95)
+    crease(ic, bez((48, 24), (46, 46), (48, 68), 8), 1.4, tone(pl, 0.6, "cr"), tone(pl, 1.35, "ch"))
+    # rolled neck guard
+    for (a, b) in zip(bez((34, 22), (48, 30), (62, 22), 8)[:-1], bez((34, 22), (48, 30), (62, 22), 8)[1:]):
+        ic.bar(a, b, 3.0, tone(pl, 1.1, "roll"), prof="cyl")
+    # arm-opening rolled edges
+    for side in (-1, 1):
+        pts = bez((48 + side * 24, 18), (48 + side * 10, 34), (48 + side * 32, 46), 8)
+        for (a, b) in zip(pts[:-1], pts[1:]):
+            ic.bar(a, b, 2.4, tone(pl, 1.1, "roll"), prof="cyl")
+    # fauld lames
+    for k in range(3):
+        y = 70 + k * 7
+        ic.poly([(20 + k, y), (76 - k, y), (74 - k, y + 8), (22 + k, y + 8)], pl, bevel=2.0, dome=0.9)
+        rivets(ic, [(26 + k, y + 4), (70 - k, y + 4)], 0.9)
+    # shoulder straps
+    strap(ic, (26, 6), (28, 22), 4.0, st, buck=0.4)
+    strap(ic, (70, 6), (68, 22), 4.0, st, buck=0.4)
+    ic.weld((30, 50), (40, 54), 1.0)
+    ic.patch(62, 40, 10, 8, 0.15, "steel")
+    if st["motif"] == "hazard":
+        stripes(ic, 24, 64, 72, 64, 5.0, 9)
+    elif st["motif"] == "stone":
+        for (x, y, r) in ((32, 36, 3), (62, 58, 2.4)):
+            ic.ellipse(x, y, r, r * 0.8, "ash", dome=0.5)
+    ic.scratches(count=18)
+
+
+def s_bottlecap(ic, st):
+    """Lucky bottle cap on a cord: crimped crown cap (21 flutes), printed star
+    logo, worn paint, punched hole with the cord knotted through."""
+    ic.bar((48, 4), (48, 22), 1.4, "thread", prof="cyl")
+    ic.bar((48, 4), (36, 2), 1.4, "thread", prof="cyl")
+    ic.ellipse(48, 22, 2.2, 1.6, "thread")
+    pts = []
+    for k in range(42):
+        a = k / 42 * math.tau
+        r = 25 if k % 2 else 21.5
+        pts.append((48 + math.cos(a) * r, 54 + math.sin(a) * r))
+    ic.poly(pts, "steel", bevel=3.0, dome=0.9)
+    ic.ellipse(48, 54, 19, 19, "red", dome=0.5)
+    star = []
+    for k in range(10):
+        a = -math.pi / 2 + k * math.pi / 5
+        r = 12 if k % 2 == 0 else 5
+        star.append((48 + math.cos(a) * r, 54 + math.sin(a) * r))
+    ic.poly(star, "reflect", bevel=1.0)
+    ic.ellipse(48, 33, 2.4, 2.4, "dark", dome=-0.3)
+    ic.scratches(count=12)
+
+
+def s_rabbit(ic, st):
+    """Rabbit's-foot keychain: split ring + bead chain, crimped cap, then a
+    fluffy hind foot in an L: short furry ankle dropping from the cap, long
+    foot turning out to the side with rounded toes and tiny claws."""
+    fur = "fur"
+    sh = tone(fur, 0.7, "fs")
+    ic.ellipse(28, 12, 8, 8, "steel", dome=0.9)
+    ic.ellipse(28, 12, 5.6, 5.6, "dark", dome=-0.2)
+    for k in range(4):
+        ic.ellipse(32 + k * 3.0, 18 + k * 3.0, 1.4, 1.4, "steel", dome=0.9)
+    ic.poly([(38, 28), (50, 28), (52, 36), (36, 36)], "brass", bevel=1.4, dome=0.9)
+    for x in range(37, 52, 3):
+        ic.bar((x, 29), (x, 35), 0.5, "dark")
+    # L-shaped foot with a bumpy fur outline
+    out = [(36, 36), (52, 36), (56, 52), (56, 64), (66, 64), (78, 66), (86, 70), (88, 78), (84, 84), (70, 86), (52, 86), (40, 84), (32, 76), (34, 60), (32, 48)]
+    bumpy = []
+    for (a1, b1) in zip(out, out[1:] + out[:1]):
+        bumpy.append(a1)
+        mx, my = (a1[0] + b1[0]) / 2, (a1[1] + b1[1]) / 2
+        cx, cy = 58, 66
+        dx, dy = mx - cx, my - cy
+        n = max(1e-3, math.hypot(dx, dy))
+        bumpy.append((mx + dx / n * 2.2, my + dy / n * 2.2))
+    ic.poly(bumpy, fur, bevel=7.0, dome=0.9)
+    # soft fur shading: underside darker, short strands
+    crease(ic, bez((36, 78), (56, 84), (82, 80), 8), 1.6, sh)
+    for (x, y) in ((40, 50), (44, 62), (60, 72), (72, 74)):
+        ic.bar((x, y), (x + 3, y + 5), 0.7, sh)
+    # toes + claws at the front of the foot
+    for (x, y) in ((84, 72), (88, 78), (84, 83)):
+        ic.ellipse(x, y, 3.6, 3.0, fur, dome=0.9)
+        ic.bar((x + 3, y), (x + 6.5, y + 1.2), 1.2, "dark", w1=0.4, prof="cyl")
+    ic.scratches(count=3)
 
 
 SHAPES = {k[2:]: v for k, v in globals().items() if k.startswith("s_")}
