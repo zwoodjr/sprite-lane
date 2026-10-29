@@ -517,12 +517,12 @@ func _update_regen(delta: float) -> void:
 	if GameState.quirk_fx("no_regen") > 0.0:
 		return
 	if _oos_timer > 1.5 and hp < max_hp:
-		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta)
+		hp = minf(max_hp, hp + float(_armor.get("regen_oos", 0.0)) * delta * _greed_heal())
 		health_changed.emit(hp, max_hp)
 	## Gear regen (Vials etc.) and Mender's Draught tick always.
 	var rg := GameState.gear_stat("regen") + GameState.tonic_fx("regen")
 	if rg > 0.0 and hp < max_hp and hp > 0.0:
-		hp = minf(max_hp, hp + rg * delta)
+		hp = minf(max_hp, hp + rg * delta * _greed_heal())
 		health_changed.emit(hp, max_hp)
 
 func _facing_dir() -> Vector2:
@@ -603,7 +603,7 @@ func apply_powerup(def: Dictionary) -> void:
 	Juice.burst(global_position, def.get("color", Color.WHITE), 16, 180.0, 0.5)
 	Juice.float_text(global_position + Vector2(0, -30), str(def.get("name", "Boost")), def.get("color", Color.WHITE), 20)
 	if id == "heal" or def.has("instant_heal"):
-		var amt := float(def.get("instant_heal", 35.0))
+		var amt := float(def.get("instant_heal", 35.0)) * _greed_heal()
 		hp = minf(max_hp, hp + amt)
 		health_changed.emit(hp, max_hp)
 	if def.has("ammo"):
@@ -1078,6 +1078,26 @@ func _pick_target(range_px: float) -> Node2D:
 				return cur
 	return best
 
+## Closest enemy within ±35° of `dir` and in range (stick aim).
+const STICK_AIM_COS := 0.82
+
+func _pick_target_cone(range_px: float, dir: Vector2) -> Node2D:
+	var best: Node2D = null
+	var best_d := INF
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n):
+			continue
+		var e := n as Node2D
+		var to := e.global_position - global_position
+		var d := _reach_dist(e, global_position)
+		if d > range_px or d >= best_d or to.length_squared() < 1.0:
+			continue
+		if to.normalized().dot(dir) < STICK_AIM_COS or not is_on_screen(self, e.global_position):
+			continue
+		best = e
+		best_d = d
+	return best
+
 func _pick_breakable(range_px: float) -> Node2D:
 	var best: Node2D = null
 	var best_d := INF
@@ -1103,6 +1123,13 @@ func _update_combat(_delta: float) -> void:
 	## Re-evaluate the target every frame (cheap: ≤ ~14 mobs) — every shot uses the
 	## closest one in range.
 	_target = _pick_target(get_trigger_range())
+	## Settings > Aim with the stick: prefer the enemy in the steer direction.
+	if bool(SettingsDefs.get_value("stick_aim")):
+		var sd := TouchInput.get_move()
+		if sd.length() > 0.3:
+			var ct := _pick_target_cone(get_trigger_range(), sd.normalized())
+			if ct != null:
+				_target = ct
 	if _target == null:
 		## No enemies in range: break the nearest on-screen crate/wreck
 		## (glowing pinged ones first) so lootables actually open.
@@ -1619,11 +1646,17 @@ func heal(amount: float) -> void:
 			e.call("apply_status", "burn", float(GameState.up("burn_it_down", "time", 3.0)), float(GameState.up("burn_it_down", "dps", 10.0)))
 		RunFx.ring(get_parent(), global_position + Vector2(0, 8), r, Color(1.0, 0.5, 0.2), 0.4, 6.0)
 		Juice.burst(global_position, Color(1.0, 0.5, 0.2), 20, r * 2.0, 0.4, 1.4)
-	var amt := amount
+	var amt := amount * _greed_heal()
 	if GameState.has_set("plague_doctor", 4):
 		amt *= float(GearDefs.GENERAL_SETS["plague_doctor"]["heal_mult"])
 	hp = minf(max_hp, hp + amt)
 	health_changed.emit(hp, max_hp)
+
+## Greed pressure: healing shrinks with every extract window you stayed past.
+func _greed_heal() -> float:
+	if GameState.in_campaign_run():
+		return 1.0
+	return float(ModeDefs.greed(GameState.windows_skipped)["heal"])
 
 func is_hidden() -> bool:
 	return _hidden_left > 0.0

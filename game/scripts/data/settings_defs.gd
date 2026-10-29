@@ -17,7 +17,7 @@ const DEFAULTS := {
 	"fps_cap": 1, "battery_saver": false, "shake_level": 2, "flash_intensity": 1.0, "fx_quality": 2,
 	"damage_numbers": true, "brightness": 0.5, "heat_shimmer": false, "edge_dither": false, "show_fps": false,
 	## CONTROLS
-	"left_handed": false, "stick_scale": 1.0, "stick_opacity": 1.0, "haptics": true, "haptic_strength": 1.0,
+	"left_handed": false, "stick_aim": false, "stick_scale": 1.0, "stick_opacity": 1.0, "haptics": true, "haptic_strength": 1.0,
 	## ACCESSIBILITY / GAME
 	"text_size": 0, "reduce_motion": false, "cb_loot": false, "caption_size": 0, "auto_salvage_commons": false,
 	"show_hints": true,
@@ -60,6 +60,7 @@ const TABS := [
 	]},
 	{"id": "controls", "label": "CONTROLS", "icon": "set_stick", "rows": [
 		{"key": "left_handed", "type": "toggle", "label": "Left-handed", "icon": "set_lefty", "desc": "DASH / ABILITY on the left."},
+		{"key": "stick_aim", "type": "toggle", "label": "Aim with the stick", "icon": "set_stick", "desc": "Fire still auto-triggers, but picks the enemy you're steering toward."},
 		{"key": "stick_scale", "type": "slider", "label": "Stick size", "icon": "set_stick", "min": 0.75, "max": 1.4, "step": 0.05, "fmt": "pct", "desc": "Bigger = finer control, more thumb travel."},
 		{"key": "stick_opacity", "type": "slider", "label": "Stick opacity", "icon": "set_stick", "min": 0.3, "max": 1.0, "step": 0.05, "fmt": "pct"},
 		{"key": "haptics", "type": "toggle", "label": "Vibration", "icon": "set_vibration", "desc": "Taps for hits, elite kills, rare pickups, extracting."},

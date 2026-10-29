@@ -238,6 +238,10 @@ const GREED_HP := 0.45
 const GREED_DAMAGE := 0.28
 const GREED_SPAWN := 0.5
 const GREED_CAP := 5
+## Healing after you stay: each skipped window cuts all healing (tonics, regen,
+## heals, lifesteal) so survivors can't top back up before the next pad.
+const GREED_HEAL := 0.25
+const GREED_HEAL_MIN := 0.3
 ## Punish wave on a skip: BASE + PER × windows skipped mobs, from two sides.
 const GREED_WAVE_BASE := 6
 const GREED_WAVE_PER := 4
@@ -256,6 +260,7 @@ static func greed(skips: int) -> Dictionary:
 		"damage": 1.0 + GREED_DAMAGE * s,
 		"spawn": 1.0 + GREED_SPAWN * s,
 		"cap": GREED_CAP * s,
+		"heal": maxf(GREED_HEAL_MIN, 1.0 - GREED_HEAL * s),
 	}
 
 

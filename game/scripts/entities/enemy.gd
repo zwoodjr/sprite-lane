@@ -758,7 +758,7 @@ func _die() -> void:
 	LootDrop.spawn_burst(parent, global_position, "scrap", nd, float(scrap))
 	LootDrop.spawn_burst(parent, global_position, "xp", nd, float(xp))
 	HaulPickup.drop_kill(parent, global_position + Vector2(randf_range(-10, 10), 6), faction, role)
-	if GameState.pact_fx("no_tonics") <= 0.0 and randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1]:
+	if GameState.pact_fx("no_tonics") <= 0.0 and randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1] * float(ModeDefs.greed(GameState.windows_skipped)["heal"]):
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)
 	## Rare special-ammo can (more likely from elites / bosses).
 	## Gated behind the Hangar's Ammo Bench (rank = types, odds).
