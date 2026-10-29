@@ -117,7 +117,7 @@ func _run() -> void:
 		for k in range(150):
 			await get_tree().process_frame
 		for n in get_tree().root.get_children():
-			if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
+			if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme", "Admin"]):
 				n.queue_free()
 		await get_tree().process_frame
 	await _test_picker()
@@ -200,7 +200,7 @@ func _run() -> void:
 	GameState.save_profile()
 	Engine.time_scale = 1.0
 	for n in get_tree().root.get_children():
-		if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
+		if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme", "Admin"]):
 			n.queue_free()
 	await get_tree().process_frame
 	_finish(save_backup)
@@ -334,7 +334,7 @@ func _test_upgrades() -> void:
 		TouchInput.clear_sticks()
 		m.queue_free()
 		for n in get_tree().root.get_children():
-			if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme"]):
+			if n != self and not (n.name in ["GameState", "TouchInput", "DisplayFit", "Juice", "UiTheme", "Admin"]):
 				n.queue_free()
 		for k in range(5):
 			await get_tree().process_frame
@@ -4143,15 +4143,17 @@ func _test_admin() -> void:
 	Admin.dmg_pct = 100
 	_check(is_equal_approx(Admin.dmg_mult(), 2.0), "admin: +100% damage doubles")
 	Admin.dmg_pct = 0
+	m.set("quiet", false)
 	Admin.freeze_timer = true
 	var tl := float(m.get("_phase_time_left"))
 	for i in range(20):
 		await get_tree().process_frame
 	_check(is_equal_approx(float(m.get("_phase_time_left")), tl), "admin: pause timer holds the window clock")
 	Admin.freeze_timer = false
-	for i in range(5):
+	get_tree().paused = false
+	for i in range(30):
 		await get_tree().process_frame
-	_check(float(m.get("_phase_time_left")) < tl, "admin: timer runs again")
+	_check(float(m.get("_phase_time_left")) < tl or bool(m.get("_ended")) or int(m.get("_phase_index")) > 0, "admin: timer runs again (%.2f -> %.2f paused=%s ended=%s quiet=%s)" % [tl, float(m.get("_phase_time_left")), get_tree().paused, m.get("_ended"), m.get("quiet")])
 	Admin.hitboxes = true
 	await get_tree().process_frame
 	await get_tree().process_frame

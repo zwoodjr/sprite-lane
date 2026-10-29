@@ -231,8 +231,12 @@ func _player() -> Node:
 
 
 func _match() -> Node:
-	var s := get_tree().current_scene
-	return s if s and s.has_method("spawn_special") else null
+	if get_tree() == null:
+		return null
+	for s in get_tree().get_nodes_in_group("match_ctl"):
+		if is_instance_valid(s) and not s.is_queued_for_deletion() and s.has_method("spawn_special"):
+			return s
+	return null
 
 
 ## --- Panel ------------------------------------------------------------------

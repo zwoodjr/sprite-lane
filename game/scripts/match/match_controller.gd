@@ -63,6 +63,11 @@ var twists: Node
 ## by the run seed, so a Daily Run's spawns repeat for everyone that day.
 var spawn_rng := RandomNumberGenerator.new()
 
+func _enter_tree() -> void:
+	## Admin finds the live match through this group (not current_scene,
+	## which can dangle while a freed scene is still "current").
+	add_to_group("match_ctl")
+
 func _ready() -> void:
 	_mode = GameState.get_mode()
 	## Depth E7 Dust Pacts: tougher / busier runs, narrower windows (loot bonus at extract).
