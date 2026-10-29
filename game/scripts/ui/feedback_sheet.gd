@@ -149,6 +149,8 @@ func build(c: VBoxContainer) -> void:
 func _hint() -> String:
 	if _web:
 		return "SEND opens your phone's share sheet: pick Messages or Mail."
+	if OS.has_feature("mobile"):
+		return "SEND copies the report and opens Mail with it filled in. Add a screenshot (side + volume up) if it helps."
 	return "SEND saves the screenshot + text on this device and copies the text."
 
 
@@ -221,6 +223,15 @@ func _on_send() -> void:
 	if path == "":
 		status.text = "Couldn't save the files. The text is on the clipboard."
 		status.add_theme_color_override("font_color", UiTheme.DANGER)
+		return
+	## iOS / Xogot: the PNG stays in the app sandbox, so hand the text to Mail
+	## (mailto with a filled body). The clipboard copy is the fallback.
+	if OS.has_feature("mobile"):
+		var err := OS.shell_open(Feedback.mailto(report()))
+		if err == OK:
+			_done("Mail opened with the report.\nThe text is also on the clipboard: paste it into Messages if you'd rather.")
+		else:
+			_done("Text copied: paste it into Messages or Mail.\n(Saved a copy in the app too.)")
 		return
 	_done("Saved to %s\nText copied: paste it into Messages or Mail with the PNG." % path)
 

@@ -82,7 +82,7 @@ static func capture(tree: SceneTree) -> Image:
 ## Everything the owner needs to place a report.
 static func build_context(tree: SceneTree) -> Dictionary:
 	var c := {}
-	c["build"] = BuildInfo.COMMIT + ((" (built %s)" % BuildInfo.BUILT) if BuildInfo.BUILT != "" else "")
+	c["build"] = "v" + BuildInfo.VERSION + " " + BuildInfo.COMMIT + ((" (built %s)" % BuildInfo.BUILT) if BuildInfo.BUILT != "" else "")
 	c["time"] = Time.get_datetime_string_from_system(false, true) + "  (UTC " + Time.get_datetime_string_from_system(true, true) + ")"
 	var plat := OS.get_name()
 	var model := OS.get_model_name()
@@ -132,6 +132,8 @@ static func build_context(tree: SceneTree) -> Dictionary:
 		c["hp"] = "%d/%d" % [int(round(float(p.get("hp")))), int(round(float(p.get("max_hp"))))]
 	else:
 		c["hp"] = "-"
+	c["pos"] = "%d, %d" % [int((p as Node2D).global_position.x), int((p as Node2D).global_position.y)] if p is Node2D else "-"
+	c["admin"] = "ADMIN RUN" if Admin.run_tainted else ("admin on" if Admin.enabled else "-")
 	c["kills"] = GameState.kills
 	c["scrap"] = GameState.scrap_found
 	c["threat"] = GameState.threat_level
@@ -176,7 +178,7 @@ static func report_text(ctx: Dictionary, category: String, fun: int, note: Strin
 	t.append("")
 	t.append("--- context ---")
 	for k in ["build", "time", "platform", "screen", "scene", "mode", "tier", "level", "hero", "pet", "loadout",
-			"run_level", "run_time", "hp", "kills", "scrap", "threat", "picks", "fps", "settings"]:
+			"run_level", "run_time", "hp", "pos", "kills", "scrap", "threat", "picks", "fps", "admin", "settings"]:
 		if ctx.has(k):
 			t.append("%s: %s" % [k, str(ctx[k])])
 	var lg: PackedStringArray = ctx.get("log", PackedStringArray())
@@ -210,6 +212,14 @@ static func save_native(stem: String, png: PackedByteArray, text: String) -> Str
 		ok = false
 	DisplayServer.clipboard_set(text)
 	return ProjectSettings.globalize_path(SAVE_DIR) if ok else ""
+
+
+## mailto: link (no recipient: the tester picks one) with the report as body.
+## Kept short enough for every mail app's URL limit.
+static func mailto(text: String) -> String:
+	var body := text if text.length() <= 6000 else text.substr(0, 6000) + "\n[...trimmed]"
+	var subj := "Wanderer feedback " + BuildInfo.VERSION
+	return "mailto:?subject=%s&body=%s" % [subj.uri_encode(), body.uri_encode()]
 
 
 ## --- Web ---------------------------------------------------------------------

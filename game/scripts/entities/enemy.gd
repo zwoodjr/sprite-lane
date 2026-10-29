@@ -12,6 +12,7 @@ const BulletScene := preload("res://scenes/entities/bullet.tscn")
 ## Built from EnemyDefs (sheet crops). Legacy raider/charger/brute still resolve.
 static var KINDS: Dictionary = {}
 
+const EnemyBehaviorsScript = preload("res://scripts/entities/enemy_behaviors.gd")
 var kind: String = "raider"
 var hp: float = 40.0
 var max_hp: float = 40.0
@@ -167,6 +168,10 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 		speed *= 1.0 + (float(ZoneDefs.MACHINES_ENRAGED["speed"]) - 1.0) * zs
 	_fire_cd = randf_range(0.6, 1.6)
 	_strafe_sign = -1.0 if randf() < 0.5 else 1.0
+	## Wander behaviors (spitter / burrower / exploder / shield / summoner).
+	## Boss brains attached later replace this. Campaign fights keep their tuning.
+	if brain == null and not GameState.in_campaign_run() and GameState.feature_on("events"):
+		brain = EnemyBehaviorsScript.for_kind(kind)
 	if is_inside_tree():
 		_apply_look()
 
@@ -755,10 +760,13 @@ func _die() -> void:
 	## One shard of each per normal kill (two from elites / bosses): same value,
 	## a quarter of the nodes — kills used to shower up to 8 pickups each.
 	var nd := 2 if role != "" or tier >= 3 else 1
-	LootDrop.spawn_burst(parent, global_position, "scrap", nd, float(scrap))
-	LootDrop.spawn_burst(parent, global_position, "xp", nd, float(xp))
-	HaulPickup.drop_kill(parent, global_position + Vector2(randf_range(-10, 10), 6), faction, role)
-	if GameState.pact_fx("no_tonics") <= 0.0 and randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1] * float(ModeDefs.greed(GameState.windows_skipped)["heal"]):
+	## Summoned minions / self-destructed exploders: no loot (can't be farmed).
+	var drops := not (has_meta("summoned") or has_meta("no_loot"))
+	if drops:
+		LootDrop.spawn_burst(parent, global_position, "scrap", nd, float(scrap))
+		LootDrop.spawn_burst(parent, global_position, "xp", nd, float(xp))
+		HaulPickup.drop_kill(parent, global_position + Vector2(randf_range(-10, 10), 6), faction, role)
+	if drops and GameState.pact_fx("no_tonics") <= 0.0 and randf() < TONIC_CHANCE[clampi(tier, 1, 3) - 1] * float(ModeDefs.greed(GameState.windows_skipped)["heal"]):
 		LootDrop.spawn_burst(parent, global_position, "tonic", 1, TONIC_HEAL)
 	## Rare special-ammo can (more likely from elites / bosses).
 	## Gated behind the Hangar's Ammo Bench (rank = types, odds).

@@ -5,6 +5,7 @@ const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
 const LOGO := "res://assets/sprites/ui/logo_wanderer.png"
 const MenuFlow = preload("res://scripts/ui/menu_flow.gd")
 const Feedback = preload("res://scripts/ui/feedback.gd")
+const BuildInfo = preload("res://scripts/build_info.gd")
 
 
 func _ready() -> void:
@@ -143,6 +144,11 @@ func build(c: VBoxContainer) -> void:
 	fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fb.pressed.connect(func() -> void: Feedback.open(self))
 	c.add_child(fb)
+	## Build stamp: testers quote it in reports.
+	var ver := UiTheme.body_label(BuildInfo.stamp(), 14, UiTheme.TEXT_DIM, false)
+	ver.name = "BuildStamp"
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	c.add_child(ver)
 	## The app closed mid-run (force quit / crash): resume or abandon first.
 	if GameState.has_live_run():
 		_live_prompt.call_deferred()

@@ -819,7 +819,7 @@ func twist_on(twist: String) -> bool:
 ## tier beyond Haze) see everything; campaign levels are handcrafted, always on.
 ## [runs finished needed, id, name, one-line pitch]
 const ONBOARD := [
-	[1, "events", "Radio events", "Helm calls in trouble mid-run — and pays for it."],
+	[1, "events", "Radio events & mob tricks", "Helm calls in trouble mid-run. Mobs spit, burrow, explode, shield up and summon."],
 	[2, "medicine", "Medicine & backpack", "Carry medicine crates out for big scrap. Mobs drop brew ingredients."],
 	[3, "jobs", "Radio jobs", "Survivors send contracts and services while you're out."],
 	[4, "modes", "Daily Run & Weekly Dust", "A shared daily map and weekly modifiers on the mode screen."],

@@ -335,7 +335,7 @@ func _info(key: String) -> String:
 	if key == "build":
 		var built := str(BuildInfo.BUILT)
 		var vi := Engine.get_version_info()
-		return "Wanderer %s%s \u00b7 Godot %d.%d.%d" % [str(BuildInfo.COMMIT), (" (" + built + ")") if built != "" else "",
+		return "Wanderer %s%s \u00b7 Godot %d.%d.%d" % ["v" + str(BuildInfo.VERSION) + " " + str(BuildInfo.COMMIT), (" (" + built + ")") if built != "" else "",
 			int(vi.get("major", 4)), int(vi.get("minor", 0)), int(vi.get("patch", 0))]
 	return ""
 

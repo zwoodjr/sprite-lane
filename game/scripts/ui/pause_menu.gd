@@ -6,6 +6,7 @@ extends CanvasLayer
 const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
 const HelpViewer = preload("res://scripts/ui/help_viewer.gd")
 const Feedback = preload("res://scripts/ui/feedback.gd")
+const BuildInfo = preload("res://scripts/build_info.gd")
 var _dim: ColorRect
 var _frame: MarginContainer
 var _content: Control
@@ -171,6 +172,10 @@ func _show_main() -> void:
 		GameState.go_result()
 	)
 	v.add_child(quit)
+	var ver := UiTheme.body_label(BuildInfo.stamp(), 14, UiTheme.TEXT_DIM, false)
+	ver.name = "BuildStamp"
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(ver)
 	_set_content(center)
 
 ## Backpack: what you carry home. Medicine fills the pack; ingredients ride

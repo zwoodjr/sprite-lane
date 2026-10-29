@@ -178,7 +178,13 @@ func _ready() -> void:
 	GameState.weekly_opt_in = extra == "weekly"
 	if extra == "daily":
 		GameState.arm_daily()
-	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id)
+	## env WANDERER_ASC=N: Dustfall at Ascension N (unlocked in memory, not saved).
+	var asc := OS.get_environment("WANDERER_ASC")
+	if asc != "":
+		GameState.tier_extracts[str(ModeDefs.EXPOSED_TIERS)] = maxi(1, GameState.tier_extracts_at(ModeDefs.EXPOSED_TIERS))
+		GameState.ascension_cleared = ModeDefs.ASCENSION_MAX - 1
+		GameState.ascension = clampi(int(asc), 0, ModeDefs.ASCENSION_MAX)
+	print("BOT char=", GameState.selected_character_id, " mode=", GameState.selected_mode_id, " asc=", GameState.ascension_now())
 	GameState.begin_run()
 	if extra != "":
 		print("EXTRAS kind=%s seed=%d mods=%s" % [GameState.run_kind, GameState.run_seed, str(GameState.run_dust_mods)])

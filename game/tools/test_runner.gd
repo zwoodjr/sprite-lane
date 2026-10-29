@@ -173,6 +173,7 @@ func _run() -> void:
 	await _test_onboarding()
 	await _test_ascension()
 	await _test_admin()
+	await _test_behaviors()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4175,3 +4176,38 @@ func _test_admin() -> void:
 	for i in range(5):
 		await get_tree().process_frame
 	print("ADMIN_OK")
+
+## Wander mob behaviors: assigned by kind, exploder self-destructs with no loot.
+func _test_behaviors() -> void:
+	var B: Script = load("res://scripts/entities/enemy_behaviors.gd")
+	var got := {}
+	for k in (B.get("BY_KIND") as Dictionary).keys():
+		got[str(B.call("behavior_of", k))] = true
+		_check(EnemyDefs.get_kind(str(k)).get("id", "") == str(k), "behavior kind exists: " + str(k))
+	for want in ["spitter", "burrower", "exploder", "shield", "summoner"]:
+		_check(got.has(want), "behavior assigned: " + want)
+	GameState.play_mode = "wander"
+	GameState.selected_mode_id = ModeDefs.HAZE_ID
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for i in range(10):
+		await get_tree().physics_frame
+	m.set("quiet", true)
+	var pl: Node2D = m.get_node("World/Player")
+	var e: Node = m.call("spawn_mob", "coil_spider", pl.global_position + Vector2(40, 0), "", 50.0)
+	_check(e != null and e.get("brain") != null, "exploder has its brain")
+	var kills0 := GameState.kills
+	Admin.god = true
+	for i in range(240):
+		await get_tree().physics_frame
+		if not is_instance_valid(e) or bool(e.get("_dead")):
+			break
+	Admin.god = false
+	_check(not is_instance_valid(e) or bool(e.get("_dead")), "exploder blows itself up")
+	_check(is_instance_valid(e) and e.has_meta("no_loot") or not is_instance_valid(e), "self-destruct drops no loot")
+	m.queue_free()
+	for i in range(5):
+		await get_tree().process_frame
+	print("BEHAVIORS_OK")
