@@ -301,6 +301,8 @@ class Icon:
             # small sizes lose contrast in the box filter: push it back
             mean = col[a > 0.42].mean(axis=0) if (a > 0.42).any() else 0
             col = np.clip((col - mean) * 1.25 + mean, 0, 255)
+            # and lift the values: dark gunmetal sinks into the dark wells
+            col = np.clip(255 * (col / 255) ** 0.8 + 6, 0, 255)
         solid = a > 0.42
         # outline: 1 px INK ring, 8-connected, plus darkening the outermost body px
         ring = ndi.binary_dilation(solid, structure=np.ones((3, 3))) & ~solid
