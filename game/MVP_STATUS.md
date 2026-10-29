@@ -1,5 +1,27 @@
 # MVP status (repo mirror)
 
+**Latest (long-term chase + Rook pass):**
+
+- **Wander bosses:** tier 5+ boss windows now roll a named boss per zone that runs its campaign brain: Rad-Gator Matriarch, Mother Vane, Mutant Overlord, Unit Seven. The Dust Warden radio boss got its own brain (sand dash, dust hounds, a phase-2 storm ring). The Wasteland God-Entity is campaign-only, so it no longer rolls in the Wander pool.
+- **Ascension (A1–A10):** opens after your first Dustfall extract, with a stepper on the Dustfall card. Each level adds one forced Pact or more starting Greed, on top of the levels below. Payout is +10% per level plus each Pact's own loot bonus. Clearing a level opens the next. Character select shows each survivor's best clear ("BEST CLEAR: DUSTFALL A3" or the highest tier name).
+
+  | Level | Adds | Payout |
+  |---|---|---|
+  | A1 | Thick Dust: enemies +25% HP | +25% |
+  | A2 | Sharp Teeth: enemies hit 20% harder | +55% |
+  | A3 | Hungry Dark: +25% enemies | +80% |
+  | A4 | Narrow Windows: windows close 3 s sooner | +105% |
+  | A5 | No Mercy: no tonic drops | +135% |
+  | A6 | Hunted: an elite joins every window | +170% |
+  | A7 | Brittle Bones: -25% max HP | +205% |
+  | A8 | Start at Greed 1 | +215% |
+  | A9 | Start at Greed 2 | +225% |
+  | A10 | Start at Greed 3 | +235% |
+
+- **Fresh install:** the Mayday prologue plays first and then returns to the main menu, where the first PLAY ("PLAY — INTO THE HAZE") drops straight into Haze with the default survivor.
+- **Rook (Braced Rush):** while she rushes and for 2 s after, she takes half damage. Rammed foes are stunned for 0.8 s (bosses are not), and each ram patches 4 HP (20 per rush). The cooldown dropped from 14 s to 10 s. She also gets a passive 15% damage reduction (heavy frame). Bot check, Haze, stay 3 windows, sloppy driver, the same 16 seeds: deaths went from 11/16 (69%) to 4/16 (25%), and survivors' end HP from 47% to 54%. For comparison, Juno ran 1/8 on the same driver.
+
+
 **Fix (Choose Your Wanderer, iPhone):** the ADMIN chip moved into the top safe band, right-aligned, so it can no longer cover the hero strip. Hero tiles now shrink to fit the width (76 → min 56 px, scrolling past that), so all 8 heroes and the pet tiles are reachable at 390x844 and 375x667 with a notch and XL text. Review tool: `tools/charsel_shots.tscn`.
 
 **Latest (combat, hangar, insurance pass):**
