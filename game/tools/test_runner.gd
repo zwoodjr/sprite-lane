@@ -532,8 +532,18 @@ func _test_hangar() -> void:
 	_check(GameState.stash.size() == 1, "stash load filters")
 	GameState.stash.clear()
 	## Prices per the brief.
-	_check(HangarDefs.cost("generator", 0) == 250 and HangarDefs.cost("generator", 2) == 2100 and HangarDefs.cost("generator", 3) == -1, "shared prices (v5: 3 ranks)")
-	_check(HangarDefs.cost("station_pebble", 2) == 1580 and HangarDefs.cost("kennel_noel", 2) == 900, "station/kennel prices")
+	_check(HangarDefs.cost("generator", 0) == 400 and HangarDefs.cost("generator", 2) == 4800 and HangarDefs.cost("generator", 3) == -1, "shared prices (v6: 3 ranks)")
+	_check(HangarDefs.cost("station_pebble", 2) == 3300 and HangarDefs.cost("kennel_noel", 2) == 1600, "station/kennel prices")
+	## v6 tier gates: rank 2 after Smog, rank 3 after Shroud; owned ranks stay.
+	var keep_bt := GameState.best_tier_extracted
+	GameState.camp.clear()
+	GameState.best_tier_extracted = 1
+	GameState.account_scrap = 99999
+	_check(GameState.try_buy_camp("generator") and GameState.camp_gate("generator") == 3 and not GameState.try_buy_camp("generator"), "rank 2 gated until Smog")
+	GameState.best_tier_extracted = 3
+	_check(GameState.try_buy_camp("generator") and GameState.camp_gate("generator") == 6, "rank 3 gated until Shroud")
+	GameState.best_tier_extracted = keep_bt
+	GameState.camp.clear()
 	## v5 migration: pairwise merge, overpay refunded, max stays max.
 	_check(HangarDefs.v5_migrate("generator", 5) == [3, 0] and HangarDefs.v5_migrate("generator", 2) == [1, 100]
 		and HangarDefs.v5_migrate("generator", 4) == [2, 600] and HangarDefs.v5_migrate("station_pebble", 4) == [2, 480]
@@ -550,6 +560,8 @@ func _test_hangar() -> void:
 	GameState.stash.clear()
 	GameState._compute_gear()
 	GameState.account_scrap = HangarDefs.full_max_cost()
+	var keep_bt2 := GameState.best_tier_extracted
+	GameState.best_tier_extracted = ModeDefs.EXPOSED_TIERS
 	GameState.selected_character_id = "ash_rook"
 	GameState.selected_pet_id = "noel"
 	var base_cd := float(GameState.hero_ability().get("cooldown", 0.0))
@@ -570,6 +582,7 @@ func _test_hangar() -> void:
 				_check(false, "buy %s" % id)
 				break
 	_check(GameState.account_scrap == 0, "full max costs exactly %d" % HangarDefs.full_max_cost())
+	GameState.best_tier_extracted = keep_bt2
 	GameState.mechs_built = keep_mechs
 	_check(GameState.stash_capacity() == HangarDefs.stash_slots(GameState.camp_rank("stash")), "stash slots")
 	_check(GameState.starting_hp_bonus() == 50.0 and is_equal_approx(GameState.scrap_find_mult(), 1.4), "generator/press")
@@ -1499,7 +1512,7 @@ func _test_tiers() -> void:
 	var tiers := ModeDefs.all_tiers()
 	_check(tiers.size() == 10 and ModeDefs.all_modes().size() == 10, "10 tiers exposed")
 	var expect := [[1.0, 0.75, 0.10], [1.25, 1.0, 0.15], [1.4, 1.25, 0.20], [1.55, 1.5, 0.25], [1.75, 1.8, 0.30],
-		[1.8, 2.1, 0.35], [2.0, 2.5, 0.40], [2.25, 3.0, 0.45], [2.55, 3.5, 0.50], [3.00, 4.5, 0.55]]
+		[1.8, 2.1, 0.35], [2.0, 2.3, 0.40], [2.25, 2.6, 0.45], [2.55, 3.0, 0.50], [3.00, 3.6, 0.55]]
 	for i in range(10):
 		var t: Dictionary = tiers[i]
 		var e: Array = expect[i]

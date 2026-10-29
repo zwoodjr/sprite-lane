@@ -76,10 +76,10 @@ const TIER_TABLE: Array = [
 	["pall", "Pall", 1.55, 1.75, 1.24, 1.5, 0.25, "The sky goes grey at noon."],
 	["blight", "Blight", 1.75, 1.85, 1.3, 1.8, 0.30, "Bosses walk the dust now."],
 	["shroud", "Shroud", 1.8, 1.9, 1.32, 2.1, 0.35, "You hear them before you see them."],
-	["choke", "Choke", 2.0, 1.95, 1.36, 2.5, 0.40, "Every breath costs something."],
-	["blackout", "Blackout", 2.25, 2.05, 1.4, 3.0, 0.45, "Elites hunt in pairs."],
-	["deadfall", "Deadfall", 2.55, 2.25, 1.45, 3.5, 0.50, "Nothing out here wants you to leave."],
-	["dustfall", "Dustfall", 3.0, 2.6, 1.5, 4.5, 0.55, "Pay the dust its due."],
+	["choke", "Choke", 2.0, 1.95, 1.36, 2.3, 0.40, "Every breath costs something."],
+	["blackout", "Blackout", 2.25, 2.05, 1.4, 2.6, 0.45, "Elites hunt in pairs."],
+	["deadfall", "Deadfall", 2.55, 2.25, 1.45, 3.0, 0.50, "Nothing out here wants you to leave."],
+	["dustfall", "Dustfall", 3.0, 2.6, 1.5, 3.6, 0.55, "Pay the dust its due."],
 ]
 ## Window rule above Drift: each tier 1s shorter open, longer gap / first window.
 const DRIFT_FIRST := 120.0

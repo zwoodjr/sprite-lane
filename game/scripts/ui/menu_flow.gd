@@ -145,9 +145,10 @@ static func quick_button(height: float = UiTheme.MIN_TOUCH) -> Button:
 static func headline_goal() -> Dictionary:
 	var best := {}
 	var ids: Array = HangarDefs.ids_for("shared") + ["backpack", HangarDefs.station_id(GameState.selected_character_id)]
+	## Tier-gated ranks aren't a goal you can buy yet: skip them.
 	for id in ids:
 		var cost := GameState.camp_cost(str(id))
-		if cost < 0:
+		if cost < 0 or GameState.camp_gate(str(id)) > 0:
 			continue
 		if best.is_empty() or cost < int(best["cost"]):
 			var rk := GameState.camp_rank(str(id))

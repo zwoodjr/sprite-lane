@@ -13,15 +13,26 @@ extends RefCounted
 ## Hangar v5 (Oct 2026): shared + station upgrades went from 5 small ranks to
 ## 3 big, felt ones (same total price). Old ranks merge pairwise
 ## (V5_RANK_MAP); anything a save paid beyond its merged rank is refunded.
-const SHARED_PRICES: Array = [250, 900, 2100]
-const STATION_PRICES: Array = [200, 700, 1580]
+## Bunker economy v6 (Oct 2026): priced against measured payouts (bot, leave at
+## window 2: Haze ~180, Smog ~400, Blight ~670, Shroud ~1.2k, Blackout ~1.6k,
+## Dustfall ~2k after the top-tier trim). Whole bunker ~90k = roughly 45-60 runs;
+## the cheapest open rank is always ~1-3 runs of your current tier away.
+## Rank 2 opens after a Smog extract, rank 3 after Shroud (RANK_GATE).
+const SHARED_PRICES: Array = [400, 1600, 4800]
+const STATION_PRICES: Array = [250, 1100, 3300]
+## v5 prices: only for migrating v4 saves (refund math), never for buying.
+const V5_SHARED_PRICES: Array = [250, 900, 2100]
+const V5_STATION_PRICES: Array = [200, 700, 1580]
 const V4_SHARED_PRICES: Array = [100, 250, 500, 900, 1500]
 const V4_STATION_PRICES: Array = [80, 200, 400, 700, 1100]
 const V5_RANK_MAP: Array = [0, 1, 1, 2, 2, 3]
 ## Hangar art was painted for 5 stages; rank r shows stages up to ART_STAGE[r].
 const ART_STAGE: Array = [0, 1, 3, 5]
-const KENNEL_PRICES: Array = [150, 400, 900]
-const STASH_PRICES: Array = [300, 600, 1000, 1600, 2500]
+const KENNEL_PRICES: Array = [200, 650, 1600]
+const STASH_PRICES: Array = [300, 700, 1300, 2200, 3500]
+## Tier you must have extracted from before buying rank i+1 (0 = open).
+const RANK_GATE: Array = [0, 3, 6]
+const STASH_GATE: Array = [0, 2, 4, 6, 8]
 
 const STASH_BASE_SLOTS := 80
 const STASH_SLOTS_PER_RANK := 40
@@ -195,6 +206,16 @@ static func max_rank(id: String) -> int:
 	return prices(id).size()
 
 
+## Tier that must be extracted before buying rank `rank`+1 (0 = no gate).
+static func gate_tier(id: String, rank: int) -> int:
+	match layer_of(id):
+		"shared", "station", "kennel", "pack":
+			return int(RANK_GATE[clampi(rank, 0, RANK_GATE.size() - 1)])
+		"stash":
+			return int(STASH_GATE[clampi(rank, 0, STASH_GATE.size() - 1)])
+	return 0
+
+
 ## Price of the next rank, or -1 when maxed / unknown.
 static func cost(id: String, rank: int) -> int:
 	var p := prices(id)
@@ -287,7 +308,7 @@ static func v5_migrate(id: String, old_rank: int) -> Array:
 	if lay != "shared" and lay != "station":
 		return [old_rank, 0]
 	var old_p: Array = V4_SHARED_PRICES if lay == "shared" else V4_STATION_PRICES
-	var new_p: Array = prices(id)
+	var new_p: Array = V5_SHARED_PRICES if lay == "shared" else V5_STATION_PRICES
 	var r := clampi(old_rank, 0, old_p.size())
 	var n := int(V5_RANK_MAP[r])
 	var paid := 0

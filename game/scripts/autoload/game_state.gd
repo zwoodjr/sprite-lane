@@ -89,6 +89,8 @@ var trophies: Dictionary = {}
 var migrated_hangar_v4: bool = false
 ## v5: shared + station upgrades merged from 5 small ranks to 3 big ones.
 var migrated_hangar_v5: bool = false
+## Bunker economy v6: higher prices + tier gates; owned ranks kept as they are.
+var migrated_hangar_v6: bool = false
 ## Shown once on the Hangar screen (e.g. the refund note). Not saved.
 var hangar_notice: String = ""
 var garage_tokens: int = 0
@@ -290,6 +292,7 @@ func save_profile() -> void:
 		"pending_rewards": pending_rewards,
 		"migrated_hangar_v4": migrated_hangar_v4,
 		"migrated_hangar_v5": migrated_hangar_v5,
+		"migrated_hangar_v6": migrated_hangar_v6,
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
 		"best_payout": best_payout,
@@ -398,6 +401,7 @@ func load_profile() -> void:
 		load_source = "fresh"
 	migrated_hangar_v4 = true
 	migrated_hangar_v5 = true
+	migrated_hangar_v6 = true
 	_sync_account_level()
 
 ## Copy an unreadable save aside (wanderer_save.damaged.json) before anything
@@ -452,6 +456,14 @@ func apply_save(d: Dictionary) -> void:
 	## Insurance used to be free: saves that already insured something keep it.
 	if typeof(d.get("insured", {})) == TYPE_DICTIONARY and not (d.get("insured", {}) as Dictionary).is_empty():
 		camp[HangarDefs.INSURANCE_ID] = maxi(1, int(camp.get(HangarDefs.INSURANCE_ID, 0)))
+	migrated_hangar_v6 = bool(d.get("migrated_hangar_v6", false))
+	if not migrated_hangar_v6:
+		migrated_hangar_v6 = true
+		var owned := 0
+		for k2 in camp.keys():
+			owned += int(camp[k2])
+		if owned > 0 and hangar_notice == "":
+			hangar_notice = "Bunker rebalanced: new ranks cost more, and rank 2 / rank 3 open after Smog / Shroud extracts. Everything you already built stays."
 	if not migrated_hangar_v5:
 		migrated_hangar_v5 = true
 		if v5_refund > 0:
@@ -749,6 +761,11 @@ func has_trophy(boss: String) -> bool:
 func stash_capacity() -> int:
 	return HangarDefs.stash_slots(camp_rank("stash"))
 
+## Tier still needed for the next rank (0 = open). Owned ranks are never taken away.
+func camp_gate(id: String) -> int:
+	var g := HangarDefs.gate_tier(id, camp_rank(id))
+	return g if g > best_tier_extracted else 0
+
 ## Next-rank price for a Hangar id (-1 = maxed / unknown).
 func camp_cost(id: String) -> int:
 	return HangarDefs.cost(id, camp_rank(id))
@@ -760,7 +777,7 @@ func try_buy_camp(id: String) -> bool:
 	if id.begins_with("kennel_") and not pet_available(id.substr(7)):
 		return false
 	var c := camp_cost(id)
-	if c < 0 or account_scrap < c:
+	if c < 0 or account_scrap < c or camp_gate(id) > 0:
 		return false
 	account_scrap -= c
 	camp[id] = camp_rank(id) + 1
@@ -2142,6 +2159,7 @@ func reset_profile() -> void:
 	kit.clear()
 	migrated_hangar_v4 = true
 	migrated_hangar_v5 = true
+	migrated_hangar_v6 = true
 	garage_tokens = 0
 	successful_extracts = 0
 	best_payout = 0

@@ -75,7 +75,7 @@ const BOSS_MEDICINE := 1
 ## Three crates fill the base pack (≈ the 2nd–3rd window on Drift); each rank fits one more.
 const PACK_BASE := 9
 const PACK_PER_RANK := 3
-const PACK_PRICES: Array = [200, 450, 800]
+const PACK_PRICES: Array = [250, 800, 1800]
 
 ## --- Tonics ---------------------------------------------------------------------
 ## fx keys: regen (HP/s), max_hp, move, exposure_mult, plague_resist (damage taken

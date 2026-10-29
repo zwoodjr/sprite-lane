@@ -428,9 +428,15 @@ func _row(id: String, icon: Texture2D) -> PanelContainer:
 	nx.max_lines_visible = 2
 	info.add_child(nx)
 	var btn: Button
+	var gate := GameState.camp_gate(id) if not maxed else 0
 	if maxed:
 		btn = UiTheme.big_button("MAX", UiTheme.LINE, 64, 20)
 		btn.disabled = true
+	elif gate > 0:
+		## Next rank opens with a tier clear: show the goal, not a price.
+		btn = UiTheme.big_button("NEEDS\n%s" % str(ModeDefs.tier_mode(gate).get("display_name", "")).to_upper(), UiTheme.LINE, 64, 14)
+		btn.disabled = true
+		btn.tooltip_text = "Extract from %s to open this rank (%d scrap)" % [str(ModeDefs.tier_mode(gate).get("display_name", "")), cost]
 	else:
 		var afford := GameState.account_scrap >= cost
 		btn = UiTheme.big_button("%d" % cost, UiTheme.TEAL if afford else UiTheme.RUST, 64, 16)
