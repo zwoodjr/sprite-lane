@@ -1,5 +1,12 @@
 # MVP status (repo mirror)
 
+**Art pass 3 (weapons + art audit):**
+
+- **Legendary weapons redrawn** (`tools/gen_legendary_icons.py`) to match the guns on the hero sprites: gunmetal with worn bright edges, red paint chipped to steel, rust bloom and streaks, welded patch plates, rivets, tape/cord wraps, oiled wood, no medallions. Painted at 4x and box-filtered down. Covers the 96 px pickup icons (`icons/legendary/`, faint gold halo) and the IconSet 48/24 px icons the stash / gear / loadout actually show (`set/{48,24}/leg_*` + `wpn_<hero>_<legendary>`). `gen_icons.py` re-runs it at the end, so a full icon rebuild keeps them. Common-Epic base weapon icons (`icons/weapons/`) re-derived from them by `gen_weapon_icons.py`.
+- **Sprite resolution audit:** heroes, pets and regular mobs are already 128 px frames, elites 192, bosses 256 (UnitAnim / `MOB_FRAME_WORLD` / `ELITE_SCALE` / `BOSS_SCALE` already map them to the same world size), so no rescale was needed. The old 96 px generators (`gen_sprites.py`, `gen_walk_cycles.py`) predate the current painted art and would regress it; not re-run.
+- **Tried and dropped:** a palette-stepped grime/rust pass on the mob roster. The mob strips are painted per frame, so procedural marks crawl between frames and read as noise; not shipped.
+- **Texture memory:** unchanged, 506 MiB if every PNG were resident (all lossless, no mipmaps; icon sizes kept). Typical run: hero ~5.6 MiB, pet ~7 MiB, regular mob ~5-7 MiB per kind, elite ~11, boss ~22.
+
 **Latest (difficulty + onboarding pass):** Fixes from the overnight critique.
 
 - **Greed pressure** (`ModeDefs.greed`, `match_controller._greed_punish`): every extract window you let close → mobs +45% HP, +28% damage, +50% spawn rate, +5 live cap (stacks to 4), plus a two-sided punish wave and a Greed elite on every tier. Base live cap 12 → 18. Tonic drops cut (T1 6% → 3%), idle regen 2 → 1 HP/s. HUD: AT STAKE (what extracting now pays; turns rust/red with greed) and GREED n on the threat line. Wipe result: "Extracting would have paid N."

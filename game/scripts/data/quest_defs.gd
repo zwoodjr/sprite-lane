@@ -87,7 +87,7 @@ const STORIES := {
 ## Long goals; each unlocks a hangar cosmetic layer (assets/sprites/hangar/cosmetic_<id>.png)
 ## or a trophy. check = how GameState decides it's done.
 const MILESTONES: Array = [
-	{"id": "max_generator", "name": "Max the Generator", "desc": "Generator at rank 5", "check": "camp_rank", "key": "generator", "need": 5, "cosmetic": "banner"},
+	{"id": "max_generator", "name": "Max the Generator", "desc": "Generator at max rank", "check": "camp_rank", "key": "generator", "need": 3, "cosmetic": "banner"},
 	{"id": "stations_3", "name": "Every Corner Lit", "desc": "Every survivor station at rank 3+", "check": "stations_min", "need": 3, "cosmetic": "campfire"},
 	{"id": "full_kennel", "name": "Good Dogs", "desc": "All three dogs at kennel rank 3", "check": "kennel_min", "need": 3, "cosmetic": "toys"},
 	{"id": "extracts_25", "name": "Seasoned Crew", "desc": "Extract 25 times", "check": "extracts", "need": 25, "cosmetic": "flag"},

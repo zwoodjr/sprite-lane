@@ -8,6 +8,10 @@ do too). Light from the top-left, 1 px INK outline, hard alpha. A faint gold
 legendary halo is drawn under the weapon at alpha < 230 (gen_weapon_icons.py
 strips it when it derives the Common-Epic icons from these).
 
+Writes icons/legendary/legendary_<id>.png (96, pickups) and the IconSet
+icons/set/{48,24}/leg_<id>.png + wpn_<hero>_<id>.png (stash / gear / loadout).
+gen_icons.py runs this at its end so a full icon rebuild keeps these.
+
     python3 tools/gen_legendary_icons.py      (from game/)
 then
     python3 tools/gen_weapon_icons.py
@@ -20,8 +24,14 @@ from PIL import Image, ImageDraw, ImageFilter
 
 GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(GAME, "assets", "sprites", "icons", "legendary")
+SET = os.path.join(GAME, "assets", "sprites", "icons", "set")
+LEG_HERO = {"last_shift": "ash_rook", "bellwether": "vesper_thorn", "gravedigger": "pebble",
+            "live_line": "bolt_juno", "censer": "sister_cinder", "bonesaw": "quill_marrow",
+            "twin_debts": "nyx_caldera", "mayday": "helm_wisp"}
 SS = 4
-FIT = 0.88
+FIT = 0.88  # 96 px: room for the halo; the IconSet pass draws at FIT_SET
+FIT_SET = 0.9
+MODE = "hd"
 N = 96
 W = N * SS
 INK = np.array([20, 12, 14], np.float32)
@@ -58,7 +68,12 @@ MAT = {
 
 def _scr(x, y):
     """96-unit layout point -> supersampled screen px (after FIT)."""
+    FIT = _fit()
     return (((x - N / 2) * FIT + N / 2) * SS, ((y - N / 2) * FIT + N / 2) * SS)
+
+
+def _fit():
+    return FIT if MODE == "hd" else FIT_SET
 
 
 def noise(seed, scale, octaves=3):
@@ -82,6 +97,7 @@ class Icon:
         self.a = np.zeros((W, W), np.float32)
         self.yy, self.xx = np.mgrid[0:W, 0:W].astype(np.float32) / SS
         # draw the 96-unit layout at FIT scale about the centre (halo margin)
+        FIT = _fit()
         self.yy = (self.yy - N / 2) / FIT + N / 2
         self.xx = (self.xx - N / 2) / FIT + N / 2
         self.n_big = noise(seed, 40)
@@ -188,7 +204,7 @@ class Icon:
     def poly(self, pts, mat, dome=0.6, bevel=2.0):
         """Flat plate polygon with bevelled rim (distance-to-edge normal)."""
         im = Image.new("L", (W, W), 0)
-        ImageDraw.Draw(im).polygon([(((x - N / 2) * FIT + N / 2) * SS, ((y - N / 2) * FIT + N / 2) * SS) for x, y in pts], fill=255)
+        ImageDraw.Draw(im).polygon([_scr(x, y) for x, y in pts], fill=255)
         cov = np.asarray(im, np.float32) / 255.0
         self._dist_paint(cov, mat, bevel, dome)
 
@@ -258,16 +274,34 @@ class Icon:
 
     # ---------------------------------------------------------------- output
     def save(self, name, halo=hx("#ffb030"), extra_glows=()):
+        """96 px pickup / HD icon (with the legendary halo) plus the IconSet
+        48 / 24 px icons the stash, gear and loadout screens actually show
+        (hard alpha, no halo: the legendary frame carries the rarity)."""
+        if MODE == "hd":
+            Image.fromarray(self._render(N, halo, extra_glows), "RGBA").save(os.path.join(OUT, "legendary_%s.png" % name))
+            return
+        hero = LEG_HERO[name]
+        for n in (48, 24):
+            im = Image.fromarray(self._render(n, None, ()), "RGBA")
+            for stem in ("leg_%s" % name, "wpn_%s_%s" % (hero, name)):
+                im.save(os.path.join(SET, str(n), stem + ".png"))
+
+    def _render(self, n, halo, extra_glows):
+        from scipy import ndimage as ndi
+        f = W // n
         rgb = self.rgb.copy()
         # darken part seams
         rgb *= (1 - 0.35 * self.edges[..., None])
-        # premultiplied box filter down to 96
+        # premultiplied box filter down to n px
         pm = np.concatenate([rgb * self.a[..., None], self.a[..., None] * 255], axis=2)
-        pm = pm.reshape(N, SS, N, SS, 4).mean(axis=(1, 3))
+        pm = pm.reshape(n, f, n, f, 4).mean(axis=(1, 3))
         a = pm[..., 3] / 255.0
         col = np.where(a[..., None] > 1e-3, pm[..., :3] / np.maximum(a[..., None], 1e-3), 0)
+        if n < N:
+            # small sizes lose contrast in the box filter: push it back
+            mean = col[a > 0.42].mean(axis=0) if (a > 0.42).any() else 0
+            col = np.clip((col - mean) * 1.25 + mean, 0, 255)
         solid = a > 0.42
-        from scipy import ndimage as ndi
         # outline: 1 px INK ring, 8-connected, plus darkening the outermost body px
         ring = ndi.binary_dilation(solid, structure=np.ones((3, 3))) & ~solid
         inner_edge = solid & ~ndi.binary_erosion(solid, structure=np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]))
@@ -275,25 +309,26 @@ class Icon:
         # light the top-left rim a touch (worn edge catching light)
         tl = solid & ~np.roll(solid, 1, axis=0) | solid & ~np.roll(solid, 1, axis=1)
         col = np.where((tl & solid)[..., None], np.clip(col * 1.18 + 10, 0, 255), col)
-        out = np.zeros((N, N, 4), np.float32)
+        out = np.zeros((n, n, 4), np.float32)
         out[solid, :3] = col[solid]
         out[solid, 3] = 255
         out[ring, :3] = INK
         out[ring, 3] = 255
-        # halo under everything, alpha < 230 so the base-icon derivation drops it
-        sil = (solid | ring).astype(np.float32)
-        hal = ndi.gaussian_filter(sil, 3.2)
-        hal = np.clip(hal * 1.6, 0, 1) * (1 - sil)
-        ha = (hal * 150).astype(np.float32)
-        hc = np.broadcast_to(halo, (N, N, 3)).copy()
-        for (g, c) in extra_glows:
-            gd = g.reshape(N, SS, N, SS).mean(axis=(1, 3)) * (1 - sil) * 200
-            hc = np.where((gd > ha)[..., None], c[None, None, :], hc)
-            ha = np.maximum(ha, gd)
-        bg = ha > 1
-        out[bg, :3] = hc[bg]
-        out[bg, 3] = np.minimum(ha[bg], 200)
-        Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA").save(os.path.join(OUT, "legendary_%s.png" % name))
+        if halo is not None:
+            # halo under everything, alpha < 230 so the base-icon derivation drops it
+            sil = (solid | ring).astype(np.float32)
+            hal = ndi.gaussian_filter(sil, 3.2)
+            hal = np.clip(hal * 1.6, 0, 1) * (1 - sil)
+            ha = (hal * 150).astype(np.float32)
+            hc = np.broadcast_to(halo, (n, n, 3)).copy()
+            for (g, c) in extra_glows:
+                gd = g.reshape(n, f, n, f).mean(axis=(1, 3)) * (1 - sil) * 200
+                hc = np.where((gd > ha)[..., None], c[None, None, :], hc)
+                ha = np.maximum(ha, gd)
+            bg = ha > 1
+            out[bg, :3] = hc[bg]
+            out[bg, 3] = np.minimum(ha[bg], 200)
+        return np.clip(out, 0, 255).astype(np.uint8)
 
 
 # =============================================================== the weapons
@@ -598,6 +633,8 @@ def mayday():
 
 
 if __name__ == "__main__":
-    for fn in (last_shift, bellwether, gravedigger, live_line, censer, bonesaw, twin_debts, mayday):
-        fn()
-        print("ok", fn.__name__)
+    WEAPONS = (last_shift, bellwether, gravedigger, live_line, censer, bonesaw, twin_debts, mayday)
+    for MODE in ("hd", "set"):
+        for fn in WEAPONS:
+            fn()
+        print("ok", MODE, len(WEAPONS))

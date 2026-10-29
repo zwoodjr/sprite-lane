@@ -524,12 +524,17 @@ func _test_hangar() -> void:
 	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "account_scrap": 5,
 		"meta_upgrades": {"starting_hp": 3}, "camp": {"generator": 9, "nonsense": 2}, "stash": [{"id": "x"}, 4]})
 	_check(GameState.account_scrap == 5, "hangar no double refund")
-	_check(GameState.camp_rank("generator") == 5 and not GameState.camp.has("nonsense"), "camp load clamps")
+	## v4 save: rank 9 clamps to the old max 5, which merges to the v5 max 3.
+	_check(GameState.camp_rank("generator") == 3 and not GameState.camp.has("nonsense") and GameState.migrated_hangar_v5, "camp load clamps")
 	_check(GameState.stash.size() == 1, "stash load filters")
 	GameState.stash.clear()
 	## Prices per the brief.
-	_check(HangarDefs.cost("generator", 0) == 100 and HangarDefs.cost("generator", 4) == 1500, "shared prices")
-	_check(HangarDefs.cost("station_pebble", 4) == 1100 and HangarDefs.cost("kennel_noel", 2) == 900, "station/kennel prices")
+	_check(HangarDefs.cost("generator", 0) == 250 and HangarDefs.cost("generator", 2) == 2100 and HangarDefs.cost("generator", 3) == -1, "shared prices (v5: 3 ranks)")
+	_check(HangarDefs.cost("station_pebble", 2) == 1580 and HangarDefs.cost("kennel_noel", 2) == 900, "station/kennel prices")
+	## v5 migration: pairwise merge, overpay refunded, max stays max.
+	_check(HangarDefs.v5_migrate("generator", 5) == [3, 0] and HangarDefs.v5_migrate("generator", 2) == [1, 100]
+		and HangarDefs.v5_migrate("generator", 4) == [2, 600] and HangarDefs.v5_migrate("station_pebble", 4) == [2, 480]
+		and HangarDefs.v5_migrate("kennel_noel", 2) == [2, 0], "hangar v5 migrate")
 	_check(HangarDefs.cost("stash", 0) == 300 and HangarDefs.cost("stash", HangarDefs.STASH_PRICES.size()) == -1 and HangarDefs.stash_slots(0) == 80 and HangarDefs.stash_slots(5) == 280, "stash prices")
 	## Ammo Bench gating.
 	GameState.camp.clear()
@@ -1412,7 +1417,7 @@ func _test_quests_events() -> void:
 	_check(int(GameState.story_state("pebble")["step"]) == 0, "story per survivor")
 	## Milestones + cosmetics; Pet Bond.
 	GameState.milestones = {}
-	GameState.camp["generator"] = 5
+	GameState.camp["generator"] = 3
 	var ms := GameState.check_milestones()
 	_check(GameState.has_cosmetic("banner") and GameState.has_cosmetic("case") and ms.size() >= 2, "milestones")
 	GameState.kennel_bond = {}
@@ -1776,10 +1781,10 @@ func _test_depth_e5() -> void:
 	var sid := HangarDefs.station_id("ash_rook")
 	_check(not GameState.set_style("ash_rook", "cluster") and GameState.kit_style("ash_rook") == "boom", "e5 style locked at rank 0")
 	_check(not GameState.set_ability_version("ash_rook", "b") and GameState.kit_ability("ash_rook") == "a", "e5 ability B locked")
+	GameState.camp[sid] = 1
+	_check(GameState.set_style("ash_rook", "cluster") and not GameState.set_style("ash_rook", "mortar"), "e5 rank 1 unlocks style 2 only")
 	GameState.camp[sid] = 2
-	_check(GameState.set_style("ash_rook", "cluster") and not GameState.set_style("ash_rook", "mortar"), "e5 rank 2 unlocks style 2 only")
-	GameState.camp[sid] = 4
-	_check(GameState.set_style("ash_rook", "mortar") and GameState.set_ability_version("ash_rook", "b"), "e5 rank 4 unlocks all")
+	_check(GameState.set_style("ash_rook", "mortar") and GameState.set_ability_version("ash_rook", "b"), "e5 rank 2 unlocks all")
 	_check(not GameState.set_quirk("ash_rook", "bloodthirst") and GameState.set_quirk("ash_rook", "glass_cannon"), "e5 quirk list per hero")
 	GameState.camp[sid] = 0
 	_check(GameState.kit_style("ash_rook") == "boom" and GameState.kit_ability("ash_rook") == "a", "e5 kit falls back when station drops")

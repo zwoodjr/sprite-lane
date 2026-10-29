@@ -87,6 +87,8 @@ var extract_bonus_notes: PackedStringArray = []
 var trophies: Dictionary = {}
 ## One-time v3 → v4 Hangar migration done (old spend refunded as scrap).
 var migrated_hangar_v4: bool = false
+## v5: shared + station upgrades merged from 5 small ranks to 3 big ones.
+var migrated_hangar_v5: bool = false
 ## Shown once on the Hangar screen (e.g. the refund note). Not saved.
 var hangar_notice: String = ""
 var garage_tokens: int = 0
@@ -282,6 +284,7 @@ func save_profile() -> void:
 		"kennel_bond": kennel_bond,
 		"pending_rewards": pending_rewards,
 		"migrated_hangar_v4": migrated_hangar_v4,
+		"migrated_hangar_v5": migrated_hangar_v5,
 		"garage_tokens": garage_tokens,
 		"successful_extracts": successful_extracts,
 		"best_payout": best_payout,
@@ -386,6 +389,7 @@ func load_profile() -> void:
 	else:
 		load_source = "fresh"
 	migrated_hangar_v4 = true
+	migrated_hangar_v5 = true
 	_sync_account_level()
 
 ## Copy an unreadable save aside (wanderer_save.damaged.json) before anything
@@ -425,11 +429,23 @@ func apply_save(d: Dictionary) -> void:
 		meta_upgrades = (mu as Dictionary).duplicate()
 	var cp: Variant = d.get("camp", {})
 	camp = {}
+	migrated_hangar_v5 = bool(d.get("migrated_hangar_v5", false))
+	var v5_refund := 0
 	if typeof(cp) == TYPE_DICTIONARY:
 		for k in (cp as Dictionary).keys():
 			var id := str(k)
 			if HangarDefs.layer_of(id) != "":
-				camp[id] = clampi(int((cp as Dictionary)[k]), 0, HangarDefs.max_rank(id))
+				var r := int((cp as Dictionary)[k])
+				if not migrated_hangar_v5:
+					var mg: Array = HangarDefs.v5_migrate(id, r)
+					r = int(mg[0])
+					v5_refund += int(mg[1])
+				camp[id] = clampi(r, 0, HangarDefs.max_rank(id))
+	if not migrated_hangar_v5:
+		migrated_hangar_v5 = true
+		if v5_refund > 0:
+			account_scrap += v5_refund
+			hangar_notice = "Hangar upgrades now come in 3 bigger ranks. Ranks merged; overpaid scrap refunded: +%d." % v5_refund
 	var st: Variant = d.get("stash", [])
 	stash = []
 	if typeof(st) == TYPE_ARRAY:
@@ -2052,6 +2068,7 @@ func reset_profile() -> void:
 	lore_pages.clear()
 	kit.clear()
 	migrated_hangar_v4 = true
+	migrated_hangar_v5 = true
 	garage_tokens = 0
 	successful_extracts = 0
 	best_payout = 0

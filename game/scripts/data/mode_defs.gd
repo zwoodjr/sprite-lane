@@ -240,7 +240,7 @@ const GREED_SPAWN := 0.5
 const GREED_CAP := 5
 ## Healing after you stay: each skipped window cuts all healing (tonics, regen,
 ## heals, lifesteal) so survivors can't top back up before the next pad.
-const GREED_HEAL := 0.25
+const GREED_HEAL := 0.2
 const GREED_HEAL_MIN := 0.3
 ## Punish wave on a skip: BASE + PER × windows skipped mobs, from two sides.
 const GREED_WAVE_BASE := 6

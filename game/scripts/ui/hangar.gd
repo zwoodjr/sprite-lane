@@ -253,7 +253,7 @@ func _layer_visible(n: String) -> bool:
 	var cut := n.rfind("_")
 	var id := n.substr(0, cut)
 	var stage := int(n.substr(cut + 1))
-	return GameState.camp_rank(id) >= stage
+	return HangarDefs.art_stage(id, GameState.camp_rank(id)) >= stage
 
 
 func _refresh_view(animate: bool) -> void:
@@ -268,7 +268,7 @@ func _refresh_view(animate: bool) -> void:
 			tr.visible = want
 	## The Generator lights the whole hangar.
 	var g := GameState.camp_rank("generator")
-	var lit := 0.62 + 0.076 * float(g)
+	var lit := 0.62 + 0.076 * float(HangarDefs.art_stage("generator", g))
 	var tint := Color(lit, lit * 0.97, lit * 0.92)
 	for n in _layers.keys():
 		(_layers[n] as TextureRect).self_modulate = tint

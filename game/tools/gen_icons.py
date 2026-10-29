@@ -2340,6 +2340,10 @@ def main():
     print("icons:", len(ICONS))
     for b in bad:
         print("WARN", *b)
+    # Legendary weapons are painted (hero-gun style), not built from primitives:
+    # gen_legendary_icons.py overwrites leg_* / wpn_<hero>_<legendary> here.
+    import subprocess
+    subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen_legendary_icons.py")], check=True)
     if sheet_path:
         cols = 10
         cw, ch = 48 * 2 + 24 * 2 + 12, 48 * 2 + 8

@@ -3,15 +3,23 @@ extends RefCounted
 
 ## The Hangar (brief Part 2 + Part 6). Three layers of permanent upgrades bought
 ## with banked scrap, plus the stash. Ranks live in GameState.camp (id -> rank).
-##   shared   — Generator, Radio Tower, Scrap Press, Ammo Bench (5 ranks)
-##   station  — one per survivor, "station_<hero id>" (5 ranks: weapon + trick)
+##   shared   — Generator, Radio Tower, Scrap Press, Ammo Bench (3 big ranks)
+##   station  — one per survivor, "station_<hero id>" (3 big ranks: weapon + trick)
 ##   kennel   — one per dog, "kennel_<pet id>" (3 ranks)
 ##   stash    — "stash" (5 ranks of +40 slots; 80 → 280)
 ##   pack     — "backpack" (3 ranks of carry room, MedicineDefs)
 ## Every tuning number lives here. Arrays indexed by rank (index 0 = not bought).
 
-const SHARED_PRICES: Array = [100, 250, 500, 900, 1500]
-const STATION_PRICES: Array = [80, 200, 400, 700, 1100]
+## Hangar v5 (Oct 2026): shared + station upgrades went from 5 small ranks to
+## 3 big, felt ones (same total price). Old ranks merge pairwise
+## (V5_RANK_MAP); anything a save paid beyond its merged rank is refunded.
+const SHARED_PRICES: Array = [250, 900, 2100]
+const STATION_PRICES: Array = [200, 700, 1580]
+const V4_SHARED_PRICES: Array = [100, 250, 500, 900, 1500]
+const V4_STATION_PRICES: Array = [80, 200, 400, 700, 1100]
+const V5_RANK_MAP: Array = [0, 1, 1, 2, 2, 3]
+## Hangar art was painted for 5 stages; rank r shows stages up to ART_STAGE[r].
+const ART_STAGE: Array = [0, 1, 3, 5]
 const KENNEL_PRICES: Array = [150, 400, 900]
 const STASH_PRICES: Array = [300, 600, 1000, 1600, 2500]
 
@@ -25,19 +33,19 @@ const SHARED := {
 	"generator": {
 		"name": "Generator", "icon": "GEN",
 		"blurb": "Juno keeps it humming. Lights the hangar and toughens everyone.",
-		"hp": [0, 8, 16, 26, 38, 50],
+		"hp": [0, 16, 32, 50],
 		"desc": "+%d max HP for every survivor",
 	},
 	"radio_tower": {
 		"name": "Radio Tower", "icon": "RADIO",
 		"blurb": "Helm's patched mast. Hears the pads before they open.",
-		"reveal": [0.0, 3.0, 6.0, 9.0, 12.0, 15.0],
+		"reveal": [0.0, 5.0, 10.0, 15.0],
 		"desc": "Extract pads revealed %ds earlier",
 	},
 	"scrap_press": {
 		"name": "Scrap Press", "icon": "PRESS",
 		"blurb": "Crushes loose junk into something worth banking.",
-		"scrap": [0.0, 0.06, 0.12, 0.2, 0.3, 0.4],
+		"scrap": [0.0, 0.12, 0.25, 0.4],
 		"desc": "+%d%% scrap from every run",
 	},
 	"ammo_bench": {
@@ -45,39 +53,38 @@ const SHARED := {
 		"blurb": "Special-ammo cans start turning up in the wastes for everyone.",
 		## Special ammo types that can drop as pickups (Helm's Supply Drop ignores this).
 		"types": [[], ["incendiary", "frost"], ["incendiary", "frost", "shock"],
-			["incendiary", "frost", "shock", "explosive"], ["incendiary", "frost", "shock", "explosive"],
 			["incendiary", "frost", "shock", "explosive"]],
-		"duration": [0.0, 0.0, 2.0, 3.0, 5.0, 7.0],
-		"odds": [0.0, 1.0, 1.0, 1.25, 1.5, 2.0],
+		"duration": [0.0, 0.0, 3.0, 7.0],
+		"odds": [0.0, 1.0, 1.25, 2.0],
 	},
 }
 
 ## Survivor stations: shared curves + per-hero ability keys that scale.
-const STATION_WEAPON_DAMAGE: Array = [0.0, 0.06, 0.12, 0.18, 0.25, 0.32]
-const STATION_ABILITY_CD: Array = [1.0, 0.96, 0.92, 0.88, 0.84, 0.8]
-const STATION_ABILITY_POWER: Array = [1.0, 1.08, 1.16, 1.25, 1.35, 1.45]
+const STATION_WEAPON_DAMAGE: Array = [0.0, 0.1, 0.2, 0.32]
+const STATION_ABILITY_CD: Array = [1.0, 0.93, 0.87, 0.8]
+const STATION_ABILITY_POWER: Array = [1.0, 1.12, 1.27, 1.45]
 
 const STATIONS := {
 	"ash_rook": {"name": "Rook's Weapon Rack", "power_keys": ["ram_damage", "ram_radius"],
-		"add_keys": {"duration": [0.0, 0.0, 0.0, 0.5, 0.5, 1.0]},
-		"notes": ["Oiled launcher rails", "Shaped scrap shells", "Longer RUSH", "Reinforced ram plate", "Rush lasts even longer"]},
+		"add_keys": {"duration": [0.0, 0.0, 0.5, 1.0]},
+		"notes": ["Oiled rails, shaped shells", "Longer RUSH, reinforced ram plate", "Rush lasts even longer"]},
 	"vesper_thorn": {"name": "Vesper's Bell Loft", "power_keys": ["vial_mult", "cloud_dps", "coat_time"],
-		"notes": ["Cleaned rifle bore", "Stronger vial mix", "Bigger poison cloud", "Longer coating", "Master tincture"]},
+		"notes": ["Clean bore, stronger vial mix", "Bigger poison cloud, longer coating", "Master tincture"]},
 	"pebble": {"name": "Pebble's Anvil", "power_keys": ["damage_mult", "radius", "stun"],
-		"notes": ["Re-forged maul head", "Wider slam", "Longer stun", "Heavier swing", "Quake slam"]},
+		"notes": ["Re-forged maul, wider slam", "Longer stun, heavier swing", "Quake slam"]},
 	"bolt_juno": {"name": "Juno's Wiring Bench", "power_keys": ["damage_mult", "stun"],
-		"add_keys": {"chain": [0, 0, 0, 1, 1, 2]},
-		"notes": ["Fresh gauntlet coils", "Hotter Overload", "+1 arc jump", "Longer stun", "+2 arc jumps"]},
+		"add_keys": {"chain": [0, 0, 1, 2]},
+		"notes": ["Fresh coils, hotter Overload", "+1 arc jump, longer stun", "+2 arc jumps"]},
 	"sister_cinder": {"name": "Cinder's Medicine Table", "power_keys": ["heal"],
-		"notes": ["Rifle stock re-wrapped", "Second tonic slot", "Stronger draught", "Brews two at a time", "Cathedral recipe"]},
+		"notes": ["Re-wrapped stock, second tonic slot", "Stronger draught, brews two at a time", "Cathedral recipe"]},
 	"quill_marrow": {"name": "Quill's Dissection Table", "power_keys": ["damage_mult", "mark_time"],
-		"notes": ["Honed bayonet", "Longer marks", "Deeper lunge", "Sharper notes", "Surgeon's eye"]},
+		"notes": ["Honed bayonet, longer marks", "Deeper lunge, sharper notes", "Surgeon's eye"]},
 	"nyx_caldera": {"name": "Nyx's Smuggler Crates", "power_keys": ["damage_mult", "hit_radius"],
-		"notes": ["Balanced blades", "Wider blade rush", "Quicker rush", "Keener edges", "Night-runner kit"]},
+		"notes": ["Balanced blades, wider rush", "Quicker rush, keener edges", "Night-runner kit"]},
 	"helm_wisp": {"name": "Helm's Drone Workbench", "power_keys": ["temp_time", "overclock_time"],
-		"add_keys": {"temp_drones": [0, 0, 0, 1, 1, 1]},
-		"drone_damage": [1.0, 1.08, 1.16, 1.25, 1.35, 1.45],
-		"notes": ["Sidearm tune-up", "Drone servos", "+1 called drone", "Overclock coils", "Squadron firmware"]},
+		"add_keys": {"temp_drones": [0, 0, 1, 1]},
+		"drone_damage": [1.0, 1.12, 1.27, 1.45],
+		"notes": ["Sidearm tune-up, drone servos", "+1 called drone, overclock coils", "Squadron firmware"]},
 }
 
 ## Kennel: per-dog rank overrides merged onto PetDefs (index = rank 0..3).
@@ -261,6 +268,32 @@ static func blurb(id: String) -> String:
 	return ""
 
 
+## v4 (5-rank) → v5 (3-rank): [new rank, scrap to refund] for an old rank.
+static func v5_migrate(id: String, old_rank: int) -> Array:
+	var lay := layer_of(id)
+	if lay != "shared" and lay != "station":
+		return [old_rank, 0]
+	var old_p: Array = V4_SHARED_PRICES if lay == "shared" else V4_STATION_PRICES
+	var new_p: Array = prices(id)
+	var r := clampi(old_rank, 0, old_p.size())
+	var n := int(V5_RANK_MAP[r])
+	var paid := 0
+	for i in range(r):
+		paid += int(old_p[i])
+	var worth := 0
+	for i in range(n):
+		worth += int(new_p[i])
+	return [n, maxi(0, paid - worth)]
+
+
+## Hangar art stage shown for a rank (shared / station art has 5 stages).
+static func art_stage(id: String, rank: int) -> int:
+	var lay := layer_of(id)
+	if lay == "shared" or lay == "station":
+		return int(ART_STAGE[clampi(rank, 0, ART_STAGE.size() - 1)])
+	return rank
+
+
 static func stash_slots(rank: int) -> int:
 	return STASH_BASE_SLOTS + STASH_SLOTS_PER_RANK * clampi(rank, 0, STASH_PRICES.size())
 
@@ -309,7 +342,7 @@ static func apply_station_weapon(hero_id: String, weapon: Dictionary, rank: int)
 		return w
 	var st: Dictionary = STATIONS[hero_id]
 	if st.has("drone_damage") and w.has("drone_damage"):
-		w["drone_damage"] = float(w["drone_damage"]) * float((st["drone_damage"] as Array)[clampi(rank, 0, 5)])
+		w["drone_damage"] = float(w["drone_damage"]) * float((st["drone_damage"] as Array)[clampi(rank, 0, STATION_PRICES.size())])
 	return w
 
 

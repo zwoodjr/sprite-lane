@@ -9,8 +9,8 @@ extends RefCounted
 ## Style "mul" multiplies weapon keys, "set" overwrites, "melee_mul"/"melee_set"
 ## edit the melee hitbox, "coat" adds a weapon coating ({coat, val}).
 
-const STYLE_UNLOCK: Array = [0, 2, 4]
-const ABILITY_B_RANK := 3
+const STYLE_UNLOCK: Array = [0, 1, 2] ## Hangar v5: 3 station ranks (was [0, 2, 4] of 5)
+const ABILITY_B_RANK := 2 ## Hangar v5 (was 3 of 5)
 const ICON := "res://assets/sprites/depth/icons/style_%s_%s.png"
 
 const STYLES := {
