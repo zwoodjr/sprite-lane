@@ -135,7 +135,7 @@ static func _table() -> Dictionary:
 				"coat_time": 4.0, "coat_mult": 1.35, "coat_dps": 6.0, "coat_poison_time": 3.0,
 			},
 			"move_speed_mult": 1.0,
-			"max_hp_bonus": 20, ## balance: died 2x as often as the others at Greed 2+
+			"max_hp_bonus": 25, ## balance: died 2-3x as often as the others at Greed 2+ (bot data)
 			"damage_mult": 1.08,
 			"heal_amount": 0,
 			"heal_cd": 999.0,

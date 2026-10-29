@@ -680,7 +680,7 @@ func _test_gear() -> void:
 	var base := LoadoutStubs.weapon_for_character("vesper_thorn")
 	var w := GearDefs.apply_weapon(base, GearDefs.make_weapon("vesper_thorn", "legendary", rng), [GearDefs.make_mod("scope", "legendary")])
 	_check(float(w["damage"]) > float(base["damage"]) and float(w["trigger_range"]) > float(base["trigger_range"]), "weapon + scope")
-	_check(int(w.get("pierce", 0)) == 1 and str(w["legendary"]) == "bellwether", "bellwether pierce")
+	_check(int(w.get("pierce", 0)) == int(base.get("pierce", 0)) + 1 and str(w["legendary"]) == "bellwether", "bellwether pierce (+1 on the base rifle)")
 	## Equip, move between survivors, insure, salvage.
 	GameState.selected_character_id = "ash_rook"
 	GameState.add_to_stash(GearDefs.make_gear("head", "rare", rng))

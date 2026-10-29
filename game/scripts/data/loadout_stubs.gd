@@ -95,6 +95,9 @@ static func _weapon_table() -> Dictionary:
 			"trigger_range": 470.0,
 			"muzzle": Vector2(24, 6),
 			"projectile": "slug",
+			## Balance (bot data): one slow round a second couldn't hold a Greed
+			## wave; heavy slugs now punch through two more bodies.
+			"pierce": 2,
 			"recoil": 8.0,
 			"shake": 0.06,
 			"weapon_xp": 0,
