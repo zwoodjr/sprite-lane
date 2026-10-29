@@ -235,19 +235,31 @@ static func threat_for_mult(mult: float) -> int:
 ## Death keeps Dustfall's share (55%).
 const ASCENSION_MAX := 10
 const ASCENSION_LOOT := 0.1
-## [name, pact id or "", greed at the drop, short rule text]
+## [name, pact id or "", greed at the drop, short rule text, extra fx]
+## Ordered mild -> harsh from bot data (Dustfall, max Bunker + kit, leave at
+## the first window): the old order flat-lined A3-A7 and walled at Greed 1.
 const ASCENSION := [
-	["A1", "thick_dust", 0, "Enemies +25% HP"],
-	["A2", "sharp_teeth", 0, "Enemies hit 20% harder"],
-	["A3", "hungry_dark", 0, "+25% more enemies"],
-	["A4", "narrow_windows", 0, "Windows close 3 s sooner"],
-	["A5", "no_mercy", 0, "No tonic drops"],
-	["A6", "hunted", 0, "An elite joins every window"],
-	["A7", "brittle_bones", 0, "-25% max HP"],
-	["A8", "", 1, "Greed 1 from the drop"],
-	["A9", "", 2, "Greed 2 from the drop"],
-	["A10", "", 3, "Greed 3 from the drop"],
+	["A1", "no_mercy", 0, "No tonic drops", {}],
+	["A2", "narrow_windows", 0, "Windows close 3 s sooner", {}],
+	["A3", "hunted", 0, "An elite joins every window", {}],
+	["A4", "thick_dust", 0, "Enemies +25% HP", {}],
+	["A5", "hungry_dark", 0, "+25% more enemies", {}],
+	["A6", "sharp_teeth", 0, "Enemies hit 20% harder", {}],
+	["A7", "brittle_bones", 0, "-25% max HP", {}],
+	["A8", "", 0, "Dust-hardened: enemies +15% HP and damage", {"enemy_hp": 1.15, "enemy_damage": 1.15}],
+	["A9", "", 0, "Dust-hardened II: another +15% HP and damage", {"enemy_hp": 1.15, "enemy_damage": 1.15}],
+	["A10", "", 1, "Greed 1 from the drop", {}],
 ]
+
+
+## Extra multiplier for a pact_fx key at Ascension `lv` (A8 / A9 rules).
+static func ascension_fx(lv: int, key: String) -> float:
+	var v := 1.0
+	for i in range(clampi(lv, 0, ASCENSION_MAX)):
+		var fx: Dictionary = ASCENSION[i][4] if (ASCENSION[i] as Array).size() > 4 else {}
+		if fx.has(key):
+			v *= float(fx[key])
+	return v
 
 
 ## Forced pacts for Ascension level `lv` (cumulative).

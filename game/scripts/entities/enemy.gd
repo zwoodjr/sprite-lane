@@ -13,6 +13,8 @@ const BulletScene := preload("res://scenes/entities/bullet.tscn")
 static var KINDS: Dictionary = {}
 
 const EnemyBehaviorsScript = preload("res://scripts/entities/enemy_behaviors.gd")
+## Bot A/B runs only: WANDERER_NOTRICKS=1 turns the Wander behaviors off.
+static var _NO_TRICKS: bool = OS.get_environment("WANDERER_NOTRICKS") != ""
 var kind: String = "raider"
 var hp: float = 40.0
 var max_hp: float = 40.0
@@ -170,7 +172,7 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	_strafe_sign = -1.0 if randf() < 0.5 else 1.0
 	## Wander behaviors (spitter / burrower / exploder / shield / summoner).
 	## Boss brains attached later replace this. Campaign fights keep their tuning.
-	if brain == null and not GameState.in_campaign_run() and GameState.feature_on("events"):
+	if brain == null and not GameState.in_campaign_run() and GameState.feature_on("events") and not _NO_TRICKS:
 		brain = EnemyBehaviorsScript.for_kind(kind)
 	if is_inside_tree():
 		_apply_look()

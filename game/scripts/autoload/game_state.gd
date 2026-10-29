@@ -933,6 +933,9 @@ func pact_fx(key: String) -> float:
 		var fx: Dictionary = ZoneDefs.pact(str(id)).get("fx", {})
 		if fx.has(key):
 			v = v + float(fx[key]) if add else v * float(fx[key])
+	## Ascension A8 / A9 rules ride the same keys (multipliers only).
+	if not add:
+		v *= ModeDefs.ascension_fx(ascension_now(), key)
 	## Weekly Dust modifiers ride the same keys.
 	var dm := DustModDefs.fx_of(dust_mods(), key)
 	return v + dm if add else v * dm
