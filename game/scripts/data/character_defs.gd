@@ -103,7 +103,7 @@ static func _table() -> Dictionary:
 				"ram_damage": 22.0, "ram_radius": 36.0, "ram_knock": 380.0,
 			},
 			"move_speed_mult": 0.96,
-			"max_hp_bonus": 10,
+			"max_hp_bonus": 25, ## balance: slow launcher, died most at Greed 2+ (bot data)
 			"damage_mult": 1.12,
 			"heal_amount": 0,
 			"heal_cd": 999.0,
