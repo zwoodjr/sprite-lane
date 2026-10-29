@@ -98,9 +98,15 @@ static func _table() -> Dictionary:
 			"equipment_unlocks": [],
 			"ability": {
 				"id": "rattle_rush", "name": "Rattle Rush", "short": "RUSH",
-				"desc": "3s sprint: ram through foes and ping every crate within 90m.",
-				"cooldown": 14.0, "duration": 3.0, "speed_mult": 1.45,
+				"desc": "3s braced sprint: ram and stun foes, take half damage until 2s after, patch up 3 HP per foe rammed (15 max), ping crates within 90m.",
+				"cooldown": 12.0, "duration": 3.0, "speed_mult": 1.45,
 				"ram_damage": 22.0, "ram_radius": 36.0, "ram_knock": 380.0,
+				## balance: Rook died most in bot runs (she charges in first).
+				## Braced: less damage during the rush and just after it;
+				## rammed foes are stunned so the pack can't punish the landing.
+				"brace_mult": 0.5, "brace_after": 2.0, "ram_stun": 0.8,
+				## Rook has no heal: charging in is how she patches up.
+				"ram_heal": 3.0, "ram_heal_cap": 15.0,
 			},
 			"move_speed_mult": 0.96,
 			"max_hp_bonus": 25, ## balance: slow launcher, died most at Greed 2+ (bot data)

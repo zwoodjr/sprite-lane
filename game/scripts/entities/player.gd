@@ -113,6 +113,9 @@ var _amove_kind: String = ""
 var _amove_hit: Array = []
 var _ram_hit: Array = []
 var _rush_active: bool = false
+## Rook's Braced window: runs on through the rush and a beat after it.
+var _brace_left: float = 0.0
+var _ram_healed: float = 0.0
 
 ## --- Phase B: gear sets + named Legendaries ---
 var _ability_charges: int = 1
@@ -429,6 +432,7 @@ func _tick_timers(delta: float) -> void:
 	_ability_cd = maxf(0.0, _ability_cd - delta)
 	_post_heal_left = maxf(0.0, _post_heal_left - delta)
 	_rush_left = maxf(0.0, _rush_left - delta)
+	_brace_left = maxf(0.0, _brace_left - delta)
 	_iframes = maxf(0.0, _iframes - delta)
 	_dash_cd = maxf(0.0, _dash_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
@@ -764,6 +768,8 @@ func _ability_cast(id: String) -> bool:
 		"rattle_rush":
 			_rush_left = float(a.get("duration", 3.0))
 			_rush_active = true
+			_brace_left = _rush_left + float(a.get("brace_after", 0.0))
+			_ram_healed = 0.0
 			_ram_hit.clear()
 			_iframes = maxf(_iframes, 0.3)
 			for crate in get_tree().get_nodes_in_group("breakables"):
@@ -959,6 +965,12 @@ func _update_rush_ram() -> void:
 		_ram_hit.append(e)
 		var dir := ((e as Node2D).global_position - global_position).normalized()
 		hit_enemy(e, float(a.get("ram_damage", 22.0)) * damage_mult, dir, float(a.get("ram_knock", 380.0)), false, "ability")
+		if is_instance_valid(e) and a.has("ram_stun") and e.has_method("apply_status") and str(e.get("role")) != "boss":
+			e.call("apply_status", "stun", float(a["ram_stun"]))
+		if a.has("ram_heal") and _ram_healed < float(a.get("ram_heal_cap", 15.0)):
+			var h := minf(float(a["ram_heal"]), float(a.get("ram_heal_cap", 15.0)) - _ram_healed)
+			_ram_healed += h
+			heal(h)
 		Juice.shake(0.08)
 	## Demolition: Rook smashes crates and wrecks he charges through.
 	var smashed := RunFx.damage_breakables(get_tree(), global_position, float(a.get("ram_radius", 36.0)),
@@ -1527,6 +1539,8 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 		Juice.sfx("shield_block")
 		return
 	var dmg := float(amount) * resist_mult * float(_char.get("damage_taken_mult", 1.0))
+	if _brace_left > 0.0:
+		dmg *= float(_ability.get("brace_mult", 1.0))
 	## Dust Surge: enemies hit harder while it lasts.
 	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("enemies"):
 		dmg *= GameState.event_enemy_damage
