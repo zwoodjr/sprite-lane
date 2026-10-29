@@ -267,6 +267,12 @@ func _outro() -> void:
 		await play_scene(str(level["outro"]))
 	card.call("show_outro", level, GameState.campaign_result)
 	var a: String = await card.chosen
+	## Fresh install, one path: the auto-played prologue hands off to the main
+	## menu, where the first PLAY drops the default survivor into the Haze.
+	var mf: Script = load("res://scripts/ui/menu_flow.gd")
+	if str(level.get("id", "")) == str(mf.get_script_constant_map().get("OPENING_LEVEL", "p0_mayday")) and bool(mf.call("is_first_wander")):
+		GameState.go_main_menu()
+		return
 	match a:
 		"next":
 			var nxt := str(GameState.campaign_result.get("next", ""))

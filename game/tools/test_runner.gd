@@ -171,6 +171,7 @@ func _run() -> void:
 	await _test_wander_extras()
 	await _test_feedback()
 	await _test_onboarding()
+	await _test_ascension()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4075,3 +4076,24 @@ func _test_onboarding() -> void:
 	GameState.best_tier_extracted = int(keep[1])
 	GameState.onboard_skip = bool(keep[2])
 	print("ONBOARD_OK")
+
+func _test_ascension() -> void:
+	var keep := [GameState.tier_extracts.duplicate(), GameState.ascension, GameState.ascension_cleared]
+	GameState.tier_extracts = {}
+	GameState.ascension_cleared = 0
+	_check(GameState.ascension_open() == 0, "ascension: locked before a Dustfall extract")
+	GameState.tier_extracts = {str(ModeDefs.EXPOSED_TIERS): 1}
+	_check(GameState.ascension_open() == 1, "ascension: A1 opens after Dustfall")
+	GameState.ascension_cleared = 4
+	_check(GameState.ascension_open() == 5, "ascension: next level opens on clear")
+	GameState.ascension_cleared = 99
+	_check(GameState.ascension_open() == ModeDefs.ASCENSION_MAX, "ascension: capped")
+	_check(ModeDefs.ascension_pacts(3).size() == 3 and ModeDefs.ascension_pacts(10).size() == 7, "ascension: pacts stack")
+	_check(ModeDefs.ascension_greed(7) == 0 and ModeDefs.ascension_greed(10) == 3, "ascension: greed from the drop")
+	_check(ModeDefs.ascension_loot(10) > ModeDefs.ascension_loot(1), "ascension: payout rises")
+	for id in ModeDefs.ascension_pacts(10):
+		_check(not ZoneDefs.pact(str(id)).is_empty(), "ascension pact exists " + str(id))
+	GameState.tier_extracts = keep[0]
+	GameState.ascension = int(keep[1])
+	GameState.ascension_cleared = int(keep[2])
+	print("ASCENSION_OK")

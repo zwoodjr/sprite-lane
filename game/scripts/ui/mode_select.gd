@@ -351,6 +351,51 @@ func _build_detail(mode: Dictionary) -> void:
 	_num_chip(chips, "hud_threat", "%d%%" % int(round(float(mode["enemy_hp"]) * 100.0)), UiTheme.DANGER)
 	_num_chip(chips, "cur_scrap", "x%.2f" % float(mode["payout_mult"]), UiTheme.AMBER)
 	_num_chip(chips, "hud_loot", "%d%%" % int(round(float(mode["death_keep"]) * 100.0)), UiTheme.TEXT)
+	## Dustfall: the Ascension ladder (post-game chase).
+	if int(mode["tier"]) >= ModeDefs.EXPOSED_TIERS and GameState.ascension_open() > 0:
+		_ascension_row(v, mode)
+
+
+func _ascension_row(v: VBoxContainer, mode: Dictionary) -> void:
+	var lv := clampi(GameState.ascension, 0, GameState.ascension_open())
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	v.add_child(row)
+	var t := UiTheme.head_label("ASCENSION", UiTheme.T_H3, UiTheme.AMBER)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(t)
+	var minus := UiTheme.big_button("-", UiTheme.LINE, 56, 24)
+	minus.custom_minimum_size.x = 64
+	minus.disabled = lv <= 0
+	row.add_child(minus)
+	var val := UiTheme.pixel_label("OFF" if lv == 0 else "A%d" % lv, UiTheme.PX_L, UiTheme.DANGER if lv > 0 else UiTheme.TEXT_DIM)
+	val.custom_minimum_size.x = 96
+	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	val.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(val)
+	var plus := UiTheme.big_button("+", UiTheme.AMBER, 56, 24)
+	plus.custom_minimum_size.x = 64
+	plus.disabled = lv >= GameState.ascension_open()
+	row.add_child(plus)
+	minus.pressed.connect(func() -> void:
+		GameState.set_ascension(lv - 1)
+		Juice.sfx("ui_tab")
+		_build_detail(mode))
+	plus.pressed.connect(func() -> void:
+		GameState.set_ascension(lv + 1)
+		Juice.sfx("ui_tab")
+		_build_detail(mode))
+	var rules: PackedStringArray = []
+	for i in range(lv):
+		rules.append(str(ModeDefs.ASCENSION[i][3]))
+	var pay := ModeDefs.ascension_loot(lv)
+	for p in ModeDefs.ascension_pacts(lv):
+		pay += float(ZoneDefs.pact(str(p)).get("loot", 0.0))
+	var txt := ("Payout +%d%% · " % int(round(pay * 100.0)) + " · ".join(rules)) if lv > 0 else "Extract at A%d to open the next. Best: A%d" % [GameState.ascension_open(), GameState.ascension_cleared]
+	var rl := UiTheme.body_label(txt, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(rl)
 
 
 func _num_chip(parent: Control, icon_id: String, value: String, col: Color) -> void:

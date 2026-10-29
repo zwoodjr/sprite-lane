@@ -8,6 +8,7 @@ var _tabs: Dictionary = {}
 var _pet_tabs: Dictionary = {}
 var _hero: StripAnim
 var _name: Label
+var _best: Label
 var _fantasy: Label
 var _weapon_icon: TextureRect
 var _weapon_name: Label
@@ -59,6 +60,9 @@ func build(c: VBoxContainer) -> void:
 	namebox.add_child(_name)
 	_fantasy = UiTheme.body_label("", UiTheme.T_SMALL, UiTheme.TEXT_DIM, false)
 	namebox.add_child(_fantasy)
+	## Highest tier / Ascension this survivor has extracted from.
+	_best = UiTheme.pixel_label("", UiTheme.PX_S, UiTheme.AMBER)
+	namebox.add_child(_best)
 	stage.namebox = namebox
 
 	## Kit card: weapon + ability (icon-led), stats, perks, pet.
@@ -245,6 +249,8 @@ func _refresh() -> void:
 	_hero.scale = Vector2(0.9, 1.08)
 	_hero.create_tween().tween_property(_hero, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_name.text = str(c["display_name"])
+	var bt := GameState.best_clear_text(cid)
+	_best.text = ("BEST CLEAR: " + bt) if bt != "" else ""
 	_name.add_theme_color_override("font_color", c.get("accent", UiTheme.AMBER))
 	_fantasy.text = str(c["fantasy"])
 	var w: Dictionary = LoadoutStubs.weapon_for_character(cid)

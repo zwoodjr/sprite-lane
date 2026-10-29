@@ -227,6 +227,51 @@ static func threat_for_mult(mult: float) -> int:
 	return clampi(int(floor((mult - 1.0) / 0.5 + 0.001)), 0, 8)
 
 
+## --- Ascension (post-Dustfall chase, Oct 2026) ----------------------------
+## Dustfall again, ranked: each Ascension level keeps every rule below it and
+## adds one more (forced Dust Pacts, then Greed from the drop), plus
+## ASCENSION_LOOT payout per level on top of the pacts' own loot. A level
+## opens by extracting on the one below (A1 after any Dustfall extract).
+## Death keeps Dustfall's share (55%).
+const ASCENSION_MAX := 10
+const ASCENSION_LOOT := 0.1
+## [name, pact id or "", greed at the drop, short rule text]
+const ASCENSION := [
+	["A1", "thick_dust", 0, "Enemies +25% HP"],
+	["A2", "sharp_teeth", 0, "Enemies hit 20% harder"],
+	["A3", "hungry_dark", 0, "+25% more enemies"],
+	["A4", "narrow_windows", 0, "Windows close 3 s sooner"],
+	["A5", "no_mercy", 0, "No tonic drops"],
+	["A6", "hunted", 0, "An elite joins every window"],
+	["A7", "brittle_bones", 0, "-25% max HP"],
+	["A8", "", 1, "Greed 1 from the drop"],
+	["A9", "", 2, "Greed 2 from the drop"],
+	["A10", "", 3, "Greed 3 from the drop"],
+]
+
+
+## Forced pacts for Ascension level `lv` (cumulative).
+static func ascension_pacts(lv: int) -> Array:
+	var out: Array = []
+	for i in range(clampi(lv, 0, ASCENSION_MAX)):
+		var p := str(ASCENSION[i][1])
+		if p != "" and not p in out:
+			out.append(p)
+	return out
+
+
+static func ascension_greed(lv: int) -> int:
+	var g := 0
+	for i in range(clampi(lv, 0, ASCENSION_MAX)):
+		g = maxi(g, int(ASCENSION[i][2]))
+	return g
+
+
+## Payout added by the level itself (pacts add their own loot on top).
+static func ascension_loot(lv: int) -> float:
+	return ASCENSION_LOOT * float(clampi(lv, 0, ASCENSION_MAX))
+
+
 ## --- Greed pressure (difficulty pass, Oct 2026) ----------------------------
 ## Bots never died on Haze: 24/24 runs extracted, ~97% HP at the pad, even after
 ## staying three windows. Every extract window you let close now makes the

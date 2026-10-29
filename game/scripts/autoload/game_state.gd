@@ -118,6 +118,11 @@ var mechs_built: Dictionary = {}
 var tier_clears: Dictionary = {}
 var plane_parts: Dictionary = {}
 var pacts: Array = []
+## Ascension (post-Dustfall): level chosen for the next Dustfall run (0 = off),
+## highest level ever cleared (opens the next), and per survivor.
+var ascension: int = 0
+var ascension_cleared: int = 0
+var ascension_best: Dictionary = {}
 var run_keys: int = 0
 var run_filter: float = 100.0
 var run_has_cell: bool = false
@@ -304,6 +309,9 @@ func save_profile() -> void:
 		"tier_clears": tier_clears,
 		"plane_parts": plane_parts,
 		"pacts": pacts,
+		"ascension": ascension,
+		"ascension_cleared": ascension_cleared,
+		"ascension_best": ascension_best,
 		"campaign": campaign,
 		"live_run": live_run,
 		"weekly_opt_in": weekly_opt_in,
@@ -656,6 +664,13 @@ func _load_depth(d: Dictionary) -> void:
 	if typeof(pp) == TYPE_DICTIONARY:
 		for t in (pp as Dictionary).keys():
 			add_plane_part(str(t))
+	ascension_cleared = clampi(int(d.get("ascension_cleared", 0)), 0, ModeDefs.ASCENSION_MAX)
+	ascension = clampi(int(d.get("ascension", 0)), 0, mini(ModeDefs.ASCENSION_MAX, ascension_cleared + 1))
+	ascension_best = {}
+	var ab: Variant = d.get("ascension_best", {})
+	if typeof(ab) == TYPE_DICTIONARY:
+		for h in (ab as Dictionary).keys():
+			ascension_best[str(h)] = int((ab as Dictionary)[h])
 	pacts = []
 	var pc: Variant = d.get("pacts", [])
 	if typeof(pc) == TYPE_ARRAY:
@@ -844,7 +859,43 @@ func pacts_unlocked() -> bool:
 func active_pacts() -> Array:
 	if run_kind == "daily" and not in_campaign_run():
 		return []
-	return pacts if pacts_unlocked() else []
+	var out: Array = (pacts if pacts_unlocked() else []).duplicate()
+	for p in ModeDefs.ascension_pacts(ascension_now()):
+		if not p in out:
+			out.append(p)
+	return out
+
+## --- Ascension --------------------------------------------------------------
+## The Ascension level in effect: only on a Wander Dustfall run.
+func ascension_now() -> int:
+	if in_campaign_run() or run_kind == "daily":
+		return 0
+	if int(get_mode().get("tier", 1)) < ModeDefs.EXPOSED_TIERS:
+		return 0
+	return clampi(ascension, 0, ascension_open())
+
+## Highest level you may pick (0 until Dustfall has been extracted once).
+func ascension_open() -> int:
+	if tier_extracts_at(ModeDefs.EXPOSED_TIERS) <= 0 and ascension_cleared <= 0:
+		return 0
+	return mini(ModeDefs.ASCENSION_MAX, ascension_cleared + 1)
+
+func tier_extracts_at(t: int) -> int:
+	return int(tier_extracts.get(str(t), 0))
+
+func set_ascension(lv: int) -> void:
+	ascension = clampi(lv, 0, ascension_open())
+	save_profile()
+
+## "DUSTFALL A3" / "BLIGHT" / "": best for a survivor (character select).
+func best_clear_text(hero: String) -> String:
+	var a := int(ascension_best.get(hero, 0))
+	if a > 0:
+		return "DUSTFALL A%d" % a
+	for t in range(ModeDefs.EXPOSED_TIERS, 0, -1):
+		if has_tier_clear(hero, t):
+			return str(ModeDefs.tier_mode(t).get("display_name", "")).to_upper()
+	return ""
 
 func toggle_pact(id: String) -> bool:
 	if ZoneDefs.pact(id).is_empty() or not pacts_unlocked():
@@ -891,7 +942,7 @@ func set_weekly_opt_in(on: bool) -> void:
 	save_profile()
 
 func pact_loot_bonus() -> float:
-	var b := 0.0
+	var b := ModeDefs.ascension_loot(ascension_now())
 	for id in active_pacts():
 		b += float(ZoneDefs.pact(str(id)).get("loot", 0.0))
 	return b
@@ -2135,6 +2186,8 @@ func reset_loadout_to_defaults() -> void:
 func begin_run(drink_tonics: bool = true) -> void:
 	threat_level = 0
 	windows_skipped = 0
+	## Ascension 8+: the Dust already smells you at the drop.
+	windows_skipped = ModeDefs.ascension_greed(ascension_now())
 	extract_windows_seen = 0
 	loot_mult = 1.0
 	scrap_found = 0
@@ -2504,8 +2557,19 @@ func on_extract_success() -> void:
 	result_unlocks.append_array(extract_bonus_notes)
 	quest_event("extract", 1, {"tier": int(mode.get("tier", 1)), "mult": loot_mult})
 	var tier_n := int(mode.get("tier", 1))
+	var asc := ascension_now()
 	if not in_campaign_run():
 		tier_extracts[str(tier_n)] = int(tier_extracts.get(str(tier_n), 0)) + 1
+		if asc > 0:
+			ascension_best[selected_character_id] = maxi(int(ascension_best.get(selected_character_id, 0)), asc)
+			if asc > ascension_cleared:
+				ascension_cleared = asc
+				if asc < ModeDefs.ASCENSION_MAX:
+					result_unlocks.append("Milestone: Ascension %d cleared — A%d is open" % [asc, asc + 1])
+				else:
+					result_unlocks.append("Milestone: Ascension 10 cleared — the Dust is yours")
+		elif tier_n >= ModeDefs.EXPOSED_TIERS and ascension_cleared == 0 and tier_extracts_at(tier_n) == 1:
+			result_unlocks.append("Milestone: Ascension unlocked — pick A1 on Dustfall")
 	if tier_n > best_tier_extracted:
 		var before := highest_unlocked_tier()
 		_advance_tier_clears()

@@ -115,6 +115,7 @@ func build(c: VBoxContainer) -> void:
 	if MenuFlow.is_first_wander():
 		## First run: straight into Haze with the default survivor.
 		play.name = "FirstPlay"
+		play.text = "PLAY — INTO THE HAZE"
 		play.pressed.connect(MenuFlow.first_run_deploy)
 	else:
 		play.pressed.connect(GameState.go_mode_choice)
