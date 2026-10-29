@@ -107,6 +107,13 @@ static func item(it: Dictionary) -> String:
 			return style(hero, str(styles[0]["id"]))
 		return "slot_weapon"
 	var sl := str(it.get("slot", ""))
+	## Painted per-piece art: tier-exclusive Legendaries, then matched set pieces.
+	var ex := str(it.get("exclusive", ""))
+	if ex != "" and has("tleg_" + ex):
+		return "tleg_" + ex
+	var sid := str(it.get("set", ""))
+	if sid != "" and has("gset_%s_%s" % [sid, sl]):
+		return "gset_%s_%s" % [sid, sl]
 	var gid := "gear_%s_%d" % [sl, GearDefs.noun_index(it)]
 	if has(gid):
 		return gid

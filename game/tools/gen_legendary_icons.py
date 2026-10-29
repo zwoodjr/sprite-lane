@@ -246,6 +246,21 @@ class Icon:
             k = SS * 1.2
             wv = (np.sin(u * k) * np.sin(v * k)) * 0.5 + 0.5
             col = col * (0.9 + 0.16 * wv[..., None])
+        if m.get("mail"):
+            per = 1.7
+            row = np.floor(v / per)
+            uu = np.mod(u + (np.mod(row, 2) * per / 2), per) - per / 2
+            vv = np.mod(v, per) - per / 2
+            ring = np.abs(np.sqrt(uu * uu + vv * vv) - per * 0.33) < per * 0.14
+            col = np.where(ring[..., None], col * 1.25 + 18, col * 0.32)
+        if m.get("fur"):
+            col = col * (0.72 + 0.5 * streak[..., None])
+        if m.get("pores"):
+            crease = np.clip((0.06 - np.abs(np.sin(u * 0.9 + n_mid * 6.0) * np.sin(v * 0.4))) * 10, 0, 1)
+            col = col * (1 - 0.25 * crease[..., None]) * np.where((n_fine > 0.8)[..., None], 0.85, 1.0)
+        if m.get("quilt"):
+            q = (np.abs(np.mod(u * 0.5, 1.0) - 0.5) < 0.05) | (np.abs(np.mod(v * 0.5, 1.0) - 0.5) < 0.05)
+            col = np.where(q[..., None], col * 0.7, col)
         # grime: soot in noise valleys and on the underside
         gr = np.clip((0.55 - n_big) * 2.2, 0, 1) * m["grime"]
         gr += np.clip(ny, 0, 1) * 0.3 * m["grime"]
