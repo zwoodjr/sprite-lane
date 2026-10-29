@@ -1723,6 +1723,18 @@ func drop_from_pack(id: String, n: int = 1) -> bool:
 		run_pack.erase(id)
 	return true
 
+## Drink a carried medicine crate now (pause > backpack). Returns HP healed.
+func drink_medicine() -> float:
+	var p := get_tree().get_first_node_in_group("player") as Node2D
+	if p == null or not drop_from_pack("medicine", 1):
+		return 0.0
+	var share := MedicineDefs.DRINK_HEAL_CINDER if selected_character_id == CharacterDefs.CINDER_ID else MedicineDefs.DRINK_HEAL
+	var before := float(p.get("hp"))
+	p.call("heal", float(p.get("max_hp")) * share)
+	cleanse_exposure(100.0)
+
+	return float(p.get("hp")) - before
+
 func medicine_carried() -> int:
 	return pack_count("medicine")
 

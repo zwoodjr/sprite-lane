@@ -46,6 +46,11 @@ const MEDICINE_WEIGHT := 3
 ## Extract pays this much bag value per crate (× loot multiplier × tier payout),
 ## and the crate is banked as 1 medicine (top tonic recipes need it).
 const MEDICINE_SCRAP := 15
+## Drink or bank: a carried crate can be drunk mid-run instead — heals this
+## share of max HP (Greed still shrinks healing) and clears exposure, but its
+## scrap and Cinder's brewing stock are gone. Sister Cinder knows the dose.
+const DRINK_HEAL := 0.45
+const DRINK_HEAL_CINDER := 0.7
 ## Carrying any medicine slows you; each extra crate a bit more, capped.
 const CARRY_SLOW := 0.12
 const CARRY_SLOW_EXTRA := 0.03

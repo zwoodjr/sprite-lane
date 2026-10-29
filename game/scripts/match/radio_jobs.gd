@@ -174,7 +174,10 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 	var s := {"id": id, "t": 0.0, "pos": Vector2.INF, "node": null, "npc": null, "phase": ""}
 	active[id] = s
 	_radio(str(j["radio"]))
-	hud.show_toast("RADIO: %s" % str(j["name"]), RadioDefs.MAP_COLOR)
+	if str(j["kind"]) == "contract":
+		hud.show_toast("RADIO: %s — +%d scrap on extract, Greed −1" % [str(j["name"]), int(j.get("reward_scrap", 0))], RadioDefs.MAP_COLOR)
+	else:
+		hud.show_toast("RADIO: %s" % str(j["name"]), RadioDefs.MAP_COLOR)
 	var giver := str(j["giver"])
 	match id:
 		"bounty":
@@ -434,7 +437,13 @@ func _complete(id: String) -> void:
 	done.append(id)
 	if str(j["kind"]) == "contract":
 		GameState.add_job_reward(int(j.get("reward_scrap", 0)), j.get("reward", {}))
-		hud.show_toast("%s done — reward paid when you extract" % str(j["name"]), RadioDefs.MAP_COLOR)
+		## Deepened (Oct 2026): a finished contract also draws the Dust off you —
+		## Greed −1 — so detouring for a job is a real answer to staying greedy.
+		if GameState.windows_skipped > 0:
+			GameState.windows_skipped -= 1
+			hud.show_toast("%s done — Greed −1 (now %d). Reward paid on extract" % [str(j["name"]), GameState.windows_skipped], RadioDefs.MAP_COLOR)
+		else:
+			hud.show_toast("%s done — reward paid on extract (Greed −1 once you've stayed)" % str(j["name"]), RadioDefs.MAP_COLOR)
 	else:
 		hud.show_toast("%s — thanks!" % str(j["name"]), RadioDefs.MAP_COLOR)
 	GameState.cameo_help(str(j["giver"]))

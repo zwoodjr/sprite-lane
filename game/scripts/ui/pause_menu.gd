@@ -230,6 +230,21 @@ func show_pack() -> void:
 		h.add_child(nv)
 		nv.add_child(UiTheme.head_label("%s  x%d" % [MedicineDefs.item_name(str(id)).to_upper(), int(GameState.run_pack[id])], UiTheme.T_H3, UiTheme.TEXT))
 		nv.add_child(UiTheme.body_label("Weight %d each" % MedicineDefs.weight(str(id)), UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		if str(id) == "medicine":
+			## Drink or bank (the deepened medicine decision).
+			var cinder := GameState.selected_character_id == CharacterDefs.CINDER_ID
+			var pct := int(round((MedicineDefs.DRINK_HEAL_CINDER if cinder else MedicineDefs.DRINK_HEAL) * 100.0))
+			nv.add_child(UiTheme.body_label("Bank it: +%d scrap × loot, Cinder's brew stock. Drink it: heal %d%%%s." % [MedicineDefs.MEDICINE_SCRAP, pct, " (Cinder's dose)" if cinder else ""], UiTheme.T_SMALL, UiTheme.TEAL))
+			var dr := UiTheme.big_button("DRINK", UiTheme.TEAL, 64, 20)
+			dr.custom_minimum_size.x = 112
+			dr.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			dr.pressed.connect(func() -> void:
+				var healed := GameState.drink_medicine()
+				if healed >= 0.0:
+					Juice.sfx("pick_tonic")
+					Juice.haptic(Juice.HAPTIC_HIT)
+				show_pack())
+			h.add_child(dr)
 		var drop := UiTheme.big_button("DROP", UiTheme.RUST, 64, 20)
 		drop.custom_minimum_size.x = 112
 		drop.size_flags_vertical = Control.SIZE_SHRINK_CENTER
