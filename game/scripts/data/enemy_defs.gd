@@ -23,6 +23,8 @@ const ELITE_KINDS: Array = ["cyber_juggernaut"]
 ## Raider crew members only come with a crew (scripts/match/raider_crew.gd).
 const CREW_KINDS: Array = ["raider_grunt", "raider_brute", "raider_captain"]
 const BOSS_KINDS: Array = ["dread_naught", "mutant_overlord"]
+## The campaign's final boss: never a random Wander mob.
+const CAMPAIGN_ONLY: Array = ["wasteland_god_entity"]
 ## Stat multipliers on top of the tier's enemy strength.
 const ROLE_STATS := {
 	"elite": {"hp": 2.2, "damage": 1.25, "speed": 1.0, "tier": 2},
@@ -85,7 +87,7 @@ static func faction(id: String) -> String:
 static func ids_for_tier(tier: int) -> Array[String]:
 	var out: Array[String] = []
 	for k in all_kinds():
-		if int(k["tier"]) == tier and not ROLE_KINDS.has(str(k["id"])) and not (str(k["id"]) in CREW_KINDS):
+		if int(k["tier"]) == tier and not ROLE_KINDS.has(str(k["id"])) and not (str(k["id"]) in CREW_KINDS) and not (str(k["id"]) in CAMPAIGN_ONLY):
 			out.append(str(k["id"]))
 	return out
 

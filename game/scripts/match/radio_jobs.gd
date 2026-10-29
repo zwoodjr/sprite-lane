@@ -554,6 +554,9 @@ func spawn_warden(pads: Array) -> Node:
 	var e: Node = match_ctl.call("spawn_at", role, RadioDefs.WARDEN_KIND, at)
 	if e != null:
 		hud.show_banner("DUST WARDEN", "It guards the last pads", UiTheme.DANGER)
+		## A real fight from boss tier up: sand dash, dust hounds, storm ring.
+		if role == "boss" and match_ctl.has_method("attach_brain"):
+			match_ctl.call("attach_brain", e, "warden")
 	return e
 
 

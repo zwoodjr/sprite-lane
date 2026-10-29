@@ -160,6 +160,32 @@ static func ground_colors(grade: String) -> Array:
 	return GROUND.get(grade, GROUND["haze"])
 
 
+## --- Wander boss pool (Oct 2026) -------------------------------------------
+## Wander bosses used to be generic brute AI with 5x HP. Now each zone draws
+## from the campaign's named fights (their boss brains: telegraphed specials,
+## phase 2 below half HP). hp = extra multiplier on top of the boss role.
+const WANDER_BOSSES := {
+	5: [{"kind": "rad_gator_matriarch", "name": "Rad Gator Matriarch", "epithet": "mother of the marsh", "brain": "matriarch", "hp": 1.0},
+		{"kind": "raider_captain", "name": "Mother Vane", "epithet": "captain of the Pit", "brain": "vane", "hp": 0.9, "pref": 80.0}],
+	6: [{"kind": "raider_captain", "name": "Mother Vane", "epithet": "she runs this territory", "brain": "vane", "hp": 1.0, "pref": 80.0},
+		{"kind": "rad_gator_matriarch", "name": "Rad Gator Matriarch", "epithet": "mother of the marsh", "brain": "matriarch", "hp": 1.0}],
+	7: [{"kind": "mutant_overlord", "name": "Mutant Overlord", "epithet": "fed on the plant's runoff", "brain": "overlord", "hp": 1.0},
+		{"kind": "rad_gator_matriarch", "name": "Rad Gator Matriarch", "epithet": "the runoff made her bigger", "brain": "matriarch", "hp": 1.1}],
+	8: [{"kind": "dread_naught", "name": "Unit Seven", "epithet": "the Dread Naught, still holding the line", "brain": "dread_naught", "hp": 1.0},
+		{"kind": "mutant_overlord", "name": "Mutant Overlord", "epithet": "the machine that broke the line", "brain": "overlord", "hp": 1.0}],
+	9: [{"kind": "dread_naught", "name": "Unit Seven", "epithet": "dug in at the crater rim", "brain": "dread_naught", "hp": 1.1},
+		{"kind": "raider_captain", "name": "Mother Vane", "epithet": "left to the Dust, and back", "brain": "vane", "hp": 1.2, "pref": 80.0}],
+	10: [{"kind": "mutant_overlord", "name": "Mutant Overlord", "epithet": "where the Dust began", "brain": "overlord", "hp": 1.2},
+		{"kind": "dread_naught", "name": "Unit Seven", "epithet": "the last standing order", "brain": "dread_naught", "hp": 1.2},
+		{"kind": "rad_gator_matriarch", "name": "Rad Gator Matriarch", "epithet": "the first mother", "brain": "matriarch", "hp": 1.3}],
+}
+
+
+static func wander_bosses(tier: int) -> Array:
+	var t := clampi(tier, 5, 10)
+	return WANDER_BOSSES.get(t, [])
+
+
 static func zone(tier: int) -> Dictionary:
 	return ZONES[clampi(tier, 1, ZONES.size()) - 1]
 

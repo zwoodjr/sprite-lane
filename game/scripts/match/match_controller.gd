@@ -300,7 +300,7 @@ func _build_warm_queue() -> void:
 			if not seen.has(id):
 				seen[id] = true
 				_warm_queue.append(id)
-	var late: Array = FactionDefs.ELITE_POOL["plague"] + FactionDefs.ELITE_POOL["machine"] + EnemyDefs.CREW_KINDS + EnemyDefs.BOSS_KINDS + [RadioDefs.WARDEN_KIND]
+	var late: Array = FactionDefs.ELITE_POOL["plague"] + FactionDefs.ELITE_POOL["machine"] + EnemyDefs.CREW_KINDS + EnemyDefs.BOSS_KINDS + [RadioDefs.WARDEN_KIND, "rad_gator_matriarch"]
 	for id in late:
 		if not seen.has(str(id)):
 			seen[str(id)] = true
@@ -678,6 +678,13 @@ func spawn_special(role: String, kind: String = "") -> Node:
 	if not is_instance_valid(player):
 		return null
 	var k := kind
+	var named: Dictionary = {}
+	if k == "" and role == "boss":
+		## Named Wander boss for this zone (campaign brains).
+		var bp: Array = ZoneDefs.wander_bosses(int(_mode.get("tier", 1)))
+		if not bp.is_empty():
+			named = bp[spawn_rng.randi() % bp.size()]
+			k = str(named["kind"])
 	if k == "":
 		var pool: Array = EnemyDefs.BOSS_KINDS
 		if role == "elite":
@@ -692,10 +699,19 @@ func spawn_special(role: String, kind: String = "") -> Node:
 	var hp_m := (1.0 + (float(tl["hp"]) - 1.0) * step) * float(_mode.get("enemy_hp", 1.0))
 	var dmg_m := (1.0 + (float(tl["damage"]) - 1.0) * step) * float(_mode.get("enemy_damage", 1.0))
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
-	enemy.setup(spot, hp_m, dmg_m, 1.0, k)
+	enemy.setup(spot, hp_m * float(named.get("hp", 1.0)), dmg_m, 1.0, k)
 	enemy.call("set_role", role)
 	world.add_child(enemy)
 	var nm := str(EnemyDefs.get_kind(k).get("display_name", k))
+	if not named.is_empty():
+		nm = str(named["name"])
+		enemy.set("display_name", nm)
+		if named.has("pref"):
+			var d: Dictionary = (enemy.get("_def") as Dictionary).duplicate()
+			d["pref"] = float(named["pref"])
+			enemy.set("_def", d)
+		attach_brain(enemy, str(named["brain"]))
+		hud.show_toast(str(named["epithet"]).to_upper(), UiTheme.DANGER)
 	if role == "elite":
 		enemy.call("set_traits", FactionDefs.roll_traits(EnemyDefs.faction(k), int(_mode.get("tier", 1))))
 		var tn := str(enemy.call("trait_names"))
@@ -714,6 +730,37 @@ func spawn_special(role: String, kind: String = "") -> Node:
 		Juice.mob_sfx("roar", enemy)
 		Juice.haptic(Juice.HAPTIC_BIG)
 	return enemy
+
+## Give a boss its campaign fight (scripts/campaign/bosses/<brain>.gd).
+func attach_brain(enemy: Node, brain_id: String) -> void:
+	var path := "res://scripts/campaign/bosses/%s.gd" % brain_id
+	if enemy == null or not ResourceLoader.exists(path):
+		return
+	var br: RefCounted = (load(path) as Script).new()
+	if br.has_method("setup"):
+		br.call("setup", enemy, self)
+	enemy.set("brain", br)
+
+## Boss brains summon adds through this (campaign_controller overrides it).
+func spawn_mob(kind: String, at: Vector2 = Vector2.INF, role: String = "", hp_k: float = 1.0) -> Node:
+	if not is_instance_valid(player):
+		return null
+	var spot := at
+	if spot == Vector2.INF:
+		var ang := spawn_rng.randf() * TAU
+		spot = _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
+	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
+	var enemy: CharacterBody2D = EnemyScene.instantiate()
+	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * hp_k, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, kind)
+	if role != "":
+		enemy.call("set_role", role)
+	world.add_child(enemy)
+	return enemy
+
+## Boss brains talk through this (campaign_controller overrides it with dialogue).
+func radio(who: String, text: String) -> void:
+	if is_instance_valid(hud):
+		hud.show_toast(text, UiTheme.DANGER if who != "" else UiTheme.TEXT)
 
 ## An elite / boss of a given kind at a given spot (Dust Warden on the pads).
 func spawn_at(role: String, kind: String, at: Vector2) -> Node:
