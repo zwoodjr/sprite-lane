@@ -494,7 +494,10 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 		extra.add_child(sb)
 	if equipped:
 		var insured := int(GameState.insured.get(_hero, -1)) == uid
-		var ins := UiTheme.big_button("INSURED" if insured else "INSURE", UiTheme.TEAL, 64, 20)
+		var unlocked := GameState.insurance_unlocked()
+		var ins := UiTheme.big_button(("INSURED" if insured else "INSURE") if unlocked else "INSURE (LOCKER)", UiTheme.TEAL if unlocked else UiTheme.LINE, 64, 20)
+		ins.disabled = not unlocked and not insured
+		ins.tooltip_text = "" if unlocked else "Buy the Insurance Locker in the Hangar"
 		ins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ins.custom_minimum_size.x = 0
 		ins.pressed.connect(func() -> void:

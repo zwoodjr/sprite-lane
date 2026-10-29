@@ -687,6 +687,9 @@ func _test_gear() -> void:
 	var uid := int(GameState.stash[0]["uid"])
 	_check(GameState.equip("ash_rook", "head", uid), "equip head")
 	_check(not GameState.equip("ash_rook", "chest", uid), "head not in chest")
+	GameState.camp.erase(HangarDefs.INSURANCE_ID)
+	_check(not GameState.set_insured("ash_rook", uid) and not GameState.is_insured(uid), "insure needs the Insurance Locker")
+	GameState.camp[HangarDefs.INSURANCE_ID] = 1
 	_check(GameState.set_insured("ash_rook", uid) and GameState.is_insured(uid), "insure")
 	_check(GameState.equip("pebble", "head", uid) and GameState.equipped_items("ash_rook").is_empty(), "moves to pebble")
 	_check(not GameState.is_insured(uid), "insure cleared on move")
@@ -725,6 +728,7 @@ func _test_gear() -> void:
 	var u2 := int(GameState.stash[1]["uid"])
 	GameState.equip("ash_rook", "head", u1)
 	GameState.equip("ash_rook", "boots", u2)
+	GameState.camp[HangarDefs.INSURANCE_ID] = 1
 	GameState.set_insured("ash_rook", u1)
 	GameState.begin_run()
 	GameState.add_run_loot(GearDefs.make_gear("legs", "epic", rng))
@@ -3510,6 +3514,7 @@ func _test_safe_save() -> void:
 	## --- insured item survives an abandon (as on any death)
 	_equip_test_kit(hero, 3)
 	var ins_uid := int(GameState.loadout_of(hero)["weapon"])
+	GameState.camp[HangarDefs.INSURANCE_ID] = 1
 	GameState.set_insured(hero, ins_uid)
 	m = await _depth_match("haze", hero)
 	m.queue_free()

@@ -350,6 +350,7 @@ func _rebuild() -> void:
 			for id in HangarDefs.ids_for("shared"):
 				_list.add_child(_row(str(id), IconSet.tex("camp_" + str(id))))
 			_list.add_child(_row("backpack", IconSet.tex("camp_backpack")))
+			_list.add_child(_row(HangarDefs.INSURANCE_ID, IconSet.tex("ui_lock")))
 		"survivors":
 			_list.add_child(_note("Each survivor's weapon and signature trick."))
 			var ids: Array = HangarDefs.ids_for("station")

@@ -27,6 +27,9 @@ const STASH_BASE_SLOTS := 80
 const STASH_SLOTS_PER_RANK := 40
 
 const SHARED_IDS: Array = ["generator", "radio_tower", "scrap_press", "ammo_bench"]
+## Insurance Locker (one-time buy): unlocks the INSURE button on worn gear.
+const INSURANCE_ID := "insurance"
+const INSURANCE_PRICES: Array = [400]
 
 ## Shared camp upgrades. Values by rank (0..5).
 const SHARED := {
@@ -166,6 +169,8 @@ static func layer_of(id: String) -> String:
 		return "stash"
 	if id == "backpack":
 		return "pack"
+	if id == INSURANCE_ID:
+		return "insure"
 	return ""
 
 
@@ -181,6 +186,8 @@ static func prices(id: String) -> Array:
 			return STASH_PRICES
 		"pack":
 			return MedicineDefs.PACK_PRICES
+		"insure":
+			return INSURANCE_PRICES
 	return []
 
 
@@ -208,6 +215,8 @@ static func display_name(id: String) -> String:
 			return "Stash Lockbox"
 		"pack":
 			return "Field Backpack"
+		"insure":
+			return "Insurance Locker"
 	return id
 
 
@@ -250,6 +259,8 @@ static func rank_text(id: String, rank: int) -> String:
 			return "%d stash slots" % stash_slots(r)
 		"pack":
 			return "Carry %d in a run (medicine weighs %d)" % [MedicineDefs.pack_capacity(r), MedicineDefs.MEDICINE_WEIGHT]
+		"insure":
+			return "Insure 1 worn piece per survivor: it comes home even if you die"
 	return ""
 
 
@@ -265,6 +276,8 @@ static func blurb(id: String) -> String:
 			return "Shared lockbox for gear you extract with."
 		"pack":
 			return "More room for ingredients and medicine on the way home."
+		"insure":
+			return "A welded lockbox Helm drops with you. One piece of gear always comes back."
 	return ""
 
 
@@ -397,11 +410,13 @@ static func ids_for(layer: String) -> Array:
 			return ["stash"]
 		"pack":
 			return ["backpack"]
+		"insure":
+			return [INSURANCE_ID]
 	return []
 
 
 static func all_ids() -> Array:
-	return ids_for("shared") + ids_for("station") + ids_for("kennel") + ids_for("stash") + ids_for("pack")
+	return ids_for("shared") + ids_for("station") + ids_for("kennel") + ids_for("stash") + ids_for("pack") + ids_for("insure")
 
 
 ## Total scrap to max everything (sanity: ~45k per the brief).

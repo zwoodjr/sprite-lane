@@ -441,6 +441,9 @@ func apply_save(d: Dictionary) -> void:
 					r = int(mg[0])
 					v5_refund += int(mg[1])
 				camp[id] = clampi(r, 0, HangarDefs.max_rank(id))
+	## Insurance used to be free: saves that already insured something keep it.
+	if typeof(d.get("insured", {})) == TYPE_DICTIONARY and not (d.get("insured", {}) as Dictionary).is_empty():
+		camp[HangarDefs.INSURANCE_ID] = maxi(1, int(camp.get(HangarDefs.INSURANCE_ID, 0)))
 	if not migrated_hangar_v5:
 		migrated_hangar_v5 = true
 		if v5_refund > 0:
@@ -1174,7 +1177,13 @@ func unequip(hero: String, slot: String) -> void:
 		save_profile()
 
 ## Insure one equipped item for this survivor (uid -1 clears).
+## Insuring needs the Hangar's Insurance Locker.
+func insurance_unlocked() -> bool:
+	return camp_rank(HangarDefs.INSURANCE_ID) >= 1
+
 func set_insured(hero: String, uid: int) -> bool:
+	if uid >= 0 and not insurance_unlocked():
+		return false
 	if uid < 0:
 		insured.erase(hero)
 		save_profile()
