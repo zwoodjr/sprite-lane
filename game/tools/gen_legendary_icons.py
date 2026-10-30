@@ -45,6 +45,7 @@ SS = 4
 FIT = 0.88  # 96 px: room for the halo; the IconSet sizes are auto-fitted
 FIT_SET = 0.9
 MODE = "hd"      # hd (96) / s48 / s24
+SOFT = False     # painted finish (no INK ring, AA alpha); the weapon run turns it on
 KIND = "legendary"  # base / patched / rare / epic / legendary
 ELEMENT = ""
 ## (variant id, kind, element) per survivor, matching GearDefs.WEAPON_VARIANTS
@@ -544,6 +545,8 @@ class Icon:
             # crisp per-pixel grit (final-resolution, never blurred)
             rng = np.random.default_rng(self.seed * 13 + n)
             col = col * (0.95 + 0.1 * rng.random((n, n)))[..., None]
+        if SOFT:
+            return self._render_soft(n, a, col, halo, extra_glows, f)
         solid = a > (0.3 if n <= 24 else 0.42)
         # outline: 1 px INK ring, 8-connected, plus darkening the outermost body px
         ring = ndi.binary_dilation(solid, structure=np.ones((3, 3))) & ~solid
@@ -578,6 +581,57 @@ class Icon:
             bg = (ha > 1) & (ha > out[..., 3])
             out[bg, :3] = hc[bg]
             out[bg, 3] = np.minimum(ha[bg], 200)
+        return np.clip(out, 0, 255).astype(np.uint8)
+
+
+    def _render_soft(self, n, a, col, halo, extra_glows, f):
+        """Painted finish (matches Zach's armour sheet): anti-aliased alpha
+        straight from the 4x render, no INK ring, values lifted a little,
+        a soft rim of darker paint at the silhouette and a real soft contact
+        shadow below-right at every size."""
+        from scipy import ndimage as ndi
+        k = n / 96.0
+        # brighter, richer paint: lift mids, a touch more saturation
+        col = np.clip(255 * (col / 255) ** 0.92 * 1.03, 0, 255)
+        g = col.mean(axis=2, keepdims=True)
+        col = np.clip(g + (col - g) * 1.12, 0, 255)
+        # local contrast so parts stay defined without an outline
+        bl = ndi.gaussian_filter(col, (2.0 * k + 0.5, 2.0 * k + 0.5, 0))
+        col = np.clip(col + (col - bl) * 0.35, 0, 255)
+        # small sizes: keep the silhouette solid enough to read
+        if n <= 24:
+            a = np.clip(a * 1.35, 0, 1)
+        elif n <= 48:
+            a = np.clip(a * 1.12, 0, 1)
+        # darker paint toward the silhouette edge (form turning away), soft
+        inside = ndi.gaussian_filter(a, 0.9 * max(k, 0.5) + 0.3)
+        rim = np.clip((a - inside) * 2.6 + (1 - inside) * 0.45, 0, 0.5) * (a > 0.05)
+        col = col * (1 - rim[..., None])
+        # contact shadow: offset down-right, blurred, under the object only
+        dx, dy = max(1, int(round(2 * k))), max(1, int(round(3 * k)))
+        sh = np.roll(np.roll(a, dx, axis=1), dy, axis=0)
+        sh = ndi.gaussian_filter(sh, 1.6 * k + 0.6) * 0.55
+        # thin soft dark fringe all round: defines the silhouette on dark wells
+        # the way painted art does, without a hard ink line
+        fr = np.clip(ndi.gaussian_filter(a, 0.7) * 1.6, 0, 1) * 0.42
+        sh = np.maximum(sh, fr)
+        out = np.zeros((n, n, 4), np.float32)
+        aa = a + sh * (1 - a)
+        rgb = (col * a[..., None] + INK[None, None, :] * (sh * (1 - a))[..., None]) / np.maximum(aa[..., None], 1e-4)
+        out[..., :3] = rgb
+        out[..., 3] = aa * 255
+        if halo is not None:
+            hal = ndi.gaussian_filter(a, 3.2 * k + 0.4)
+            hal = np.clip(hal * 1.6, 0, 1) * (1 - a)
+            ha = hal * 150
+            hc = np.broadcast_to(halo, (n, n, 3)).copy()
+            for (gl, c) in extra_glows:
+                gd = gl.reshape(n, f, n, f).mean(axis=(1, 3)) * (1 - a) * 200
+                hc = np.where((gd > ha)[..., None], c[None, None, :], hc)
+                ha = np.maximum(ha, gd)
+            m = ha > out[..., 3]
+            out[m, :3] = hc[m]
+            out[m, 3] = np.minimum(ha[m], 200)
         return np.clip(out, 0, 255).astype(np.uint8)
 
 
@@ -1085,7 +1139,8 @@ def save(arr, path):
 
 
 def job(hero):
-    global MODE
+    global MODE, SOFT
+    SOFT = True
     leg = HERO_FN[hero].__name__
     for MODE in ("hd", "s48", "s24"):
         if MODE == "hd":
