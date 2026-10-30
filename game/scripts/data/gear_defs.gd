@@ -8,6 +8,7 @@ extends RefCounted
 ##    mod: "", coat: "", needs_heart: bool, charged: bool}
 ## Every tuning number lives here.
 
+const CraftSets = preload("res://scripts/data/craft_defs.gd")
 const RARITIES: Array = ["common", "rare", "epic", "legendary"]
 const RARITY_NAME := {"common": "Common", "rare": "Rare", "epic": "Epic", "legendary": "Legendary"}
 const RARITY_COLOR := {
@@ -408,6 +409,8 @@ const SET_COLOR := {
 
 
 static func set_color(sid: String) -> Color:
+	if CraftSets.SETS.has(sid):
+		return CraftSets.SETS[sid]["color"]
 	return SET_COLOR.get(sid, Color("3a3436"))
 
 
@@ -427,6 +430,8 @@ static func set_thresholds(sid: String) -> Array:
 static func set_bonuses(sid: String) -> Array:
 	if SURVIVOR_SETS.has(sid):
 		return SURVIVOR_SETS[sid]["bonus"]
+	if CraftSets.SETS.has(sid):
+		return CraftSets.SETS[sid]["bonus"]
 	return GENERAL_SETS.get(sid, {}).get("bonus", [])
 
 
@@ -449,6 +454,15 @@ static func survivor_set_for(hero: String) -> String:
 		if str(SURVIVOR_SETS[sid]["hero"]) == hero:
 			return str(sid)
 	return ""
+
+
+## A craft-only set piece (Crafter Bench): Epic stats, never in a drop pool.
+static func make_craft_piece(sid: String, slot: String, rng: RandomNumberGenerator) -> Dictionary:
+	var it := make_gear(slot, "epic", rng)
+	it["set"] = sid
+	it["craft"] = sid
+	it["name"] = "%s %s" % [str(CraftSets.SETS[sid]["noun"]), str(SLOT_NAME.get(slot, slot))]
+	return it
 
 
 static func make_weapon(hero: String, rarity: String, rng: RandomNumberGenerator) -> Dictionary:
@@ -636,6 +650,8 @@ static func set_name(sid: String) -> String:
 		return str(GENERAL_SETS[sid]["name"])
 	if SURVIVOR_SETS.has(sid):
 		return str(SURVIVOR_SETS[sid]["name"])
+	if CraftSets.SETS.has(sid):
+		return str(CraftSets.SETS[sid]["name"])
 	return sid
 
 

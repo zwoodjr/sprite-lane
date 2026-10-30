@@ -57,6 +57,8 @@ var result_salvaged: int = 0
 ## Loot v2: Commons auto-salvaged on extract (setting) and stash-full overflow.
 var result_auto_salvaged_n: int = 0
 var result_auto_salvaged_scrap: int = 0
+## {rarity: count} for the result screen breakdown.
+var result_auto_salvaged_by: Dictionary = {}
 var result_overflow_n: int = 0
 ## Rare+ (and set) finds that didn't fit a full stash: held in pending_rewards
 ## until there's room (never salvaged silently).
@@ -135,6 +137,7 @@ var jobs_done_run: int = 0
 
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
+const CraftDefs = preload("res://scripts/data/craft_defs.gd")
 const SAVE_VERSION := 4
 ## Rolling backup (the save before the latest) + where an unreadable save is kept.
 const SAVE_BAK_PATH := "user://wanderer_save.bak"
@@ -418,6 +421,9 @@ func apply_save(d: Dictionary) -> void:
 		SettingsDefs.upgrade_keys(up)
 		for k in up.keys():
 			settings[k] = up[k]
+		## Pre-threshold saves: the Commons toggle becomes tier 1.
+		if not up.has("auto_salvage_tier"):
+			settings["auto_salvage_tier"] = 1 if bool(up.get("auto_salvage_commons", false)) else 0
 		## The old film grain (default on) became the bible's edge dither,
 		## default off: older saves start with it off once.
 		if not (saved_settings as Dictionary).has("dither_v1"):
@@ -1048,6 +1054,8 @@ func starting_hp_bonus() -> float:
 	var hp_b := float(HangarDefs.shared_val("generator", "hp", camp_rank("generator"), 0)) + gear_stat("max_hp")
 	if has_set("quarry_plate", 2):
 		hp_b += float(GearDefs.SURVIVOR_SETS["quarry_plate"]["max_hp"])
+	if has_set("dustborn", 2):
+		hp_b += float(CraftDefs.SETS["dustborn"]["max_hp"])
 	return hp_b
 
 ## Scrap Press + gear: more scrap per run.
@@ -1120,7 +1128,84 @@ func extract_payout_mult() -> float:
 	return 1.0
 
 func crit_chance() -> float:
-	return gear_stat("crit") + float(up("deadeye", "crit", 0.0))
+	return gear_stat("crit") + float(up("deadeye", "crit", 0.0)) + (float(CraftDefs.SETS["dustborn"]["crit"]) if has_set("dustborn", 4) else 0.0)
+
+## --- Crafter Bench (craft-only sets) -------------------------------------------
+## Crafting draws on the pouch (ingredients) first, then banked boss materials.
+func craft_count(id: String) -> int:
+	return ingredient_count(id) + material_count(id)
+
+func bench_rank() -> int:
+	return camp_rank(CraftDefs.BENCH_ID)
+
+## {"ok": bool, "why": String, "missing": {id: n}} for one piece of `sid`.
+func craft_check(sid: String) -> Dictionary:
+	var d: Dictionary = CraftDefs.SETS.get(sid, {})
+	if d.is_empty():
+		return {"ok": false, "why": "Unknown set", "missing": {}}
+	var missing := {}
+	var c: Dictionary = d["cost"]
+	for k in c.keys():
+		var have := account_scrap if str(k) == "scrap" else craft_count(str(k))
+		if have < int(c[k]):
+			missing[str(k)] = int(c[k]) - have
+	if bench_rank() < int(d["bench"]):
+		return {"ok": false, "why": "Needs Crafter Bench rank %d" % int(d["bench"]), "missing": missing}
+	if stash.size() >= stash_capacity():
+		return {"ok": false, "why": "Stash full", "missing": missing}
+	return {"ok": missing.is_empty(), "why": "" if missing.is_empty() else "Missing materials", "missing": missing}
+
+## Pieces of `sid` already owned (stash), by slot.
+func craft_owned(sid: String) -> Dictionary:
+	var out := {}
+	for it in stash:
+		if str(it.get("craft", "")) == sid:
+			out[str(it.get("slot", ""))] = true
+	return out
+
+## Craft one piece for `slot`: pays, makes it, stashes it. {} on failure.
+func craft_piece(sid: String, slot: String) -> Dictionary:
+	if not (slot in GearDefs.ARMOR_SLOTS) or not bool(craft_check(sid)["ok"]):
+		return {}
+	var c: Dictionary = CraftDefs.SETS[sid]["cost"]
+	for k in c.keys():
+		var n := int(c[k])
+		if str(k) == "scrap":
+			account_scrap -= n
+			continue
+		var from_pouch := mini(n, ingredient_count(str(k)))
+		ingredients[str(k)] = ingredient_count(str(k)) - from_pouch
+		if int(ingredients[str(k)]) <= 0:
+			ingredients.erase(str(k))
+		materials[str(k)] = material_count(str(k)) - (n - from_pouch)
+		if int(materials[str(k)]) <= 0:
+			materials.erase(str(k))
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var it := GearDefs.make_craft_piece(sid, slot, rng)
+	add_to_stash(it)
+	save_profile()
+	meta_changed.emit()
+	return it
+
+## Set-bonus hooks the player reads (2 / 4 / 6 pieces).
+func craft_damage_mult(target: Node) -> float:
+	var m := 1.0
+	if has_set("rustwright", 2):
+		m += float(CraftDefs.SETS["rustwright"]["damage"])
+	if has_set("rustwright", 4) and target != null and is_instance_valid(target) and str(target.get("faction")) == EnemyDefs.MACHINE:
+		m *= float(CraftDefs.SETS["rustwright"]["machine_dealt"])
+	return m
+
+func craft_taken_mult(attacker: Node) -> float:
+	if attacker == null or not is_instance_valid(attacker) or not attacker.is_in_group("enemies"):
+		return 1.0
+	var f := str(attacker.get("faction"))
+	if f == EnemyDefs.MACHINE and has_set("rustwright", 4):
+		return float(CraftDefs.SETS["rustwright"]["machine_taken"])
+	if f == EnemyDefs.PLAGUE and has_set("ashwalker", 4):
+		return float(CraftDefs.SETS["ashwalker"]["plague_taken"])
+	return 1.0
 
 func crit_damage_bonus() -> float:
 	return (float(GearDefs.SURVIVOR_SETS["surgeons_coat"]["crit_bonus"]) if has_set("surgeons_coat", 2) else 0.0) \
@@ -1592,15 +1677,37 @@ func on_boss_killed(kind: String) -> void:
 		trophies[kind] = true
 		result_unlocks_pending.append("Trophy: first %s kill" % EnemyDefs.get_kind(kind).get("display_name", kind))
 
-func auto_salvage_on() -> bool:
-	return bool(settings.get("auto_salvage_commons", false))
+## Auto-recycle threshold (per save, Settings + Stash): 0 Off, 1 Commons,
+## 2 up to Rare, 3 up to Epic. Old saves: the Commons toggle maps to 1.
+const AUTO_SALVAGE_NAMES: Array = ["OFF", "COMMONS", "UP TO RARE", "UP TO EPIC"]
 
-## Would auto-salvage take this found item? Plain Commons only: never set
-## pieces, legendaries, locked items, or a piece that beats what any survivor
-## wears in that slot (empty slots don't count).
+func auto_salvage_tier() -> int:
+	return clampi(int(settings.get("auto_salvage_tier", 1 if bool(settings.get("auto_salvage_commons", false)) else 0)), 0, 3)
+
+func set_auto_salvage_tier(t: int) -> void:
+	set_setting("auto_salvage_tier", clampi(t, 0, 3))
+
+func auto_salvage_on() -> bool:
+	return auto_salvage_tier() > 0
+
+## Set pieces only go when this separate toggle is on (off by default).
+func auto_salvage_sets() -> bool:
+	return bool(settings.get("auto_salvage_sets", false))
+
+## Would auto-salvage take this found item? At or under the threshold rarity;
+## never Legendary, set pieces (unless that toggle is on), tier exclusives,
+## Heart Vials, crafted gear, locked / insured / worn items, or a piece that
+## beats what any survivor wears in that slot (empty slots don't count).
 func auto_salvageable(it: Dictionary) -> bool:
-	if str(it.get("rarity", "")) != "common" or str(it.get("set", "")) != "" \
-			or str(it.get("legendary", "")) != "" or bool(it.get("locked", false)):
+	var ri := GearDefs.RARITIES.find(str(it.get("rarity", "")))
+	if ri < 0 or ri >= auto_salvage_tier() or str(it.get("rarity", "")) == "legendary":
+		return false
+	if str(it.get("legendary", "")) != "" or bool(it.get("locked", false)) or str(it.get("exclusive", "")) != "" \
+			or bool(it.get("needs_heart", false)) or str(it.get("craft", "")) != "":
+		return false
+	if str(it.get("set", "")) != "" and not auto_salvage_sets():
+		return false
+	if it.has("uid") and (is_insured(int(it["uid"])) or not equipped_by(int(it["uid"])).is_empty()):
 		return false
 	var sc := GearDefs.item_score(it)
 	for h in loadouts.keys():
@@ -1648,6 +1755,7 @@ func _bank_run_loot() -> void:
 	result_salvaged = 0
 	result_auto_salvaged_n = 0
 	result_auto_salvaged_scrap = 0
+	result_auto_salvaged_by = {}
 	result_overflow_n = 0
 	result_held_n = 0
 	var keep: Array = []
@@ -1656,6 +1764,8 @@ func _bank_run_loot() -> void:
 		if auto and auto_salvageable(it):
 			result_auto_salvaged_scrap += _salvage_found(it, 1.0)
 			result_auto_salvaged_n += 1
+			var rk := str(it.get("rarity", "common"))
+			result_auto_salvaged_by[rk] = int(result_auto_salvaged_by.get(rk, 0)) + 1
 		else:
 			keep.append(it)
 	var room := maxi(0, stash_capacity() - stash.size())
@@ -2122,6 +2232,11 @@ func has_cosmetic(c: String) -> bool:
 
 func set_setting(key: String, value: Variant, save: bool = true) -> void:
 	settings[key] = value
+	## Old on/off switch: drives the auto-salvage threshold (Commons).
+	if key == "auto_salvage_commons":
+		settings["auto_salvage_tier"] = 1 if bool(value) else 0
+	elif key == "auto_salvage_tier":
+		settings["auto_salvage_commons"] = int(value) > 0
 	SettingsDefs.apply(key)
 	settings_changed.emit(key)
 	if save:
@@ -2297,6 +2412,7 @@ func _clear_result_meta() -> void:
 	result_salvaged = 0
 	result_auto_salvaged_n = 0
 	result_auto_salvaged_scrap = 0
+	result_auto_salvaged_by = {}
 	result_overflow_n = 0
 	result_held_n = 0
 	result_scrap_after = -1

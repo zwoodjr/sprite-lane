@@ -200,8 +200,17 @@ func build(c: VBoxContainer) -> void:
 		mid.add_child(UiTheme.body_label("Dragged home %d found piece%s (best first) — extract to keep the rest." % [GameState.result_death_kept.size(),
 			"" if GameState.result_death_kept.size() == 1 else "s"], UiTheme.T_SMALL, UiTheme.AMBER))
 	if _won and GameState.result_auto_salvaged_n > 0:
-		var al := UiTheme.body_label("Auto-salvaged %d common%s (+%d scrap)" % [GameState.result_auto_salvaged_n,
-			"" if GameState.result_auto_salvaged_n == 1 else "s", GameState.result_auto_salvaged_scrap], UiTheme.T_SMALL, UiTheme.AMBER)
+		var by: Dictionary = GameState.result_auto_salvaged_by
+		var txt := "Auto-salvaged %d common%s (+%d scrap)" % [GameState.result_auto_salvaged_n,
+			"" if GameState.result_auto_salvaged_n == 1 else "s", GameState.result_auto_salvaged_scrap]
+		if by.size() > 1 or (by.size() == 1 and not by.has("common")):
+			var parts := PackedStringArray()
+			for r in GearDefs.RARITIES:
+				if int(by.get(r, 0)) > 0:
+					parts.append("%d %s" % [int(by[r]), str(GearDefs.RARITY_NAME[r])])
+			txt = "Auto-salvaged %d item%s: %s (+%d scrap)" % [GameState.result_auto_salvaged_n,
+				"" if GameState.result_auto_salvaged_n == 1 else "s", ", ".join(parts), GameState.result_auto_salvaged_scrap]
+		var al := UiTheme.body_label(txt, UiTheme.T_SMALL, UiTheme.AMBER)
 		al.name = "AutoSalvageLine"
 		mid.add_child(al)
 	if _won and GameState.result_held_n > 0:

@@ -9,6 +9,7 @@ const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
 
 const HANGAR_DIR := "res://assets/sprites/hangar/"
 const TABS := ["camp", "survivors", "kennel", "brew", "stash"]
+const CraftDefs = preload("res://scripts/data/craft_defs.gd")
 const TAB_LABEL := {"camp": "CAMP", "survivors": "CREW", "kennel": "KENNEL", "brew": "BREW", "stash": "STASH"}
 const TAB_ICON := {"camp": "tab_camp", "survivors": "tab_crew", "kennel": "tab_kennel", "brew": "tab_brew", "stash": "tab_stash"}
 const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
@@ -351,6 +352,15 @@ func _rebuild() -> void:
 				_list.add_child(_row(str(id), IconSet.tex("camp_" + str(id))))
 			_list.add_child(_row("backpack", IconSet.tex("camp_backpack")))
 			_list.add_child(_row(HangarDefs.INSURANCE_ID, IconSet.tex("ui_lock")))
+			## Crafter Bench: craft-only sets (recipes open from here).
+			_list.add_child(_row(CraftDefs.BENCH_ID, IconSet.tex("camp_ammo_bench")))
+			var cb := UiTheme.big_button("CRAFTER BENCH: RECIPES" if GameState.bench_rank() > 0 else "CRAFTER BENCH: PREVIEW RECIPES",
+				UiTheme.AMBER if GameState.bench_rank() > 0 else UiTheme.LINE, 64, 18)
+			cb.name = "CrafterButton"
+			cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			cb.mouse_force_pass_scroll_events = true
+			cb.pressed.connect(open_crafter)
+			_list.add_child(cb)
 		"survivors":
 			_list.add_child(_note("Each survivor's weapon and signature trick."))
 			var ids: Array = HangarDefs.ids_for("station")
@@ -752,14 +762,30 @@ func _build_stash() -> void:
 	rb.mouse_force_pass_scroll_events = true
 	rb.pressed.connect(open_buyback)
 	trow.add_child(rb)
-	## Quick toggle for Settings > Auto-salvage Commons.
+	## Auto-recycle on extract (same as Settings): threshold + set pieces.
 	var ao := GameState.auto_salvage_on()
-	var ab := UiTheme.big_button("AUTO-SALVAGE COMMONS: %s" % ("ON" if ao else "OFF"), UiTheme.AMBER if ao else UiTheme.LINE, 64, 16)
+	var arow := HBoxContainer.new()
+	arow.add_theme_constant_override("separation", 8)
+	arow.mouse_filter = Control.MOUSE_FILTER_PASS
+	_list.add_child(arow)
+	var ab := UiTheme.big_button("AUTO-SALVAGE: %s" % str(GameState.AUTO_SALVAGE_NAMES[GameState.auto_salvage_tier()]), UiTheme.AMBER if ao else UiTheme.LINE, 64, 16)
 	ab.name = "AutoSalvageToggle"
+	ab.custom_minimum_size.x = 0
 	ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab.size_flags_stretch_ratio = 1.6
 	ab.mouse_force_pass_scroll_events = true
 	ab.pressed.connect(toggle_auto_salvage)
-	_list.add_child(ab)
+	arow.add_child(ab)
+	var sb := UiTheme.big_button("SETS: %s" % ("SALVAGE" if GameState.auto_salvage_sets() else "KEEP"), UiTheme.RUST if GameState.auto_salvage_sets() else UiTheme.LINE, 64, 16)
+	sb.name = "AutoSalvageSets"
+	sb.custom_minimum_size.x = 0
+	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sb.mouse_force_pass_scroll_events = true
+	sb.disabled = not ao
+	sb.pressed.connect(toggle_auto_salvage_sets)
+	arow.add_child(sb)
+	if ao:
+		_list.add_child(_note("On extract: %s turn into scrap. Never Legendary, locked, insured, worn or an upgrade. BUY BACK undoes it." % str(GameState.AUTO_SALVAGE_NAMES[GameState.auto_salvage_tier()]).to_lower()))
 	var shown := GameState.stash_view(_sort, _filters)
 	if shown.size() < GameState.stash.size():
 		_list.add_child(_note("Showing %d of %d" % [shown.size(), GameState.stash.size()]))
@@ -802,11 +828,21 @@ func _stash_grid() -> GridContainer:
 	return grid
 
 
+## Cycles Off -> Commons -> up to Rare -> up to Epic -> Off. True = now on.
 func toggle_auto_salvage() -> bool:
-	var on := not GameState.auto_salvage_on()
-	GameState.set_setting("auto_salvage_commons", on)
+	var t := (GameState.auto_salvage_tier() + 1) % GameState.AUTO_SALVAGE_NAMES.size()
+	GameState.set_auto_salvage_tier(t)
 	Juice.sfx("ui_toggle")
-	_toast("Auto-salvage Commons on extract: %s" % ("ON" if on else "OFF"))
+	_toast("Auto-salvage on extract: %s" % str(GameState.AUTO_SALVAGE_NAMES[t]))
+	_rebuild()
+	return t > 0
+
+
+func toggle_auto_salvage_sets() -> bool:
+	var on := not GameState.auto_salvage_sets()
+	GameState.set_setting("auto_salvage_sets", on)
+	Juice.sfx("ui_toggle")
+	_toast("Set pieces: %s" % ("auto-salvaged too" if on else "always kept"))
 	_rebuild()
 	return on
 
@@ -864,6 +900,13 @@ func _slot(item: Dictionary) -> Control:
 		b.disabled = true
 	else:
 		b.pressed.connect(inspect_item.bind(int(item.get("uid", -1))))
+		## Locked (favourite): never salvaged, by hand or automatically.
+		if bool(item.get("locked", false)):
+			var lk := UiTheme.pixel_label("LOCK", UiTheme.PX_S, UiTheme.AMBER)
+			lk.name = "LockTag"
+			lk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			lk.position = Vector2(4, 2)
+			b.add_child(lk)
 	return b
 
 
@@ -1189,6 +1232,103 @@ func _open_popup(title: String, lines: Array) -> void:
 	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 60, 20)
 	close.pressed.connect(close_popup)
 	v.add_child(close)
+
+
+## Crafter Bench recipes: per set the bench rank, bonuses, per-piece cost with
+## what you have, where missing materials drop, and a CRAFT button per slot.
+func open_crafter() -> void:
+	close_popup()
+	var v := GearUi.overlay(self, UiTheme.AMBER)
+	_popup = v.get_meta("root")
+	_popup.name = "Crafter"
+	v.add_child(UiTheme.head_label("CRAFTER BENCH", UiTheme.T_H1, UiTheme.AMBER))
+	var br := GameState.bench_rank()
+	var gate := GameState.camp_gate(CraftDefs.BENCH_ID)
+	if br == 0:
+		v.add_child(_note("Build the bench in CAMP to start crafting%s." % ((" (opens after a %s extract)" % str(ModeDefs.tier_mode(gate).get("display_name", ""))) if gate > 0 else "")))
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(0, get_viewport_rect().size.y * 0.62)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	var lv := VBoxContainer.new()
+	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lv.add_theme_constant_override("separation", 10)
+	sc.add_child(lv)
+	for sid in CraftDefs.ORDER:
+		var d: Dictionary = CraftDefs.SETS[sid]
+		var col: Color = d["color"]
+		var owned := GameState.craft_owned(str(sid))
+		var head := UiTheme.head_label("%s  %d/6" % [str(d["name"]).to_upper(), owned.size()], UiTheme.T_H2, col.lightened(0.45))
+		head.name = "Set_" + str(sid)
+		lv.add_child(head)
+		var locked := br < int(d["bench"])
+		lv.add_child(_note(("LOCKED: bench rank %d. " % int(d["bench"]) if locked else "") + str(d["lore"])))
+		var bon: Array = d["bonus"]
+		for i in range(bon.size()):
+			var need: int = [2, 4, 6][i]
+			var on: bool = owned.size() >= need
+			lv.add_child(UiTheme.body_label("%d pc: %s" % [need, str(bon[i])], UiTheme.T_SMALL, UiTheme.TEAL if on else UiTheme.TEXT_DIM))
+		## Cost per piece vs what you have.
+		var chk := GameState.craft_check(str(sid))
+		var miss: Dictionary = chk["missing"]
+		var parts := PackedStringArray()
+		var c: Dictionary = d["cost"]
+		for k in c.keys():
+			var have := GameState.account_scrap if str(k) == "scrap" else GameState.craft_count(str(k))
+			var nm := "scrap" if str(k) == "scrap" else MedicineDefs.item_name(str(k)) if MedicineDefs.INGREDIENTS.has(str(k)) else str(GearDefs.MATERIAL_NAME.get(str(k), str(k)))
+			parts.append("%d %s (%d)" % [int(c[k]), nm, have])
+		lv.add_child(UiTheme.body_label("Per piece: " + " · ".join(parts), UiTheme.T_SMALL, UiTheme.TEXT))
+		for k in miss.keys():
+			if str(k) == "scrap":
+				continue
+			var nm2 := MedicineDefs.item_name(str(k)) if MedicineDefs.INGREDIENTS.has(str(k)) else str(GearDefs.MATERIAL_NAME.get(str(k), str(k)))
+			var where := UiTheme.body_label("Need %d more %s: %s" % [int(miss[k]), nm2, str(CraftDefs.SOURCES.get(str(k), ""))], UiTheme.T_SMALL, UiTheme.RUST)
+			where.name = "Where_%s_%s" % [str(sid), str(k)]
+			lv.add_child(where)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 8)
+		grid.add_theme_constant_override("v_separation", 8)
+		grid.mouse_filter = Control.MOUSE_FILTER_PASS
+		lv.add_child(grid)
+		for slot in GearDefs.ARMOR_SLOTS:
+			var have_it := owned.has(str(slot))
+			var b := UiTheme.big_button(("%s: OWNED" if have_it else "CRAFT %s") % str(GearDefs.SLOT_NAME.get(slot, slot)).to_upper(),
+				UiTheme.TEAL if bool(chk["ok"]) else UiTheme.LINE, 56, 14)
+			b.name = "Craft_%s_%s" % [str(sid), str(slot)]
+			b.custom_minimum_size.x = 0
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.mouse_force_pass_scroll_events = true
+			b.disabled = not bool(chk["ok"])
+			b.pressed.connect(craft.bind(str(sid), str(slot)))
+			grid.add_child(b)
+		if not bool(chk["ok"]) and str(chk["why"]) != "" and str(chk["why"]) != "Missing materials":
+			lv.add_child(UiTheme.body_label(str(chk["why"]), UiTheme.T_SMALL, UiTheme.DANGER))
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 18)
+	close.pressed.connect(close_popup)
+	v.add_child(close)
+
+
+## Craft a piece (tests call this too). True on success.
+func craft(sid: String, slot: String) -> bool:
+	var it := GameState.craft_piece(sid, slot)
+	if it.is_empty():
+		Juice.sfx("ui_denied")
+		return false
+	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_HIT)
+	_toast("Crafted: %s" % str(it.get("name", "")))
+	var keep := -1
+	var old := _popup.find_children("*", "ScrollContainer", true, false) if _popup != null and is_instance_valid(_popup) else []
+	if not old.is_empty():
+		keep = (old[0] as ScrollContainer).scroll_vertical
+	open_crafter()
+	if keep >= 0 and _popup != null:
+		var nw := _popup.find_children("*", "ScrollContainer", true, false)
+		if not nw.is_empty():
+			(nw[0] as ScrollContainer).set_deferred("scroll_vertical", keep)
+	_set_scrap_shown(GameState.account_scrap)
+	return true
 
 
 func close_popup() -> void:

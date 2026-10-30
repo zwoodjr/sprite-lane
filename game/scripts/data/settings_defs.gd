@@ -19,7 +19,7 @@ const DEFAULTS := {
 	## CONTROLS
 	"left_handed": false, "stick_aim": false, "stick_scale": 1.0, "stick_opacity": 1.0, "haptics": true, "haptic_strength": 1.0,
 	## ACCESSIBILITY / GAME
-	"text_size": 0, "reduce_motion": false, "cb_loot": false, "caption_size": 0, "auto_salvage_commons": false,
+	"text_size": 0, "reduce_motion": false, "cb_loot": false, "caption_size": 0, "auto_salvage_commons": false, "auto_salvage_tier": 0, "auto_salvage_sets": false,
 	"show_hints": true,
 }
 
@@ -72,7 +72,7 @@ const TABS := [
 		{"key": "reduce_motion", "type": "toggle", "label": "Reduce motion", "icon": "set_shake", "desc": "No shake, pops, wipes or drifting menus."},
 		{"key": "cb_loot", "type": "toggle", "label": "Colour-blind loot", "icon": "hud_loot", "desc": "Shapes on rarity: ● common  ▲ rare  ◆ epic  ★ legendary."},
 		{"key": "show_hints", "type": "toggle", "label": "Tutorial hints", "icon": "set_hints", "desc": "Ghost stick and rotating tips."},
-		{"key": "auto_salvage_commons", "type": "toggle", "label": "Auto-salvage Commons", "icon": "cur_scrap", "desc": "On extract, plain Commons turn into scrap. Buy back from the stash."},
+		{"key": "auto_salvage_tier", "type": "choice", "label": "Auto-salvage", "icon": "cur_scrap", "options": ["OFF", "COMMONS", "UP TO RARE", "UP TO EPIC"], "desc": "On extract, finds at or under this rarity turn into scrap. Never Legendary, locked, insured, worn or upgrades; set pieces only with the Stash toggle. Buy back from the stash."},
 		{"key": "replay_tutorial", "type": "action", "label": "Replay tutorial", "icon": "set_tutorial"},
 	]},
 	{"id": "about", "label": "ABOUT", "icon": "tab_notes", "rows": [

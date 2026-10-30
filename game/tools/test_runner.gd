@@ -174,6 +174,9 @@ func _run() -> void:
 	await _test_ascension()
 	await _test_admin()
 	await _test_behaviors()
+	await _test_scroll()
+	_test_autosalvage()
+	await _test_crafting()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -1080,7 +1083,7 @@ func _test_loot2() -> void:
 	_check(absf(float(mods) / 2000.0 - GearDefs.ELITE_MOD_CHANCE) < 0.05, "elite bonus mod rate %d" % mods)
 	_check((GearDefs.roll_role_reward("elite", "", 3, "ash_rook", 0.0, rng, false)["items"] as Array).size() == 1, "soft cap: no bonus mod")
 	## Toggle: default OFF, and an old save without the key loads OFF.
-	_check(str(SettingsDefs.row("auto_salvage_commons").get("type", "")) == "toggle", "settings row")
+	_check(str(SettingsDefs.row("auto_salvage_tier").get("type", "")) == "choice", "settings row")
 	GameState.settings.erase("auto_salvage_commons")
 	GameState.save_profile()
 	var old_save: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
@@ -1174,8 +1177,9 @@ func _test_loot2() -> void:
 	h.call("set_stash_filters", {"group": "", "rarity": "", "set": "", "fits": ""})
 	var tb := h.find_child("AutoSalvageToggle", true, false)
 	_check(tb != null and bool(h.call("toggle_auto_salvage")) and GameState.auto_salvage_on(), "stash quick toggle")
-	h.call("toggle_auto_salvage")
-	_check(not GameState.auto_salvage_on(), "stash quick toggle off")
+	for i in range(3):
+		h.call("toggle_auto_salvage")
+	_check(not GameState.auto_salvage_on(), "stash quick toggle cycles back to off")
 	h.queue_free()
 	await get_tree().process_frame
 	var lo: Node = (load("res://scenes/ui/loadout.tscn") as PackedScene).instantiate()
@@ -4225,3 +4229,272 @@ func _test_behaviors() -> void:
 	for i in range(5):
 		await get_tree().process_frame
 	print("BEHAVIORS_OK")
+
+## --- Touch scrolling (shared helper, every scrollable screen) -----------------
+func _push(ev: InputEvent) -> void:
+	get_viewport().push_input(ev, true)
+
+func _touch_drag(from: Vector2, to: Vector2, steps: int = 8, hold_end: bool = false) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = from
+	down.global_position = from
+	_push(down)
+	await get_tree().process_frame
+	var last := from
+	for i in range(1, steps + 1):
+		var p := from.lerp(to, float(i) / float(steps))
+		var mv := InputEventMouseMotion.new()
+		mv.position = p
+		mv.global_position = p
+		mv.relative = p - last
+		mv.button_mask = MOUSE_BUTTON_MASK_LEFT
+		last = p
+		_push(mv)
+		await get_tree().process_frame
+	if hold_end:
+		await get_tree().create_timer(0.15, true, false, true).timeout
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = to
+	up.global_position = to
+	_push(up)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+## First visible button inside `sc` (a row to start the drag on).
+func _row_button(sc: ScrollContainer) -> Button:
+	var r := sc.get_global_rect()
+	for b in sc.find_children("*", "Button", true, false):
+		var bb := b as Button
+		if bb.is_visible_in_tree() and not bb.disabled and r.encloses(bb.get_global_rect().grow(-2.0)):
+			return bb
+	return null
+
+func _scroll_screen(label: String, root: Node) -> void:
+	for i in range(6):
+		await get_tree().process_frame
+	var best: ScrollContainer = null
+	for sc in root.find_children("*", "ScrollContainer", true, false):
+		var s2 := sc as ScrollContainer
+		if not s2.is_visible_in_tree() or s2.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED:
+			continue
+		var c: Control = null
+		for ch in s2.get_children():
+			if ch is Control and not (ch is ScrollBar):
+				c = ch
+		if c != null and s2.size.y >= 100.0 and c.size.y > s2.size.y + 40.0:
+			best = s2
+	if best == null:
+		print("SCROLL %s: nothing tall enough to scroll (ok)" % label)
+		return
+	_check(bool(best.has_meta("touch_scroll")), "scroll %s: helper attached" % label)
+	_check(best.scroll_deadzone > 1000, "scroll %s: built-in drag off" % label)
+	best.scroll_vertical = 0
+	await get_tree().process_frame
+	var b := _row_button(best)
+	var fired := {"n": 0}
+	var from := best.get_global_rect().get_center() + Vector2(0, best.size.y * 0.25)
+	if b != null:
+		from = b.get_global_rect().get_center()
+		b.pressed.connect(func() -> void: fired["n"] += 1)
+	var to := from - Vector2(0, minf(260.0, best.size.y * 0.5))
+	await _touch_drag(from, to, 10, true)
+	_check(best.scroll_vertical > 60, "scroll %s: drag from a %s scrolls (%d)" % [label, "button" if b else "gap", best.scroll_vertical])
+	_check(int(fired["n"]) == 0, "scroll %s: drag doesn't fire the row" % label)
+	## Sideways swipe never moves a vertical list.
+	var v0 := best.scroll_vertical
+	var mid := best.get_global_rect().get_center()
+	await _touch_drag(mid, mid + Vector2(-200, 6), 8)
+	_check(absi(best.scroll_vertical - v0) <= 3, "scroll %s: no horizontal steal (%d -> %d, follow=%s)" % [label, v0, best.scroll_vertical, best.follow_focus])
+	## The last row clears the bottom safe area.
+	var content: Control = null
+	for ch in best.get_children():
+		if ch is Control and not (ch is ScrollBar):
+			content = ch
+	if content is VBoxContainer:
+		var pad := content.get_node_or_null("_TouchScrollPad")
+		_check(pad != null and content.get_child(content.get_child_count() - 1) == pad, "scroll %s: bottom pad last" % label)
+
+func _test_scroll() -> void:
+	var ts: Node = UiTheme.get_node_or_null("TouchScroll")
+	_check(ts != null, "touch scroll helper is up")
+	## A test-owned list: tap fires, drag scrolls + doesn't fire, fling glides,
+	## a rebuild after a tap keeps the position.
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var sc := ScrollContainer.new()
+	sc.position = Vector2(40, 100)
+	sc.size = Vector2(500, 600)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layer.add_child(sc)
+	var v := VBoxContainer.new()
+	v.custom_minimum_size.x = 500
+	sc.add_child(v)
+	var taps := {"n": 0}
+	var rebuild := func() -> void:
+		for c in v.get_children():
+			if c.name != "_TouchScrollPad":
+				c.queue_free()
+		for i in range(40):
+			var b := Button.new()
+			b.text = "Row %d" % i
+			b.custom_minimum_size = Vector2(0, 64)
+			b.mouse_filter = Control.MOUSE_FILTER_PASS
+			b.pressed.connect(func() -> void: taps["n"] += 1)
+			v.add_child(b)
+	rebuild.call()
+	for i in range(6):
+		await get_tree().process_frame
+	_check(bool(sc.has_meta("touch_scroll")), "helper hooks a new ScrollContainer")
+	var p0 := sc.get_global_rect().get_center()
+	await _touch_drag(p0, p0, 1)
+	_check(int(taps["n"]) == 1, "tap without movement fires the row")
+	await _touch_drag(p0, p0 - Vector2(0, 240), 10, true)
+	_check(int(taps["n"]) == 1 and sc.scroll_vertical >= 200, "drag from a row scrolls and does not tap (%d)" % sc.scroll_vertical)
+	var held := sc.scroll_vertical
+	for i in range(10):
+		await get_tree().process_frame
+	_check(sc.scroll_vertical == held, "held finger: no glide after release")
+	## Fast flick: keeps moving after release.
+	await _touch_drag(p0, p0 - Vector2(0, 200), 3)
+	var at_release := sc.scroll_vertical
+	for i in range(10):
+		await get_tree().process_frame
+	_check(sc.scroll_vertical > at_release, "fling glides (%d -> %d)" % [at_release, sc.scroll_vertical])
+	for i in range(120):
+		await get_tree().process_frame
+	## Tap a row that rebuilds the list: the position stays.
+	var keep := sc.scroll_vertical
+	for c in v.get_children():
+		if c is Button:
+			(c as Button).pressed.connect(rebuild)
+	var tap_at := sc.get_global_rect().get_center()
+	await _touch_drag(tap_at, tap_at, 1)
+	for i in range(6):
+		await get_tree().process_frame
+	_check(absi(sc.scroll_vertical - keep) <= 2, "rebuild after a tap keeps the scroll (%d vs %d)" % [sc.scroll_vertical, keep])
+	layer.queue_free()
+	await get_tree().process_frame
+	## Every scrollable screen.
+	var keep_scrap := GameState.account_scrap
+	var screens := ["res://scenes/ui/hangar.tscn", "res://scenes/ui/loadout.tscn", "res://scenes/ui/character_select.tscn",
+		"res://scenes/ui/settings_menu.tscn", "res://scenes/ui/mode_select.tscn", "res://scenes/ui/logbook.tscn",
+		"res://scenes/ui/run_history.tscn", "res://scenes/ui/campaign_map.tscn", "res://scenes/ui/prep.tscn", "res://scenes/ui/how_to_play.tscn"]
+	for path in screens:
+		var inst: Node = (load(path) as PackedScene).instantiate()
+		get_tree().root.add_child(inst)
+		get_tree().current_scene = inst
+		await _scroll_screen(path.get_file().get_basename(), inst)
+		if path.ends_with("hangar.tscn"):
+			for t in ["survivors", "kennel", "brew", "stash"]:
+				inst.call("show_tab", t)
+				await _scroll_screen("hangar/" + t, inst)
+		inst.queue_free()
+		await get_tree().process_frame
+	## Admin panel.
+	Admin.set("_tab", "RUN")
+	Admin.open_panel()
+	await _scroll_screen("admin", Admin)
+	Admin.close_panel()
+	GameState.account_scrap = keep_scrap
+	await get_tree().process_frame
+	print("SCROLL_OK")
+
+## Auto-recycle thresholds: Off / Commons / up to Rare / up to Epic.
+func _test_autosalvage() -> void:
+	var keep := [GameState.settings.duplicate(true), GameState.loadouts.duplicate(true)]
+	GameState.loadouts.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var c := GearDefs.make_gear("boots", "common", rng)
+	var r := GearDefs.make_gear("boots", "rare", rng)
+	var e := GearDefs.make_gear("hands", "epic", rng)
+	var l := GearDefs.make_gear("hands", "legendary", rng)
+	var sp := GearDefs.make_gear("chest", "epic", rng, "general", "ash_rook")
+	var lk := GearDefs.make_gear("boots", "rare", rng)
+	lk["locked"] = true
+	GameState.set_auto_salvage_tier(0)
+	_check(not GameState.auto_salvageable(c), "autosalvage off keeps commons")
+	GameState.set_auto_salvage_tier(1)
+	_check(GameState.auto_salvageable(c) and not GameState.auto_salvageable(r), "autosalvage commons tier")
+	GameState.set_auto_salvage_tier(2)
+	_check(GameState.auto_salvageable(r) and not GameState.auto_salvageable(e) and not GameState.auto_salvageable(lk), "autosalvage up to rare (locked kept)")
+	GameState.set_auto_salvage_tier(3)
+	_check(GameState.auto_salvageable(e) and not GameState.auto_salvageable(l), "autosalvage up to epic, never legendary")
+	GameState.set_setting("auto_salvage_sets", false)
+	_check(str(sp.get("set", "")) != "" and not GameState.auto_salvageable(sp), "set pieces kept by default")
+	GameState.set_setting("auto_salvage_sets", true)
+	_check(GameState.auto_salvageable(sp), "set toggle lets set pieces go")
+	GameState.settings = keep[0]
+	GameState.loadouts = keep[1]
+	print("AUTOSALVAGE_OK")
+
+## Crafter Bench: gates, costs, materials, crafting, craft-only set bonuses.
+func _test_crafting() -> void:
+	var CD: Script = load("res://scripts/data/craft_defs.gd")
+	var keep := [GameState.camp.duplicate(), GameState.account_scrap, GameState.ingredients.duplicate(), GameState.materials.duplicate(),
+		GameState.stash.duplicate(true), GameState.loadouts.duplicate(true), GameState.best_tier_extracted]
+	GameState.camp.erase("crafter")
+	GameState.best_tier_extracted = 4
+	GameState.account_scrap = 100000
+	_check(GameState.camp_gate("crafter") == 5 and not GameState.try_buy_camp("crafter"), "bench gated until Blight")
+	GameState.best_tier_extracted = 5
+	_check(GameState.try_buy_camp("crafter") and GameState.bench_rank() == 1, "bench rank 1")
+	## Craft-only: never in a random drop pool.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var seen := false
+	for i in range(4000):
+		var it := GearDefs.roll_drop(8, "ash_rook", 1.0, rng)
+		if CD.call("is_craft_set", str(it.get("set", ""))):
+			seen = true
+	_check(not seen, "craft sets never drop")
+	GameState.ingredients.clear()
+	GameState.materials.clear()
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	var chk: Dictionary = GameState.craft_check("rustwright")
+	_check(not bool(chk["ok"]) and (chk["missing"] as Dictionary).has("salvage_core"), "craft reports missing materials")
+	_check(not bool(GameState.craft_check("ashwalker")["ok"]) and str(GameState.craft_check("ashwalker")["why"]).begins_with("Needs Crafter Bench"), "set 2 needs bench rank 2")
+	## Materials from both stores (pouch first).
+	GameState.ingredients["salvage_core"] = 50
+	GameState.materials["salvage_core"] = 50
+	GameState.ingredients["machine_oil"] = 60
+	GameState.ingredients["dust_shard"] = 24
+	var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(h)
+	await get_tree().process_frame
+	h.call("open_crafter")
+	await get_tree().process_frame
+	_check(h.find_child("Set_rustwright", true, false) != null and h.find_child("Craft_rustwright_head", true, false) != null, "recipe screen lists sets + slots")
+	var made := 0
+	for slot in GearDefs.ARMOR_SLOTS:
+		if bool(h.call("craft", "rustwright", str(slot))):
+			made += 1
+	_check(made == 6 and GameState.craft_owned("rustwright").size() == 6, "crafted 6 rustwright pieces (%d)" % made)
+	_check(GameState.craft_count("salvage_core") == 100 - 96 and GameState.account_scrap == 100000 - int(HangarDefs.cost("crafter", 0)) - 5400, "craft costs paid (cores %d)" % GameState.craft_count("salvage_core"))
+	h.call("open_crafter")
+	await get_tree().process_frame
+	_check(h.find_child("Where_rustwright_salvage_core", true, false) != null, "missing material shows where it drops")
+	h.queue_free()
+	## Wear all six: the 2 / 4 / 6 bonuses turn on.
+	for it in GameState.stash:
+		if str(it.get("craft", "")) == "rustwright":
+			GameState.equip("ash_rook", str(it["slot"]), int(it["uid"]))
+	GameState.selected_character_id = "ash_rook"
+	GameState._compute_gear()
+	_check(GameState.has_set("rustwright", 6) and GameState.craft_damage_mult(null) > 1.1, "rustwright set bonuses on")
+	_check(not GameState.auto_salvageable(GameState.stash[0]), "crafted gear never auto-salvaged")
+	GameState.camp = keep[0]
+	GameState.account_scrap = int(keep[1])
+	GameState.ingredients = keep[2]
+	GameState.materials = keep[3]
+	GameState.stash = keep[4]
+	GameState.loadouts = keep[5]
+	GameState.best_tier_extracted = int(keep[6])
+	GameState._compute_gear()
+	await get_tree().process_frame
+	print("CRAFTING_OK")

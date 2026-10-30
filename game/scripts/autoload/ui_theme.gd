@@ -89,6 +89,10 @@ func _ready() -> void:
 	## Every button anywhere gets press feedback (scale + haptic tick).
 	get_tree().node_added.connect(_on_node_added)
 	_build_fade()
+	## Drag-anywhere touch scrolling with momentum for every ScrollContainer.
+	var ts: Node = load("res://scripts/ui/touch_scroll.gd").new()
+	ts.name = "TouchScroll"
+	add_child(ts)
 
 
 func _load_fonts() -> void:

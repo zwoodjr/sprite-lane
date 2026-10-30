@@ -9,6 +9,7 @@ signal ability_used(name: String)
 ## Fired when this player actually loses HP to an enemy (pets listen — Noel enrages).
 signal attacked(attacker: Node)
 ## Who landed the last hit (Run History's cause of death).
+const CraftSets = preload("res://scripts/data/craft_defs.gd")
 var last_hit_by: String = ""
 ## Fired when the player takes damage (HUD red edge flash).
 signal hurt(amount: float)
@@ -115,6 +116,9 @@ var _ram_hit: Array = []
 var _rush_active: bool = false
 ## Rook's Braced window: runs on through the rush and a beat after it.
 var _brace_left: float = 0.0
+## Crafted sets: Dust Ward cooldown, Ashwalker regen clock.
+var _ward_cd: float = 0.0
+var _craft_regen_t: float = 0.0
 var _ram_healed: float = 0.0
 
 ## --- Phase B: gear sets + named Legendaries ---
@@ -433,6 +437,13 @@ func _tick_timers(delta: float) -> void:
 	_post_heal_left = maxf(0.0, _post_heal_left - delta)
 	_rush_left = maxf(0.0, _rush_left - delta)
 	_brace_left = maxf(0.0, _brace_left - delta)
+	_ward_cd = maxf(0.0, _ward_cd - delta)
+	## Ashwalker's Shroud (2): slow regen (Greed still shrinks it).
+	if GameState.has_set("ashwalker", 2) and hp > 0.0 and hp < max_hp:
+		_craft_regen_t += delta
+		if _craft_regen_t >= float(CraftSets.SETS["ashwalker"]["regen_every"]):
+			_craft_regen_t = 0.0
+			heal(float(CraftSets.SETS["ashwalker"]["regen"]))
 	_iframes = maxf(0.0, _iframes - delta)
 	_dash_cd = maxf(0.0, _dash_cd - delta)
 	_flash_left = maxf(0.0, _flash_left - delta)
@@ -1541,7 +1552,14 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	var dmg := float(amount) * resist_mult * float(_char.get("damage_taken_mult", 1.0))
 	if _brace_left > 0.0:
 		dmg *= float(_ability.get("brace_mult", 1.0))
-	dmg *= Admin.def_mult()
+	dmg *= Admin.def_mult() * GameState.craft_taken_mult(attacker)
+	## Dustborn Regalia (6): Dust Ward eats one big hit every 30 s.
+	if _ward_cd <= 0.0 and GameState.has_set("dustborn", 6) and dmg >= max_hp * float(CraftSets.SETS["dustborn"]["ward_frac"]):
+		_ward_cd = float(CraftSets.SETS["dustborn"]["ward_cd"])
+		_iframes = HURT_IFRAMES * 0.6
+		Juice.float_text(global_position + Vector2(0, -36), "DUST WARD", Color(1.0, 0.8, 0.4), 16)
+		Juice.fx("fx_shield_hit", global_position + Vector2(0, -6), {"follow": self})
+		return
 	## Dust Surge: enemies hit harder while it lasts.
 	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("enemies"):
 		dmg *= GameState.event_enemy_damage
@@ -1685,7 +1703,7 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 		return
 	if bool(e.get("_dead")):
 		return
-	dmg *= _damage_vs(e as Node2D, src) * Admin.dmg_mult()
+	dmg *= _damage_vs(e as Node2D, src) * Admin.dmg_mult() * GameState.craft_damage_mult(e)
 	## Depth E2: plague burns, machines short out.
 	var weak := FactionDefs.weakness(str(e.get("faction")), hit_element(src))
 	if weak > 1.0:
@@ -1918,6 +1936,16 @@ func on_kill(e: Node) -> void:
 	## Plague Doctor (6): kills may drop a small heal.
 	if GameState.has_set("plague_doctor", 6) and randf() < float(gs["plague_doctor"]["kill_heal_chance"]):
 		LootDrop.spawn_burst(parent, pos, "tonic", 1, float(gs["plague_doctor"]["kill_heal"]))
+	## Rustwright's Harness (6): Overcharge shock nova every Nth kill.
+	if GameState.has_set("rustwright", 6) and _kills % int(CraftSets.SETS["rustwright"]["nova_every"]) == 0:
+		var rw: Dictionary = CraftSets.SETS["rustwright"]
+		RunFx.explosion(self, global_position, float(rw["nova_radius"]), float(rw["nova_damage"]) * damage_mult,
+			Color(0.45, 0.85, 1.0), "ability", 260.0, float(rw["nova_stun"]), "slam")
+		Juice.shake(0.15)
+	## Ashwalker's Shroud (6): Ash Bloom where the kill fell.
+	if GameState.has_set("ashwalker", 6):
+		var aw: Dictionary = CraftSets.SETS["ashwalker"]
+		RunFx.ground(parent, self, pos, "poison", float(aw["bloom_radius"]), float(aw["bloom_time"]), float(aw["bloom_dps"]))
 	## Demolition Crew (6): every Nth kill sets off a blast around you.
 	if GameState.has_set("demolition_crew", 6) and _kills % int(gs["demolition_crew"]["blast_every"]) == 0:
 		RunFx.explosion(self, global_position, float(gs["demolition_crew"]["blast_radius"]),

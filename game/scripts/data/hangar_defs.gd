@@ -18,6 +18,7 @@ extends RefCounted
 ## Dustfall ~2k after the top-tier trim). Whole bunker ~90k = roughly 45-60 runs;
 ## the cheapest open rank is always ~1-3 runs of your current tier away.
 ## Rank 2 opens after a Smog extract, rank 3 after Shroud (RANK_GATE).
+const CraftDefs = preload("res://scripts/data/craft_defs.gd")
 const SHARED_PRICES: Array = [400, 1600, 4800]
 const STATION_PRICES: Array = [250, 1100, 3300]
 ## v5 prices: only for migrating v4 saves (refund math), never for buying.
@@ -182,6 +183,8 @@ static func layer_of(id: String) -> String:
 		return "pack"
 	if id == INSURANCE_ID:
 		return "insure"
+	if id == CraftDefs.BENCH_ID:
+		return "bench"
 	return ""
 
 
@@ -199,6 +202,8 @@ static func prices(id: String) -> Array:
 			return MedicineDefs.PACK_PRICES
 		"insure":
 			return INSURANCE_PRICES
+		"bench":
+			return CraftDefs.BENCH_PRICES
 	return []
 
 
@@ -213,6 +218,8 @@ static func gate_tier(id: String, rank: int) -> int:
 			return int(RANK_GATE[clampi(rank, 0, RANK_GATE.size() - 1)])
 		"stash":
 			return int(STASH_GATE[clampi(rank, 0, STASH_GATE.size() - 1)])
+		"bench":
+			return int(CraftDefs.BENCH_GATE[clampi(rank, 0, CraftDefs.BENCH_GATE.size() - 1)])
 	return 0
 
 
@@ -238,6 +245,8 @@ static func display_name(id: String) -> String:
 			return "Field Backpack"
 		"insure":
 			return "Insurance Locker"
+		"bench":
+			return "Crafter Bench"
 	return id
 
 
@@ -282,6 +291,11 @@ static func rank_text(id: String, rank: int) -> String:
 			return "Carry %d in a run (medicine weighs %d)" % [MedicineDefs.pack_capacity(r), MedicineDefs.MEDICINE_WEIGHT]
 		"insure":
 			return "Insure 1 worn piece per survivor: it comes home even if you die"
+		"bench":
+			if r <= 0:
+				return "Craft gear sets that never drop"
+			var sid := str(CraftDefs.ORDER[r - 1])
+			return "Unlocks %s (6-piece craft-only set)" % str(CraftDefs.SETS[sid]["name"])
 	return ""
 
 
@@ -299,6 +313,8 @@ static func blurb(id: String) -> String:
 			return "More room for ingredients and medicine on the way home."
 		"insure":
 			return "A welded lockbox Helm drops with you. One piece of gear always comes back."
+		"bench":
+			return "Helm's workbench. Turns cores, oil, glands and Dust into sets the wastes never drop."
 	return ""
 
 
@@ -433,11 +449,13 @@ static func ids_for(layer: String) -> Array:
 			return ["backpack"]
 		"insure":
 			return [INSURANCE_ID]
+		"bench":
+			return [CraftDefs.BENCH_ID]
 	return []
 
 
 static func all_ids() -> Array:
-	return ids_for("shared") + ids_for("station") + ids_for("kennel") + ids_for("stash") + ids_for("pack") + ids_for("insure")
+	return ids_for("shared") + ids_for("station") + ids_for("kennel") + ids_for("stash") + ids_for("pack") + ids_for("insure") + ids_for("bench")
 
 
 ## Total scrap to max everything (sanity: ~45k per the brief).
