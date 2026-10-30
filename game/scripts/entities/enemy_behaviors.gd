@@ -16,11 +16,16 @@ extends RefCounted
 ##   summoner  — hangs back and calls minions in a purple ring; kill it and they
 ##               crumble. (plague: Geist-Alpha, Apocalypse Wraith)
 
-const SPIT := {"cd": 3.6, "windup": 0.8, "radius": 56.0, "flight": 0.55, "dmg": 1.25,
-	"pool_time": 2.6, "pool_tick": 0.5, "pool_dmg": 0.3, "min": 110.0, "max": 430.0}
-const BURROW := {"surface": 5.0, "under_max": 2.6, "under_speed": 1.7, "rise": 0.75, "radius": 62.0, "dmg": 1.4}
-const BOOM := {"arm_at": 66.0, "fuse": 0.9, "radius": 92.0, "dmg": 2.1, "chase": 1.15, "chain_dmg": 1.6}
-const BASH := {"reach": 92.0, "windup": 0.5, "cd": 3.0, "shove": 520.0, "dmg": 0.7}
+## Balance (bot A/B, Haze stay-3): the first pass took deaths 2/16 -> 12/15;
+## softer hits, a longer fuse and a thinner puddle (the bot never dodges rings).
+const SPIT := {"cd": 4.5, "windup": 0.85, "radius": 52.0, "flight": 0.55, "dmg": 0.9,
+	"pool_time": 2.2, "pool_tick": 0.5, "pool_dmg": 0.15, "min": 110.0, "max": 430.0}
+const BURROW := {"surface": 6.0, "under_max": 2.6, "under_speed": 1.6, "rise": 0.9, "radius": 58.0, "dmg": 1.0}
+const BOOM := {"arm_at": 62.0, "fuse": 1.1, "radius": 80.0, "dmg": 1.3, "chase": 1.1, "chain_dmg": 1.6}
+const BASH := {"reach": 88.0, "windup": 0.55, "cd": 3.5, "shove": 460.0, "dmg": 0.5}
+## Share of each trick-kind spawn that actually uses its trick, by zone tier
+## (Haze stays gentle; full from Smog up).
+const SHARE_BY_TIER: Array = [0.5, 0.75, 1.0]
 const SUMMON := {"cd": 8.0, "channel": 1.25, "max_alive": 4, "hp": 0.6, "global_cap": 14}
 
 ## Which kind gets which behavior (+ per-kind extras).
@@ -51,6 +56,9 @@ var _init_done: bool = false
 
 static func for_kind(kind: String) -> RefCounted:
 	if not BY_KIND.has(kind):
+		return null
+	var t := clampi(GameState.zone_tier(), 1, SHARE_BY_TIER.size())
+	if randf() >= float(SHARE_BY_TIER[t - 1]):
 		return null
 	var b: RefCounted = load("res://scripts/entities/enemy_behaviors.gd").new()
 	b.id = str(BY_KIND[kind]["b"])

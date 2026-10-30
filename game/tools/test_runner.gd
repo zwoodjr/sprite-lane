@@ -4205,7 +4205,7 @@ func _test_behaviors() -> void:
 	for want in ["spitter", "burrower", "exploder", "shield", "summoner"]:
 		_check(got.has(want), "behavior assigned: " + want)
 	GameState.play_mode = "wander"
-	GameState.selected_mode_id = ModeDefs.HAZE_ID
+	GameState.selected_mode_id = "smog" ## tricks on every trick-kind mob from Smog up
 	GameState.begin_run()
 	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
 	get_tree().root.add_child(m)

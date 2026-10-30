@@ -1,5 +1,80 @@
 # MVP status (repo mirror)
 
+**Latest (admin, economy, tester kit, Ascension curve, mob tricks, scrolling, auto-salvage, Crafter Bench):**
+
+- **Admin panel** (ADMIN chip, top-right): the panel has 5 tabs (RUN / PLAYER / SPAWN / ACCOUNT / DEBUG) with 56 px buttons and −/+ steppers.
+  - **RUN:** restart, timer pause (windows and storm hold, enemies keep coming), next window, jump to extract, extract now, teleport to a pad, a Greed stepper, kill all.
+  - **PLAYER:** god mode, damage +% and defense +% steppers, run levels, ability and ammo refill.
+  - **SPAWN:** elite, zone boss, every named boss, the Warden, or any enemy kind.
+  - **ACCOUNT:** scrap and XP, tier and Ascension steppers, unlock tiers / Ascension / stations / mechs, gear grants (by rarity, set piece, Legendary weapon), the onboarding phase-in toggle, and a reset that asks for a second tap.
+  - **DEBUG:** game speed 0.5/1/2/3×, FPS + frame-time overlay, hitboxes, enemy-cap toggle.
+  - **Admin runs:** using god mode, damage/defense boosts, timer pause or speed flags the run **ADMIN RUN**. Scrap still banks, but bests, tier clears, Ascension records and the daily score are skipped, and the history entry is flagged.
+- **Bunker economy v6.** Bot payouts per extract when leaving at window 2 (with max camp from T5 up): Haze 183, Drift 277, Smog 399, Pall 435, Blight 671, Shroud ~1,260, Blackout ~1,590, Deadfall ~1,900, Dustfall ~2,490. Choke had no clean extracts. The top-tier payout multipliers were trimmed (T7–T10: 2.5/3.0/3.5/4.5 → 2.3/2.6/3.0/3.6), so Dustfall now pays about 2,000.
+
+  | Item | Ranks (scrap) | Gates |
+  |---|---|---|
+  | Shared ×4 | 400 / 1,600 / 4,800 | rank 2 after a Smog extract, rank 3 after Shroud |
+  | Station ×8 | 250 / 1,100 / 3,300 | same |
+  | Kennel ×6 | 200 / 650 / 1,600 | same |
+  | Stash | 300 / 700 / 1,300 / 2,200 / 3,500 | –, Drift, Pall, Shroud, Deadfall |
+  | Backpack | 250 / 800 / 1,800 | Smog / Shroud |
+  | Insurance | 400 | – |
+  | Crafter Bench | 1,200 / 2,800 / 5,000 | Blight / Shroud / Blackout |
+  | **Whole bunker** | **99,350** (was 49,390) | about 45–60 runs |
+
+  Owned ranks are kept (a one-time notice explains the change), and the menu's next-goal card skips gated ranks.
+- **Tester kit:**
+  - A build stamp (`v0.11.0 · dev`) shows on the title, pause and settings screens and in every report.
+  - On iPhone/Xogot, SEND opens Mail with the report filled in (falling back to a clipboard copy). Reports now include position and the admin flag.
+  - `TESTER_GUIDE.md` explains what to test and how to send feedback.
+- **Ascension ladder.** Reordered from mild to harsh, A8/A9 "Dust-hardened", A10 Greed 1, and every level adds +4% enemy HP and +3% damage. Bot: Dustfall, max bunker + kit, clean driver, leave at the first window, 16 seeds (2 per hero) per level.
+
+  | Level | Adds | Payout | Bot deaths |
+  |---|---|---|---|
+  | A0 | – | – | 4/16 |
+  | A1 | No Mercy (no tonic drops) | +30% | 4/16 |
+  | A2 | Narrow Windows (−3 s) | +55% | 5/16 |
+  | A3 | Hunted (an elite each window) | +90% | 2/16 |
+  | A4 | Thick Dust (+25% enemy HP) | +115% | 8/16 |
+  | A5 | Hungry Dark (+25% enemies) | +140% | 7/16 |
+  | A6 | Sharp Teeth (+20% enemy damage) | +170% | 7/16 |
+  | A7 | Brittle Bones (−25% max HP) | +205% | 10/16 |
+  | A8 | Dust-hardened (+15% enemy HP and damage) | +215% | 8/16 |
+  | A9 | Dust-hardened II | +225% | 12/16 |
+  | A10 | Greed 1 at the drop | +235% | 15/16 |
+
+  A1, A2, A3 and A5 were re-run after the ramp was added; the other levels are from the run before it. Per-level noise is about ±2/16.
+- **Mob tricks** (Wander, from run 2; not in the campaign). Every attack shows a red ring first.
+
+  | Trick | Mobs | Faction / tier | What it does |
+  |---|---|---|---|
+  | Spitter | Ash-Singer, Glow-Moth Queen (3 globs) | plague, T1/T2 | lobs acid at your spot and leaves a puddle |
+  | Burrower | Dune-Stalker, Dune-Serpent | plague, T1/T2 | dives, tunnels at you (untargetable), pops up under a ring |
+  | Exploder | Coil-Spider, Void-Spider | machine T1, plague T3 | stops and blinks, then blows; killed mid-blink, it blasts its friends instead; no loot when it self-destructs |
+  | Shield-bearer | Iron-Horse, Fusion-Golem | machine, T1/T2 | front shield; shield bash shoves you |
+  | Summoner | Geist-Alpha, Apocalypse Wraith | plague, T2/T3 | calls minions in a purple ring; minions drop no loot, die with it, and are capped |
+
+  In Haze 50% of these mobs use their trick, in Drift 75%, and from Smog up all of them. Bot A/B (Haze, stay 3, 8 heroes × clean/sloppy): the first tune took deaths from 2/16 to 12/15, the re-tune brings it to 5/15. The bot never dodges rings.
+- **Scrolling.**
+  - One shared touch-scroll helper attaches to every ScrollContainer.
+  - A drag that starts on a row or button scrolls and never presses it. A tap without movement still fires.
+  - Lists have momentum, a 12 px dead zone and an axis lock (no sideways steal).
+  - A tap that rebuilds a list keeps its scroll position, and lists get bottom padding past the home bar.
+  - Headless drag tests cover the Hangar tabs, settings, campaign map, prep, admin and a test list.
+- **Auto-salvage.**
+  - Settings and Stash offer Off / Commons / Up to Rare / Up to Epic, plus a separate set-piece toggle.
+  - It never takes Legendary, locked, insured, worn, crafted, exclusive or Heart Vial items, or an upgrade.
+  - Locked items show a LOCK tag in the stash.
+  - The result screen breaks salvage down by rarity. BUY BACK still works.
+- **Crafter Bench** (Hangar → Camp). Three craft-only 6-piece sets, about 15–25 focused runs each. The recipe screen shows what you have, what's missing and where each material drops.
+
+  | Set | Bench | Per piece (×6) | 2 / 4 / 6 pc |
+  |---|---|---|---|
+  | Rustwright's Harness | 1 (Blight) | 900 scrap, 16 Salvage Core, 10 Machine Oil, 4 Dust Shard | +12% damage / machines take +25% and hit you −20% / every 12th kill a stunning nova |
+  | Ashwalker's Shroud | 2 (Shroud) | 1,300 scrap, 16 Plague Gland, 6 Ashroot, 6 Dust Shard, 1 Dust Heart | 1 HP every 2 s / plague hits −30% / kills leave a poison cloud |
+  | Dustborn Regalia | 3 (Blackout) | 2,000 scrap, 12 Dust Shard, 10 Salvage Core, 10 Plague Gland, 2 Dust Heart | +25 max HP / +10% crit / Dust Ward blocks one big hit every 30 s |
+
+
 **Latest (long-term chase + Rook pass):**
 
 - **Wander bosses:** tier 5+ boss windows now roll a named boss per zone that runs its campaign brain: Rad-Gator Matriarch, Mother Vane, Mutant Overlord, Unit Seven. The Dust Warden radio boss got its own brain (sand dash, dust hounds, a phase-2 storm ring). The Wasteland God-Entity is campaign-only, so it no longer rolls in the Wander pool.
