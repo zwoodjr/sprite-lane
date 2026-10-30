@@ -1552,7 +1552,7 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	var dmg := float(amount) * resist_mult * float(_char.get("damage_taken_mult", 1.0))
 	if _brace_left > 0.0:
 		dmg *= float(_ability.get("brace_mult", 1.0))
-	dmg *= Admin.def_mult() * GameState.craft_taken_mult(attacker)
+	dmg *= Admin.def_mult() * GameState.craft_taken_mult(attacker) * GameState.zone_guard
 	## Dustborn Regalia (6): Dust Ward eats one big hit every 30 s.
 	if _ward_cd <= 0.0 and GameState.has_set("dustborn", 6) and dmg >= max_hp * float(CraftSets.SETS["dustborn"]["ward_frac"]):
 		_ward_cd = float(CraftSets.SETS["dustborn"]["ward_cd"])

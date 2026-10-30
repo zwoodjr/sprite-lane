@@ -59,6 +59,8 @@ var result_auto_salvaged_n: int = 0
 var result_auto_salvaged_scrap: int = 0
 ## {rarity: count} for the result screen breakdown.
 var result_auto_salvaged_by: Dictionary = {}
+## Radio service: Pebble's Barricade (damage taken x inside her ring).
+var zone_guard: float = 1.0
 var result_overflow_n: int = 0
 ## Rare+ (and set) finds that didn't fit a full stash: held in pending_rewards
 ## until there's room (never salvaged silently).
@@ -2407,6 +2409,7 @@ func begin_run(drink_tonics: bool = true) -> void:
 	result_unlocks_pending = PackedStringArray()
 	event_scrap_mult = 1.0
 	event_enemy_damage = 1.0
+	zone_guard = 1.0
 	events_done_run = 0
 	extract_bonus_scrap = 0
 	extract_bonus_notes = PackedStringArray()

@@ -759,7 +759,9 @@ func spawn_mob(kind: String, at: Vector2 = Vector2.INF, role: String = "", hp_k:
 		spot = _spawn_point_outside_view(Vector2(cos(ang), sin(ang)))
 	var tl := ModeDefs.run_table(GameState.threat_level, GameState.windows_skipped)
 	var enemy: CharacterBody2D = EnemyScene.instantiate()
-	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * hp_k, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, kind)
+	## kind "" = this zone's usual roster.
+	var k := kind if kind != "" else _roll_enemy_kind()
+	enemy.setup(spot, float(tl["hp"]) * float(_mode.get("enemy_hp", 1.0)) * hp_k, float(tl["damage"]) * float(_mode.get("enemy_damage", 1.0)), 1.0, k)
 	if role != "":
 		enemy.call("set_role", role)
 	world.add_child(enemy)

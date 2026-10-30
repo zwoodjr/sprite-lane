@@ -30,6 +30,27 @@ const IN_RUN := {
 	"elite_hunt": {"name": "Elite Hunt", "weight": 0.7,
 		"radio": "Helm: I've got an elite on the scope — marked it for you. Take it down and grab what it drops.",
 		"bonus_scrap": 40, "bonus_min_rarity": "rare"},
+	## --- Oct 2026 pool (after onboarding: "late": true) -----------------------
+	## Every one is a choice: a cost you can dodge or a prize you can skip.
+	"toxic_rain": {"name": "Toxic Rain", "weight": 0.8, "late": true,
+		"radio": "Helm: Acid rain over you. Get under the shelter I marked — or stay out in it. Everything you kill out there pays half again.",
+		"duration": 22.0, "radius": 150.0, "distance": Vector2(180.0, 320.0), "drain": 1.5, "tick": 0.5, "scrap_mult": 1.5},
+	"caravan_wreck": {"name": "Caravan Wreck", "weight": 0.8, "late": true,
+		"radio": "Helm: A medicine caravan went over out there. Two crates intact — heavy, and the plague will smell them on you.",
+		"distance": Vector2(520.0, 760.0), "crates": 2, "scrap": 25},
+	"distress_flare": {"name": "Distress Flare", "weight": 0.8, "late": true,
+		"radio": "Helm: Someone fired a flare. Reach it in 25 seconds and they'll pay — but that flare's calling everything else too.",
+		"duration": 25.0, "radius": 70.0, "distance": Vector2(420.0, 620.0), "wave": 5, "bonus_scrap": 45, "tonics": 2, "heal": 14.0},
+	"raider_ambush": {"name": "Raider Ambush", "weight": 0.6, "late": true, "min_tier": 3,
+		"radio": "Helm: Raider crew closing on you. Fight them for their kit, or run for it — they won't chase far.",
+		"duration": 40.0, "bonus_scrap": 50},
+	"helms_wager": {"name": "Helm's Wager", "weight": 0.7, "late": true,
+		"radio": "Helm: Dust is heavy here. Stand in the marked spot for 3 seconds: the run pays more, but the Dust smells greed. Your call.",
+		"duration": 20.0, "radius": 70.0, "distance": Vector2(150.0, 260.0), "hold": 3.0, "loot": 0.3, "greed": 1},
+	"plague_nest": {"name": "Plague Nest", "weight": 0.7, "late": true, "min_tier": 2,
+		"radio": "Helm: Plague nest nearby — it'll keep spitting them out till it's dead. Burn it for a good drop, or keep clear.",
+		"distance": Vector2(380.0, 560.0), "every": 5.0, "spawn": 2, "kind": "muck_golem", "max": 60.0,
+		"bonus_scrap": 40, "bonus_min_rarity": "rare"},
 }
 
 ## At-extract bonuses.
@@ -39,6 +60,20 @@ const PET_BOND := {"name": "Pet Bond", "radius": 170.0, "xp": 10}
 const BOND_XP_PER_LEVEL := 50
 const BOND_MAX_LEVEL := 10
 const BOND_DAMAGE_PER_LEVEL := 0.03
+
+
+## Events that can roll: "late" ones only once onboarding is done, and only at
+## their min tier.
+static func pool(late_ok: bool, tier: int) -> Array:
+	var out: Array = []
+	for k in IN_RUN.keys():
+		var d: Dictionary = IN_RUN[k]
+		if bool(d.get("late", false)) and not late_ok:
+			continue
+		if tier < int(d.get("min_tier", 1)):
+			continue
+		out.append(str(k))
+	return out
 
 
 static func roll_event(rng: RandomNumberGenerator, exclude: Array = []) -> String:

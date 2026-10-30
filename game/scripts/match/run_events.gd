@@ -29,6 +29,9 @@ var _chip: Label
 var _arrow: Control
 var _t: float = 0.0
 var _entered_zone: bool = false
+var _hold: float = 0.0
+var _tick_t: float = 0.0
+var _crew: Node = null
 var rng := RandomNumberGenerator.new()
 
 
@@ -130,6 +133,11 @@ func _process(delta: float) -> void:
 		var skip: Array = _done_ids.duplicate()
 		if int(GameState.get_mode().get("tier", 1)) < ModeDefs.ELITE_FROM_TIER:
 			skip.append("elite_hunt")
+		## Late pool (and tier gates) via EventDefs.pool.
+		var ok := EventDefs.pool(GameState.onboarding_done(), int(GameState.get_mode().get("tier", 1)))
+		for k in EventDefs.IN_RUN.keys():
+			if not str(k) in ok and not str(k) in skip:
+				skip.append(str(k))
 		start_event(EventDefs.roll_event(rng, skip))
 	if _active != "":
 		_tick_event(delta)
@@ -200,6 +208,45 @@ func start_event(id: String) -> void:
 				e2.add_to_group("hunt_target")
 				e2.connect("died", _on_hunt_killed)
 			_left = 9999.0
+		"toxic_rain":
+			_target_pos = _spot(_def["distance"])
+			_zone = _make_zone(_target_pos, float(_def["radius"]), Color(0.55, 0.9, 1.0))
+			_overlay = _tint_overlay(Color(0.35, 0.55, 0.15, 0.0), 0.22)
+			_tick_t = float(_def["tick"])
+		"caravan_wreck":
+			_target_pos = _spot(_def["distance"])
+			for i in range(int(_def["crates"])):
+				HaulPickup.spawn(world, _target_pos + Vector2(-24 + 48 * i, 0), "medicine", 1, false)
+			LootDrop.spawn_burst(world, _target_pos + Vector2(0, 30), "scrap", 4, float(_def["scrap"]))
+			_zone = _make_zone(_target_pos, 60.0, Color(1.0, 0.45, 0.4))
+			_left = 9999.0
+		"distress_flare":
+			_target_pos = _spot(_def["distance"])
+			_zone = _make_zone(_target_pos, float(_def["radius"]), Color(1.0, 0.4, 0.3))
+			RunFx.ring(world, _target_pos, 200.0, Color(1.0, 0.4, 0.3), 1.0, 6.0)
+		"raider_ambush":
+			var a2 := rng.randf() * TAU
+			_crew = match_ctl.call("spawn_crew", player.global_position + Vector2(cos(a2), sin(a2)) * 520.0) if match_ctl.has_method("spawn_crew") else null
+			if _crew == null:
+				_finish(false)
+				return
+		"helms_wager":
+			_target_pos = _spot(_def["distance"])
+			_zone = _make_zone(_target_pos, float(_def["radius"]), Color(1.0, 0.78, 0.3))
+			_hold = 0.0
+		"plague_nest":
+			_target_pos = _spot(_def["distance"])
+			var nest: Node = match_ctl.call("spawn_at", "elite", str(_def["kind"]), _target_pos) if match_ctl.has_method("spawn_at") else null
+			if nest == null:
+				_finish(false)
+				return
+			nest.set("display_name", "Plague Nest")
+			nest.set("speed", 0.0)
+			nest.add_to_group("map_markers")
+			_target_node = nest as Node2D
+			nest.connect("died", _on_nest_killed)
+			_tick_t = float(_def["every"])
+			_left = float(_def["max"])
 
 
 func _tick_event(delta: float) -> void:
@@ -243,6 +290,75 @@ func _tick_event(delta: float) -> void:
 			_chip.text = "ELITE HUNT — take it down"
 			if _target_node == null or not is_instance_valid(_target_node):
 				_finish(false)
+		"toxic_rain":
+			var under := player.global_position.distance_to(_target_pos) <= float(_def["radius"])
+			GameState.event_scrap_mult = 1.0 if under else float(_def["scrap_mult"])
+			_tick_t -= delta
+			if _tick_t <= 0.0:
+				_tick_t = float(_def["tick"])
+				if not under and player.has_method("drain"):
+					player.call("drain", float(_def["drain"]))
+			_chip.text = "TOXIC RAIN  %ds  %s" % [ceili(_left), "SHELTERED" if under else "×1.5 SCRAP, BURNING"]
+			if _left <= 0.0:
+				_finish(true)
+		"caravan_wreck":
+			_chip.text = "CARAVAN WRECK — medicine crates"
+			if player.global_position.distance_to(_target_pos) < 70.0:
+				_finish(true)
+		"distress_flare":
+			_chip.text = "DISTRESS FLARE  %ds" % ceili(_left)
+			if player.global_position.distance_to(_target_pos) <= float(_def["radius"]):
+				GameState.scrap_found += int(_def["bonus_scrap"])
+				for i in range(int(_def["tonics"])):
+					LootDrop.spawn_burst(world, _target_pos + Vector2(rng.randf_range(-30, 30), 10), "tonic", 1, float(_def["heal"]))
+				for i in range(int(_def["wave"])):
+					if match_ctl.has_method("spawn_mob"):
+						match_ctl.call("spawn_mob", "", _target_pos + Vector2.RIGHT.rotated(TAU * i / float(_def["wave"])) * 300.0)
+				hud.show_toast("Flare reached: +%d bag scrap — and company" % int(_def["bonus_scrap"]), UiTheme.AMBER)
+				_finish(true)
+			elif _left <= 0.0:
+				_finish(false)
+		"raider_ambush":
+			var alive := false
+			if _crew != null and is_instance_valid(_crew) and not bool(_crew.get("done")):
+				for m in (_crew.get("members") as Array):
+					if is_instance_valid(m) and not bool(m.get("_dead")):
+						alive = true
+						break
+			_chip.text = "RAIDER AMBUSH  %ds" % ceili(_left)
+			if not alive:
+				GameState.scrap_found += int(_def["bonus_scrap"])
+				hud.show_toast("Crew broken: +%d bag scrap" % int(_def["bonus_scrap"]), UiTheme.AMBER)
+				_finish(true)
+			elif _left <= 0.0:
+				hud.show_toast("The crew lost interest.", UiTheme.TEXT_DIM)
+				_finish(false)
+		"helms_wager":
+			var inside := player.global_position.distance_to(_target_pos) <= float(_def["radius"])
+			_hold = _hold + delta if inside else 0.0
+			_chip.text = "HELM'S WAGER  %s" % ("%.1fs" % maxf(0.0, float(_def["hold"]) - _hold) if inside else "%ds to decide" % ceili(_left))
+			if _hold >= float(_def["hold"]):
+				GameState.boss_loot_bonus += float(_def["loot"])
+				GameState.windows_skipped += int(_def["greed"])
+				hud.show_toast("Wager taken: loot +%.1f, Greed +%d" % [float(_def["loot"]), int(_def["greed"])], UiTheme.RUST)
+				Juice.shake(0.2)
+				_finish(true)
+			elif _left <= 0.0:
+				_finish(false)
+		"plague_nest":
+			_chip.text = "PLAGUE NEST — burn it or keep clear"
+			if _target_node == null or not is_instance_valid(_target_node):
+				if _active == "plague_nest":
+					_finish(false)
+				return
+			_tick_t -= delta
+			if _tick_t <= 0.0:
+				_tick_t = float(_def["every"])
+				for i in range(int(_def["spawn"])):
+					if match_ctl.has_method("spawn_mob"):
+						match_ctl.call("spawn_mob", "", _target_node.global_position + Vector2.RIGHT.rotated(rng.randf() * TAU) * 80.0)
+			if _left <= 0.0:
+				_finish(false)
 	_chip.visible = _active != ""
 
 
@@ -256,6 +372,31 @@ func _on_hunt_killed() -> void:
 	hud.show_toast("Hunt done: +%d bag scrap and a bounty drop" % int(_def["bonus_scrap"]), UiTheme.AMBER)
 	_target_node = null
 	_finish(true)
+
+
+func _on_nest_killed() -> void:
+	if _active != "plague_nest":
+		return
+	var pos := _target_node.global_position if _target_node != null and is_instance_valid(_target_node) else player.global_position
+	GameState.scrap_found += int(_def["bonus_scrap"])
+	GearPickup.spawn(world, pos, GearDefs.roll_drop(int(GameState.get_mode().get("tier", 1)), GameState.selected_character_id,
+		GameState.gear_luck(), rng, "", str(_def["bonus_min_rarity"])))
+	hud.show_toast("Nest burned: +%d bag scrap and a drop" % int(_def["bonus_scrap"]), UiTheme.AMBER)
+	_target_node = null
+	_finish(true)
+
+
+func _tint_overlay(col: Color, alpha: float) -> ColorRect:
+	var o := ColorRect.new()
+	o.color = col
+	o.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	o.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var ol := CanvasLayer.new()
+	ol.layer = 2
+	add_child(ol)
+	ol.add_child(o)
+	o.create_tween().tween_property(o, "color:a", alpha, 1.2)
+	return o
 
 
 func _finish(success: bool) -> void:

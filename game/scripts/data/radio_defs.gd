@@ -38,6 +38,20 @@ const JOBS := {
 	"black_box": {"kind": "contract", "giver": "helm_wisp", "name": "Black Box",
 		"radio": "Helm: There's a plane down out there. I need its black box — hold still by the wreck to pry it loose.",
 		"distance": Vector2(560.0, 820.0), "channel": 3.0, "radius": 70.0, "reward_scrap": 80, "reward": {"dust_shard": 1}},
+	## Oct 2026 pool ("late": after onboarding). Each one asks for something.
+	"cull": {"kind": "contract", "giver": "vesper_thorn", "name": "Vesper's Cull", "late": true,
+		"radio": "Helm: Vesper wants the pack thinned before it reaches the camp. Fifteen kills in forty-five seconds.",
+		"kills": 15, "time": 45.0, "reward_scrap": 60, "reward": {"dust_shard": 1}},
+	"power_cells": {"kind": "contract", "giver": "bolt_juno", "name": "Juno's Power Cells", "late": true,
+		"radio": "Helm: Juno dropped three power cells on the way out. They're spread wide — grab them all.",
+		"cells": 3, "distance": Vector2(380.0, 720.0), "radius": 60.0, "guard": 1, "give_up": 150.0,
+		"reward_scrap": 75, "reward": {"salvage_core": 2}},
+	"dead_drop": {"kind": "contract", "giver": "nyx_caldera", "name": "Nyx's Dead Drop", "late": true,
+		"radio": "Helm: Nyx left a package. She says if you get hit on the way, the courier's seal breaks — so don't.",
+		"distance": Vector2(520.0, 760.0), "radius": 60.0, "reward_scrap": 85, "reward": {}},
+	"spore_samples": {"kind": "contract", "giver": "quill_marrow", "name": "Quill's Spore Samples", "late": true, "min_tier": 2,
+		"radio": "Helm: Quill needs fresh plague glands. Three more in your pouch before the next window — the plague mobs carry them.",
+		"glands": 3, "give_up": 120.0, "reward_scrap": 55, "reward": {"plague_gland": 2}},
 	## ---------------- services ----------------
 	"field_tent": {"kind": "service", "giver": "sister_cinder", "name": "Cinder's Field Tent",
 		"radio": "Helm: Cinder's pitched a field tent nearby. Get patched up — she'll burn the plague out of you too.",
@@ -53,6 +67,18 @@ const JOBS := {
 		"distance": Vector2(420.0, 640.0), "radius": 100.0, "fuse": 4.0, "guards": 3, "scrap": 30, "min_rarity": "rare"},
 	"care_package": {"kind": "service", "giver": "helm_wisp", "name": "Helm's Care Package",
 		"radio": "Helm: Care package incoming! My drone's dropping it right on you.", "tonics": 3, "heal": 12.0},
+	"turret": {"kind": "service", "giver": "bolt_juno", "name": "Juno's Turret", "late": true,
+		"radio": "Helm: Juno bolted a turret together near you. It covers a small circle for 40 seconds — fight inside it.",
+		"distance": Vector2(160.0, 260.0), "life": 40.0, "every": 0.9, "damage": 26.0, "range": 300.0},
+	"barricade": {"kind": "service", "giver": "pebble", "name": "Pebble's Barricade", "late": true,
+		"radio": "Helm: Pebble threw up sandbags. Inside her ring you take 40% less — but you can't loot what's outside.",
+		"distance": Vector2(180.0, 300.0), "radius": 130.0, "life": 35.0, "guard": 0.6},
+	"smoke": {"kind": "service", "giver": "nyx_caldera", "name": "Nyx's Smoke", "late": true,
+		"radio": "Helm: Nyx is popping smoke where you stand. Inside it they lose you — good for a breather or a getaway.",
+		"radius": 150.0, "life": 18.0},
+	"scan": {"kind": "service", "giver": "quill_marrow", "name": "Quill's Scan", "late": true,
+		"radio": "Helm: Quill's scanning the area. Everything near you is marked — they'll take more for a few seconds.",
+		"range": 640.0, "time": 8.0, "mult": 1.2},
 }
 
 ## Nyx's black market (run scrap = the bag's scrap).
@@ -90,11 +116,12 @@ static func job(id: String) -> Dictionary:
 
 
 ## Jobs of a kind whose giver isn't the hero being played (and open at this tier).
-static func jobs_for(kind: String, hero: String, tier: int = 10) -> Array:
+static func jobs_for(kind: String, hero: String, tier: int = 10, late_ok: bool = true) -> Array:
 	var out: Array = []
 	for k in JOBS.keys():
 		var j: Dictionary = JOBS[k]
-		if str(j["kind"]) == kind and str(j["giver"]) != hero and tier >= int(j.get("min_tier", 1)):
+		if str(j["kind"]) == kind and str(j["giver"]) != hero and tier >= int(j.get("min_tier", 1)) \
+				and (not bool(j.get("late", false)) or late_ok):
 			out.append(str(k))
 	return out
 

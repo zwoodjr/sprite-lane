@@ -1523,6 +1523,11 @@ func _test_quests_events() -> void:
 	await get_tree().process_frame
 	GameState.stash.clear()
 	GameState.camp = {}
+	## The newer events bring enough kills for a level-up picker, which pauses.
+	get_tree().paused = false
+	for n in get_tree().root.get_children():
+		if n.name == "UpgradePicker" or n.has_method("_on_pick"):
+			n.queue_free()
 	print("QUESTS_EVENTS_OK")
 
 
@@ -4544,7 +4549,11 @@ func _spawn_run(job: String) -> int:
 	await get_tree().physics_frame
 	m.set("quiet", false)
 	var jobs: Node = m.get("jobs")
-	if job != "" and jobs != null:
+	if job.begins_with("ev:"):
+		var evn: Node = m.get("events")
+		if evn != null:
+			evn.call("start_event", job.substr(3))
+	elif job != "" and jobs != null:
 		jobs.call("start", job)
 	var n := 0
 	for i in range(300):
@@ -4568,6 +4577,11 @@ func _test_spawns() -> void:
 	_check(await _spawn_run("") > 0, "fresh run spawns enemies within 5 s")
 	for id in RadioDefs.JOBS.keys():
 		_check(await _spawn_run(str(id)) > 0, "run with radio job %s spawns enemies" % id)
+	for ev in EventDefs.IN_RUN.keys():
+		_check(await _spawn_run("ev:" + str(ev)) > 0, "run with event %s spawns enemies" % ev)
+	_check(EventDefs.IN_RUN.size() >= 12 and RadioDefs.jobs_for("contract", "", 10).size() >= 9 and RadioDefs.jobs_for("service", "", 10).size() >= 9, "radio pool doubled")
+	_check(EventDefs.pool(false, 10).size() == 6 and RadioDefs.jobs_for("contract", "", 10, false).size() == 5, "new radio content waits for onboarding")
+	_check(is_equal_approx(GameState.zone_guard, 1.0), "barricade guard resets")
 	## The trick script loading can't break spawning.
 	var e: Node = (load("res://scenes/entities/enemy.tscn") as PackedScene).instantiate()
 	e.call("setup", Vector2.ZERO, 1.0, 1.0, 1.0, "coil_spider")

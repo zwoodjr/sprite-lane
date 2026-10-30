@@ -37,8 +37,9 @@ func setup(ctl: Node, p: Node2D, w: Node2D, h: Node, ev: Node) -> void:
 	var hero := GameState.selected_character_id
 	var ts := GameState.timer_scale()
 	var tier := int(GameState.get_mode().get("tier", 1))
-	var contracts := RadioDefs.jobs_for("contract", hero, tier)
-	var services := RadioDefs.jobs_for("service", hero, tier)
+	var late := GameState.onboarding_done()
+	var contracts := RadioDefs.jobs_for("contract", hero, tier, late)
+	var services := RadioDefs.jobs_for("service", hero, tier, late)
 	var nc := rng.randi_range(RadioDefs.CONTRACTS_PER_RUN.x, RadioDefs.CONTRACTS_PER_RUN.y)
 	var ns := rng.randi_range(RadioDefs.SERVICES_PER_RUN.x, RadioDefs.SERVICES_PER_RUN.y)
 	var givers: Array = []
@@ -230,7 +231,66 @@ func start(id: String, at: Vector2 = Vector2.INF) -> Dictionary:
 			s["pos"] = at
 			s["npc"] = _npc(giver, at, "market_stall", 110.0, Vector2(-104, 0), "Nyx's black market")
 			s["inside"] = false
+		"cull":
+			s["k0"] = GameState.kills
+		"power_cells":
+			var cells: Array = []
+			for i in range(int(j["cells"])):
+				var cp := _spot(j["distance"])
+				var cn := _prop("relay", cp, 60.0)
+				cn.scale *= 0.45
+				cells.append(cn)
+				for g in range(int(j["guard"])):
+					_mob(cp + Vector2(70, 0))
+			s["cells"] = cells
+			s["got"] = 0
+			s["pos"] = (cells[0] as Node2D).global_position if not cells.is_empty() else Vector2.INF
+		"dead_drop":
+			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
+			s["node"] = _prop("medicine_crate", s["pos"], 60.0)
+			s["phase"] = "go"
+			if player.has_signal("hurt"):
+				player.hurt.connect(func(_a: float) -> void:
+					if active.has("dead_drop") and str(active["dead_drop"]["phase"]) == "go":
+						_fail("dead_drop"))
+		"spore_samples":
+			s["g0"] = int(GameState.run_pack.get("plague_gland", 0))
+		"turret":
+			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
+			s["npc"] = _npc(giver, s["pos"], "relay", 92.0, Vector2(-80, 0), "Juno's turret")
+			s["fire_t"] = 0.5
+		"barricade":
+			s["pos"] = at if at != Vector2.INF else _spot(j["distance"])
+			s["npc"] = _npc(giver, s["pos"], "", 0.0, Vector2.ZERO, "Pebble's barricade")
+			s["ring"] = _ring_node(s["pos"], float(j["radius"]), Color(0.85, 0.75, 0.5))
+		"smoke":
+			s["pos"] = player.global_position
+			s["ring"] = _ring_node(s["pos"], float(j["radius"]), Color(0.6, 0.6, 0.65))
+			Juice.dust_puff(s["pos"], 20)
+		"scan":
+			for e in get_tree().get_nodes_in_group("enemies"):
+				if is_instance_valid(e) and (e as Node2D).global_position.distance_to(player.global_position) <= float(j["range"]) and e.has_method("apply_status"):
+					e.call("apply_status", "mark", float(j["time"]), float(j["mult"]))
+			RunFx.ring(world, player.global_position, float(j["range"]) * 0.5, Color(0.7, 1.0, 0.5), 0.8, 4.0)
+			_complete(id)
 	return s
+
+
+func _ring_node(pos: Vector2, r: float, col: Color) -> Node2D:
+	var z := Node2D.new()
+	z.position = pos
+	z.z_index = -1
+	var ring := Line2D.new()
+	var pts := PackedVector2Array()
+	for i in range(41):
+		var a := TAU * i / 40.0
+		pts.append(Vector2(cos(a) * r, sin(a) * r * 0.6))
+	ring.points = pts
+	ring.width = 4.0
+	ring.default_color = Color(col.r, col.g, col.b, 0.8)
+	z.add_child(ring)
+	world.add_child(z)
+	return z
 
 
 func _tick(id: String, delta: float) -> void:
@@ -309,6 +369,67 @@ func _tick(id: String, delta: float) -> void:
 				if float(s["fuse"]) <= 0.0:
 					_open_vault(s, j)
 					_complete(id)
+		"cull":
+			var got := GameState.kills - int(s["k0"])
+			if got >= int(j["kills"]):
+				_complete(id)
+			elif float(s["t"]) > float(j["time"]):
+				_fail(id)
+		"power_cells":
+			var cells: Array = s["cells"]
+			for c in cells.duplicate():
+				if is_instance_valid(c) and player.global_position.distance_to((c as Node2D).global_position + Vector2(0, 20)) < float(j["radius"]):
+					(c as Node).queue_free()
+					cells.erase(c)
+					s["got"] = int(s["got"]) + 1
+					Juice.sfx("pick_rare")
+			s["pos"] = Vector2.INF
+			for c in cells:
+				if is_instance_valid(c):
+					s["pos"] = (c as Node2D).global_position
+					break
+			if cells.is_empty():
+				_complete(id)
+			elif float(s["t"]) > float(j["give_up"]):
+				for c in cells:
+					if is_instance_valid(c):
+						(c as Node).queue_free()
+				_fail(id)
+		"dead_drop":
+			if near:
+				s["phase"] = "done"
+				if s["node"] and is_instance_valid(s["node"]):
+					(s["node"] as Node).queue_free()
+				_complete(id)
+		"spore_samples":
+			if int(GameState.run_pack.get("plague_gland", 0)) - int(s["g0"]) >= int(j["glands"]):
+				_complete(id)
+			elif float(s["t"]) > float(j["give_up"]):
+				_fail(id)
+		"turret":
+			s["fire_t"] = float(s["fire_t"]) - delta
+			if float(s["fire_t"]) <= 0.0:
+				s["fire_t"] = float(j["every"])
+				_snipe(s, j)
+			if float(s["t"]) > float(j["life"]):
+				_complete(id)
+		"barricade":
+			var inside := player.global_position.distance_to(pos) <= float(j["radius"])
+			GameState.zone_guard = float(j["guard"]) if inside else 1.0
+			if float(s["t"]) > float(j["life"]):
+				GameState.zone_guard = 1.0
+				if s.get("ring") and is_instance_valid(s["ring"]):
+					(s["ring"] as Node).queue_free()
+				_complete(id)
+		"smoke":
+			for e in get_tree().get_nodes_in_group("enemies"):
+				if is_instance_valid(e) and (e as Node2D).global_position.distance_to(pos) <= float(j["radius"]) and e.has_method("distract"):
+					if player.global_position.distance_to(pos) <= float(j["radius"]):
+						e.call("distract", 0.4)
+			if float(s["t"]) > float(j["life"]):
+				if s.get("ring") and is_instance_valid(s["ring"]):
+					(s["ring"] as Node).queue_free()
+				_complete(id)
 		"black_market":
 			if s["npc"] == null:
 				return
@@ -587,7 +708,9 @@ static func job_icon(id: String) -> int:
 		"black_market": return MapIcons.MARKET
 		"overwatch", "defend_relay": return MapIcons.TOWER
 		"vault": return MapIcons.VAULT
-		"care_package": return MapIcons.CRATE
+		"care_package", "dead_drop": return MapIcons.CRATE
+		"turret": return MapIcons.TOWER
+		"barricade": return MapIcons.TENT
 	return MapIcons.BANG
 
 
