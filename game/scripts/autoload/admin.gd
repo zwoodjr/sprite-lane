@@ -153,6 +153,16 @@ func game_speed() -> float:
 
 ## GameState.begin_run: a fresh run starts clean unless switches are still on.
 func on_run_begin() -> void:
+	## World switches never carry into a new run (a frozen clock or a cap
+	## override looks like a broken game); with the panel hidden, nothing does.
+	freeze_timer = false
+	no_cap = false
+	time_scale = 1.0
+	if not enabled:
+		god = false
+		dmg_pct = 0
+		def_pct = 0
+		hitboxes = false
 	run_tainted = cheats_on()
 
 func taint() -> void:

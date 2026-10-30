@@ -54,16 +54,18 @@ var _minions: Array = []
 var _init_done: bool = false
 
 
-static func for_kind(kind: String) -> RefCounted:
+## Share of trick-kind spawns using the trick at zone tier `t`.
+static func share_for_tier(t: int) -> float:
+	return float(SHARE_BY_TIER[clampi(t, 1, SHARE_BY_TIER.size()) - 1])
+
+
+## Configure a fresh instance for `kind` (the enemy creates it). False = none.
+func setup_kind(kind: String) -> bool:
 	if not BY_KIND.has(kind):
-		return null
-	var t := clampi(GameState.zone_tier(), 1, SHARE_BY_TIER.size())
-	if randf() >= float(SHARE_BY_TIER[t - 1]):
-		return null
-	var b: RefCounted = load("res://scripts/entities/enemy_behaviors.gd").new()
-	b.id = str(BY_KIND[kind]["b"])
-	b.opts = BY_KIND[kind]
-	return b
+		return false
+	id = str(BY_KIND[kind]["b"])
+	opts = BY_KIND[kind]
+	return true
 
 
 static func behavior_of(kind: String) -> String:
@@ -209,76 +211,18 @@ func _lob(e: Node, at: Vector2) -> void:
 	var world := (e as Node).get_parent()
 	if world == null:
 		return
-	var g := Glob.new()
-	g.from = (e as Node2D).global_position + Vector2(0, -18.0 * float(e.get("body_scale")))
-	g.to = at
-	g.flight = SPIT["flight"]
-	g.dmg = float(e.get("damage")) * SPIT["dmg"]
-	g.src = e
+	var g: Node2D = load("res://scripts/fx/acid_glob.gd").new()
+	var dmg := float(e.get("damage")) * float(SPIT["dmg"])
+	g.set("from", (e as Node2D).global_position + Vector2(0, -18.0 * float(e.get("body_scale"))))
+	g.set("to", at)
+	g.set("flight", float(SPIT["flight"]))
+	g.set("dmg", dmg)
+	g.set("radius", float(SPIT["radius"]))
+	g.set("pool_time", float(SPIT["pool_time"]))
+	g.set("pool_tick", float(SPIT["pool_tick"]))
+	g.set("pool_dmg", dmg * float(SPIT["pool_dmg"]) / float(SPIT["dmg"]))
+	g.set("src", e)
 	world.add_child(g)
-
-
-class Glob extends Node2D:
-	var from: Vector2
-	var to: Vector2
-	var flight: float = 0.5
-	var dmg: float = 10.0
-	var src: Node
-	var _t: float = 0.0
-
-	func _ready() -> void:
-		z_index = 50
-		global_position = from
-
-	func _process(delta: float) -> void:
-		_t += delta
-		var k := clampf(_t / flight, 0.0, 1.0)
-		global_position = from.lerp(to, k) + Vector2(0, -sin(k * PI) * 90.0)
-		queue_redraw()
-		if k >= 1.0:
-			var p := get_tree().get_first_node_in_group("player") as Node2D
-			if p and p.global_position.distance_to(to) <= SPIT["radius"] + 14.0 and p.has_method("take_damage"):
-				p.call("take_damage", dmg, src if is_instance_valid(src) else null)
-			Juice.fx("ex_plague", to + Vector2(0, -6))
-			Juice.sfx_at("hit_flesh", to, -4.0)
-			var pool := Pool.new()
-			pool.at = to
-			pool.dmg = dmg * SPIT["pool_dmg"] / SPIT["dmg"]
-			get_parent().add_child(pool)
-			queue_free()
-
-	func _draw() -> void:
-		draw_circle(Vector2.ZERO, 8.0, Color(0.55, 1.0, 0.3, 0.95))
-		draw_circle(Vector2(-2, -2), 3.5, Color(0.9, 1.0, 0.7, 0.9))
-
-
-class Pool extends Node2D:
-	var at: Vector2
-	var dmg: float = 3.0
-	var _left: float = SPIT["pool_time"]
-	var _tick: float = 0.0
-
-	func _ready() -> void:
-		z_index = -3
-		global_position = at
-
-	func _process(delta: float) -> void:
-		_left -= delta
-		_tick -= delta
-		if _tick <= 0.0:
-			_tick = SPIT["pool_tick"]
-			var p := get_tree().get_first_node_in_group("player") as Node2D
-			if p and p.global_position.distance_to(at) <= SPIT["radius"] and p.has_method("drain"):
-				p.call("drain", dmg)
-		modulate.a = clampf(_left / 0.6, 0.0, 1.0)
-		if _left <= 0.0:
-			queue_free()
-
-	func _draw() -> void:
-		var r: float = SPIT["radius"]
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.55))
-		draw_circle(Vector2.ZERO, r, Color(0.35, 0.85, 0.2, 0.28))
-		draw_arc(Vector2.ZERO, r, 0.0, TAU, 28, Color(0.55, 1.0, 0.3, 0.55), 2.0)
 
 
 ## --- burrower ----------------------------------------------------------------

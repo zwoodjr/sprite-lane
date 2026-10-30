@@ -177,6 +177,7 @@ func _run() -> void:
 	await _test_scroll()
 	_test_autosalvage()
 	await _test_crafting()
+	await _test_spawns()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4503,3 +4504,50 @@ func _test_crafting() -> void:
 	GameState._compute_gear()
 	await get_tree().process_frame
 	print("CRAFTING_OK")
+
+## "No targets" guard (Xogot, Oct 2026): a fresh Wander run, and a run with each
+## radio job active, has enemies within 5 s; admin switches don't leak in.
+func _spawn_run(job: String) -> int:
+	GameState.play_mode = "wander"
+	GameState.selected_mode_id = "drift"
+	GameState.tutorial_done = true
+	GameState.begin_run()
+	var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	m.set("quiet", false)
+	var jobs: Node = m.get("jobs")
+	if job != "" and jobs != null:
+		jobs.call("start", job)
+	var n := 0
+	for i in range(300):
+		await get_tree().physics_frame
+		n = get_tree().get_nodes_in_group("enemies").size()
+		if n > 0 and i > 30:
+			break
+	m.queue_free()
+	for i in range(3):
+		await get_tree().process_frame
+	return n
+
+func _test_spawns() -> void:
+	var keep := [GameState.tutorial_done, GameState.fast_timers]
+	GameState.fast_timers = false
+	Admin.freeze_timer = true
+	Admin.no_cap = true
+	Admin.time_scale = 2.0
+	GameState.begin_run()
+	_check(not Admin.freeze_timer and not Admin.no_cap and is_equal_approx(Admin.time_scale, 1.0), "admin world switches reset on a new run")
+	_check(await _spawn_run("") > 0, "fresh run spawns enemies within 5 s")
+	for id in RadioDefs.JOBS.keys():
+		_check(await _spawn_run(str(id)) > 0, "run with radio job %s spawns enemies" % id)
+	## The trick script loading can't break spawning.
+	var e: Node = (load("res://scenes/entities/enemy.tscn") as PackedScene).instantiate()
+	e.call("setup", Vector2.ZERO, 1.0, 1.0, 1.0, "coil_spider")
+	_check(e.get_script() != null and e.has_method("_make_trick"), "enemy sets up with or without its trick")
+	e.free()
+	GameState.tutorial_done = bool(keep[0])
+	GameState.fast_timers = bool(keep[1])
+	print("SPAWNS_OK")

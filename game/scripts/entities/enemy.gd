@@ -12,9 +12,6 @@ const BulletScene := preload("res://scenes/entities/bullet.tscn")
 ## Built from EnemyDefs (sheet crops). Legacy raider/charger/brute still resolve.
 static var KINDS: Dictionary = {}
 
-const EnemyBehaviorsScript = preload("res://scripts/entities/enemy_behaviors.gd")
-## Bot A/B runs only: WANDERER_NOTRICKS=1 turns the Wander behaviors off.
-static var _NO_TRICKS: bool = OS.get_environment("WANDERER_NOTRICKS") != ""
 var kind: String = "raider"
 var hp: float = 40.0
 var max_hp: float = 40.0
@@ -172,10 +169,27 @@ func setup(spawn_pos: Vector2, hp_mult: float, dmg_mult: float, spd_mult: float 
 	_strafe_sign = -1.0 if randf() < 0.5 else 1.0
 	## Wander behaviors (spitter / burrower / exploder / shield / summoner).
 	## Boss brains attached later replace this. Campaign fights keep their tuning.
-	if brain == null and not GameState.in_campaign_run() and GameState.feature_on("events") and not _NO_TRICKS:
-		brain = EnemyBehaviorsScript.for_kind(kind)
+	if brain == null and not GameState.in_campaign_run() and GameState.feature_on("events"):
+		brain = _make_trick(kind)
 	if is_inside_tree():
 		_apply_look()
+
+## Wander trick brain for this kind, or null. Loaded lazily and only if the
+## script compiled: a broken trick script can never stop enemies spawning
+## (Xogot "no targets" bug, Oct 2026).
+const TRICKS_PATH := "res://scripts/entities/enemy_behaviors.gd"
+func _make_trick(kind_id: String) -> RefCounted:
+	if OS.get_environment("WANDERER_NOTRICKS") != "":
+		return null
+	var scr := load(TRICKS_PATH) as GDScript
+	if scr == null or not scr.can_instantiate():
+		return null
+	if randf() >= float(scr.call("share_for_tier", GameState.zone_tier())):
+		return null
+	var b: Object = scr.new()
+	if b == null or not bool(b.call("setup_kind", kind_id)):
+		return null
+	return b as RefCounted
 
 ## Promote to an elite / boss (EnemyDefs.ROLE_STATS): tougher, bigger arrow, rewards.
 func set_role(r: String) -> void:
