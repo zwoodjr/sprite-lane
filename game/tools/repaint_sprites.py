@@ -16,7 +16,11 @@ The source is always the original art at SRC_REV (read through git), so
 re-running never compounds.
 
     python3 tools/repaint_sprites.py <unit dir under assets/sprites> ... [--out DIR] [--light]
-    e.g. enemies/rad_gator;  --light = palette mute + light grime only (pets)
+    e.g. enemies/rad_gator;  --light = palette mute + light grime only
+    --crisp = the --light palette tone-down applied per pixel on the original
+    grid (pets): alpha copied exactly, no grime, no resampling, contrast
+    stretched round the unit's mid value plus a 1 px unsharp so eyes, nose,
+    collar and fur edges stay sharp
 """
 import colorsys
 import io
@@ -324,13 +328,43 @@ class Unit:
         res[..., :3] = np.clip(out, 0, 255).astype(np.uint8)
         return res
 
-    def run(self, out_dir, light=False):
+    def tone(self, rgb):
+        """--light palette tone-down on float RGB 0..255 (no grime)."""
+        hls = cv2.cvtColor((rgb / 255.0).astype(np.float32), cv2.COLOR_RGB2HLS)
+        h, l, s_ = hls[..., 0], hls[..., 1], hls[..., 2]
+        out = cv2.cvtColor(np.stack([h, np.clip(0.93 * l ** 1.04, 0, 1), s_ * 0.76], -1), cv2.COLOR_HLS2RGB) * 255
+        return out * 0.92 + np.array([104, 92, 74], np.float32) * 0.08
+
+    def crisp(self, fr, fs):
+        """Crisp pass (pets): the light tone-down mapped colour-for-colour on
+        the original pixel grid. Alpha copied exactly (hard silhouette), no
+        noise, no resampling; contrast widened round the unit's mid value and
+        a light 1 px unsharp inside the silhouette for edge definition."""
+        a0 = fr[..., 3]
+        if a0.max() == 0:
+            return fr
+        if not hasattr(self, "_crisp_pal"):
+            t = self.tone(self.pal[None])[0]
+            lum = t @ np.array([0.299, 0.587, 0.114], np.float32)
+            mid = float(np.median(lum))
+            k = (mid + (lum - mid) * np.where(lum < mid, 1.22, 1.02)) / np.maximum(lum, 1.0)
+            self._crisp_pal = np.clip(t * k[:, None], 0, 255).astype(np.float32)
+        col = self._crisp_pal[self.labels(fr[..., :3].astype(np.float32))]
+        m = (a0 > 0).astype(np.float32)[..., None]
+        # unsharp against a blur that only sees the sprite (no halo from bg)
+        bl = cv2.GaussianBlur(col * m, (0, 0), 0.75) / np.maximum(cv2.GaussianBlur(m[..., 0], (0, 0), 0.75), 1e-3)[..., None]
+        col = np.clip(col + (col - bl) * 0.3, 0, 255)
+        res = fr.copy()
+        res[..., :3] = np.where(m > 0, np.rint(col), fr[..., :3]).astype(np.uint8)
+        return res
+
+    def run(self, out_dir, light=False, crisp=False):
         os.makedirs(out_dir, exist_ok=True)
         for f, im in self.strips.items():
             arr = np.asarray(im)
             fs = arr.shape[0]
             n = arr.shape[1] // fs
-            fn = self.light if light else self.frame
+            fn = self.crisp if crisp else self.light if light else self.frame
             frames = [fn(arr[:, i * fs:(i + 1) * fs], fs) for i in range(n)]
             Image.fromarray(np.concatenate(frames, 1), "RGBA").save(os.path.join(out_dir, f))
             print("repainted", self.rel, f, n)
@@ -339,6 +373,7 @@ class Unit:
 def main(argv):
     out = None
     light = False
+    crisp = False
     units = []
     it = iter(argv)
     for a in it:
@@ -346,11 +381,13 @@ def main(argv):
             out = next(it)
         elif a == "--light":
             light = True
+        elif a == "--crisp":
+            crisp = True
         else:
             units.append(a)
     for rel in units:
         u = Unit(rel)
-        u.run(os.path.join(out, u.name) if out else os.path.join(SPR, rel), light=light)
+        u.run(os.path.join(out, u.name) if out else os.path.join(SPR, rel), light=light, crisp=crisp)
 
 
 if __name__ == "__main__":
