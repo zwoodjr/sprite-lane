@@ -140,6 +140,7 @@ static var _alive_cache: Dictionary = {}
 var sprite: Sprite2D
 var states: Dictionary = {}
 var frame_size: int = 128
+var _ffb: float = FEET_FROM_BOTTOM
 var state: String = ""
 var frame: int = 0
 var feet_y: float = 0.0
@@ -326,7 +327,9 @@ void fragment() {
 
 ## world_frame_px: how many world px one full frame spans on screen.
 ## feet: local y (unit space) where the feet should stand.
-func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0) -> bool:
+## `hd`: texture px per art texel (2 for strips painted at 2x, e.g. pets),
+## so the feet anchor stays at the same art texel.
+func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0, hd: float = 1.0) -> bool:
 	sprite = spr
 	states = load_states(prefix)
 	_alive = ALIVE.duplicate()
@@ -338,11 +341,12 @@ func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0
 	frame_size = (any["tex"] as Texture2D).get_height()
 	feet_y = feet
 	_px_scale = world_frame_px / float(frame_size)
+	_ffb = FEET_FROM_BOTTOM * hd
 	sprite.centered = true
 	sprite.scale = Vector2.ONE * _px_scale
 	sprite.rotation = 0.0
 	sprite.position = Vector2(0.0, feet_y)
-	sprite.offset = Vector2(0.0, -(frame_size * 0.5 - FEET_FROM_BOTTOM))
+	sprite.offset = Vector2(0.0, -(frame_size * 0.5 - _ffb))
 	state = ""
 	_loco = "idle"
 	play("idle")
@@ -538,7 +542,7 @@ func frame_to_local(px: Vector2) -> Vector2:
 	var x := (px.x - frame_size * 0.5) * _px_scale
 	if sprite != null and sprite.flip_h:
 		x = -x
-	var y := (px.y - (frame_size - FEET_FROM_BOTTOM)) * _px_scale + feet_y
+	var y := (px.y - (frame_size - _ffb)) * _px_scale + feet_y
 	return Vector2(x, y)
 
 

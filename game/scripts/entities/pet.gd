@@ -81,7 +81,8 @@ func _apply_look() -> void:
 	if body and prefix != _anim_prefix:
 		_anim_prefix = prefix
 		## Native density for every pet (mech frame_world sizes predate the visual tier).
-		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y)
+		## "hd": strips painted at 2x (256 px frames) keep the same world size.
+		_anim.setup(body, prefix, PET_FRAME_WORLD, FEET_Y, float(_def.get("hd", 1.0)))
 		## Y-sorted with the hero, mobs and standing props (World y-sort).
 		z_index = 0
 	if name_label:

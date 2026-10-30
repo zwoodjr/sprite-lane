@@ -21,6 +21,12 @@ re-running never compounds.
     grid (pets): alpha copied exactly, no grime, no resampling, contrast
     stretched round the unit's mid value plus a 1 px unsharp so eyes, nose,
     collar and fur edges stay sharp
+    --real = crisp palette, shapes rebuilt at 4x with Scale2x x2 (edge
+    preserving, no blur), then painted: top-left volume, fur strokes along
+    the body (LIC, body-anchored noise), hair strands on the silhouette,
+    wet specular on eyes / nose / dark leather, paw contact occlusion;
+    Lanczos down to 2x frame size (pets ship 256 px frames; pet.gd draws
+    them at the same world size) + light unsharp, alpha thresholded (hard)
 """
 import colorsys
 import io
@@ -38,6 +44,7 @@ GAME = os.path.normpath(os.path.join(HERE, ".."))
 SPR = os.path.join(GAME, "assets", "sprites")
 SRC_REV = "358ad4a7fa74432abd95639229527d720d9277e8"
 K = 4                               # supersample
+REAL_OUT = 2                        # --real frame size multiple
 LIGHT = np.array([-0.55, -0.68, 0.48])
 LIGHT = LIGHT / np.linalg.norm(LIGHT)
 
@@ -358,13 +365,142 @@ class Unit:
         res[..., :3] = np.where(m > 0, np.rint(col), fr[..., :3]).astype(np.uint8)
         return res
 
-    def run(self, out_dir, light=False, crisp=False):
+    @staticmethod
+    def scale2x(L):
+        """EPX / Scale2x on an integer label map (edge preserving, no blur)."""
+        P = np.pad(L, 1, mode="edge")
+        A, B, C, D = P[:-2, 1:-1], P[1:-1, :-2], P[1:-1, 2:], P[2:, 1:-1]
+        E = L
+        ok = (A != D) & (B != C)
+        e0 = np.where(ok & (B == A), A, E)
+        e1 = np.where(ok & (A == C), C, E)
+        e2 = np.where(ok & (B == D), B, E)
+        e3 = np.where(ok & (D == C), D, E)
+        out = np.empty((L.shape[0] * 2, L.shape[1] * 2), L.dtype)
+        out[0::2, 0::2], out[0::2, 1::2], out[1::2, 0::2], out[1::2, 1::2] = e0, e1, e2, e3
+        return out
+
+    def real(self, fr, fs):
+        """Real pass (pets): see module doc. Same frames, poses, markings."""
+        a0 = fr[..., 3]
+        if a0.max() == 0:
+            return fr
+        if not hasattr(self, "_real_pal"):
+            self.crisp(fr, fs)                      # builds _crisp_pal
+            pal = self._crisp_pal
+            lum = pal @ np.array([0.299, 0.587, 0.114], np.float32)
+            self._dark = lum < 60
+            self._real_pal = np.concatenate([pal, np.zeros((1, 3), np.float32)])
+            seed = sum(map(ord, self.name)) + 7
+            rng = np.random.default_rng(seed)
+            W2 = fs * K * 2
+            self._fur_n = cv2.GaussianBlur(rng.random((W2, W2)).astype(np.float32), (0, 0), 1.3)
+        BG = len(self.pal)
+        lab = self.labels(fr[..., :3].astype(np.float32))
+        lab = np.where(a0 > 0, lab, BG)
+        W = fs * K
+        L = self.scale2x(self.scale2x(lab))
+        solid = L != BG
+        col = self._real_pal[L].astype(np.float32)
+        dark = np.append(self._dark, False)[L]
+        # body offset so texture sticks to the dog, not the frame
+        try:
+            (dx, dy), _ = cv2.phaseCorrelate(self.ref_a.astype(np.float64), (a0 / 255.0).astype(np.float64))
+        except cv2.error:
+            dx, dy = 0.0, 0.0
+        # ---- volume: height from silhouette distance, lit from top-left
+        d_out = cv2.distanceTransform(solid.astype(np.uint8), cv2.DIST_L2, 5)
+        hgt = cv2.GaussianBlur(np.sqrt(np.clip(d_out / (7.0 * K), 0, 1)), (0, 0), 2.0 * K)
+        gy, gx = np.gradient(hgt * 6.0 * K)
+        nrm = np.stack([-gx, -gy, np.ones_like(hgt)], -1)
+        nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
+        ndl = np.clip((nrm * LIGHT).sum(-1), 0, 1)
+        shade = 0.86 + 0.24 * ndl
+        # ---- fur: line-integral convolution of body-anchored noise along
+        # the contour tangent, biased to fall down and back
+        hb = cv2.GaussianBlur(d_out, (0, 0), 3.0 * K)
+        ty, tx = np.gradient(hb)
+        vx, vy = -ty, tx
+        flip = vy < 0
+        vx, vy = np.where(flip, -vx, vx), np.where(flip, -vy, vy)
+        vx, vy = vx + 0.25, vy + 0.6
+        nv = np.sqrt(vx * vx + vy * vy) + 1e-6
+        vx, vy = (vx / nv).astype(np.float32), (vy / nv).astype(np.float32)
+        ys, xs = np.mgrid[0:W, 0:W].astype(np.float32)
+        ox, oy = W / 2 - dx * K, W / 2 - dy * K
+        acc = np.zeros((W, W), np.float32)
+        for sgn in (1.0, -1.0):
+            px, py = xs.copy(), ys.copy()
+            for _ in range(7):
+                acc += cv2.remap(self._fur_n, px + ox, py + oy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+                sx = cv2.remap(vx, px, py, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+                sy = cv2.remap(vy, px, py, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+                px, py = px + sgn * sx * 1.4, py + sgn * sy * 1.4
+        fur = acc / 14.0
+        fur = (fur - fur[solid].mean()) / (fur[solid].std() + 1e-6)
+        fur_k = np.where(dark, 0.025, 0.05)
+        col = col * (1 + fur_k * np.clip(fur, -2, 2))[..., None]
+        # ---- crease shadow where a lighter patch meets a darker one
+        lum4 = col.mean(-1)
+        crease = np.clip(cv2.GaussianBlur(lum4, (0, 0), 1.5 * K) - lum4, 0, 40) / 40.0
+        col = col * (1 - 0.12 * crease)[..., None]
+        col = col * shade[..., None]
+        # ---- wet specular on small dark blobs (eyes, nose) + leather sheen
+        rows = np.nonzero(solid.any(1))[0]
+        top, bot_y = rows[0], rows[-1]
+        sml = ndi.label(dark & solid)
+        spec = np.zeros((W, W), np.float32)
+        for i, sl in enumerate(ndi.find_objects(sml[0]), 1):
+            m = sml[0][sl] == i
+            area = m.sum() / (K * K)
+            if not (1.5 <= area <= 14) or d_out[sl][m].min() < 1.5 * K or sl[0].stop > top + 0.42 * (bot_y - top) \
+                    or max(sl[0].stop - sl[0].start, sl[1].stop - sl[1].start) > 2.2 * min(sl[0].stop - sl[0].start, sl[1].stop - sl[1].start):
+                continue
+            yy, xx = np.nonzero(m)
+            cy, cx = sl[0].start + yy.mean(), sl[1].start + xx.mean()
+            r = max(1.2, 0.22 * np.sqrt(m.sum()))
+            sy_, sx_ = int(round(cy - 0.35 * r - 0.5)), int(round(cx - 0.35 * r - 0.5))
+            dot = ((ys - sy_) ** 2 + (xs - sx_) ** 2) <= (0.9 * r) ** 2
+            spec = np.maximum(spec, dot * (sml[0] == i) * 0.85)
+        sheen = dark & (ndl ** 6 > 0.35) & (d_out > 1.5 * K)
+        col = col + 255 * (spec[..., None] * 0.9) + sheen[..., None] * 18.0
+        # ---- paw contact occlusion (bottom of the silhouette)
+        bot = np.zeros_like(d_out)
+        colmax = np.where(solid.any(0), W - 1 - np.argmax(solid[::-1], 0), -1)
+        dist_bot = colmax[None, :] - ys
+        ao = np.clip(1 - dist_bot / (3.0 * K), 0, 1) * solid * (colmax[None, :] > W * 0.6)
+        col = col * (1 - 0.22 * ao)[..., None]
+        # ---- hair strands: a few short tufts out along the outward normal
+        edge_out = (~solid) & (cv2.distanceTransform((~solid).astype(np.uint8), cv2.DIST_L2, 5) <= 2.5)
+        tuft = edge_out & (cv2.remap(self._fur_n, xs + ox, ys + oy, cv2.INTER_NEAREST) > 0.62) & (ys < (colmax[None, :] - 3 * K))
+        nb = cv2.erode(np.where(solid[..., None], col, 255).astype(np.float32), np.ones((5, 5), np.uint8))
+        col = np.where(tuft[..., None], nb, col)
+        alpha = (solid | tuft).astype(np.float32)
+        col = np.clip(col, 0, 255)
+        # ---- back to frame size: Lanczos (premultiplied) + light unsharp,
+        # hard alpha (threshold, no halo)
+        pm = np.concatenate([col * alpha[..., None], alpha[..., None]], -1)
+        T = fs * REAL_OUT
+        sm = cv2.resize(pm, (T, T), interpolation=cv2.INTER_AREA)
+        lz = cv2.resize(pm, (T, T), interpolation=cv2.INTER_LANCZOS4)
+        a1 = sm[..., 3]
+        hard = a1 >= 0.5
+        c = np.clip(lz[..., :3], 0, None) / np.maximum(np.clip(lz[..., 3], 0, 1), 0.35)[..., None]
+        m = hard.astype(np.float32)[..., None]
+        bl = cv2.GaussianBlur(c * m, (0, 0), 0.8) / np.maximum(cv2.GaussianBlur(m[..., 0], (0, 0), 0.8), 1e-3)[..., None]
+        c = np.clip(c + (c - bl) * 0.4, 0, 255)
+        res = np.zeros((T, T, 4), np.uint8)
+        res[..., :3] = np.where(hard[..., None], np.rint(c), 0).astype(np.uint8)
+        res[..., 3] = np.where(hard, 255, 0).astype(np.uint8)
+        return res
+
+    def run(self, out_dir, light=False, crisp=False, real=False):
         os.makedirs(out_dir, exist_ok=True)
         for f, im in self.strips.items():
             arr = np.asarray(im)
             fs = arr.shape[0]
             n = arr.shape[1] // fs
-            fn = self.crisp if crisp else self.light if light else self.frame
+            fn = self.real if real else self.crisp if crisp else self.light if light else self.frame
             frames = [fn(arr[:, i * fs:(i + 1) * fs], fs) for i in range(n)]
             Image.fromarray(np.concatenate(frames, 1), "RGBA").save(os.path.join(out_dir, f))
             print("repainted", self.rel, f, n)
@@ -374,6 +510,7 @@ def main(argv):
     out = None
     light = False
     crisp = False
+    real = False
     units = []
     it = iter(argv)
     for a in it:
@@ -383,11 +520,13 @@ def main(argv):
             light = True
         elif a == "--crisp":
             crisp = True
+        elif a == "--real":
+            real = True
         else:
             units.append(a)
     for rel in units:
         u = Unit(rel)
-        u.run(os.path.join(out, u.name) if out else os.path.join(SPR, rel), light=light, crisp=crisp)
+        u.run(os.path.join(out, u.name) if out else os.path.join(SPR, rel), light=light, crisp=crisp, real=real)
 
 
 if __name__ == "__main__":
