@@ -33,7 +33,10 @@ Short and often beats long and rare. "Died at window 2 on Smog, didn't see what 
 6. **Crafter Bench** (Hangar → Camp, after a Blight extract). Craft-only 6-piece sets: Rustwright's Harness, Ashwalker's Shroud (bench rank 2), Dustborn Regalia (bench rank 3). The recipe screen shows what's missing and where it drops. Does a set feel like a fair 15–25 run goal?
 7. **Rook** (charge-in launcher). Rush now braces her (half damage during and just after) and heals a little per enemy rammed. Is she still fun? Is she too tanky?
 8. **Ascension** (after your first Dustfall extract). Use the A-level stepper on the Dustfall card. Each level stacks a rule and raises the payout. Do the jumps between levels feel smooth?
-9. **Comfort on device.** FPS when the screen is crowded, heat and battery over 20 minutes, text size (Settings → Text size), left-hand layout, the notch / Dynamic Island.
+9. **Music.** Play into Pall+ (Act II) and Choke+ (Act III): does each act sound different? Skip windows: the Greed layer should build (double kick, extra guitars, lead fills).
+10. **Mech pets** (Hangar → Kennel → Workshop). Earn blueprints by studying a machine, finding one as salvage, or beating Unit Seven (Drone Hawk).
+11. **New radio events and jobs** from run 5 on. Each should feel like a choice, not a free win.
+12. **Comfort on device.** FPS when the screen is crowded, heat and battery over 20 minutes, text size (Settings → Text size), left-hand layout, the notch / Dynamic Island.
 
 ## Good to know
 

@@ -1,5 +1,29 @@
 # MVP status (repo mirror)
 
+**Latest (music, earned mech pets, radio pool):**
+
+- **Music by act + Greed layer.** Each act has three loops (explore / combat / boss) that crossfade in lockstep, plus a Greed layer on top.
+  - Act I (Haze–Smog) keeps the original 160 BPM set and gains a Greed layer.
+  - Act II (Pall–Shroud) is new: 176 BPM galloping riffs.
+  - Act III (Choke–Dustfall) is new: 192 BPM thrash with 16th tremolo, a skank beat and a mosh breakdown.
+  - The Greed layer adds doubled octave chugs, double kick, china hits and lead fills. It rises +0.3 per window stayed, +0.35 with a boss on the field, +0.2 while a window is open, and with threat above 0.6.
+  - 9 new OGGs, about 10 MB in total, streamed.
+  - They are rendered from the CC0 Karoryfer multisamples with `tools/audio/build_metal_acts.py`, the same way as the original score. The clones need `* -text` in `.git/info/attributes`, or the WAVs get CRLF-corrupted on checkout.
+- **Earned mech pets.**
+  - A blueprint comes from Field Notes (40 kills of the source machine) or a rare salvage drop off it (0.6% per kill, 20% off its elites):
+    - Mech Hound ← Scrap-Hound
+    - Drone Bat ← Coil-Spider
+    - Rust Mule ← Iron-Horse
+  - The new **Drone Hawk** (a long-range strafe scout, 8 cores + 900 scrap) is earned by beating Unit Seven, the Dread-Naught zone boss.
+  - Mechs already built in old saves are kept. The workshop shows how to earn each blueprint.
+  - The Drone Hawk reuses the Drone Bat art, tinted gunmetal blue, until it gets its own.
+- **Radio pool doubled.** All new content arrives once onboarding is done.
+  - Events, 6 → 12: Toxic Rain (shelter, or stay out for 1.5× scrap while it burns), Caravan Wreck (2 heavy medicine crates), Distress Flare (reach it in 25 s for scrap and tonics, plus the wave it draws), Raider Ambush (fight for loot or run), Helm's Wager (stand 3 s: loot +0.3 and Greed +1), Plague Nest (keeps spawning until burned; a rare drop).
+  - Contracts, 5 → 9: Vesper's Cull (15 kills in 45 s), Juno's Power Cells (3 guarded cells), Nyx's Dead Drop (fails if you're hit on the way), Quill's Spore Samples (3 glands before time runs out).
+  - Services, 5 → 9: Juno's Turret (fight inside its circle), Pebble's Barricade (−40% damage inside her ring), Nyx's Smoke (enemies inside lose you), Quill's Scan (marks everything nearby).
+  - Bot A/B, before vs after the new radio content (Smog, stay 3 windows, 16 runs each): deaths 14/16 vs 14/16 (the bot doesn't dodge rings), average payout 96 → 110, no script errors. Nothing got trivialized.
+
+
 **Latest (admin, economy, tester kit, Ascension curve, mob tricks, scrolling, auto-salvage, Crafter Bench):**
 
 - **Admin panel** (ADMIN chip, top-right): the panel has 5 tabs (RUN / PLAYER / SPAWN / ACCOUNT / DEBUG) with 56 px buttons and −/+ steppers.
