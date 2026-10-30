@@ -82,6 +82,19 @@ const ZONE_AMB := {
 ## Run loops share tempo (160 BPM), length (72 bars) and chord map, so they play
 ## in lockstep and the game only moves the faders.
 const RUN_TRACKS := ["mus_explore", "mus_combat", "mus_boss"]
+## Per-act run sets (zone tier -> act): [explore, combat, boss, greed layer].
+## Each act's four loops share tempo + length and play in lockstep; the greed
+## layer rides on top of whichever loop leads (tools/audio/build_metal_acts.py).
+const ACT_SETS := {
+	1: ["mus_explore", "mus_combat", "mus_boss", "mus_greed_a1"],
+	2: ["mus_a2_explore", "mus_a2_combat", "mus_a2_boss", "mus_greed_a2"],
+	3: ["mus_a3_explore", "mus_a3_combat", "mus_a3_boss", "mus_greed_a3"],
+}
+## Greed layer: + per window stayed, + boss on the field, + an open extract
+## window, + raw threat above 0.6; quieter while exploring calm with no Greed.
+const LAYER_PER_GREED := 0.3
+const LAYER_BOSS := 0.35
+const LAYER_WINDOW := 0.2
 const LOOP_TRACKS := ["mus_menu", "mus_explore", "mus_combat", "mus_boss", "mus_story"]
 const STINGS := ["mus_sting_death", "mus_sting_extract"]
 ## Threat (0..1) and enemies-near-hero thresholds for explore <-> combat, with hysteresis.
@@ -112,7 +125,7 @@ var _pos: Array[AudioStreamPlayer] = []
 ## instead of player.volume_db, which reallocates the playback's bus details
 ## on every write — the audio-thread SIGSEGV seen in 2/40 bot runs
 ## (StringName copy inside AudioServer::_mix_step).
-const FADE_BUSES := {"MusMenu": "Music", "MusStem0": "Music", "MusStem1": "Music", "MusStem2": "Music",
+const FADE_BUSES := {"MusMenu": "Music", "MusStem0": "Music", "MusStem1": "Music", "MusStem2": "Music", "MusStem3": "Music",
 	"MusStory": "Music", "AmbA": "Ambience", "AmbB": "Ambience", "Storm": "Ambience", "LowHP": "SFX"}
 var _bus_db: Dictionary = {}
 var _flat_i: int = 0
@@ -128,6 +141,12 @@ var _amb_current: String = ""
 var _music_state: String = ""
 var _stem_target: Array[float] = [0.0, 0.0, 0.0]
 var _stem_level: Array[float] = [0.0, 0.0, 0.0]
+## Greed / intensity layer on top of the run loops (0..1).
+var layer_target: float = 0.0
+var _layer_level: float = 0.0
+var _layer_player: AudioStreamPlayer
+## Act whose loops are loaded on the stem players (1..3).
+var act: int = 1
 var _story_player: AudioStreamPlayer
 var _sting_player: AudioStreamPlayer
 var _story_level: float = 0.0
@@ -189,6 +208,7 @@ func _ready() -> void:
 	_menu_player = _loop_player("MusMenu", MUS_DIR + "mus_menu.ogg")
 	for si in range(RUN_TRACKS.size()):
 		_stem_players.append(_loop_player("MusStem%d" % si, MUS_DIR + RUN_TRACKS[si] + ".ogg"))
+	_layer_player = _loop_player("MusStem3", MUS_DIR + str(ACT_SETS[1][3]) + ".ogg")
 	_story_player = _loop_player("MusStory", MUS_DIR + "mus_story.ogg")
 	_sting_player = AudioStreamPlayer.new()
 	_sting_player.bus = "Music"
@@ -500,6 +520,7 @@ func set_music(state: String) -> void:
 	_story_target = 0.0
 	if state != "run":
 		_stem_target = [0.0, 0.0, 0.0]
+		layer_target = 0.0
 	match state:
 		"menu":
 			_menu_target = 1.0
@@ -517,10 +538,13 @@ func set_music(state: String) -> void:
 			if prev != "story" or not running:
 				run_track = "explore"
 				_run_track_t = 0.0
-				## Phase-locked: all three loops start together.
+				load_act(act_for_tier(GameState.zone_tier()))
+				## Phase-locked: all loops (and the greed layer) start together.
 				for p in _stem_players:
 					if p.stream:
 						p.play(0.0)
+				if _layer_player.stream:
+					_layer_player.play(0.0)
 			_apply_run_track()
 		"result":
 			## The sting is the moment: no leftover duck from the run's last SFX.
@@ -543,6 +567,42 @@ static func pick_run_track(current: String, threat: float, near: int, boss: bool
 	if current == "combat" or current == "boss":
 		return "explore" if threat < COMBAT_OFF and near <= NEAR_OFF else "combat"
 	return "combat" if threat >= COMBAT_ON or near >= NEAR_ON else "explore"
+
+
+## Zone tier -> act (I: Haze..Smog, II: Pall..Shroud, III: Choke..Dustfall).
+static func act_for_tier(tier: int) -> int:
+	return 1 if tier <= 3 else (2 if tier <= 6 else 3)
+
+
+## Swap the stem players to an act's loops (only while they're stopped, so
+## nothing jumps mid-bar). Missing files fall back to the Act I set.
+func load_act(a: int) -> void:
+	if a == act and _stem_players.size() > 0 and _stem_players[0].stream != null and _layer_player.stream != null:
+		return
+	var names: Array = ACT_SETS.get(a, ACT_SETS[1])
+	for i in range(names.size()):
+		var path := MUS_DIR + str(names[i]) + ".ogg"
+		if not ResourceLoader.exists(path):
+			path = MUS_DIR + str(ACT_SETS[1][i]) + ".ogg"
+		if not ResourceLoader.exists(path):
+			continue
+		var pl: AudioStreamPlayer = _stem_players[i] if i < _stem_players.size() else _layer_player
+		pl.stop()
+		pl.stream = _looped(load(path))
+	act = a
+
+
+## Pure: how loud the greed layer should be.
+static func layer_for(skips: int, boss: bool, window_open: bool, threat: float, track: String) -> float:
+	var v := LAYER_PER_GREED * float(clampi(skips, 0, 3))
+	if boss:
+		v += LAYER_BOSS
+	if window_open:
+		v += LAYER_WINDOW
+	v += maxf(0.0, threat - 0.6)
+	if track == "explore" and skips <= 0:
+		v *= 0.4
+	return clampf(v, 0.0, 1.0)
 
 
 func _apply_run_track() -> void:
@@ -613,10 +673,14 @@ func _process(delta: float) -> void:
 		var up := _stem_target[i] > _stem_level[i]
 		_stem_level[i] = move_toward(_stem_level[i], _stem_target[i], delta * (1.0 if up else 0.33))
 		_fade("MusStem%d" % i, _lin_db(_stem_level[i]) + MUSIC_DB)
+	_layer_level = move_toward(_layer_level, layer_target if _music_state == "run" else 0.0, delta * (0.8 if layer_target > _layer_level else 0.25))
+	_fade("MusStem3", _lin_db(_layer_level) + MUSIC_DB)
 	if _music_state != "run" and _music_state != "story" and _stem_players.size() > 0 and _stem_level.max() <= 0.001:
 		for p in _stem_players:
 			if p.playing:
 				p.stop()
+		if _layer_player.playing:
+			_layer_player.stop()
 	if _music_state == "result" and _sting_wait > 0.0:
 		_sting_wait -= delta
 		if _sting_wait <= 0.0:
@@ -697,6 +761,7 @@ func _auto_context() -> void:
 		if intensity_override >= 0.0:
 			v = intensity_override
 		update_run_music(v, near, boss, last or storming, 0.25)
+		layer_target = layer_for(GameState.windows_skipped, boss, scene.get("_extract_open") == true, v, run_track)
 		if pl != null and pl.get("max_hp") != null:
 			var hp_r := float(pl.get("hp")) / maxf(float(pl.get("max_hp")), 1.0)
 			set_low_hp(hp_r > 0.0 and hp_r < 0.3)
