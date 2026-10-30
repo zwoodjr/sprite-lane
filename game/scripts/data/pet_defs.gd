@@ -9,7 +9,18 @@ const NOEL_ID := "noel"
 const BENTLEY_ID := "bentley"
 const LILLIE_ID := "lillie"
 ## Depth E6: mech pets, rebuilt from Salvage Cores in the hangar Workshop.
-const MECH_IDS: Array = ["mech_hound", "drone_bat", "rust_mule"]
+const MECH_IDS: Array = ["mech_hound", "drone_bat", "rust_mule", "drone_hawk"]
+## Blueprints (earned, not bought): old war machines the survivors capture and
+## Helm rewires. A mech's blueprint comes from studying the machine it is built
+## from (Field Notes stage `stage`: 2 = Weak spot found, 40 kills), as a rare
+## salvage drop off that machine (`drop` per kill, `elite_drop` off its elites),
+## or for the Drone Hawk, from beating Unit Seven (Dread-Naught as a zone boss).
+const BLUEPRINTS := {
+	"mech_hound": {"from": "scrap_hound", "stage": 2, "drop": 0.006, "elite_drop": 0.2},
+	"drone_bat": {"from": "coil_spider", "stage": 2, "drop": 0.006, "elite_drop": 0.2},
+	"rust_mule": {"from": "iron_horse", "stage": 2, "drop": 0.006, "elite_drop": 0.2},
+	"drone_hawk": {"from": "dread_naught", "boss": true, "boss_drop": 1.0},
+}
 
 
 static func all_pets() -> Array[Dictionary]:
@@ -212,6 +223,39 @@ static func all_pets() -> Array[Dictionary]:
 			"mortar_damage": 34.0,
 			"mortar_delay": 0.7,
 			"note": "An iron horse with its furnace swapped for a mortar and a pack frame.",
+		},
+		{
+			"id": "drone_hawk",
+			"name": "Drone Hawk",
+			"kind": "mech",
+			"branch": "Scout",
+			"species": "war-surplus strike drone",
+			"damage": 9,
+			"loyalty": 100,
+			"active": true,
+			"equipable": true,
+			"flying": true,
+			## Placeholder look: the Drone Bat frame in gunmetal blue until it gets its own art.
+			"sprite": "res://assets/sprites/pets/drone_bat/drone_bat_idle.png",
+			"anim": "res://assets/sprites/pets/drone_bat/drone_bat",
+			"tint": Color(0.72, 0.86, 1.15),
+			"frame_world": 66.0,
+			"build_cores": 8,
+			"build_scrap": 900,
+			"follow_speed": 360.0,
+			"bite_damage": 6.0,
+			"bite_range": 46.0,
+			"bite_cooldown": 0.6,
+			"ability_id": "strafe_run",
+			"ability_name": "Hawk Strafe",
+			"ability_desc": "Scouts ahead over walls; long strafing runs that mark everything they cross (+20% damage taken).",
+			"strafe_cooldown": 3.6,
+			"strafe_range": 440.0,
+			"strafe_shots": 6,
+			"strafe_damage": 10.0,
+			"strafe_mark_mult": 1.2,
+			"strafe_mark_time": 4.0,
+			"note": "Unit Seven's spotter drone. Helm cut its leash and taught it a new master.",
 		},
 	]
 

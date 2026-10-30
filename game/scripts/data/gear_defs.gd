@@ -260,7 +260,9 @@ const ELITE_REWARD := {"min_rarity": "rare", "mod": true, "set_chance": 0.1}
 const BOSS_REWARD := {"rarity": "epic", "set": true, "materials": Vector2i(1, 2), "legendary_chance": 0.08}
 ## Boss-kill material per boss kind; anything else drops Salvage Cores.
 const BOSS_MATERIAL := {"dread_naught": "salvage_core", "mutant_overlord": "dust_heart"}
-const MATERIAL_NAME := {"salvage_core": "Salvage Core", "dust_heart": "Dust Heart"}
+const MATERIAL_NAME := {"salvage_core": "Salvage Core", "dust_heart": "Dust Heart",
+	"bp_mech_hound": "Mech Hound blueprint", "bp_drone_bat": "Drone Bat blueprint", "bp_rust_mule": "Rust Mule blueprint",
+	"bp_drone_hawk": "Drone Hawk blueprint"}
 const MATERIAL_ICON := {"salvage_core": "res://assets/sprites/pickups/salvage_core.png", "dust_heart": "res://assets/sprites/pickups/dust_heart.png"}
 ## Boss kill: added to the run's loot multiplier immediately.
 const BOSS_LOOT_BONUS := 0.5

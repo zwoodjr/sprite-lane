@@ -803,8 +803,46 @@ func pet_available(pet_id: String) -> bool:
 func salvage_cores() -> int:
 	return int(ingredients.get("salvage_core", 0)) + material_count("salvage_core")
 
+## Mech blueprints (earned): Field Notes stage on the source machine, a banked
+## salvage blueprint ("bp_<id>"), or the mech is already built (old saves).
+func has_blueprint(pet_id: String) -> bool:
+	if mechs_built.has(pet_id) or material_count("bp_" + pet_id) > 0:
+		return true
+	var bp: Dictionary = PetDefs.BLUEPRINTS.get(pet_id, {})
+	if bp.has("stage") and BestiaryDefs.stage_for(bestiary_kills(str(bp["from"]))) >= int(bp["stage"]):
+		return true
+	return false
+
+## How to earn a blueprint (workshop line).
+func blueprint_hint(pet_id: String) -> String:
+	var bp: Dictionary = PetDefs.BLUEPRINTS.get(pet_id, {})
+	var nm := str(EnemyDefs.get_kind(str(bp.get("from", ""))).get("display_name", bp.get("from", "")))
+	if bool(bp.get("boss", false)):
+		return "Blueprint: beat Unit Seven (%s zone boss, Shroud and up)" % nm
+	var need := int(BestiaryDefs.THRESHOLDS[clampi(int(bp.get("stage", 2)) - 1, 0, BestiaryDefs.THRESHOLDS.size() - 1)])
+	return "Blueprint: study the %s (%d/%d kills) or salvage one off it" % [nm, mini(bestiary_kills(str(bp.get("from", ""))), need), need]
+
+## Kill hook: a blueprint may drop off its source machine (banked on extract).
+## Returns the mech id that dropped ("" if none).
+func roll_blueprint(kind: String, role: String) -> String:
+	if in_campaign_run():
+		return ""
+	for mid in PetDefs.BLUEPRINTS.keys():
+		var bp: Dictionary = PetDefs.BLUEPRINTS[mid]
+		if str(bp["from"]) != kind or has_blueprint(str(mid)) or int(run_materials.get("bp_" + str(mid), 0)) > 0:
+			continue
+		var ch := 0.0
+		if bool(bp.get("boss", false)):
+			ch = float(bp.get("boss_drop", 0.0)) if role == "boss" else 0.0
+		else:
+			ch = float(bp.get("elite_drop", 0.0)) if role != "" else float(bp.get("drop", 0.0))
+		if randf() < ch:
+			add_run_material("bp_" + str(mid), 1)
+			return str(mid)
+	return ""
+
 func can_build_mech(pet_id: String) -> bool:
-	if not PetDefs.is_mech(pet_id) or mechs_built.has(pet_id):
+	if not PetDefs.is_mech(pet_id) or mechs_built.has(pet_id) or not has_blueprint(pet_id):
 		return false
 	var d := PetDefs.get_pet(pet_id)
 	return salvage_cores() >= int(d["build_cores"]) and account_scrap >= int(d["build_scrap"])
@@ -2522,6 +2560,10 @@ func note_kill(kind: String) -> void:
 	var after := BestiaryDefs.stage_for(bestiary_kills(kind))
 	if after > before:
 		result_unlocks_pending.append("Field Notes: %s — %s" % [str(EnemyDefs.get_kind(kind).get("display_name", kind)), str(BestiaryDefs.STAGE_NAME[after])])
+		for mid in PetDefs.BLUEPRINTS.keys():
+			var bp: Dictionary = PetDefs.BLUEPRINTS[mid]
+			if str(bp["from"]) == kind and int(bp.get("stage", 99)) == after and not mechs_built.has(str(mid)):
+				result_unlocks_pending.append("Blueprint: %s — build it in the Hangar Workshop" % str(PetDefs.get_pet(str(mid)).get("name", mid)))
 	quest_event("kills", 1, {"kind": kind})
 
 ## Scavenger's Eye (+ Field Salvager 2) multiplier on kill scrap.

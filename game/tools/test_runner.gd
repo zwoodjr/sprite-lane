@@ -178,6 +178,7 @@ func _run() -> void:
 	_test_autosalvage()
 	await _test_crafting()
 	await _test_spawns()
+	_test_blueprints()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -479,6 +480,20 @@ func _test_music() -> void:
 	snd.call("set_music", "story")
 	snd.call("set_music", "run")
 	_check(str(snd.get("run_track")) == "boss", "music: story beat doesn't restart the run score")
+	## Per-act sets + greed layer (zone tier -> act; layer rises with Greed / boss / window).
+	var SoundScript: Script = snd.get_script()
+	_check(int(SoundScript.call("act_for_tier", 1)) == 1 and int(SoundScript.call("act_for_tier", 5)) == 2 and int(SoundScript.call("act_for_tier", 10)) == 3, "music: act by tier")
+	var l0 := float(SoundScript.call("layer_for", 0, false, false, 0.2, "explore"))
+	var l1 := float(SoundScript.call("layer_for", 1, false, false, 0.2, "combat"))
+	var l3 := float(SoundScript.call("layer_for", 3, true, true, 0.9, "boss"))
+	_check(l0 < 0.1 and l1 > l0 and l3 >= 0.99, "music: greed layer climbs (%.2f %.2f %.2f)" % [l0, l1, l3])
+	for a in [1, 2, 3]:
+		for nm in (SoundScript.get_script_constant_map()["ACT_SETS"] as Dictionary)[a]:
+			_check(ResourceLoader.exists("res://assets/audio/music/%s.ogg" % str(nm)), "music file %s" % nm)
+	snd.call("load_act", 3)
+	var sp: Array = snd.get("_stem_players")
+	_check(int(snd.get("act")) == 3 and (sp[1] as AudioStreamPlayer).stream != null, "music: act III loaded")
+	snd.call("load_act", 1)
 	snd.call("set_music", "menu")
 	## Panning.
 	_check(float(snd.call("pan_for", -200.0, 300.0)) < 0.0, "pan: left of camera is negative")
@@ -1933,6 +1948,11 @@ func _test_depth_e6() -> void:
 	GameState.materials["salvage_core"] = 0
 	GameState.account_scrap = 5000
 	_check(not GameState.can_build_mech("mech_hound") and not GameState.try_buy_camp("kennel_mech_hound"), "e6 needs cores; bay closed")
+	## Blueprints (earned) for every mech so this section tests the build costs.
+	var keep_bp := {}
+	for bmid in PetDefs.MECH_IDS:
+		keep_bp["bp_" + str(bmid)] = GameState.material_count("bp_" + str(bmid))
+		GameState.materials["bp_" + str(bmid)] = 1
 	GameState.ingredients["salvage_core"] = 10
 	_check(GameState.build_mech("mech_hound") and GameState.salvage_cores() == 6 and GameState.account_scrap == 4700, "e6 build spends cores + scrap")
 	_check(not GameState.build_mech("mech_hound") and GameState.pet_available("mech_hound") and not GameState.pet_available("drone_bat"), "e6 built once")
@@ -2008,6 +2028,11 @@ func _test_depth_e6() -> void:
 	await get_tree().process_frame
 	_check(bool(hg.call("build_mech", "drone_bat")) and GameState.pet_available("drone_bat"), "e6 hangar workshop build")
 	hg.queue_free()
+	for bk in keep_bp.keys():
+		if int(keep_bp[bk]) > 0:
+			GameState.materials[bk] = int(keep_bp[bk])
+		else:
+			GameState.materials.erase(bk)
 	GameState.selected_pet_id = "noel"
 	GameState.reset_loadout_to_defaults()
 	await get_tree().process_frame
@@ -4551,3 +4576,34 @@ func _test_spawns() -> void:
 	GameState.tutorial_done = bool(keep[0])
 	GameState.fast_timers = bool(keep[1])
 	print("SPAWNS_OK")
+
+## Earned mech pets: blueprints from Field Notes / salvage / Unit Seven; old builds kept.
+func _test_blueprints() -> void:
+	var keep := [GameState.mechs_built.duplicate(), GameState.bestiary.duplicate(), GameState.materials.duplicate(),
+		GameState.run_materials.duplicate(), GameState.account_scrap, GameState.ingredients.duplicate()]
+	GameState.mechs_built.clear()
+	GameState.bestiary.erase("scrap_hound")
+	GameState.materials.erase("bp_mech_hound")
+	GameState.run_materials.clear()
+	GameState.account_scrap = 99999
+	GameState.ingredients["salvage_core"] = 99
+	_check("drone_hawk" in PetDefs.MECH_IDS and PetDefs.is_mech("drone_hawk"), "drone hawk is a mech pet")
+	_check(not GameState.has_blueprint("mech_hound") and not GameState.can_build_mech("mech_hound"), "no blueprint, no build")
+	GameState.bestiary["scrap_hound"] = 40
+	_check(GameState.has_blueprint("mech_hound") and GameState.can_build_mech("mech_hound"), "Field Notes stage gives the blueprint")
+	_check(not GameState.has_blueprint("drone_hawk"), "hawk needs Unit Seven")
+	var got := GameState.roll_blueprint("dread_naught", "boss")
+	_check(got == "drone_hawk" and int(GameState.run_materials.get("bp_drone_hawk", 0)) == 1, "Unit Seven drops the hawk blueprint")
+	_check(GameState.roll_blueprint("dread_naught", "") == "", "only the boss drops it")
+	GameState.materials["bp_drone_hawk"] = 1
+	_check(GameState.build_mech("drone_hawk") and GameState.pet_available("drone_hawk"), "hawk builds")
+	## Old saves keep built mechs without a blueprint.
+	GameState.mechs_built = {"rust_mule": true}
+	_check(GameState.has_blueprint("rust_mule") and GameState.pet_available("rust_mule"), "built mechs grandfathered")
+	GameState.mechs_built = keep[0]
+	GameState.bestiary = keep[1]
+	GameState.materials = keep[2]
+	GameState.run_materials = keep[3]
+	GameState.account_scrap = int(keep[4])
+	GameState.ingredients = keep[5]
+	print("BLUEPRINTS_OK")

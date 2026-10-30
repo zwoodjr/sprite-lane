@@ -544,6 +544,10 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	need.add_theme_constant_override("separation", 8)
 	info.add_child(need)
 	var okc := GameState.can_build_mech(mid)
+	if not GameState.has_blueprint(mid):
+		var bh := UiTheme.body_label(GameState.blueprint_hint(mid), UiTheme.T_SMALL, UiTheme.AMBER)
+		bh.name = "Blueprint_" + mid
+		info.add_child(bh)
 	need.add_child(IconSet.rect("mat_salvage_core", 48))
 	var n1 := UiTheme.pixel_label("%d" % int(d["build_cores"]), UiTheme.PX_M, UiTheme.TEXT if okc else UiTheme.DANGER)
 	n1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -553,7 +557,7 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	n2.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	need.add_child(n2)
 	var ok := GameState.can_build_mech(mid)
-	var btn := UiTheme.big_button("BUILD", UiTheme.TEAL if ok else UiTheme.RUST, 64, 20)
+	var btn := UiTheme.big_button("BUILD" if GameState.has_blueprint(mid) else "NO PLAN", UiTheme.TEAL if ok else UiTheme.RUST, 64, 20)
 	btn.disabled = not ok
 	btn.custom_minimum_size.x = 136
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER

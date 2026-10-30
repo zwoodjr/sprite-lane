@@ -768,6 +768,11 @@ func _die() -> void:
 	var scrap := randi_range(range_v.x, range_v.y)
 	GameState.kills += 1
 	GameState.note_kill(kind)
+	## Mech blueprints off their source machines (Drone Hawk: Unit Seven).
+	var bp := GameState.roll_blueprint(kind, role)
+	if bp != "":
+		Juice.float_text(global_position + Vector2(0, -60), "BLUEPRINT: %s" % str(PetDefs.get_pet(bp).get("name", bp)).to_upper(), Color(0.55, 0.9, 1.0), 20)
+		Juice.sfx("ui_purchase")
 	_status.clear()
 	## Loot pops out and magnets to the hero: scrap bolts + Dust-shard XP,
 	## sometimes a small health tonic (more often from elites/bosses).

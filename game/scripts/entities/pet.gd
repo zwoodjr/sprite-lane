@@ -538,7 +538,7 @@ func _update_visuals(delta: float) -> void:
 	elif _flash_left > 0.0 or _accent_left > 0.0:
 		body.modulate = Color(1.35, 1.2, 0.95)
 	else:
-		body.modulate = Color.WHITE
+		body.modulate = _def.get("tint", Color.WHITE)
 
 func is_rampaging() -> bool:
 	return _rampaging

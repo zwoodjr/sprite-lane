@@ -141,6 +141,13 @@ const KENNEL := {
 		"strafe_mark_mult": [1.15, 1.18, 1.22, 1.28],
 		"rank_text": ["", "5 shots per strafe", "6 shots, marks +22%", "8 shots, marks +28%"],
 	},
+	"drone_hawk": {
+		"name": "Drone Hawk", "blurb": "Longer runs, more rounds, deeper marks.",
+		"strafe_shots": [6, 7, 8, 10],
+		"strafe_damage": [10.0, 11.0, 12.0, 14.0],
+		"strafe_mark_mult": [1.2, 1.23, 1.26, 1.32],
+		"rank_text": ["", "7 rounds per run", "8 rounds, marks +26%", "10 rounds, marks +32%"],
+	},
 	"rust_mule": {
 		"name": "Rust Mule", "blurb": "Bigger shells, more to carry.",
 		"mortar_damage": [34.0, 42.0, 50.0, 62.0],
@@ -442,7 +449,7 @@ static func ids_for(layer: String) -> Array:
 			return out
 		"kennel":
 			return [kennel_id("noel"), kennel_id("bentley"), kennel_id("lillie"),
-				kennel_id("mech_hound"), kennel_id("drone_bat"), kennel_id("rust_mule")]
+				kennel_id("mech_hound"), kennel_id("drone_bat"), kennel_id("rust_mule"), kennel_id("drone_hawk")]
 		"stash":
 			return ["stash"]
 		"pack":
