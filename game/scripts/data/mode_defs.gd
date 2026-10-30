@@ -253,8 +253,12 @@ const ASCENSION := [
 
 
 ## Extra multiplier for a pact_fx key at Ascension `lv` (A8 / A9 rules).
+## Every level also hardens enemies a little (bot data: A1-A3's rules alone
+## didn't move a first-window clear), so the curve climbs from A1.
+const ASCENSION_RAMP := {"enemy_hp": 0.04, "enemy_damage": 0.03}
+
 static func ascension_fx(lv: int, key: String) -> float:
-	var v := 1.0
+	var v := 1.0 + float(ASCENSION_RAMP.get(key, 0.0)) * float(clampi(lv, 0, ASCENSION_MAX))
 	for i in range(clampi(lv, 0, ASCENSION_MAX)):
 		var fx: Dictionary = ASCENSION[i][4] if (ASCENSION[i] as Array).size() > 4 else {}
 		if fx.has(key):

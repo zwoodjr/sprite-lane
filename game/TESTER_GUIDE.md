@@ -27,10 +27,13 @@ Short and often beats long and rare. "Died at window 2 on Smog, didn't see what 
    - **Summoners** (Geist-Alpha, Apocalypse Wraith) call minions in a purple ring. Kill the summoner and the minions crumble.
 
    Is each one readable in time? Which ones feel unfair?
-3. **Bunker (Hangar) pace.** Does the next upgrade always feel 1–3 runs away? Does maxing out feel like a long goal and not a weekend?
-4. **Rook** (charge-in launcher). Rush now braces her (half damage during and just after) and heals a little per enemy rammed. Is she still fun? Is she too tanky?
-5. **Ascension** (after your first Dustfall extract). Use the A-level stepper on the Dustfall card. Each level stacks a rule and raises the payout. Do the jumps between levels feel smooth?
-6. **Comfort on device.** FPS when the screen is crowded, heat and battery over 20 minutes, text size (Settings → Text size), left-hand layout, the notch / Dynamic Island.
+3. **Bunker (Hangar) pace.** Does the next upgrade always feel 1–3 runs away? Does maxing out feel like a long goal and not a weekend? Rank 2 opens after a Smog extract, rank 3 after Shroud.
+4. **Scrolling.** Every list (Hangar, Stash, Gear, Settings, Admin, Logbook, recipes): drag starting on a button should scroll and never press it. A flick should glide. The last row should clear the home bar.
+5. **Stash → AUTO-SALVAGE.** Cycle OFF / COMMONS / UP TO RARE / UP TO EPIC, plus SETS: KEEP / SALVAGE. Lock favourites from the item card (they show a LOCK tag). After an extract, the result screen shows what got recycled. BUY BACK undoes it.
+6. **Crafter Bench** (Hangar → Camp, after a Blight extract). Craft-only 6-piece sets: Rustwright's Harness, Ashwalker's Shroud (bench rank 2), Dustborn Regalia (bench rank 3). The recipe screen shows what's missing and where it drops. Does a set feel like a fair 15–25 run goal?
+7. **Rook** (charge-in launcher). Rush now braces her (half damage during and just after) and heals a little per enemy rammed. Is she still fun? Is she too tanky?
+8. **Ascension** (after your first Dustfall extract). Use the A-level stepper on the Dustfall card. Each level stacks a rule and raises the payout. Do the jumps between levels feel smooth?
+9. **Comfort on device.** FPS when the screen is crowded, heat and battery over 20 minutes, text size (Settings → Text size), left-hand layout, the notch / Dynamic Island.
 
 ## Good to know
 

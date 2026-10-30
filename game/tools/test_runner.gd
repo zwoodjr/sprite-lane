@@ -4109,7 +4109,7 @@ func _test_ascension() -> void:
 	_check(GameState.ascension_open() == ModeDefs.ASCENSION_MAX, "ascension: capped")
 	_check(ModeDefs.ascension_pacts(3).size() == 3 and ModeDefs.ascension_pacts(10).size() == 7, "ascension: pacts stack")
 	_check(ModeDefs.ascension_greed(9) == 0 and ModeDefs.ascension_greed(10) == 1, "ascension: greed from the drop")
-	_check(is_equal_approx(ModeDefs.ascension_fx(9, "enemy_hp"), 1.3225) and is_equal_approx(ModeDefs.ascension_fx(7, "enemy_hp"), 1.0), "ascension: dust-hardened stacks")
+	_check(is_equal_approx(ModeDefs.ascension_fx(9, "enemy_hp"), 1.36 * 1.3225) and is_equal_approx(ModeDefs.ascension_fx(7, "enemy_hp"), 1.28), "ascension: ramp + dust-hardened stack")
 	_check(ModeDefs.ascension_loot(10) > ModeDefs.ascension_loot(1), "ascension: payout rises")
 	for id in ModeDefs.ascension_pacts(10):
 		_check(not ZoneDefs.pact(str(id)).is_empty(), "ascension pact exists " + str(id))
