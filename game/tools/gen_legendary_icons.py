@@ -87,7 +87,7 @@ MAT = {
     "steel": dict(c=hx("#6b7178"), spec=0.8, grime=0.45, rust=0.3),
     "blade": dict(c=hx("#9aa3a8"), spec=1.0, grime=0.3, rust=0.18),
     "dark": dict(c=hx("#30333a"), spec=0.45, grime=0.4, rust=0.15, metal=0.8),
-    "red": dict(c=hx("#9e3324"), spec=0.35, grime=0.55, rust=0.4, chip="steel"),
+    "red": dict(c=hx("#8a3a2c"), spec=0.35, grime=0.55, rust=0.4, chip="steel"),
     "rust": dict(c=hx("#7a3a1e"), spec=0.2, grime=0.6, rust=0.6),
     "wood": dict(c=hx("#6e4428"), spec=0.25, grime=0.5, rust=0.0, grain=1),
     "leather": dict(c=hx("#4a3324"), spec=0.15, grime=0.4, rust=0.0),
@@ -96,15 +96,15 @@ MAT = {
     "brass": dict(c=hx("#9a7330"), spec=0.9, grime=0.45, rust=0.1),
     "olive": dict(c=hx("#5f6340"), spec=0.3, grime=0.55, rust=0.35, chip="steel"),
     "bone": dict(c=hx("#cfc3a6"), spec=0.3, grime=0.5, rust=0.0),
-    "glass": dict(c=hx("#6fbf3a"), spec=1.2, grime=0.1, rust=0.0, glow=1),
-    "ember": dict(c=hx("#e8761c"), spec=1.0, grime=0.0, rust=0.0, glow=1),
-    "signal": dict(c=hx("#d8661a"), spec=0.5, grime=0.5, rust=0.3, chip="steel"),
-    "arc": dict(c=hx("#7fe6ff"), spec=1.0, grime=0.0, rust=0.0, glow=1),
-    "tealp": dict(c=hx("#3f857b"), spec=0.4, grime=0.5, rust=0.3, chip="steel"),
+    "glass": dict(c=hx("#6a9a3e"), spec=1.2, grime=0.1, rust=0.0, glow=1),
+    "ember": dict(c=hx("#c8662a"), spec=1.0, grime=0.0, rust=0.0, glow=1),
+    "signal": dict(c=hx("#b8602a"), spec=0.5, grime=0.5, rust=0.3, chip="steel"),
+    "arc": dict(c=hx("#b8dce4"), spec=1.0, grime=0.0, rust=0.0, glow=1),
+    "tealp": dict(c=hx("#466e66"), spec=0.4, grime=0.5, rust=0.3, chip="steel"),
     "tealwrap": dict(c=hx("#3a6e68"), spec=0.1, grime=0.6, rust=0.0, wrap=1),
     "scorch": dict(c=hx("#3a2622"), spec=0.3, grime=0.3, rust=0.2, chip="dark"),
-    "toxicp": dict(c=hx("#5c7a26"), spec=0.35, grime=0.5, rust=0.3, chip="steel"),
-    "voltp": dict(c=hx("#2f4f78"), spec=0.6, grime=0.4, rust=0.15, chip="steel"),
+    "toxicp": dict(c=hx("#5a6a34"), spec=0.35, grime=0.5, rust=0.3, chip="steel"),
+    "voltp": dict(c=hx("#3a4e66"), spec=0.6, grime=0.4, rust=0.15, chip="steel"),
     "frostp": dict(c=hx("#9db4c2"), spec=0.6, grime=0.35, rust=0.1, chip="steel"),
     "frost": dict(c=hx("#dff2ff"), spec=1.0, grime=0.0, rust=0.0, glow=1),
     "iceblade": dict(c=hx("#8fd0ea"), spec=1.1, grime=0.15, rust=0.0),
@@ -219,6 +219,8 @@ class Icon:
             env = env * (0.88 + 0.22 * streak)
             dif = 0.30 + 0.55 * lam
             sp = ndh ** 26 * m["spec"] * (0.75 + 0.5 * streak) + ndh ** 6 * 0.18 * m["spec"]
+            # break the highlight up: worn, smudged metal never shines evenly
+            sp = sp * np.clip(0.35 + 1.1 * n_mid, 0, 1.2) * np.where(n_fine > 0.7, 0.4, 1.0)
             col = base * (dif * (1 - 0.55 * metal) + env * 0.95 * metal)[..., None] + 255 * sp[..., None] * 0.6
         else:
             dif = 0.34 + 0.76 * lam
@@ -289,6 +291,12 @@ class Icon:
             col = col * (1 - 0.65 * bev[..., None]) + hx("#c9c6bb")[None, None, :] * 0.65 * bev[..., None]
         # fine pitting / grit
         col = col * (0.9 + 0.2 * n_fine[..., None])
+        # uneven value across the part (handling wear, sun-bleach, oil): low-
+        # frequency +/-, slightly desaturated toward grey where it is worn
+        lv = noise(sd + 9, 18, 2)[sl]
+        col = col * (0.86 + 0.28 * lv[..., None])
+        gmean = col.mean(axis=2, keepdims=True)
+        col = gmean + (col - gmean) * (0.82 + 0.2 * lv[..., None])
         if m.get("glow"):
             col = m["c"][None, None, :] * (0.75 + 0.5 * lam[..., None]) + 255 * (ndh ** 18)[..., None]
         # this part casts a soft shadow onto the parts under it (offset down-right)
@@ -469,7 +477,7 @@ class Icon:
         inner = ndi.binary_erosion(sil, iterations=int(1.5 * SS))
         if el == "fire":
             n = noise(self.seed + 50, 22, 1)
-            vein = inner & (np.abs(n - 0.5) < 0.02)
+            vein = inner & (np.abs(n - 0.5) < 0.012)
             it = {"hd": 0, "s48": 1, "s24": 2}[MODE]
             if it:
                 vein = ndi.binary_dilation(vein, iterations=it)
@@ -477,8 +485,8 @@ class Icon:
             return [(ndi.gaussian_filter(vein.astype(np.float32), 6) * 3.0, hx("#ff8a2a"))]
         if el == "poison":
             n = noise(self.seed + 51, 12, 2)
-            vein = inner & (np.abs(n - 0.5) < 0.016)
-            self._paint(vein.astype(np.float32), flatn, "glass")
+            vein = inner & (np.abs(n - 0.5) < 0.008)
+            self._paint(vein.astype(np.float32) * 0.7, flatn, "glass")
             # venom drips under the lowest edge points
             ys, xs = np.nonzero(sil)
             cols = rng.choice(np.unique(xs), size=4, replace=False)
@@ -504,9 +512,9 @@ class Icon:
                     x += rng.uniform(-2, 4) * SS
                     y += rng.uniform(-4, 1) * SS
                     path.append((x, y))
-                d.line(path, fill=255, width=SS + (1 if MODE == "hd" else SS))
+                d.line(path, fill=255, width=(SS // 2 + 1) if MODE == "hd" else SS)
             arc = np.asarray(im, np.float32) / 255.0
-            self._paint(arc, flatn, "arc")
+            self._paint(arc * 0.75, flatn, "arc")
             return [(ndi.gaussian_filter(arc, 6) * 3.0, hx("#5cd2c0"))]
         if el == "frost":
             up = np.zeros_like(sil)

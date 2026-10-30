@@ -35,21 +35,28 @@ L.MAT.update({
     "gel_poison": dict(c=hx("#5e8a2e"), spec=1.0, grime=0.05, rust=0.0, metal=0.0),
     "gel_shock": dict(c=hx("#2e78a8"), spec=1.1, grime=0.05, rust=0.0, metal=0.0),
     "stone": dict(c=hx("#6e6a62"), spec=0.15, grime=0.4, rust=0.0, metal=0.0, pores=1),
+    "whet_c": dict(c=hx("#8a5a3a"), spec=0.1, grime=0.4, rust=0.0, metal=0.0, pores=1),
+    "hazardw": dict(c=hx("#a8852e"), spec=0.3, grime=0.6, rust=0.2, metal=0.0),
     "molten": dict(c=hx("#e06a1c"), spec=1.0, grime=0.0, rust=0.0, glow=1),
 })
 
 
 # --------------------------------------------------------- style shapes
 def k_cluster(ic, st):
-    """Cluster Pot: three small bomblets with fins and fuses, bound together."""
-    for (x, y, r) in ((34, 62, 15), (62, 62, 15), (48, 40, 15)):
-        ic.ellipse(x, y, r, r, "olivep", dome=0.95)
-        ic.bar((x - r * 0.7, y + 2), (x + r * 0.7, y + 2), 2.0, tone("olivep", 0.6, "band"))
-        ic.bar((x + r * 0.5, y - r * 0.7), (x + r * 0.9, y - r * 1.2), 3.0, "brass", prof="cyl")
-        ic.bar((x + r * 0.9, y - r * 1.2), (x + r * 1.3, y - r * 1.6), 1.0, "twine", prof="cyl")
-    ic.bar((20, 58), (76, 58), 2.4, "leatherb")
-    ic.ellipse(48 + 15 * 1.35, 40 - 15 * 1.7, 2.6, 2.6, "flame", dome=0.4)
-    ic.scratches(count=10)
+    """Cluster Pot: three cast-iron bomblets with tail fins and brass fuses,
+    strapped together; olive paint worn off the iron."""
+    for (x, y, r, a) in ((30, 64, 14, -0.5), (60, 66, 14, 0.4), (46, 42, 14, -0.1)):
+        F = F_(ic, (x, y), math.degrees(a) - 90, 1.0)
+        F.bar(r * 0.6, 0, r * 1.5, 0, r * 0.6, "gun", w1=r * 0.3, prof="cyl")
+        for v in (-1, 1):
+            F.poly([(r * 1.2, 0), (r * 1.7, v * r * 0.7), (r * 1.8, v * r * 0.6), (r * 1.45, 0)], "dark", bevel=0.6)
+        ic.ellipse(x, y, r, r * 1.05, "gun", dome=0.95)
+        ic.ellipse(x, y, r * 0.98, r * 0.45, "olivep", dome=0.6)
+        tip = F.P(-r * 1.1, 0)
+        ic.bar(F.P(-r * 0.8, 0), tip, 3.2, "brass", prof="cyl")
+    ic.bar((18, 60), (76, 62), 2.6, "leatherb")
+    ic.scratches(count=12)
+
 
 
 def k_mortar(ic, st):
@@ -150,10 +157,10 @@ def k_knuckle(ic, st):
     """Knuckle Duster: heavy steel knuckles with four rings, studded."""
     for k in range(4):
         x = 24 + k * 16
-        ic.ellipse(x, 44, 9.5, 9.5, "steel", dome=0.9)
+        ic.ellipse(x, 44, 9.5, 9.5, "gun", dome=0.9)
         ic.ellipse(x, 44, 5.4, 5.4, "dark", dome=-0.4)
         ic.ellipse(x, 33, 3.0, 2.4, "blade", dome=0.9)
-    ic.poly([(18, 52), (78, 52), (72, 74), (24, 74)], "steel", bevel=3.0, dome=0.9)
+    ic.poly([(18, 52), (78, 52), (72, 74), (24, 74)], "gun", bevel=3.0, dome=0.9)
     ic.bar((26, 64), (70, 64), 1.0, tone("steel", 0.6, "kg"))
     ic.scratches(count=14)
 
@@ -207,7 +214,8 @@ def k_cleaver(ic, st):
     for i in range(9):
         u = 30 + i * 6
         teeth += [(u, -16), (u + 3, -19)]
-    F.poly([(26, -16)] + teeth + [(86, -16), (88, 12), (28, 12)], "blade", bevel=2.4)
+    F.poly([(26, -16)] + teeth + [(86, -16), (88, 12), (28, 12)], "steel", bevel=2.4)
+    F.poly([(60, -12), (78, -12), (80, 2), (62, 4)], "rust", bevel=1.0)
     F.bar(30, -10, 80, -10, 1.2, "gun")
     F.edge(30, 11, 86, 11, 0.5)
     F.bar(56, 4, 76, 6, 2.2, "rust", w1=0.6)
@@ -241,17 +249,25 @@ def k_viper(ic, st):
 
 
 def k_flarepistol(ic, st):
-    """Flare Pistol: a fat orange break-action flare gun, wide barrel."""
-    F = F_(ic, (14, 48), -14, 1.0)
-    F.poly([(8, 6), (22, 6), (26, 32), (14, 34), (8, 28)], "signal", bevel=1.8)
-    F.bar(2, -4, 66, -4, 14, "signal", prof="cyl")
-    F.bar(62, -4, 68, -4, 15, "dark", prof="cyl")
-    F.ell(68.5, -4, 1.4, 5.4, "dark", dome=0.2)
-    F.bar(0, -10, 8, -10, 3.0, "gun")
-    F.bar(22, 8, 24, 16, 1.4, "gun")
-    F.bar(24, 16, 32, 15, 1.4, "gun")
-    F.screw(18, 0, 0.9)
-    ic.scratches(count=10)
+    """Flare Pistol: chunky break-action flare gun: fat signal-orange barrel
+    and frame (chipped to steel, grimy), black grip, big hammer, a red flare
+    shell loaded at the breech."""
+    F = F_(ic, (10, 46), -14, 1.15)
+    F.poly([(10, 4), (26, 4), (32, 34), (24, 38), (12, 38), (8, 30)], "rubber", bevel=2.0, dome=0.9)
+    for v in range(12, 34, 4):
+        F.bar(13, v, 27, v + 1, 0.7, tone("rubber", 0.6, "chk"))
+    F.poly([(4, -14), (64, -14), (66, 8), (4, 8)], "signal", bevel=3.0, dome=0.9)
+    F.bar(30, -3, 74, -3, 22, "signal", prof="cyl")
+    F.bar(70, -3, 76, -3, 24, tone("signal", 0.8, "muz"), prof="cyl")
+    F.ell(76.5, -3, 2.0, 9.5, "dark", dome=-0.3)
+    F.bar(26, 8, 28, 18, 2.0, "gun")
+    F.bar(28, 18, 40, 16, 2.0, "gun")
+    F.bar(-2, -18, 6, -12, 4.0, "gun", prof="cyl")
+    F.bar(26, -14, 30, 8, 1.2, tone("signal", 0.5, "hinge"))
+    F.screw(18, -4, 1.1)
+    F.edge(6, -13, 62, -13, 0.5)
+    ic.scratches(count=14)
+
 
 
 def k_machine(ic, st):
@@ -265,6 +281,37 @@ def k_machine(ic, st):
     F.bar(44, 6, 44, 18, 4.0, "rubber", prof="cyl")
     F.edge(3, -6.5, 59, -6.5, 0.4)
     ic.scratches(count=10)
+
+
+
+# ------------------------------------------------ painted element marks
+def mark_flame(ic, cx, cy, r, mat):
+    pts = bez((cx - r * 0.6, cy + r * 0.6), (cx - r * 0.9, cy - r * 0.2), (cx - r * 0.1, cy - r), 6) + bez((cx - r * 0.1, cy - r), (cx + r * 0.1, cy - r * 0.3), (cx + r * 0.3, cy - r * 0.5), 4) + bez((cx + r * 0.3, cy - r * 0.5), (cx + r * 0.9, cy), (cx + r * 0.6, cy + r * 0.6), 6) + bez((cx + r * 0.6, cy + r * 0.6), (cx, cy + r * 0.95), (cx - r * 0.6, cy + r * 0.6), 4)
+    ic.poly(pts, mat, bevel=0.6, dome=0.2)
+
+
+def mark_snow(ic, cx, cy, r, mat):
+    for k in range(3):
+        a = k / 3 * math.pi + math.pi / 2
+        ic.bar((cx - math.cos(a) * r, cy - math.sin(a) * r), (cx + math.cos(a) * r, cy + math.sin(a) * r), r * 0.22, mat)
+        for sgn in (-1, 1):
+            px, py = cx + math.cos(a) * r * 0.6 * sgn, cy + math.sin(a) * r * 0.6 * sgn
+            for t in (-0.6, 0.6):
+                b = a + t
+                ic.bar((px, py), (px + math.cos(b + (math.pi if sgn < 0 else 0)) * r * 0.32, py + math.sin(b + (math.pi if sgn < 0 else 0)) * r * 0.32), r * 0.14, mat)
+
+
+def mark_drop(ic, cx, cy, r, mat):
+    pts = bez((cx, cy - r), (cx - r * 0.7, cy + r * 0.1), (cx - r * 0.55, cy + r * 0.45), 6) + bez((cx - r * 0.55, cy + r * 0.45), (cx, cy + r * 1.1), (cx + r * 0.55, cy + r * 0.45), 6) + bez((cx + r * 0.55, cy + r * 0.45), (cx + r * 0.7, cy + r * 0.1), (cx, cy - r), 6)
+    ic.poly(pts, mat, bevel=0.6, dome=0.2)
+
+
+def mark_bolt(ic, cx, cy, r, mat):
+    ic.poly([(cx + r * 0.3, cy - r), (cx - r * 0.55, cy + r * 0.1), (cx - r * 0.05, cy + r * 0.1), (cx - r * 0.35, cy + r), (cx + r * 0.6, cy - r * 0.2), (cx + r * 0.1, cy - r * 0.2)], mat, bevel=0.5, dome=0.2)
+
+
+def label_plate(ic, x0, y0, x1, y1, mat="paper"):
+    ic.poly([(x0, y0), (x1, y0 + 0.6), (x1 - 0.4, y1), (x0 + 0.3, y1 - 0.5)], mat, bevel=1.0, dome=0.5)
 
 
 # ----------------------------------------------------------- mod shapes
@@ -286,28 +333,69 @@ def m_barrel(ic, st):
 
 def m_coat(el):
     def fn(ic, st):
-        """A tin of weapon coating with the lid off, gel brimming and running down."""
-        ic.bar((48, 40), (48, 86), 48, "steel", prof="cyl")
-        ic.ellipse(48, 86, 24, 6, "steel", dome=0.6)
-        ic.ellipse(48, 40, 24, 7, tone("steel", 0.8, "rim"), dome=0.4)
-        ic.ellipse(48, 40, 21, 5.6, "gel_" + el, dome=0.7)
-        for (x, ln) in ((34, 16), (54, 24), (64, 10)):
-            ic.bar((x, 42), (x, 42 + ln), 4.0, "gel_" + el, w1=2.4, prof="cyl")
-            ic.ellipse(x, 44 + ln, 2.6, 3.0, "gel_" + el, dome=0.8)
-        LO.label(ic, 30, 58, 66, 76, 11)
-        ic.poly([(70, 20), (92, 24), (90, 32), (68, 28)], tone("steel", 0.9, "lid"), bevel=1.4)
+        """Weapon coating: a different real container per element, each with a
+        paper label carrying a bold painted element mark.
+          fire   squat round tin with a lever lid, red label + flame
+          frost  frosted glass jar with a screw lid, pale label + snowflake
+          poison stoppered dark glass bottle, drip down the side + drop
+          shock  steel canister with terminals on top + lightning bolt"""
+        if el == "fire":
+            ic.bar((48, 34), (48, 80), 60, "steel", prof="cyl")
+            ic.ellipse(48, 80, 30, 7, tone("steel", 0.7, "b"), dome=0.5)
+            ic.ellipse(48, 34, 30, 8, tone("steel", 1.1, "lid"), dome=0.6)
+            ic.ellipse(48, 34, 22, 5, tone("steel", 0.8, "lr"), dome=0.3)
+            ic.bar((26, 32), (70, 30), 2.4, "gun", prof="cyl")
+            label_plate(ic, 22, 46, 74, 74, "redp")
+            mark_flame(ic, 48, 60, 11, "stencil")
+            ic.bar((70, 40), (70, 54), 3.6, "gel_fire", w1=2.0, prof="cyl")
+        elif el == "frost":
+            ic.poly([(30, 30), (66, 30), (70, 36), (70, 86), (26, 86), (26, 36)], "glassw", bevel=4.0, dome=0.9)
+            ic.poly([(30, 40), (66, 40), (67, 84), (29, 84)], "gel_frost", bevel=3.0, dome=0.8)
+            ic.bar((30, 22), (66, 22), 14, "gun", prof="box")
+            for x in range(32, 66, 4):
+                ic.bar((x, 16), (x, 28), 0.7, "dark")
+            label_plate(ic, 30, 50, 66, 76, "paper")
+            mark_snow(ic, 48, 63, 10, "ribbon_b")
+            ic.bar((32, 38), (32, 82), 1.6, "frost")
+        elif el == "poison":
+            body = [(32, 40), (64, 40), (70, 50), (70, 88), (26, 88), (26, 50)]
+            LO.bottle(ic, body, "gel_poison", (48, 20, 42, 12), 14, 50, 5, glass="glassd")
+            label_plate(ic, 32, 58, 64, 82, "paper")
+            mark_drop(ic, 48, 68, 10, "toxicp")
+            ic.bar((68, 54), (69, 70), 2.6, "gel_poison", w1=1.6, prof="cyl")
+        else:
+            ic.bar((48, 30), (48, 86), 40, "gun", prof="cyl")
+            ic.ellipse(48, 30, 20, 5, tone("gun", 1.2, "top"), dome=0.6)
+            for x in (38, 58):
+                ic.bar((x, 22), (x, 30), 6, "copper", prof="cyl")
+                ic.ellipse(x, 22, 3, 1.4, tone("copper", 1.3, "ct"), dome=0.5)
+            label_plate(ic, 28, 44, 68, 76, "hazardw")
+            mark_bolt(ic, 48, 60, 12, "dark")
+            for y in (40, 80):
+                ic.bar((28, y), (68, y), 1.4, tone("gun", 0.6, "ring"))
         ic.scratches(count=8)
     return fn
 
 
+
 def m_edge(ic, st):
-    """Edge: a whetstone with a blade edge being honed, steel dust."""
-    ic.poly([(10, 62), (82, 52), (88, 64), (16, 76)], "stone", bevel=3.0, dome=0.8)
-    ic.poly([(12, 74), (86, 62), (88, 70), (14, 82)], tone("stone", 0.7, "side"), bevel=1.4)
-    F = F_(ic, (20, 46), -14, 1.0)
-    F.poly([(0, -4), (62, -6), (72, 0), (62, 4), (0, 4)], "blade", bevel=2.0)
-    F.edge(2, 3.4, 66, 3.0, 0.6)
-    ic.bar((14, 38), (28, 36), 6.0, "leatherb", prof="cyl")
+    """Edge: one two-grit whetstone (coarse brown on fine grey) seen in 3/4,
+    with a bright sharpened bevel along the top edge, wet sheen and steel
+    filings."""
+    top = [(8, 42), (70, 22), (90, 34), (28, 56)]
+    ic.poly([(28, 56), (90, 34), (90, 56), (28, 80)], tone("stone", 0.62, "face"), bevel=1.6)
+    ic.poly([(8, 42), (28, 56), (28, 80), (8, 64)], tone("stone", 0.48, "end"), bevel=1.4)
+    ic.poly([(28, 68), (90, 45), (90, 56), (28, 80)], "whet_c", bevel=1.2)
+    ic.poly([(8, 53), (28, 68), (28, 80), (8, 64)], tone("whet_c", 0.75, "ce"), bevel=1.0)
+    ic.poly(top, "stone", bevel=2.6, dome=0.7)
+    # sharpened bevel: a honed, polished strip along the near top edge
+    ic.poly([(10, 43), (28, 55), (90, 33.6), (88, 31)], "blade", bevel=0.8)
+    ic.bar((12, 44.5), (86, 33), 0.7, "frost")
+    ic.ellipse(50, 38, 16, 3.4, tone("stone", 1.35, "wet"), dome=0.3)
+    for (x, y) in ((40, 36), (56, 31), (64, 38), (32, 44)):
+        ic.bar((x, y), (x + 2.5, y - 0.6), 0.6, "steel")
+    ic.scratches(count=6)
+
 
 
 def m_ext_mag(ic, st):
@@ -324,17 +412,22 @@ def m_ext_mag(ic, st):
 
 
 def m_grip(ic, st):
-    """Grip: an angled rubber pistol grip (as on an AR), finger grooves,
-    stippled panels, the mounting screw on top."""
-    F = F_(ic, (28, 16), 70, 1.0)
-    pts = [(0, -12), (0, 14), (66, 22), (74, 12), (72, -6), (60, -16)]
-    F.poly(pts, "rubber", bevel=5.0, dome=0.9)
-    for u in (22, 38, 54):
-        crease(ic, [F.P(u, 17), F.P(u + 2, 10), F.P(u + 4, 18)], 1.6, tone("rubber", 0.45, "fg"), tone("rubber", 1.5, "fh"))
-    F.poly([(-6, -16), (2, -16), (2, 18), (-6, 18)], "gun", bevel=1.4)
+    """Grip: an angled pistol grip wrapped in cloth tape (visible overlapping
+    turns, frayed end), steel frame stub on top with the mounting screw, a
+    worn highlight down the front strap."""
+    F = F_(ic, (26, 18), 66, 1.0)
+    F.poly([(-8, -16), (4, -16), (4, 18), (-8, 18)], "gun", bevel=1.6, dome=0.8)
     F.screw(-2, 0, 1.6)
-    F.screw(66, 4, 1.2)
+    pts = [(2, -13), (2, 15), (70, 22), (78, 12), (76, -6), (64, -16)]
+    F.poly(pts, "tape", bevel=5.0, dome=0.9)
+    for u in range(8, 74, 7):
+        F.bar(u, -14 + u * 0.05, u + 3, 20, 1.2, tone("tape", 0.62, "turn"))
+        F.bar(u + 1.4, -14 + u * 0.05, u + 4.4, 20, 0.6, tone("tape", 1.25, "tlit"))
+    F.bar(6, -11, 70, -12, 1.4, tone("tape", 1.45, "hi"))
+    tail = F.P(76, 18)
+    G.frayed(ic, tail[0], tail[1], 1.4, "thread", 4, 4.0)
     ic.scratches(count=4)
+
 
 
 
@@ -365,15 +458,21 @@ def m_stock(ic, st):
 
 
 def m_weighted_head(ic, st):
-    """Weighted Head: a cast-iron weight sleeve with bolts, to clamp on a haft."""
-    ic.poly([(18, 26), (78, 26), (84, 34), (84, 70), (78, 78), (18, 78), (12, 70), (12, 34)], "gun", bevel=5.0, dome=0.9)
-    ic.ellipse(48, 52, 12, 12, "dark", dome=-0.5)
-    ic.ellipse(48, 52, 8, 8, tone("dark", 0.6, "bore"), dome=-0.2)
-    for (x, y) in ((22, 34), (74, 34), (22, 70), (74, 70)):
-        ic.ellipse(x, y, 3.4, 3.4, "steel", dome=0.9)
-        ic.bar((x - 2.4, y), (x + 2.4, y), 0.8, "dark")
-    ic.bar((12, 52), (84, 52), 1.2, tone("gun", 0.6, "seam"))
+    """Weighted Head: a heavy cast-iron sleeve weight, seen in 3/4: knurled
+    band, bore through the middle, two clamp bolts, rust in the knurling."""
+    ic.bar((48, 30), (48, 74), 64, "gun", prof="cyl")
+    ic.ellipse(48, 30, 32, 10, tone("gun", 1.2, "face"), dome=0.5)
+    ic.ellipse(48, 30, 10, 3.4, "dark", dome=-0.4)
+    for k in range(16):
+        x = 18 + k * 4
+        ic.bar((x, 44), (x + 2, 60), 0.8, tone("gun", 0.55, "kn"))
+    ic.bar((16, 44), (80, 44), 1.2, tone("gun", 1.3, "kh"))
+    for x in (28, 68):
+        ic.ellipse(x, 66, 3.6, 3.6, "steel", dome=0.9)
+        ic.bar((x - 2.4, 66), (x + 2.4, 66), 0.8, "dark")
+    ic.ellipse(48, 74, 32, 8, tone("gun", 0.6, "bot"), dome=0.3)
     ic.scratches(count=14)
+
 
 
 def m_wraps(ic, st):
@@ -413,7 +512,7 @@ ALL = list(BASE) + list(SHAPES)
 ## (the orange flare gun goes blotchy at 48 px), mod_edge (whetstone + blade is
 ## ambiguous; the old bright edge reads instantly) and the 4 coatings (painted
 ## tins only differ by gel colour; the old element symbols read better at 24 px).
-SKIP = ("mod_grip", "style_helm_wisp_flare", "mod_edge", "mod_coat_fire", "mod_coat_frost", "mod_coat_poison", "mod_coat_shock")
+SKIP = ()
 WIRE = [k for k in ALL if k not in SKIP]
 
 for k, fn in SHAPES.items():

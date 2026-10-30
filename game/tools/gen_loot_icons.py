@@ -297,13 +297,14 @@ def i_dust_heart(ic, st):
     ic.poly(heart, "amber", bevel=8.0, dome=0.95)
     crease(ic, bez((48, 30), (44, 46), (50, 64), 6), 0.8, tone("amber", 0.6, "crack"))
     ic.bar((34, 36), (40, 30), 2.0, "frost")
+    ic.ellipse(48, 50, 14, 16, tone("amber", 1.45, "glowcore"), dome=0.4)
     for (a, b, c) in (((18, 40), (48, 28), (78, 40)), ((20, 52), (48, 62), (76, 52)), ((48, 20), (44, 52), (48, 84))):
         for p, q in zip(bez(a, b, c, 10)[:-1], bez(a, b, c, 10)[1:]):
-            ic.bar(p, q, 1.6, "gold", prof="cyl")
+            ic.bar(p, q, 2.0, "gun", prof="cyl")
     ic.bar((48, 10), (48, 22), 1.6, "gold", prof="cyl")
     ic.ellipse(48, 9, 3.6, 3.6, "gold", dome=0.9)
     ic.ellipse(48, 9, 2.0, 2.0, "dark", dome=-0.2)
-    rivets(ic, [(18, 40), (78, 40), (48, 84), (48, 22)], 1.2, "gold")
+    rivets(ic, [(18, 40), (78, 40), (48, 84), (48, 22)], 1.4, "brass")
 
 
 def _nut(ic, x, y, r, rot, mat="steel"):
@@ -331,31 +332,44 @@ def _bolt(ic, x0, y0, x1, y1, w, mat="steel"):
 
 
 def i_scrap(ic, st):
-    """Pile of real hardware: hex nuts, threaded bolts, washers, a bent bracket."""
-    ic.poly([(14, 80), (30, 70), (66, 68), (84, 78), (76, 88), (20, 90)], tone("dust", 0.5, "grit"), bevel=3.0, dome=0.4)
-    ic.poly([(18, 60), (40, 56), (42, 62), (24, 66)], "rust", bevel=1.2)
-    _bolt(ic, 20, 58, 60, 70, 5.0, "steel")
-    _bolt(ic, 78, 50, 50, 60, 4.0, "gun")
-    _nut(ic, 58, 46, 8, 0.1, "steel")
-    _washer(ic, 30, 78, 8, "steel")
-    _washer(ic, 62, 82, 6, "brass")
-    _nut(ic, 46, 78, 9, 0.2, "steel")
-    _nut(ic, 74, 64, 7, 0.5, "rust")
-    _nut(ic, 22, 56, 6, 0.9, "brass")
-    ic.scratches(count=10)
+    """Scrap: three big chunky pieces of hardware: a fat hex bolt with deep
+    threads, a heavy hex nut, a thick washer: worn steel, rust in the threads."""
+    ic.ellipse(48, 84, 36, 6, tone("dust", 0.45, "sh"), dome=0.2)
+    _bolt(ic, 20, 30, 62, 72, 12.0, "steel")
+    _nut(ic, 66, 46, 18, 0.15, "gun")
+    _washer(ic, 30, 72, 14, "steel")
+    ic.scratches(count=12)
+
 
 
 def i_xp_shard(ic, st):
-    """A broad amber crystal point on a broken base: three lit facets, a
-    darker side facet, a bright cap, small chips beside it."""
-    ic.ellipse(48, 86, 18, 4, tone("ash", 0.6, "sh"), dome=0.3)
-    ic.poly([(30, 84), (40, 30), (48, 12), (48, 88)], tone("amber", 1.15, "x1"), bevel=1.0, dome=0.2)
-    ic.poly([(48, 88), (48, 12), (58, 32), (66, 84)], tone("amber", 0.78, "x2"), bevel=1.0, dome=0.2)
-    ic.poly([(66, 84), (58, 32), (64, 46), (72, 80)], tone("amber", 0.55, "x3"), bevel=0.8, dome=0.2)
-    ic.poly([(40, 30), (48, 12), (58, 32), (48, 26)], tone("amber", 1.4, "x4"), bevel=0.6, dome=0.2)
-    ic.bar((38, 76), (44, 34), 1.0, "frost")
-    for (x, y, r) in ((22, 82, 5), (76, 86, 4)):
-        ic.poly([(x - r, y + 3), (x - r * 0.2, y - r * 1.6), (x + r, y + 3)], tone("amber", 0.95, "chip"), bevel=0.6, dome=0.2)
+    """XP: one chunky faceted amber crystal leaning right: hexagonal body
+    with an angled termination whose broad top facet catches the light,
+    inner glow, a chipped edge and a dusty base."""
+    a = math.radians(14)
+    ca, sa = math.cos(a), math.sin(a)
+    def P(u, v):  # u across, v up from base centre (44, 86)
+        return (44 + u * ca + v * sa, 86 + u * sa - v * ca)
+    w = 22
+    ic.ellipse(46, 87, 30, 6, tone("dust", 0.45, "xs"), dome=0.2)
+    L0, L1, R1, R0 = -w, -w * 0.4, w * 0.4, w
+    body = [
+        ([P(L0, 4), P(L1, 0), P(L1, 52), P(L0, 50)], 1.1),
+        ([P(L1, 0), P(R1, 0), P(R1, 46), P(L1, 52)], 0.88),
+        ([P(R1, 0), P(R0, 4), P(R0, 40), P(R1, 46)], 0.6),
+    ]
+    for i, (pts, t) in enumerate(body):
+        ic.poly(pts, tone("amber", t, "xf%d" % i), bevel=1.0, dome=0.25)
+    tip = P(-4, 72)
+    ic.poly([P(L0, 50), P(L1, 52), P(R1, 46), tip], tone("amber", 1.5, "top"), bevel=0.8, dome=0.15)
+    ic.poly([P(L0, 50), tip, P(L0 + 4, 60)], tone("amber", 1.2, "t0"), bevel=0.5, dome=0.15)
+    ic.poly([P(R1, 46), P(R0, 40), tip], tone("amber", 0.72, "t2"), bevel=0.5, dome=0.15)
+    ic.ellipse(*P(-4, 26), 8, 15, tone("amber", 1.45, "core"), dome=0.3)
+    ic.bar(P(L1, 4), P(L1, 50), 1.0, tone("amber", 1.7, "edge"))
+    ic.bar(P(L0 + 3, 8), P(L0 + 3, 46), 1.4, "frost")
+    ic.poly([P(R1 + 2, 22), P(R0, 18), P(R0, 30)], tone("amber", 0.45, "chip"), bevel=0.4)
+
+
 
 
 
@@ -397,7 +411,7 @@ def i_crate(ic, st):
     ic.scratches(count=10)
 
 
-AMMO_COL = {"explosive": "#8a2a22", "frost": "#5a7e96", "incendiary": "#b0601e", "shock": "#2e6a7a"}
+AMMO_COL = {"explosive": "#7a3428", "frost": "#5e7a8a", "incendiary": "#9a5a2a", "shock": "#3a6470"}
 
 
 def _ammo(el):
@@ -455,23 +469,33 @@ def i_medal(ic, st):
 
 
 def i_flare(ic, st):
-    """Lit road flare: red paper tube with a worn label, striker cap, a burning
-    tip with a hot core and a thin smoke wisp."""
-    F = L.Frame(ic, (24, 82), -45, 1.0)
-    F.bar(0, 0, 54, 0, 12, "redp", prof="cyl")
-    pt = F.P(18, -6)
-    F.bar(14, 0, 30, 0, 12.6, "paper", prof="cyl")
-    for v in (-2, 1.5):
-        F.bar(16, v, 27, v, 0.5, "ink")
-    F.bar(-6, 0, 2, 0, 13.4, "dark", prof="cyl")
-    F.bar(52, 0, 56, 0, 11, tone("redp", 0.5, "char"), prof="cyl")
-    tip = F.P(60, 0)
-    for (r, m) in ((7.5, "flame"), (4.2, "flame_hot")):
-        ic.ellipse(tip[0], tip[1], r, r * 1.1, m, dome=0.5)
-    ic.poly([F.P(56, -5), F.P(70, -1), F.P(74, 0), F.P(70, 1), F.P(56, 5)], "flame", bevel=1.0)
-    for k in range(4):
-        x, y = tip[0] + 2 + k * 2, tip[1] - 8 - k * 6
-        ic.ellipse(x, y, 2.6 + k * 0.8, 2.0 + k * 0.6, "smoke", dome=0.3)
+    """Extract: a thick road flare stuck in the dirt at an angle: red waxed
+    tube, worn label band, black striker cap, bright painted spark burst
+    and a smoke trail rising off the burning tip."""
+    ic.ellipse(30, 86, 18, 5, tone("dust", 0.45, "fs"), dome=0.2)
+    a, b = (26, 86), (52, 46)
+    def L(t):
+        return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+    ic.bar(L(0.0), L(1.0), 22, "redp", prof="cyl")
+    ic.bar(L(0.38), L(0.6), 22.6, "paper", prof="cyl")
+    for t in (0.44, 0.5, 0.56):
+        p = L(t)
+        ic.bar((p[0] - 6, p[1] - 4), (p[0] + 4, p[1] + 2.4), 0.6, "ink")
+    ic.bar(L(-0.02), L(0.16), 23, "dark", prof="cyl")
+    ic.bar(L(0.96), L(1.08), 20, tone("redp", 0.45, "char"), prof="cyl")
+    tip = L(1.1)
+    for k in range(5):
+        ic.ellipse(tip[0] + 6 + k * 5, tip[1] - 8 - k * 6, 6 + k * 1.8, 5 + k * 1.3, tone("smoke", 1.45 - k * 0.08, "sm%d" % k), dome=0.3)
+    ic.ellipse(tip[0], tip[1], 16, 15, tone("flame", 0.8, "halo"), dome=0.3)
+    ic.ellipse(tip[0], tip[1], 12, 11, "flame", dome=0.5)
+    ic.ellipse(tip[0], tip[1], 7, 6.5, "flame_hot", dome=0.5)
+    for k in range(10):
+        ang = -math.pi / 2 + (k - 4.5) * 0.36
+        ln = 17 + (k % 3) * 7
+        ic.bar((tip[0] + math.cos(ang) * 8, tip[1] + math.sin(ang) * 8), (tip[0] + math.cos(ang) * ln, tip[1] + math.sin(ang) * ln),
+               2.0 if k % 2 else 2.8, "flame_hot" if k % 2 else "flame", w1=0.6)
+
+
 
 
 ITEMS = {
@@ -504,7 +528,7 @@ OUT = {
 ## Left out: scrap (a hardware pile is messy next to numbers at 24 px; the
 ## old nut-and-bolt currency mark reads better), xp (reads as a cone), extract
 ## (the flare is a thin diagonal at 24 px; the portal mark reads better).
-WIRE = [k for k in ITEMS if k not in ("scrap", "xp", "extract")]
+WIRE = list(ITEMS)
 
 for k, fn in ITEMS.items():
     G.SHAPES["loot_" + k] = fn
