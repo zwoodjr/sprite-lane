@@ -4302,7 +4302,12 @@ func _scroll_screen(label: String, root: Node) -> void:
 		b.pressed.connect(func() -> void: fired["n"] += 1)
 	var to := from - Vector2(0, minf(260.0, best.size.y * 0.5))
 	await _touch_drag(from, to, 10, true)
-	_check(best.scroll_vertical > 60, "scroll %s: drag from a %s scrolls (%d)" % [label, "button" if b else "gap", best.scroll_vertical])
+	var content0: Control = null
+	for ch in best.get_children():
+		if ch is Control and not (ch is ScrollBar):
+			content0 = ch
+	var max_sc := int(content0.size.y - best.size.y) if content0 else 0
+	_check(best.scroll_vertical >= mini(60, max_sc - 2), "scroll %s: drag from a %s scrolls (%d of max %d)" % [label, "button" if b else "gap", best.scroll_vertical, max_sc])
 	_check(int(fired["n"]) == 0, "scroll %s: drag doesn't fire the row" % label)
 	## Sideways swipe never moves a vertical list.
 	var v0 := best.scroll_vertical
