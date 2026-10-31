@@ -246,7 +246,7 @@ def main():
         x = fn()
         y = master(x, True, target)
         print("%-16s %6.1fs  LUFS %.2f  TP %.2f dBTP" % (name, y.shape[-1] / SR, lufs(y), true_peak_db(y)), flush=True)
-        write_ogg(os.path.join(out, name + ".ogg"), y, q=3)
+        write_ogg(os.path.join(out, name + ".ogg"), y, q=2)
 
 
 if __name__ == "__main__":

@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/bolt_juno_windup.png-5e17ea2bc6ce81cf5e4dddc3
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.88
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

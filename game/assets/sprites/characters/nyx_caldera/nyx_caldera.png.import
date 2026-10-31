@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/nyx_caldera.png-e033ff103775d371e75c0b0f95e31
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.88
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

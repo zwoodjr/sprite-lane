@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/rad_bat_hit.png-9bb893dee41902359a6dff2c14369
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.88
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

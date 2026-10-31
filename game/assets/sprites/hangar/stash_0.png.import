@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/stash_0.png-1605c92db7edfec4ec1b6a7ea373a815.
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.88
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

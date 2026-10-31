@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/rad_gator_windup.png-d8c91cd5ad81e7958664872d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.88
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

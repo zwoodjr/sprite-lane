@@ -471,13 +471,13 @@ def main():
     if what in ("amb", "all"):
         for k, x in AMB().items():
             p = os.path.join(out, k + ".ogg")
-            write_ogg(p, x, q=1)
+            write_ogg(p, x, q=0)
             tot += os.path.getsize(p)
             print("ok", k, round(x.shape[-1] / SR, 2), flush=True)
     if what == "legacy-music":
         for k, x in MUSIC().items():
             p = os.path.join(out, k + ".ogg")
-            write_ogg(p, x, q=3)
+            write_ogg(p, x, q=2)
             tot += os.path.getsize(p)
             print("ok", k, round(x.shape[-1] / SR, 2), flush=True)
     print("bytes", tot)

@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/scav_bear_walk.png-a778ce7fd824d9f264a91ef5d2
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.88
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

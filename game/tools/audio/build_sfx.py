@@ -812,7 +812,7 @@ def main():
         for i in range(cfg["n"]):
             x = render(name, cfg, i)
             p = os.path.join(out, "%s_%d.ogg" % (name, i + 1))
-            write_ogg(p, x, q=5)
+            write_ogg(p, x, q=3)
             total += os.path.getsize(p)
         print("ok", name, cfg["n"], flush=True)
     print("SFX bytes", total)
