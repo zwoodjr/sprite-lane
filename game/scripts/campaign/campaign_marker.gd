@@ -9,7 +9,13 @@ extends Node2D
 
 var kind: String = "target"
 var radius: float = 60.0
-var icon_path: String = ""
+## Setting it after the marker is in the tree builds the icon then (the
+## objective runner sets it right after add_child: the med kits were invisible).
+var icon_path: String = "":
+	set(v):
+		icon_path = v
+		if is_inside_tree():
+			_build_icon()
 var progress: float = -1.0
 var hp_ratio: float = -1.0
 var last_chance: bool = false
@@ -27,15 +33,7 @@ func _ready() -> void:
 	z_index = -1 if kind != "item" else 1
 	if not has_meta("map_glyph"):
 		set_meta("map_glyph", MapIcons.BANG if kind != "item" else MapIcons.GEM)
-	if icon_path != "" and ResourceLoader.exists(icon_path):
-		_icon = Sprite2D.new()
-		_icon.texture = load(icon_path)
-		_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		## 48-px icon-set art at the world texel (one art px = one screen px).
-		_icon.scale = Vector2.ONE * UnitAnim.TEXEL
-		_icon.position = Vector2(0, -22)
-		_icon.z_index = 2
-		add_child(_icon)
+	_build_icon()
 	if label_text != "":
 		_label = Label.new()
 		_label.text = label_text
@@ -49,6 +47,20 @@ func _ready() -> void:
 		_label.position = Vector2(-120, -radius * 0.55 - 64.0)
 		_label.z_index = 20
 		add_child(_label)
+
+
+func _build_icon() -> void:
+	if icon_path == "" or not ResourceLoader.exists(icon_path):
+		return
+	if _icon == null or not is_instance_valid(_icon):
+		_icon = Sprite2D.new()
+		_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		## 48-px icon-set art at the world texel (one art px = one screen px).
+		_icon.scale = Vector2.ONE * UnitAnim.TEXEL
+		_icon.position = Vector2(0, -22)
+		_icon.z_index = 2
+		add_child(_icon)
+	_icon.texture = load(icon_path)
 
 
 func _process(delta: float) -> void:

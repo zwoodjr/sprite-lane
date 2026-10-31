@@ -181,6 +181,7 @@ func _run() -> void:
 	_test_blueprints()
 	await _test_petgear()
 	await _test_scrap_pull()
+	await _test_campaign_items()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4758,3 +4759,46 @@ func _test_scrap_pull() -> void:
 	## The wipe ducks the music: let it recover before later sections read buses.
 	await get_tree().create_timer(3.0, true, false, true).timeout
 	print("SCRAP_PULL_OK")
+
+## Campaign collect objectives: item markers draw their icon and get minimap /
+## edge arrows (Mayday med kits were invisible: icon set after _ready).
+func _test_campaign_items() -> void:
+	var Mk: Script = load("res://scripts/campaign/campaign_marker.gd")
+	var mk: Node2D = Mk.new()
+	mk.set("kind", "item")
+	add_child(mk)
+	mk.set("icon_path", IconSet.path("ing_medicine", true))
+	_check(mk.get("_icon") != null and (mk.get("_icon") as Sprite2D).texture != null, "marker builds its icon when set after _ready")
+	mk.queue_free()
+	GameState.campaign_autoplay = true
+	GameState.campaign_autoplay_exit = false
+	_check(GameState.prepare_campaign_level("p0_mayday"), "mayday prepares")
+	var m: Node = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for i in range(10):
+		await get_tree().physics_frame
+	var rn: Node = m.get("runner")
+	var frames := 0
+	while rn != null and str((rn.get("obj") as Dictionary).get("type", "")) != "collect" and frames < 3000:
+		frames += 1
+		await get_tree().physics_frame
+		if frames % 40 == 0 and not bool(rn.get("busy")) and int(rn.get("idx")) >= 0:
+			m.call("debug_complete_objective")
+	for i in range(10):
+		await get_tree().physics_frame
+	var items: Array = rn.get("_items") if rn else []
+	var drawn := 0
+	for it in items:
+		if is_instance_valid(it) and it.get("_icon") != null:
+			drawn += 1
+	_check(items.size() == 5 and drawn == 5, "mayday med kits drawn (%d/%d)" % [drawn, items.size()])
+	var pads: Array = m.call("get_pads")
+	_check(items.size() > 0 and items[0] in pads, "med kits on the minimap / arrows")
+	m.queue_free()
+	for i in range(5):
+		await get_tree().process_frame
+	get_tree().paused = false
+	GameState.campaign_autoplay = false
+	GameState.call("leave_campaign_run")
+	print("CAMPAIGN_ITEMS_OK")

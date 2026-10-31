@@ -171,7 +171,10 @@ func _begin(o: Dictionary) -> void:
 				var it := _make_marker(p, 44.0, "item")
 				it.set("icon_path", IconSet.path(str(o.get("icon", "ing_medicine")), true))
 				_items.append(it)
-			## Items are found on the map; no single marker.
+				## Minimap glyph + screen-edge arrows for every item.
+				_pads().append(it)
+			if not pts.is_empty():
+				mc.call("hud_objective_arrows", true)
 		"escort":
 			var n: Node = npcs.get(str(o.get("npc", "")), null)
 			if n:
@@ -345,6 +348,7 @@ func _process(delta: float) -> void:
 			for it in _items.duplicate():
 				if is_instance_valid(it) and p.global_position.distance_to((it as Node2D).global_position) <= 46.0:
 					_items.erase(it)
+					_pads().erase(it)
 					Juice.sfx("pick_lore", -2.0)
 					Juice.float_text((it as Node2D).global_position + Vector2(0, -40), "+1", UiTheme.TEAL, 16)
 					(it as Node).queue_free()
