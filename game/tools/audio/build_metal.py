@@ -787,7 +787,7 @@ def main():
     for name in names:
         fn, loop = TRACKS[name]
         global RNG
-        RNG = np.random.default_rng(abs(hash(name)) % 100000)
+        RNG = np.random.default_rng(sum(map(ord, name)))
         x = fn()
         if not loop:
             n = x.shape[-1]
@@ -795,7 +795,7 @@ def main():
             x[:, -f:] *= np.linspace(1, 0, f) ** 2
         y = master(x, loop)
         print("%-18s %6.1fs  LUFS %.2f  TP %.2f dBTP" % (name, y.shape[-1] / SR, lufs(y), true_peak_db(y)), flush=True)
-        write_ogg(os.path.join(out, name + ".ogg"), y, q=2)
+        write_ogg(os.path.join(out, name + ".ogg"), y, q=0)
         if wav_dir:
             write_wav(os.path.join(wav_dir, name + ".wav"), y)
 

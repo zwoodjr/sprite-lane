@@ -43,9 +43,11 @@ LOSSY_GLOBS = [
 ]
 # (dir glob, libvorbis -q, nominal kbps ceiling that triggers a re-encode)
 AUDIO = [
-    ("assets/audio/music/*.ogg", 2, 100),
+    # Music is rendered at q0 (~64 kbps) straight from the CC0 sources by
+    # tools/audio/build_metal*.py; this only catches stray higher-rate files.
+    ("assets/audio/music/*.ogg", 0, 72),
     ("assets/audio/amb/*.ogg", 0, 70),
-    ("assets/audio/sfx/*.ogg", 3, 70),
+    ("assets/audio/sfx/*.ogg", 3, 80),
 ]
 
 
