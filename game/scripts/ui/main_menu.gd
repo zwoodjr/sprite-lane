@@ -154,6 +154,8 @@ func build(c: VBoxContainer) -> void:
 		_live_prompt.call_deferred()
 	elif GameState.load_notice != "":
 		_notice_prompt.call_deferred()
+	elif OS.has_feature("web") and not bool(GameState.settings.get("web_notice_seen", false)):
+		_web_save_prompt.call_deferred()
 
 
 ## RUN INTERRUPTED — RESUME rebuilds the match; ABANDON counts as a death.
@@ -224,6 +226,14 @@ func _notice_prompt() -> void:
 	_dialog = modal("SAVE CHECK", [[GameState.load_notice, UiTheme.TEXT]], [["OK", UiTheme.AMBER, func() -> void:
 		GameState.load_notice = ""
 		_close_dialog()]])
+
+
+## Web build, once: progress lives in this browser only.
+func _web_save_prompt() -> void:
+	_dialog = modal("PLAYING IN THE BROWSER", [["Your progress is saved in this browser on this device. Clearing Safari's history or website data wipes it. Add Wanderer to your Home Screen for the best fit.", UiTheme.TEXT]],
+		[["GOT IT", UiTheme.AMBER, func() -> void:
+			GameState.set_setting("web_notice_seen", true)
+			_close_dialog()]])
 
 
 ## Title sting: the logo drops in big, lands with a shake and a dust puff.
