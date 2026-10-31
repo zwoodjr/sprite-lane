@@ -1,5 +1,38 @@
 # MVP status (repo mirror)
 
+**Latest (pet gear + bond perks):**
+
+- **Pet gear slot.** Each pet has one gear slot, managed under Kennel → CHANGE / INSURE. The pet select screen shows the worn piece.
+  - Signature starting pieces: Noel's Worn Collar, Bentley's Satchel and Lillie's Armor Patch. They are bound to their dog: never lost, salvaged or auto-salvaged. Old saves get them on load.
+  - Pets never take damage, so gear works through the hero and the pet's attacks. Dodge, guard and Med Pouch only work while the pet is within 260 px.
+
+  | Piece | Common → Legendary | Icon |
+  |---|---|---|
+  | Spiked Collar | thorns 6 → 16 dps to enemies touching the pet; pet damage +4 → 10% | dog tags |
+  | Reflective Harness | 4 → 10% dodge | chest |
+  | Scavenger Satchel | +15 → 39% loot find | pack |
+  | Armored Vest | 5 → 13% less damage taken | chest plate |
+  | Radio Collar | elites and bosses are called out, marked and shown on the map; pet damage +2 → 5% | radio tower |
+  | Med Pouch | 1 → 2.6 HP when an enemy dies next to the pet | medicine |
+  | War-Dog Rig (craft-only Legendary, bench rank 2) | +15% pet damage, 8% guard, 5% dodge, thorns 10 | chest |
+
+  - Drops: 0.12% per kill, 5% per elite, 15% per boss (Wander, after the medicine phase-in).
+  - Crafter Bench: a Rare of each piece for 500–600 scrap plus materials. The War-Dog Rig costs 2,400 scrap, 12 Salvage Cores, 8 Dust Shards and 1 Dust Heart.
+  - Auto-salvage, locks and insurance all apply; a non-signature piece is worn kit that can be lost on death unless insured.
+- **Bond perks.** Bond levels 3, 6 and 10 offer a choice of two perks instead of the flat +3% at those levels. Respec in the Kennel costs 150 scrap. Saves already past those levels get a notice and pick on their next Hangar visit.
+
+  | Pet | Lv 3 | Lv 6 | Lv 10 |
+  |---|---|---|---|
+  | Noel (guard) | Bodyguard −6% damage taken / Bloodhound rampage +25% | Long Grudge +1.5 s linger / Fast Feet +15% speed | Pack Leader chain +2 / Last Line −10% damage taken |
+  | Bentley (scout) | Keen Nose finds ×1.4 / Loud Mouth bark +30% | Lucky Find +30% loot / Harrier marks +10% | Treasure Hound finds 35% faster / Spotter elite call-outs + 5% dodge |
+  | Lillie (tank) | Thick Skull +25% / Bulwark −6% damage taken | Battering Ram −20% cooldown / Big Stun +0.4 s | Stampede blast +35% / Iron Hide −10% damage + thorns |
+  | Mech Hound | Overcharged Cells / Hydraulic Legs | Arc Relay / Plated Frame | Tesla Bite / Servo Overdrive |
+  | Drone Bat + Drone Hawk | Extended Mag / Targeting Lens | Afterburner / Scanner Array | Hellfire Rounds / Aerial Cover |
+  | Rust Mule | Heavy Shells / Cargo Rack | Quick Loader / Wide Bore | Twin Tubes / Pack Mule |
+
+  Bot check (Smog, stay 3 windows, 16 runs each), default gear vs fully maxed pet (bond 10 with the defensive perks + War-Dog Rig, about 24% guard and 5% dodge): deaths 13/16 vs 15/16, within noise. Nothing trivialized.
+
+
 **Latest (music, earned mech pets, radio pool):**
 
 - **Music by act + Greed layer.** Each act has three loops (explore / combat / boss) that crossfade in lockstep, plus a Greed layer on top.

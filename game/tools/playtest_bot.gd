@@ -178,6 +178,15 @@ func _ready() -> void:
 	GameState.weekly_opt_in = extra == "weekly"
 	if extra == "daily":
 		GameState.arm_daily()
+	## env WANDERER_PETMAX=1: the pet at bond 10 with the defensive perks + War-Dog Rig.
+	if OS.get_environment("WANDERER_PETMAX") != "":
+		var pid := GameState.selected_pet_id
+		GameState.kennel_bond[pid] = 10 * EventDefs.BOND_XP_PER_LEVEL
+		GameState.pet_perks[pid] = {"3": 0, "6": 0, "10": 1}
+		GameState.add_to_stash(load("res://scripts/data/pet_gear_defs.gd").call("make_war_dog_rig"))
+		GameState.pet_gear[pid] = int(GameState.stash[GameState.stash.size() - 1]["uid"])
+		GameState.reset_loadout_to_defaults()
+		print("PETMAX pet=%s guard=%.2f dodge=%.2f power=%.2f" % [pid, GameState.pet_fx("guard"), GameState.pet_fx("dodge"), GameState.pet_power_mult()])
 	## env WANDERER_ASC=N: Dustfall at Ascension N (unlocked in memory, not saved).
 	var asc := OS.get_environment("WANDERER_ASC")
 	if asc != "":
