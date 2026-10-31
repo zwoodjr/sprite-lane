@@ -140,6 +140,8 @@ static var _alive_cache: Dictionary = {}
 var sprite: Sprite2D
 var states: Dictionary = {}
 var frame_size: int = 128
+## 2 when the strips were upscaled in memory (load_states_2x).
+var _up: float = 1.0
 var _ffb: float = FEET_FROM_BOTTOM
 var state: String = ""
 var frame: int = 0
@@ -183,6 +185,41 @@ static func load_states(prefix: String) -> Dictionary:
 			out[s]["fps"] = float(fps_over[s])
 	_alive_cache[prefix] = side.get("alive", {})
 	_cache[prefix] = out
+	return out
+
+
+## Heroes on phones: the 1x strips are drawn ~1.6 physical px per texel.
+## Like the dogs' 2x painted strips, an in-memory 2x copy (Lanczos per frame)
+## is then *minified* by the GPU with linear filtering, which keeps the painted
+## detail sharp and even instead of nearest's uneven texel widths. No files are
+## written; only the current hero's strips are upscaled (once, cached).
+static func load_states_2x(prefix: String) -> Dictionary:
+	var key := prefix + "@2x"
+	if _cache.has(key):
+		return _cache[key]
+	var src := load_states(prefix)
+	var out: Dictionary = {}
+	for s in src.keys():
+		var e: Dictionary = (src[s] as Dictionary).duplicate()
+		var tex: Texture2D = e["tex"]
+		var img := tex.get_image()
+		if img == null or img.is_empty():
+			out[s] = e
+			continue
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		var fs := img.get_height()
+		var n := int(e["n"])
+		var big := Image.create(fs * 2 * n, fs * 2, false, Image.FORMAT_RGBA8)
+		for i in range(n):
+			var fr := img.get_region(Rect2i(i * fs, 0, fs, fs))
+			fr.resize(fs * 2, fs * 2, Image.INTERPOLATE_LANCZOS)
+			big.blit_rect(fr, Rect2i(0, 0, fs * 2, fs * 2), Vector2i(i * fs * 2, 0))
+		e["tex"] = ImageTexture.create_from_image(big)
+		out[s] = e
+	_alive_cache[key] = _alive_cache.get(prefix, {})
+	_cache[key] = out
 	return out
 
 
@@ -241,6 +278,45 @@ void fragment() {
 		_rim_mat = ShaderMaterial.new()
 		_rim_mat.shader = sh
 	return _rim_mat
+
+
+## Heroes on phones: 128-px frames land at ~1.6 physical px per texel (a
+## non-integer scale); nearest gives uneven texel widths that read as "out of
+## focus" and shimmer in motion. Heroes now use 2x strips (load_states_2x) drawn
+## at hd 2 with linear filtering, like the dogs' 256-px strips.
+## Rim + a light unsharp mask for the 2x hero strips (rim offsets in 2x texels).
+static var _hd_mat: ShaderMaterial = null
+static func hero_hd_material() -> ShaderMaterial:
+	if _hd_mat == null:
+		var sh := Shader.new()
+		sh.code = """shader_type canvas_item;
+uniform vec4 rim_light : source_color = vec4(1.0, 0.92, 0.72, 0.6);
+uniform vec4 rim_dark : source_color = vec4(0.06, 0.04, 0.03, 0.75);
+uniform float sharpen = 0.45;
+varying vec4 vcol;
+void vertex() { vcol = COLOR; }
+float solid(sampler2D t, vec2 uv) { return step(0.6, texture(t, uv).a); }
+void fragment() {
+	vec2 px = TEXTURE_PIXEL_SIZE;
+	vec4 c = texture(TEXTURE, UV);
+	vec4 n = (texture(TEXTURE, UV + vec2(px.x, 0.0)) + texture(TEXTURE, UV - vec2(px.x, 0.0))
+		+ texture(TEXTURE, UV + vec2(0.0, px.y)) + texture(TEXTURE, UV - vec2(0.0, px.y))) * 0.25;
+	vec3 rgb = c.a > 0.01 ? clamp(c.rgb + (c.rgb - n.rgb) * sharpen * n.a, 0.0, 1.0) : c.rgb;
+	vec4 base = vec4(rgb, c.a) * vcol;
+	if (base.a < 0.6 * vcol.a) {
+		vec2 q = px * 2.0;
+		float lit = max(solid(TEXTURE, UV + vec2(0.0, q.y)), solid(TEXTURE, UV + vec2(q.x, 0.0)));
+		float ink = max(solid(TEXTURE, UV - vec2(0.0, q.y)), solid(TEXTURE, UV - vec2(q.x, 0.0)));
+		vec4 edge = lit > 0.5 ? rim_light : (ink > 0.5 ? rim_dark : vec4(0.0));
+		edge.a *= vcol.a;
+		base = vec4(mix(base.rgb, edge.rgb, edge.a), max(base.a, edge.a));
+	}
+	COLOR = base;
+}
+"""
+		_hd_mat = ShaderMaterial.new()
+		_hd_mat.shader = sh
+	return _hd_mat
 
 
 static func flash_material() -> ShaderMaterial:
@@ -329,9 +405,13 @@ void fragment() {
 ## feet: local y (unit space) where the feet should stand.
 ## `hd`: texture px per art texel (2 for strips painted at 2x, e.g. pets),
 ## so the feet anchor stays at the same art texel.
-func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0, hd: float = 1.0) -> bool:
+func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0, hd: float = 1.0, up2x: bool = false) -> bool:
 	sprite = spr
-	states = load_states(prefix)
+	states = load_states_2x(prefix) if up2x else load_states(prefix)
+	## Sidecar points (weapon tips, hit origins) stay in 1x frame pixels.
+	_up = 2.0 if up2x else 1.0
+	if up2x:
+		hd = 2.0
 	_alive = ALIVE.duplicate()
 	_alive.merge(_alive_cache.get(prefix, {}), true)
 	if states.is_empty() or sprite == null:
@@ -538,7 +618,8 @@ func _show(f: int, emit: bool = true) -> void:
 
 ## Frame-pixel point (x right, y down, origin top-left of the frame) → the
 ## unit's local space, honouring scale, feet anchor and facing flip.
-func frame_to_local(px: Vector2) -> Vector2:
+func frame_to_local(px_in: Vector2) -> Vector2:
+	var px := px_in * _up
 	var x := (px.x - frame_size * 0.5) * _px_scale
 	if sprite != null and sprite.flip_h:
 		x = -x

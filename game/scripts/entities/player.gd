@@ -198,8 +198,18 @@ func _apply_loadout() -> void:
 	## Cathedral Vestments (3): Last Rites — first death revives at half health.
 	_last_rites = GameState.has_set("cathedral_vestments", 3)
 	var prefix := str(_char.get("anim", "res://assets/sprites/characters/ash_rook/ash_rook"))
-	_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y)
-	_anim.base_material = UnitAnim.rim_material()
+	## Hero sharpness on phones: 2x in-memory strips (Lanczos), minified with
+	## linear filtering + a light sharpen (UnitAnim.load_states_2x). Env
+	## WANDERER_HERO_FILTER=old keeps the earlier nearest path for A/B renders.
+	var hf := OS.get_environment("WANDERER_HERO_FILTER")
+	if hf == "old":
+		_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y)
+		body.texture_filter = CanvasItem.TEXTURE_FILTER_PARENT_NODE
+		_anim.base_material = UnitAnim.rim_material()
+	else:
+		_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y, 1.0, true)
+		body.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		_anim.base_material = UnitAnim.hero_hd_material()
 	body.material = _anim.base_material
 	_wpn_art = UnitAnim.load_json(prefix + "_weapon.json")
 	if not _anim.frame_event.is_connected(_on_anim_frame):
