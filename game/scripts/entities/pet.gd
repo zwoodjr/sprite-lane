@@ -97,7 +97,17 @@ func _apply_look() -> void:
 		## Slim HUD look: the name only shows while the pet is doing something.
 		name_label.visible = col != Color(0.92, 0.86, 0.72)
 
+var _thorn_t: float = 0.0
+
 func _physics_process(delta: float) -> void:
+	## Pet gear / perks: thorns hurt enemies touching the pet.
+	_thorn_t -= delta
+	if _thorn_t <= 0.0:
+		_thorn_t = 0.5
+		var th := GameState.pet_fx("thorns")
+		if th > 0.0:
+			for e in RunFx.enemies_in(get_tree(), global_position, 40.0):
+				e.call("take_damage", th * 0.5, (e.global_position - global_position).normalized(), 0.0, false, Color(0.85, 0.8, 0.6))
 	_bite_cd = maxf(0.0, _bite_cd - delta)
 	_aoe_cd = maxf(0.0, _aoe_cd - delta)
 	_bark_cd = maxf(0.0, _bark_cd - delta)

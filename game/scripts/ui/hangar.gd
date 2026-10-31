@@ -10,6 +10,7 @@ const SettingsMenu = preload("res://scripts/ui/settings_menu.gd")
 const HANGAR_DIR := "res://assets/sprites/hangar/"
 const TABS := ["camp", "survivors", "kennel", "brew", "stash"]
 const CraftDefs = preload("res://scripts/data/craft_defs.gd")
+const PetGear = preload("res://scripts/data/pet_gear_defs.gd")
 const TAB_LABEL := {"camp": "CAMP", "survivors": "CREW", "kennel": "KENNEL", "brew": "BREW", "stash": "STASH"}
 const TAB_ICON := {"camp": "tab_camp", "survivors": "tab_crew", "kennel": "tab_kennel", "brew": "tab_brew", "stash": "tab_stash"}
 const RARITY_FRAME := "res://assets/sprites/icons/frames/frame_%s.png"
@@ -376,6 +377,7 @@ func _rebuild() -> void:
 			for id in HangarDefs.ids_for("kennel"):
 				if not PetDefs.is_mech(str(id).substr(7)):
 					_list.add_child(_row(str(id), _pet_frame(str(id).substr(7), true)))
+					_list.add_child(_pet_card(str(id).substr(7)))
 			_build_workshop()
 		"brew":
 			_build_brew()
@@ -493,6 +495,169 @@ func buy(id: String) -> bool:
 
 
 ## =========================================================================
+## Pet card (Kennel): gear slot + bond perk tree (levels 3 / 6 / 10).
+func _pet_card(pid: String) -> PanelContainer:
+	var p := card(UiTheme.LINE, Color(0.09, 0.075, 0.06, 0.9))
+	p.name = "PetCard_" + pid
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	v.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.add_child(v)
+	## Gear slot.
+	var gh := HBoxContainer.new()
+	gh.add_theme_constant_override("separation", 10)
+	gh.mouse_filter = Control.MOUSE_FILTER_PASS
+	v.add_child(gh)
+	var it := GameState.pet_gear_item(pid)
+	gh.add_child(GearUi.tile(it, 80, {"worn": false, "new": false, "icon": "gear_charm_2", "empty_alpha": 0.4}))
+	var gi := VBoxContainer.new()
+	gi.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gi.mouse_filter = Control.MOUSE_FILTER_PASS
+	gh.add_child(gi)
+	gi.add_child(UiTheme.head_label("GEAR: " + (str(it.get("name", "")) if not it.is_empty() else "empty slot"), UiTheme.T_SMALL, UiTheme.AMBER))
+	if not it.is_empty():
+		var gl := UiTheme.body_label(" · ".join(PetGear.lines(it)), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+		gl.max_lines_visible = 2
+		gi.add_child(gl)
+	var gb := HBoxContainer.new()
+	gb.add_theme_constant_override("separation", 6)
+	gi.add_child(gb)
+	var ch := UiTheme.big_button("CHANGE", UiTheme.TEAL, 48, 14)
+	ch.name = "PetGear_" + pid
+	ch.custom_minimum_size.x = 0
+	ch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ch.mouse_force_pass_scroll_events = true
+	ch.pressed.connect(open_pet_gear.bind(pid))
+	gb.add_child(ch)
+	if not it.is_empty() and str(it.get("bound", "")) == "":
+		var ins := GameState.is_insured(int(it["uid"]))
+		var ib := UiTheme.big_button("INSURED" if ins else "INSURE", UiTheme.AMBER if ins else UiTheme.LINE, 48, 14)
+		ib.custom_minimum_size.x = 0
+		ib.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ib.mouse_force_pass_scroll_events = true
+		ib.disabled = not GameState.insurance_unlocked()
+		ib.pressed.connect(func() -> void:
+			GameState.set_pet_insured(pid, not GameState.is_insured(int(it["uid"])))
+			_rebuild())
+		gb.add_child(ib)
+	## Bond perks.
+	var lv := GameState.bond_level(pid)
+	var picks: Dictionary = GameState.pet_perks.get(pid, {})
+	v.add_child(UiTheme.head_label("BOND Lv %d — PERKS" % lv, UiTheme.T_SMALL, UiTheme.TEXT))
+	var tree := PetGear.perks_for(pid)
+	for i in range(PetGear.PERK_LEVELS.size()):
+		var plv := int(PetGear.PERK_LEVELS[i])
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		v.add_child(row)
+		var tag := UiTheme.pixel_label("Lv%d" % plv, UiTheme.PX_S, UiTheme.AMBER if lv >= plv else UiTheme.TEXT_DIM)
+		tag.custom_minimum_size.x = 52
+		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(tag)
+		for c in range(2):
+			var pk: Dictionary = tree[i][c]
+			var chosen := picks.has(str(plv)) and int(picks[str(plv)]) == c
+			var open := lv >= plv and not picks.has(str(plv))
+			var b := UiTheme.big_button("%s\n%s" % [str(pk["name"]).to_upper(), str(pk["desc"])], UiTheme.TEAL if chosen else (UiTheme.AMBER if open else UiTheme.LINE), 64, 12)
+			b.name = "Perk_%s_%d_%d" % [pid, plv, c]
+			b.custom_minimum_size.x = 0
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.mouse_force_pass_scroll_events = true
+			b.clip_text = true
+			b.disabled = not open and not chosen
+			if open:
+				var lvv := plv
+				var cc := c
+				b.pressed.connect(func() -> void:
+					if GameState.choose_perk(pid, lvv, cc):
+						Juice.sfx("ui_purchase")
+						_toast("Perk learned: %s" % str(pk["name"]))
+					_rebuild())
+			row.add_child(b)
+	if not GameState.pending_perks(pid).is_empty():
+		v.add_child(UiTheme.body_label("Bond grew: pick a perk above.", UiTheme.T_SMALL, UiTheme.AMBER))
+	if not picks.is_empty():
+		var rs := UiTheme.big_button("RESPEC PERKS (%d)" % PetGear.RESPEC_COST, UiTheme.RUST, 48, 14)
+		rs.name = "Respec_" + pid
+		rs.mouse_force_pass_scroll_events = true
+		rs.disabled = GameState.account_scrap < PetGear.RESPEC_COST
+		rs.pressed.connect(func() -> void:
+			if GameState.respec_perks(pid):
+				_toast("Perks reset — pick again")
+				_set_scrap_shown(GameState.account_scrap)
+			_rebuild())
+		v.add_child(rs)
+	return p
+
+
+## Pet gear picker: every pet gear piece in the stash (bound ones only for their pet).
+func open_pet_gear(pid: String) -> void:
+	close_popup()
+	var v := GearUi.overlay(self, UiTheme.TEAL)
+	_popup = v.get_meta("root")
+	_popup.name = "PetGearPicker"
+	v.add_child(UiTheme.head_label("%s'S GEAR" % str(PetDefs.get_pet(pid).get("name", pid)).to_upper(), UiTheme.T_H1, UiTheme.AMBER))
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(0, get_viewport_rect().size.y * 0.5)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	var lv := VBoxContainer.new()
+	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lv.add_theme_constant_override("separation", 8)
+	sc.add_child(lv)
+	var n := 0
+	for it in GameState.stash:
+		if str(it.get("kind", "")) != "petgear":
+			continue
+		var b := str(it.get("bound", ""))
+		if b != "" and b != pid:
+			continue
+		n += 1
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		h.mouse_filter = Control.MOUSE_FILTER_PASS
+		lv.add_child(h)
+		h.add_child(GearUi.tile(it, 80, {"new": false}))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.mouse_filter = Control.MOUSE_FILTER_PASS
+		h.add_child(info)
+		var who := GameState.pet_wearing(int(it["uid"]))
+		info.add_child(UiTheme.head_label(str(it.get("name", "")) + (("  (on %s)" % str(PetDefs.get_pet(who).get("name", who))) if who != "" else ""), UiTheme.T_SMALL, UiTheme.TEXT))
+		info.add_child(UiTheme.body_label(" · ".join(PetGear.lines(it)), UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		var eb := UiTheme.big_button("WORN" if who == pid else "EQUIP", UiTheme.TEAL, 56, 14)
+		eb.name = "EquipPet_%d" % int(it["uid"])
+		eb.custom_minimum_size.x = 120
+		eb.disabled = who == pid
+		eb.mouse_force_pass_scroll_events = true
+		var uid := int(it["uid"])
+		eb.pressed.connect(func() -> void:
+			if GameState.equip_pet_gear(pid, uid):
+				Juice.sfx("ui_purchase")
+			close_popup()
+			_rebuild())
+		h.add_child(eb)
+	if n == 0:
+		lv.add_child(_note("No pet gear yet. It drops rarely (elites and bosses most) and the Crafter Bench makes it."))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	if not GameState.pet_gear_item(pid).is_empty():
+		var ub := UiTheme.big_button("TAKE OFF", UiTheme.LINE, 56, 16)
+		ub.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ub.pressed.connect(func() -> void:
+			GameState.unequip_pet_gear(pid)
+			close_popup()
+			_rebuild())
+		row.add_child(ub)
+	var cb := UiTheme.big_button("CLOSE", UiTheme.LINE, 56, 16)
+	cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cb.pressed.connect(close_popup)
+	row.add_child(cb)
+
+
 ## Workshop (Depth Update E6): Helm rebuilds war machines into mech pets.
 
 func _build_workshop() -> void:
@@ -510,6 +675,7 @@ func _build_workshop() -> void:
 	for mid in PetDefs.MECH_IDS:
 		if GameState.pet_available(str(mid)):
 			_list.add_child(_row(HangarDefs.kennel_id(str(mid)), _pet_frame(str(mid), true)))
+			_list.add_child(_pet_card(str(mid)))
 		else:
 			_list.add_child(_mech_build_row(str(mid)))
 
@@ -1308,6 +1474,44 @@ func open_crafter() -> void:
 			grid.add_child(b)
 		if not bool(chk["ok"]) and str(chk["why"]) != "" and str(chk["why"]) != "Missing materials":
 			lv.add_child(UiTheme.body_label(str(chk["why"]), UiTheme.T_SMALL, UiTheme.DANGER))
+	## Pet gear: Rare pieces of the drop pool + the craft-only War-Dog Rig.
+	lv.add_child(UiTheme.head_label("PET GEAR", UiTheme.T_H2, UiTheme.AMBER))
+	for t in PetGear.CRAFT.keys() + ["war_dog_rig"]:
+		var tid := str(t)
+		var nm := str(PetGear.WAR_DOG_RIG["name"]) + " (craft-only Legendary)" if tid == "war_dog_rig" else "Rare " + str(PetGear.TYPES[tid]["name"])
+		var c: Dictionary = PetGear.WAR_DOG_RIG["cost"] if tid == "war_dog_rig" else PetGear.CRAFT[tid]
+		var chk := GameState.craft_pet_check(tid)
+		var parts := PackedStringArray()
+		for k in c.keys():
+			var have := GameState.account_scrap if str(k) == "scrap" else GameState.craft_count(str(k))
+			var mn := "scrap" if str(k) == "scrap" else MedicineDefs.item_name(str(k)) if MedicineDefs.INGREDIENTS.has(str(k)) else str(GearDefs.MATERIAL_NAME.get(str(k), str(k)))
+			parts.append("%d %s (%d)" % [int(c[k]), mn, have])
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		h.mouse_filter = Control.MOUSE_FILTER_PASS
+		lv.add_child(h)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.mouse_filter = Control.MOUSE_FILTER_PASS
+		h.add_child(info)
+		info.add_child(UiTheme.head_label(nm, UiTheme.T_SMALL, UiTheme.TEXT))
+		info.add_child(UiTheme.body_label(" · ".join(parts), UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		if not bool(chk["ok"]) and str(chk["why"]).begins_with("Needs"):
+			info.add_child(UiTheme.body_label(str(chk["why"]), UiTheme.T_SMALL, UiTheme.RUST))
+		var cb2 := UiTheme.big_button("CRAFT", UiTheme.TEAL if bool(chk["ok"]) else UiTheme.LINE, 56, 14)
+		cb2.name = "CraftPet_" + tid
+		cb2.custom_minimum_size.x = 110
+		cb2.disabled = not bool(chk["ok"])
+		cb2.mouse_force_pass_scroll_events = true
+		cb2.pressed.connect(func() -> void:
+			var made := GameState.craft_pet_piece(tid)
+			if made.is_empty():
+				Juice.sfx("ui_denied")
+				return
+			Juice.sfx("ui_purchase")
+			_toast("Crafted: %s" % str(made.get("name", "")))
+			open_crafter())
+		h.add_child(cb2)
 	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 18)
 	close.pressed.connect(close_popup)
 	v.add_child(close)

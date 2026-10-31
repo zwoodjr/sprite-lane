@@ -8,6 +8,7 @@ extends RefCounted
 ##    mod: "", coat: "", needs_heart: bool, charged: bool}
 ## Every tuning number lives here.
 
+const PetGearDefs = preload("res://scripts/data/pet_gear_defs.gd")
 const CraftSets = preload("res://scripts/data/craft_defs.gd")
 const RARITIES: Array = ["common", "rare", "epic", "legendary"]
 const RARITY_NAME := {"common": "Common", "rare": "Rare", "epic": "Epic", "legendary": "Legendary"}
@@ -600,6 +601,8 @@ static func roll_role_reward(role: String, kind: String, tier: int, hero: String
 
 ## Short stat lines for UI.
 static func stat_lines(item: Dictionary) -> PackedStringArray:
+	if str(item.get("kind", "")) == "petgear":
+		return PackedStringArray(PetGearDefs.lines(item))
 	var out := PackedStringArray()
 	var stats: Dictionary = item.get("stats", {})
 	for s in stats.keys():

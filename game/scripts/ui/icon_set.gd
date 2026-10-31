@@ -92,6 +92,8 @@ static func upgrade(u: Dictionary) -> String:
 ## armour / accessory look (gear_<slot>_<noun>); slot art as the fallback.
 static func item(it: Dictionary) -> String:
 	var kind := str(it.get("kind", ""))
+	if kind == "petgear":
+		return str(it.get("icon_id", "gear_charm_2"))
 	if kind == "mod" and has("mod_" + str(it.get("mod", ""))):
 		return "mod_" + str(it.get("mod", ""))
 	if kind == "weapon":

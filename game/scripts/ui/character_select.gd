@@ -299,6 +299,11 @@ func _refresh() -> void:
 		pb.self_modulate = Color.WHITE if on else Color(0.82, 0.8, 0.78)
 	_pet_name.text = str(pet.get("name", ""))
 	_pet_blurb.text = "%s — %s" % [pet.get("ability_name", ""), pet.get("ability_desc", "")]
+	var pg := GameState.pet_gear_item(GameState.selected_pet_id)
+	if not pg.is_empty():
+		_pet_blurb.text += "\nGear: %s" % str(pg.get("name", ""))
+	if not GameState.pending_perks(GameState.selected_pet_id).is_empty():
+		_pet_blurb.text += "\nBond perk ready: pick it in the Hangar Kennel"
 
 func _stat_bar(label: String, v: float, lo: float, hi: float) -> void:
 	var h := HBoxContainer.new()

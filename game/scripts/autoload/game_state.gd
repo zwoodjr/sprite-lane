@@ -79,6 +79,10 @@ var stories: Dictionary = {}
 var milestones: Dictionary = {}
 ## Pet Bond XP per dog (EventDefs.PET_BOND / BOND_*).
 var kennel_bond: Dictionary = {}
+## Pet gear: pet id -> stash uid of its one gear piece (collar / harness).
+var pet_gear: Dictionary = {}
+## Bond perks: pet id -> {"3": 0|1, "6": .., "10": ..}.
+var pet_perks: Dictionary = {}
 ## Story Legendaries waiting for stash room.
 var pending_rewards: Array = []
 ## In-run event state (reset every deploy).
@@ -140,6 +144,7 @@ var jobs_done_run: int = 0
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
 const CraftDefs = preload("res://scripts/data/craft_defs.gd")
+const PetGear = preload("res://scripts/data/pet_gear_defs.gd")
 const SAVE_VERSION := 4
 ## Rolling backup (the save before the latest) + where an unreadable save is kept.
 const SAVE_BAK_PATH := "user://wanderer_save.bak"
@@ -269,6 +274,7 @@ func _ready() -> void:
 	if "--dev" in OS.get_cmdline_user_args():
 		dev_tools = true
 	load_profile()
+	ensure_default_pet_gear()
 	reset_loadout_to_defaults()
 
 func save_profile() -> void:
@@ -294,6 +300,8 @@ func save_profile() -> void:
 		"stories": stories,
 		"milestones": milestones,
 		"kennel_bond": kennel_bond,
+		"pet_gear": pet_gear,
+		"pet_perks": pet_perks,
 		"pending_rewards": pending_rewards,
 		"migrated_hangar_v4": migrated_hangar_v4,
 		"migrated_hangar_v5": migrated_hangar_v5,
@@ -537,6 +545,24 @@ func apply_save(d: Dictionary) -> void:
 	var kb := _dict_or_empty(d.get("kennel_bond", {}))
 	for k in kb.keys():
 		kennel_bond[str(k)] = maxi(0, int(kb[k]))
+	pet_gear = {}
+	var pgd := _dict_or_empty(d.get("pet_gear", {}))
+	for k in pgd.keys():
+		pet_gear[str(k)] = int(pgd[k])
+	pet_perks = {}
+	var ppd := _dict_or_empty(d.get("pet_perks", {}))
+	for k in ppd.keys():
+		if typeof(ppd[k]) == TYPE_DICTIONARY:
+			var one := {}
+			for lv in (ppd[k] as Dictionary).keys():
+				one[str(lv)] = clampi(int(ppd[k][lv]), 0, 1)
+			pet_perks[str(k)] = one
+	ensure_default_pet_gear()
+	if hangar_notice == "":
+		for pk in kennel_bond.keys():
+			if not pending_perks(str(pk)).is_empty():
+				hangar_notice = "New: bond perks. Your pets' bond levels 3, 6 and 10 now offer a choice — pick them in the Hangar Kennel."
+				break
 	var pr: Variant = d.get("pending_rewards", [])
 	pending_rewards = []
 	if typeof(pr) == TYPE_ARRAY:
@@ -1271,7 +1297,164 @@ func pickup_radius_bonus() -> float:
 
 ## Pet Bond levels (extracting with the dog close by) add pet damage.
 func pet_power_mult() -> float:
-	return 1.0 + EventDefs.BOND_DAMAGE_PER_LEVEL * float(bond_level(selected_pet_id))
+	## Bond levels 3 / 6 / 10 give a perk choice instead of the flat gain.
+	var lv := bond_level(selected_pet_id)
+	var flat := lv
+	for pl in PetGear.PERK_LEVELS:
+		if lv >= int(pl):
+			flat -= 1
+	return (1.0 + EventDefs.BOND_DAMAGE_PER_LEVEL * float(flat)) * (1.0 + pet_fx("pet_damage"))
+
+## ---- Pet gear + bond perks ------------------------------------------------------
+func pet_gear_item(pet_id: String = "") -> Dictionary:
+	var pid := pet_id if pet_id != "" else selected_pet_id
+	return stash_item(int(pet_gear.get(pid, -1)))
+
+## Which pet wears this item ("" = none).
+func pet_wearing(uid: int) -> String:
+	for k in pet_gear.keys():
+		if int(pet_gear[k]) == uid:
+			return str(k)
+	return ""
+
+func equip_pet_gear(pet_id: String, uid: int) -> bool:
+	var it := stash_item(uid)
+	if it.is_empty() or str(it.get("kind", "")) != "petgear":
+		return false
+	var b := str(it.get("bound", ""))
+	if b != "" and b != pet_id:
+		return false
+	var cur := pet_wearing(uid)
+	if cur != "":
+		pet_gear.erase(cur)
+		insured.erase("pet:" + cur)
+	if int(insured.get("pet:" + pet_id, -1)) != uid:
+		insured.erase("pet:" + pet_id)
+	pet_gear[pet_id] = uid
+	it.erase("new")
+	reset_loadout_to_defaults()
+	save_profile()
+	return true
+
+func unequip_pet_gear(pet_id: String) -> void:
+	pet_gear.erase(pet_id)
+	insured.erase("pet:" + pet_id)
+	reset_loadout_to_defaults()
+	save_profile()
+
+## Picks waiting: perk levels reached with no choice yet.
+func pending_perks(pet_id: String) -> Array:
+	var out: Array = []
+	var lv := bond_level(pet_id)
+	var picks: Dictionary = pet_perks.get(pet_id, {})
+	for pl in PetGear.PERK_LEVELS:
+		if lv >= int(pl) and not picks.has(str(pl)):
+			out.append(int(pl))
+	return out
+
+func choose_perk(pet_id: String, level: int, choice: int) -> bool:
+	if not (level in PetGear.PERK_LEVELS) or bond_level(pet_id) < level:
+		return false
+	var picks: Dictionary = pet_perks.get(pet_id, {})
+	if picks.has(str(level)):
+		return false
+	picks[str(level)] = clampi(choice, 0, 1)
+	pet_perks[pet_id] = picks
+	reset_loadout_to_defaults()
+	save_profile()
+	return true
+
+func respec_perks(pet_id: String) -> bool:
+	if not pet_perks.has(pet_id) or (pet_perks[pet_id] as Dictionary).is_empty() or account_scrap < PetGear.RESPEC_COST:
+		return false
+	account_scrap -= PetGear.RESPEC_COST
+	pet_perks.erase(pet_id)
+	reset_loadout_to_defaults()
+	save_profile()
+	meta_changed.emit()
+	return true
+
+## Pet gear + perk effect for the selected pet (see PetGear for keys).
+func pet_fx(key: String) -> float:
+	var v := 0.0
+	var it := pet_gear_item(selected_pet_id)
+	if not it.is_empty():
+		v += float((it.get("fx", {}) as Dictionary).get(key, 0.0))
+	for pk in PetGear.picked(selected_pet_id, pet_perks.get(selected_pet_id, {})):
+		v += float((pk.get("fx", {}) as Dictionary).get(key, 0.0))
+	return v
+
+## Old saves / fresh profiles: the dogs get their signature pieces.
+func ensure_default_pet_gear() -> void:
+	for pid in PetGear.DEFAULTS.keys():
+		var have := false
+		for it in stash:
+			if str(it.get("bound", "")) == str(pid):
+				have = true
+				if not pet_gear.has(pid) or stash_item(int(pet_gear[pid])).is_empty():
+					pet_gear[pid] = int(it["uid"])
+				break
+		if have:
+			continue
+		var g := PetGear.make_default(str(pid))
+		g["uid"] = next_uid
+		next_uid += 1
+		stash.append(g)
+		if not pet_gear.has(pid) or stash_item(int(pet_gear[pid])).is_empty():
+			pet_gear[pid] = int(g["uid"])
+
+## Kill hook: rare pet gear drop (Wander, after the medicine phase-in).
+func roll_pet_gear(role: String) -> Dictionary:
+	if in_campaign_run() or not feature_on("medicine"):
+		return {}
+	if randf() >= float(PetGear.DROP.get(role, PetGear.DROP[""])):
+		return {}
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	return PetGear.roll_drop(rng, zone_tier())
+
+## Crafter Bench: pet gear pieces.
+func craft_pet_check(type: String) -> Dictionary:
+	var c: Dictionary = PetGear.WAR_DOG_RIG["cost"] if type == "war_dog_rig" else PetGear.CRAFT.get(type, {})
+	var missing := {}
+	for k in c.keys():
+		var have := account_scrap if str(k) == "scrap" else craft_count(str(k))
+		if have < int(c[k]):
+			missing[str(k)] = int(c[k]) - have
+	var need_bench := int(PetGear.WAR_DOG_RIG["bench"]) if type == "war_dog_rig" else 1
+	if c.is_empty():
+		return {"ok": false, "why": "Unknown", "missing": {}}
+	if bench_rank() < need_bench:
+		return {"ok": false, "why": "Needs Crafter Bench rank %d" % need_bench, "missing": missing}
+	if stash.size() >= stash_capacity():
+		return {"ok": false, "why": "Stash full", "missing": missing}
+	return {"ok": missing.is_empty(), "why": "" if missing.is_empty() else "Missing materials", "missing": missing}
+
+func craft_pet_piece(type: String) -> Dictionary:
+	if not bool(craft_pet_check(type)["ok"]):
+		return {}
+	var c: Dictionary = PetGear.WAR_DOG_RIG["cost"] if type == "war_dog_rig" else PetGear.CRAFT[type]
+	_pay_craft(c)
+	var it := PetGear.make_war_dog_rig() if type == "war_dog_rig" else PetGear.make(type, PetGear.CRAFT_RARITY)
+	if not add_to_stash(it):
+		return {}
+	save_profile()
+	meta_changed.emit()
+	return stash[stash.size() - 1]
+
+func _pay_craft(c: Dictionary) -> void:
+	for k in c.keys():
+		var n := int(c[k])
+		if str(k) == "scrap":
+			account_scrap -= n
+			continue
+		var from_pouch := mini(n, ingredient_count(str(k)))
+		ingredients[str(k)] = ingredient_count(str(k)) - from_pouch
+		if int(ingredients[str(k)]) <= 0:
+			ingredients.erase(str(k))
+		materials[str(k)] = material_count(str(k)) - (n - from_pouch)
+		if int(materials[str(k)]) <= 0:
+			materials.erase(str(k))
 
 func bond_level(pet_id: String) -> int:
 	return mini(EventDefs.BOND_MAX_LEVEL, int(kennel_bond.get(pet_id, 0)) / EventDefs.BOND_XP_PER_LEVEL)
@@ -1392,6 +1575,21 @@ func set_insured(hero: String, uid: int) -> bool:
 	save_profile()
 	return true
 
+## Insure a pet's gear piece (one per pet; needs the Insurance Locker).
+func set_pet_insured(pet_id: String, on: bool) -> bool:
+	if on and not insurance_unlocked():
+		return false
+	if not on:
+		insured.erase("pet:" + pet_id)
+		save_profile()
+		return true
+	var it := pet_gear_item(pet_id)
+	if it.is_empty():
+		return false
+	insured["pet:" + pet_id] = int(it["uid"])
+	save_profile()
+	return true
+
 func is_insured(uid: int) -> bool:
 	for h in insured.keys():
 		if int(insured[h]) == uid:
@@ -1402,8 +1600,10 @@ func is_insured(uid: int) -> bool:
 ## Every salvage lands in the buy-back bin (see buy_back).
 func salvage(uid: int) -> int:
 	var it := stash_item(uid)
-	if it.is_empty() or bool(it.get("locked", false)):
+	if it.is_empty() or bool(it.get("locked", false)) or str(it.get("bound", "")) != "":
 		return 0
+	if pet_wearing(uid) != "":
+		unequip_pet_gear(pet_wearing(uid))
 	var by := equipped_by(uid)
 	if not by.is_empty():
 		unequip(str(by[0]), str(by[1]))
@@ -1459,7 +1659,7 @@ func bulk_salvageable(it: Dictionary) -> bool:
 	var uid := int(it.get("uid", -1))
 	return str(it.get("rarity", "")) == "common" and str(it.get("set", "")) == "" \
 		and not bool(it.get("locked", false)) and str(it.get("legendary", "")) == "" \
-		and equipped_by(uid).is_empty() and not is_insured(uid)
+		and equipped_by(uid).is_empty() and not is_insured(uid) and pet_wearing(uid) == "" and str(it.get("bound", "")) == ""
 
 func bulk_salvage_preview() -> Array:
 	var out: Array = []
@@ -1696,7 +1896,7 @@ func gear_legendary() -> String:
 	return str(gear.get("legendary", ""))
 
 func gear_luck() -> float:
-	var l := gear_stat("luck")
+	var l := gear_stat("luck") + pet_fx("luck")
 	if has_set("field_salvager", 4):
 		l += float(GearDefs.GENERAL_SETS["field_salvager"]["drop_luck"])
 	return l
@@ -1747,7 +1947,9 @@ func auto_salvageable(it: Dictionary) -> bool:
 		return false
 	if str(it.get("set", "")) != "" and not auto_salvage_sets():
 		return false
-	if it.has("uid") and (is_insured(int(it["uid"])) or not equipped_by(int(it["uid"])).is_empty()):
+	if it.has("uid") and (is_insured(int(it["uid"])) or not equipped_by(int(it["uid"])).is_empty() or pet_wearing(int(it["uid"])) != ""):
+		return false
+	if str(it.get("bound", "")) != "":
 		return false
 	var sc := GearDefs.item_score(it)
 	for h in loadouts.keys():
@@ -1871,6 +2073,10 @@ func _lose_run_loot() -> void:
 	for sl in eq.keys():
 		if int((eq[sl] as Dictionary).get("uid", -1)) != keep:
 			at_risk.append(sl)
+	## The pet's gear piece is worn kit too (never a bound signature piece).
+	var pg := pet_gear_item(selected_pet_id)
+	if not pg.is_empty() and str(pg.get("bound", "")) == "" and int(insured.get("pet:" + selected_pet_id, -1)) != int(pg["uid"]):
+		at_risk.append("pet")
 	at_risk.sort()
 	var drng := RandomNumberGenerator.new()
 	drng.seed = run_seed * 31 + 7
@@ -1880,6 +2086,11 @@ func _lose_run_loot() -> void:
 		at_risk[i] = at_risk[j]
 		at_risk[j] = tmp
 		var sl: Variant = at_risk[i]
+		if str(sl) == "pet":
+			result_lost_items.append(pg.duplicate(true))
+			stash.erase(pg)
+			pet_gear.erase(selected_pet_id)
+			continue
 		var it: Dictionary = eq[sl]
 		result_lost_items.append(it.duplicate(true))
 		stash.erase(it)
@@ -2308,6 +2519,8 @@ func reset_profile() -> void:
 	stories.clear()
 	milestones.clear()
 	kennel_bond.clear()
+	pet_gear.clear()
+	pet_perks.clear()
 	pending_rewards.clear()
 	ingredients.clear()
 	tonics.clear()
@@ -2328,6 +2541,7 @@ func reset_profile() -> void:
 	weekly_opt_in = false
 	daily_runs = {}
 	run_history = []
+	ensure_default_pet_gear()
 	save_profile()
 	meta_changed.emit()
 
@@ -2348,6 +2562,7 @@ func reset_loadout_to_defaults() -> void:
 	weapon = KitDefs.apply_style(weapon, selected_character_id, kit_style(selected_character_id))
 	weapon = GearDefs.apply_weapon(weapon, gear.get("weapon_item", {}), gear.get("mods", []))
 	pet = HangarDefs.apply_kennel(LoadoutStubs.default_pet(selected_pet_id), kennel_rank())
+	pet = PetGear.apply_perks(pet, selected_pet_id, pet_perks.get(selected_pet_id, {}))
 	insured_slots.clear()
 	var slots: int = int(get_mode().get("insurance_slots", 2)) + insurance_bonus_slots()
 	slots = mini(slots, 3)

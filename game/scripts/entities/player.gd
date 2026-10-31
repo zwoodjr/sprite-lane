@@ -9,6 +9,7 @@ signal ability_used(name: String)
 ## Fired when this player actually loses HP to an enemy (pets listen — Noel enrages).
 signal attacked(attacker: Node)
 ## Who landed the last hit (Run History's cause of death).
+const PetGear = preload("res://scripts/data/pet_gear_defs.gd")
 const CraftSets = preload("res://scripts/data/craft_defs.gd")
 var last_hit_by: String = ""
 ## Fired when the player takes damage (HUD red edge flash).
@@ -1553,6 +1554,13 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	if _brace_left > 0.0:
 		dmg *= float(_ability.get("brace_mult", 1.0))
 	dmg *= Admin.def_mult() * GameState.craft_taken_mult(attacker) * GameState.zone_guard
+	## Pet gear / bond perks: dodge and guard while the pet is close.
+	if _pet_near():
+		if randf() < GameState.pet_fx("dodge"):
+			_iframes = HURT_IFRAMES * 0.4
+			Juice.float_text(global_position + Vector2(0, -36), "DODGE", Color(0.75, 0.9, 1.0), 15)
+			return
+		dmg *= 1.0 - clampf(GameState.pet_fx("guard"), 0.0, 0.5)
 	## Dustborn Regalia (6): Dust Ward eats one big hit every 30 s.
 	if _ward_cd <= 0.0 and GameState.has_set("dustborn", 6) and dmg >= max_hp * float(CraftSets.SETS["dustborn"]["ward_frac"]):
 		_ward_cd = float(CraftSets.SETS["dustborn"]["ward_cd"])
@@ -1686,6 +1694,10 @@ func heal(amount: float) -> void:
 	health_changed.emit(hp, max_hp)
 
 ## Greed pressure: healing shrinks with every extract window you stayed past.
+func _pet_near() -> bool:
+	var p := get_tree().get_first_node_in_group("pets") as Node2D
+	return p != null and p.global_position.distance_to(global_position) <= PetGear.NEAR
+
 func _greed_heal() -> float:
 	if GameState.in_campaign_run():
 		return 1.0

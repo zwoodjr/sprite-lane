@@ -179,6 +179,7 @@ func _run() -> void:
 	await _test_crafting()
 	await _test_spawns()
 	_test_blueprints()
+	await _test_petgear()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -548,7 +549,7 @@ func _test_hangar() -> void:
 	_check(GameState.account_scrap == 5, "hangar no double refund")
 	## v4 save: rank 9 clamps to the old max 5, which merges to the v5 max 3.
 	_check(GameState.camp_rank("generator") == 3 and not GameState.camp.has("nonsense") and GameState.migrated_hangar_v5, "camp load clamps")
-	_check(GameState.stash.size() == 1, "stash load filters")
+	_check(_hero_gear_n() == 1 and _pet_gear_n() == 3, "stash load filters (+3 signature pet pieces)")
 	GameState.stash.clear()
 	## Prices per the brief.
 	_check(HangarDefs.cost("generator", 0) == 400 and HangarDefs.cost("generator", 2) == 4800 and HangarDefs.cost("generator", 3) == -1, "shared prices (v6: 3 ranks)")
@@ -800,7 +801,7 @@ func _test_gear() -> void:
 	_check(str(bitems[0]["rarity"]) == "epic" and str(bitems[0]["set"]) != "" and int((br["materials"] as Dictionary).get("dust_heart", 0)) >= 1, "boss reward")
 	## Old saves (no gear keys) load with safe defaults.
 	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "stash": [{"name": "old", "rarity": "rare", "kind": "armor", "slot": "head"}]})
-	_check(GameState.stash.size() == 1 and int(GameState.stash[0]["uid"]) > 0 and GameState.loadouts.is_empty(), "old save gear defaults")
+	_check(_hero_gear_n() == 1 and int(GameState.stash[0]["uid"]) > 0 and GameState.loadouts.is_empty() and _pet_gear_n() == 3, "old save gear defaults")
 	GameState.stash.clear()
 	print("GEAR_OK")
 
@@ -872,7 +873,7 @@ func _test_gear_ux() -> void:
 	_check(GearDefs.noun_index({"slot": "boots", "name": "Worn Striders"}) == 2 and GearDefs.noun_index({"slot": "charm", "name": "Fine Lucky Bottle Cap"}) == 1, "old-save look from name")
 	## Old saves: no lock / new / bin keys -> safe defaults.
 	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "stash": [{"uid": 3, "name": "Plain Hood", "rarity": "common", "kind": "armor", "slot": "head"}]})
-	_check(GameState.stash.size() == 1 and not bool(GameState.stash[0].get("new", false)) and GameState.salvage_bin.is_empty() and GameState.next_uid >= 4, "old save gear ux defaults")
+	_check(_hero_gear_n() == 1 and not bool(GameState.stash[0].get("new", false)) and GameState.salvage_bin.is_empty() and GameState.next_uid >= 4, "old save gear ux defaults")
 	GameState.camp["stash"] = 3
 	GameState.stash.clear()
 	## Confirm rules.
@@ -4621,3 +4622,89 @@ func _test_blueprints() -> void:
 	GameState.account_scrap = int(keep[4])
 	GameState.ingredients = keep[5]
 	print("BLUEPRINTS_OK")
+
+## Pet gear slot + bond perks.
+func _test_petgear() -> void:
+	var PG: Script = load("res://scripts/data/pet_gear_defs.gd")
+	var keep := [GameState.stash.duplicate(true), GameState.pet_gear.duplicate(), GameState.pet_perks.duplicate(true), GameState.kennel_bond.duplicate(),
+		GameState.selected_pet_id, GameState.account_scrap, GameState.insured.duplicate(), GameState.camp.duplicate(), GameState.ingredients.duplicate(), GameState.materials.duplicate()]
+	GameState.stash.clear()
+	GameState.pet_gear.clear()
+	GameState.ensure_default_pet_gear()
+	var sat := GameState.pet_gear_item("bentley")
+	_check(str(sat.get("name", "")) == "Bentley's Satchel" and GameState.pet_gear_item("lillie").get("name", "") == "Lillie's Armor Patch" and not GameState.pet_gear_item("noel").is_empty(), "dogs start with their signature gear")
+	GameState.ensure_default_pet_gear()
+	var n_pg := 0
+	for it in GameState.stash:
+		if str(it.get("kind", "")) == "petgear":
+			n_pg += 1
+	_check(n_pg == 3, "defaults made once (%d)" % n_pg)
+	_check(GameState.salvage(int(sat["uid"])) == 0 and not GameState.auto_salvageable(sat), "signature gear never salvaged")
+	GameState.selected_pet_id = "bentley"
+	GameState.reset_loadout_to_defaults()
+	_check(GameState.pet_fx("luck") > 0.0 and GameState.gear_luck() >= GameState.pet_fx("luck"), "satchel adds loot find")
+	## A dropped piece: equip, auto-salvage skips it while worn, insurance.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	GameState.add_to_stash(PG.call("make", "armored_vest", "epic", rng))
+	var vest: Dictionary = GameState.stash[GameState.stash.size() - 1]
+	_check(not GameState.equip_pet_gear("noel", int(sat["uid"])), "bound gear stays with its pet")
+	_check(GameState.equip_pet_gear("bentley", int(vest["uid"])) and is_equal_approx(GameState.pet_fx("guard"), 0.1), "vest equips (guard %.2f)" % GameState.pet_fx("guard"))
+	_check(not GameState.auto_salvageable(vest), "worn pet gear never auto-salvaged")
+	GameState.camp["insurance"] = 1
+	_check(GameState.set_pet_insured("bentley", true) and GameState.is_insured(int(vest["uid"])), "pet gear insurable")
+	## Bond perks: level 6 pending x2, pick, effect, flat gain skips perk levels, respec.
+	GameState.kennel_bond["bentley"] = 6 * EventDefs.BOND_XP_PER_LEVEL
+	GameState.pet_perks.erase("bentley")
+	_check(GameState.pending_perks("bentley") == [3, 6], "existing bond levels wait for a pick")
+	_check(GameState.choose_perk("bentley", 6, 0) and is_equal_approx(GameState.pet_fx("luck"), float(sat["fx"]["luck"]) * 0.0 + float((GameState.pet_gear_item("bentley").get("fx", {}) as Dictionary).get("luck", 0.0)) + 0.3), "Lucky Find adds loot find")
+	_check(GameState.choose_perk("bentley", 3, 1) and float(GameState.pet.get("bark_radius", 0)) > float(PetDefs.get_pet("bentley")["bark_radius"]), "Loud Mouth widens the bark")
+	_check(not GameState.choose_perk("bentley", 10, 0), "level 10 locked until bond 10")
+	_check(is_equal_approx(GameState.pet_power_mult(), (1.0 + 4 * EventDefs.BOND_DAMAGE_PER_LEVEL)), "perk levels replace the flat gain (%.3f)" % GameState.pet_power_mult())
+	GameState.account_scrap = 1000
+	_check(GameState.respec_perks("bentley") and GameState.account_scrap == 1000 - int(PG.get("RESPEC_COST")) and GameState.pending_perks("bentley").size() == 2, "respec costs scrap and reopens picks")
+	## Crafting + craft-only War-Dog Rig.
+	GameState.camp["crafter"] = 2
+	GameState.account_scrap = 99999
+	GameState.ingredients["salvage_core"] = 40
+	GameState.ingredients["machine_oil"] = 20
+	GameState.ingredients["dust_shard"] = 20
+	GameState.materials["dust_heart"] = 2
+	var rig := GameState.craft_pet_piece("war_dog_rig")
+	_check(str(rig.get("rarity", "")) == "legendary" and str(rig.get("craft", "")) == "war_dog_rig", "War-Dog Rig crafts")
+	_check(not GameState.craft_pet_piece("radio_collar").is_empty(), "radio collar crafts")
+	## Kennel UI.
+	var h: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(h)
+	await get_tree().process_frame
+	h.call("show_tab", "kennel")
+	await get_tree().process_frame
+	_check(h.find_child("PetCard_bentley", true, false) != null and h.find_child("Perk_bentley_3_0", true, false) != null, "kennel shows gear + perk tree")
+	h.call("open_pet_gear", "noel")
+	await get_tree().process_frame
+	_check(h.find_child("EquipPet_%d" % int(rig["uid"]), true, false) != null, "gear picker lists pet gear")
+	h.queue_free()
+	await get_tree().process_frame
+	GameState.stash = keep[0]
+	GameState.pet_gear = keep[1]
+	GameState.pet_perks = keep[2]
+	GameState.kennel_bond = keep[3]
+	GameState.selected_pet_id = str(keep[4])
+	GameState.account_scrap = int(keep[5])
+	GameState.insured = keep[6]
+	GameState.camp = keep[7]
+	GameState.ingredients = keep[8]
+	GameState.materials = keep[9]
+	GameState.reset_loadout_to_defaults()
+	print("PETGEAR_OK")
+
+
+func _pet_gear_n() -> int:
+	var n := 0
+	for it in GameState.stash:
+		if str(it.get("kind", "")) == "petgear":
+			n += 1
+	return n
+
+func _hero_gear_n() -> int:
+	return GameState.stash.size() - _pet_gear_n()

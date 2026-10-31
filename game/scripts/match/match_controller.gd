@@ -685,6 +685,19 @@ func _mark_scheduled(e: Node) -> void:
 func spawn_special(role: String, kind: String = "") -> Node:
 	if not is_instance_valid(player):
 		return null
+	var e := _spawn_special(role, kind)
+	## Pet gear / perk "reveal": elites and bosses are called out and marked.
+	if e != null and GameState.pet_fx("reveal") > 0.0 and is_instance_valid(hud):
+		e.add_to_group("map_markers")
+		e.set("map_color", Color(1.0, 0.35, 0.3))
+		if e.has_method("apply_status"):
+			e.call("apply_status", "mark", 6.0, 1.1)
+		hud.show_toast("%s sniffs out a %s" % [str(GameState.pet.get("name", "Your pet")), "boss" if role == "boss" else "elite"], UiTheme.AMBER)
+	return e
+
+func _spawn_special(role: String, kind: String = "") -> Node:
+	if not is_instance_valid(player):
+		return null
 	var k := kind
 	var named: Dictionary = {}
 	if k == "" and role == "boss":

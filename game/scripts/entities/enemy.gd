@@ -768,6 +768,16 @@ func _die() -> void:
 	var scrap := randi_range(range_v.x, range_v.y)
 	GameState.kills += 1
 	GameState.note_kill(kind)
+	## Pet gear: Med Pouch heals the hero on kills next to the pet; rare drops.
+	var kh := GameState.pet_fx("kill_heal")
+	if kh > 0.0:
+		var pt := get_tree().get_first_node_in_group("pets") as Node2D
+		var pl := get_tree().get_first_node_in_group("player")
+		if pt != null and pl != null and pt.global_position.distance_to(global_position) <= 140.0 and pl.has_method("heal"):
+			pl.call("heal", kh)
+	var pgd := GameState.roll_pet_gear(role)
+	if not pgd.is_empty():
+		GearPickup.spawn(get_parent(), global_position + Vector2(0, -12), pgd)
 	## Mech blueprints off their source machines (Drone Hawk: Unit Seven).
 	var bp := GameState.roll_blueprint(kind, role)
 	if bp != "":
