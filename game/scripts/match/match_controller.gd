@@ -981,6 +981,8 @@ func _on_extract_requested() -> void:
 	_ended = true
 	if jobs:
 		jobs.call("on_extract")
+	## Scrap still lying on screen streaks in and counts before the payout.
+	pull_onscreen_scrap()
 	_extract_bonuses()
 	GameState.on_extract_success()
 	Juice.sfx("extract_win")
@@ -999,6 +1001,37 @@ func _on_extract_requested() -> void:
 		tw.tween_property(player, "modulate", Color(2.0, 1.9, 1.5, 0.0), 0.8).set_ease(Tween.EASE_IN)
 		tw.tween_property(player, "scale", Vector2(0.7, 1.6), 0.8).set_ease(Tween.EASE_IN)
 	_go_result_after(1.6)
+
+## End-of-round scrap pull (extract only): every scrap pickup inside the
+## camera view is banked now and streaks to the hero over ~0.6 s; off-screen
+## scrap is left behind. Returns [pieces, scrap value].
+func pull_onscreen_scrap() -> Array:
+	var n := 0
+	var total := 0
+	if not is_instance_valid(player):
+		return [0, 0]
+	var xf := get_viewport().get_canvas_transform()
+	var view := get_viewport().get_visible_rect()
+	var i := 0
+	for d in get_tree().get_nodes_in_group("loot"):
+		if not (d is Node2D) or not is_instance_valid(d) or str(d.get("kind")) != "scrap":
+			continue
+		var dn := d as Node2D
+		if not view.has_point(xf * dn.global_position):
+			continue
+		var v := maxi(1, int(round(float(d.get("value")))))
+		total += GameState.add_scrap(v)
+		n += 1
+		## The pickup is already banked: just the streak + the normal sound.
+		dn.set_physics_process(false)
+		dn.remove_from_group("loot")
+		var tw := dn.create_tween()
+		tw.tween_interval(minf(0.25, 0.012 * float(i)))
+		tw.tween_property(dn, "global_position", player.global_position + Vector2(0, -10), 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(func() -> void: Juice.sfx("pick_scrap"))
+		tw.tween_callback(dn.queue_free)
+		i += 1
+	return [n, total]
 
 ## Leaving the match (result screen, abandon, tests) always restores real time.
 func _exit_tree() -> void:

@@ -180,6 +180,7 @@ func _run() -> void:
 	await _test_spawns()
 	_test_blueprints()
 	await _test_petgear()
+	await _test_scrap_pull()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -4708,3 +4709,50 @@ func _pet_gear_n() -> int:
 
 func _hero_gear_n() -> int:
 	return GameState.stash.size() - _pet_gear_n()
+
+## End-of-round scrap pull: on-screen scrap counts on extract, off-screen and death don't.
+func _test_scrap_pull() -> void:
+	GameState.play_mode = "wander"
+	GameState.selected_mode_id = ModeDefs.HAZE_ID
+	GameState.tutorial_done = true
+	for death in [false, true]:
+		GameState.begin_run()
+		var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+		get_tree().root.add_child(m)
+		get_tree().current_scene = m
+		for i in range(4):
+			await get_tree().physics_frame
+		m.set("quiet", true)
+		var pl: Node2D = m.get_node("World/Player")
+		var w: Node = m.get_node("World")
+		for e in get_tree().get_nodes_in_group("enemies"):
+			e.queue_free()
+		## Settle: anything already magnetised lands first.
+		for i in range(30):
+			await get_tree().physics_frame
+		LootDrop.spawn_burst(w, pl.global_position + Vector2(150, -150), "scrap", 1, 7.0)
+		LootDrop.spawn_burst(w, pl.global_position + Vector2(4000, 0), "scrap", 1, 9.0)
+		await get_tree().physics_frame
+		var near_drop: Node = null
+		for d in get_tree().get_nodes_in_group("loot"):
+			if (d as Node2D).global_position.distance_to(pl.global_position) < 400:
+				d.set("_age", 0.0)
+				near_drop = d
+		var before := GameState.scrap_found
+		if death:
+			m.call("_finish_wipe", "test")
+			await get_tree().physics_frame
+			_check(GameState.scrap_found == before, "scrap pull: nothing pulled on death")
+		else:
+			var got: Array = m.call("pull_onscreen_scrap")
+			_check(int(got[0]) == 1 and GameState.scrap_found > before, "scrap pull: on-screen scrap counts (%s)" % [got])
+			var far_left := 0
+			for d in get_tree().get_nodes_in_group("loot"):
+				if str(d.get("kind")) == "scrap" and (d as Node2D).global_position.distance_to(pl.global_position) > 3000:
+					far_left += 1
+			_check(far_left == 1, "scrap pull: off-screen scrap stays (lost)")
+		m.queue_free()
+		for i in range(4):
+			await get_tree().process_frame
+	get_tree().paused = false
+	print("SCRAP_PULL_OK")
