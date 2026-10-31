@@ -4755,4 +4755,6 @@ func _test_scrap_pull() -> void:
 		for i in range(4):
 			await get_tree().process_frame
 	get_tree().paused = false
+	## The wipe ducks the music: let it recover before later sections read buses.
+	await get_tree().create_timer(3.0, true, false, true).timeout
 	print("SCRAP_PULL_OK")
