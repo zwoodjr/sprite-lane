@@ -499,6 +499,34 @@ static func overlay(host: Control, accent: Color = UiTheme.AMBER) -> VBoxContain
 	return v
 
 
+## Card text next to a right-hand action button: wraps (up to `lines`, then
+## an ellipsis) instead of running on under the button.
+static func wrap_text(l: Label, lines: int = 2) -> Label:
+	l.clip_text = false
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.max_lines_visible = lines
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return l
+
+
+## Right-hand action button in its own fixed column of a card's HBox: the
+## text column beside it can never reach under it (Xogot / small phones /
+## Extra-large text included).
+static func action_column(btn: Button, width: float = 136.0) -> Control:
+	var col := VBoxContainer.new()
+	col.name = "ActionCol"
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_SHRINK_END
+	col.custom_minimum_size.x = width
+	btn.custom_minimum_size.x = width
+	btn.size_flags_horizontal = Control.SIZE_FILL
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	col.add_child(btn)
+	return col
+
+
 ## Hold-to-confirm button: fills over `hold` seconds while pressed, then
 ## calls cb. Letting go early cancels.
 static func hold_button(text: String, accent: Color, hold: float, cb: Callable) -> Button:

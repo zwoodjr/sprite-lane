@@ -202,6 +202,28 @@ func preview_item(uid: int) -> void:
 	_preview = -1 if _preview == uid else uid
 	GameState.mark_seen(uid)
 	_rebuild_list(true)
+	if _preview == uid:
+		## Bring the opened card to the top of the list: its compare panel is
+		## in view and no half-cut card sits above it. Runs once the rebuild
+		## has laid out and TouchScroll's keep-after-tap has let go.
+		var tw := create_tween()
+		tw.tween_interval(0.06)
+		tw.tween_callback(_reveal_row.bind(uid))
+
+
+func _reveal_row(uid: int) -> void:
+	if _preview != uid or not is_instance_valid(_scroll):
+		return
+	var r := _list.get_node_or_null("Row_%d" % uid) as Control
+	if r == null:
+		return
+	var ts := UiTheme.get_node_or_null("TouchScroll")
+	if ts != null and ts.has_method("release"):
+		ts.call("release", _scroll)
+	var top := int(round(r.position.y))
+	if top == _scroll.scroll_vertical:
+		return
+	_scroll.create_tween().tween_property(_scroll, "scroll_vertical", top, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func set_sort(s: String) -> void:
@@ -490,9 +512,8 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 	info.add_theme_constant_override("separation", 4)
 	info.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_child(info)
-	var nm := UiTheme.head_label(str(it.get("name", "Item")), UiTheme.T_H2, col)
-	nm.clip_text = true
-	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var nm := GearUi.wrap_text(UiTheme.head_label(str(it.get("name", "Item")), UiTheme.T_H2, col))
+	nm.name = "ItemName"
 	info.add_child(nm)
 	info.add_child(GearUi.rarity_line(it))
 	var by := GameState.equipped_by(uid)
@@ -506,7 +527,7 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 		sub = str(sl0[0]) if sl0.size() else ""
 	if sub != "":
 		var sl := UiTheme.body_label(sub, UiTheme.T_SMALL, UiTheme.TEAL if equipped else (UiTheme.RUST if not by.is_empty() else UiTheme.TEXT_DIM), false)
-		sl.clip_text = true
+		GearUi.wrap_text(sl, 1)
 		info.add_child(sl)
 	var btn: Button
 	if equipped:
@@ -518,10 +539,9 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 	else:
 		btn = UiTheme.big_button("EQUIP", UiTheme.TEAL, 64, 20)
 		btn.pressed.connect(equip_item.bind(uid))
-	btn.custom_minimum_size.x = 136
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	btn.name = "RowAction"
 	btn.mouse_force_pass_scroll_events = true
-	h.add_child(btn)
+	h.add_child(GearUi.action_column(btn))
 	if not open:
 		return p
 	## Open row: full stats, compare vs equipped, set progress, extras.

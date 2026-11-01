@@ -420,10 +420,7 @@ func _row(id: String, icon: Texture2D) -> PanelContainer:
 	var title := HBoxContainer.new()
 	title.mouse_filter = Control.MOUSE_FILTER_PASS
 	info.add_child(title)
-	var nm := UiTheme.head_label(HangarDefs.display_name(id), UiTheme.T_H2, UiTheme.AMBER if mine else UiTheme.TEXT)
-	nm.clip_text = true
-	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var nm := GearUi.wrap_text(UiTheme.head_label(HangarDefs.display_name(id), UiTheme.T_H2, UiTheme.AMBER if mine else UiTheme.TEXT))
 	info.add_child(nm)
 	var pr := UiTheme.rank_pips(rank, max_r, not maxed)
 	info.add_child(pr)
@@ -448,10 +445,8 @@ func _row(id: String, icon: Texture2D) -> PanelContainer:
 		btn.icon = IconSet.tex("cur_scrap", false)
 		btn.disabled = not afford
 		btn.pressed.connect(buy.bind(id))
-	btn.custom_minimum_size.x = 136
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.mouse_force_pass_scroll_events = true
-	h.add_child(btn)
+	h.add_child(GearUi.action_column(btn))
 	return p
 
 
@@ -902,7 +897,7 @@ func _pet_card(pid: String) -> PanelContainer:
 	gi.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gi.mouse_filter = Control.MOUSE_FILTER_PASS
 	gh.add_child(gi)
-	gi.add_child(UiTheme.head_label("GEAR: " + (str(it.get("name", "")) if not it.is_empty() else "empty slot"), UiTheme.T_SMALL, UiTheme.AMBER))
+	gi.add_child(GearUi.wrap_text(UiTheme.head_label("GEAR: " + (str(it.get("name", "")) if not it.is_empty() else "empty slot"), UiTheme.T_SMALL, UiTheme.AMBER)))
 	if not it.is_empty():
 		var gl := UiTheme.body_label(" · ".join(PetGear.lines(it)), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 		gl.max_lines_visible = 2
@@ -1012,11 +1007,12 @@ func open_pet_gear(pid: String) -> void:
 		info.mouse_filter = Control.MOUSE_FILTER_PASS
 		h.add_child(info)
 		var who := GameState.pet_wearing(int(it["uid"]))
-		info.add_child(UiTheme.head_label(str(it.get("name", "")) + (("  (on %s)" % str(PetDefs.get_pet(who).get("name", who))) if who != "" else ""), UiTheme.T_SMALL, UiTheme.TEXT))
-		info.add_child(UiTheme.body_label(" · ".join(PetGear.lines(it)), UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		info.add_child(GearUi.wrap_text(UiTheme.head_label(str(it.get("name", "")) + (("  (on %s)" % str(PetDefs.get_pet(who).get("name", who))) if who != "" else ""), UiTheme.T_SMALL, UiTheme.TEXT)))
+		var pl := UiTheme.body_label(" · ".join(PetGear.lines(it)), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+		pl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(pl)
 		var eb := UiTheme.big_button("WORN" if who == pid else "EQUIP", UiTheme.TEAL, 56, 14)
 		eb.name = "EquipPet_%d" % int(it["uid"])
-		eb.custom_minimum_size.x = 120
 		eb.disabled = who == pid
 		eb.mouse_force_pass_scroll_events = true
 		var uid := int(it["uid"])
@@ -1025,7 +1021,7 @@ func open_pet_gear(pid: String) -> void:
 				Juice.sfx("ui_purchase")
 			close_popup()
 			_rebuild())
-		h.add_child(eb)
+		h.add_child(GearUi.action_column(eb, 120))
 	if n == 0:
 		lv.add_child(_note("No pet gear yet. It drops rarely (elites and bosses most) and the Crafter Bench makes it."))
 	var row := HBoxContainer.new()
@@ -1112,11 +1108,9 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	var ok := GameState.can_build_mech(mid)
 	var btn := UiTheme.big_button("BUILD" if GameState.has_blueprint(mid) else "NO PLAN", UiTheme.TEAL if ok else UiTheme.RUST, 64, 20)
 	btn.disabled = not ok
-	btn.custom_minimum_size.x = 136
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.mouse_force_pass_scroll_events = true
 	btn.pressed.connect(build_mech.bind(mid))
-	h.add_child(btn)
+	h.add_child(GearUi.action_column(btn))
 	return p
 
 

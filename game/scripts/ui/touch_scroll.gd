@@ -122,6 +122,13 @@ func _rebuild_started(sc: ScrollContainer) -> void:
 	_keep[sc] = {"v": sc.scroll_vertical, "h": sc.scroll_horizontal, "frames": 3}
 
 
+## A screen that scrolls on purpose after a rebuild (e.g. to an opened card)
+## stops the keep-after-tap from pulling the list back.
+func release(sc: ScrollContainer) -> void:
+	_keep.erase(sc)
+	_glide.erase(sc)
+
+
 ## --- Gesture ---------------------------------------------------------------------
 
 func _input(event: InputEvent) -> void:
