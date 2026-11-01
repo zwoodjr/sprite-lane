@@ -22,6 +22,16 @@ rm -rf "$WORK/game/.godot"
 # Build stamp (testers quote it in feedback); VERSION stays as committed.
 sed -i "s/^const COMMIT := .*/const COMMIT := \"$SHA\"/; s/^const BUILT := .*/const BUILT := \"$NOW\"/" "$WORK/game/scripts/build_info.gd"
 
+# Slim engine (tools/build_web_template.sh) when it has been built; STOCK=1
+# forces the stock 4.3 template.
+TPL=${WANDERER_WEB_TEMPLATE:-$HOME/.local/share/wanderer/web_nothreads_release.zip}
+if [ -z "${STOCK:-}" ] && [ -f "$TPL" ]; then
+  echo "template: $TPL"
+  sed -i "s#^custom_template/release=.*#custom_template/release=\"$TPL\"#" "$WORK/game/export_presets.cfg"
+else
+  echo "template: stock 4.3"
+fi
+
 rm -rf "$OUT" && mkdir -p "$OUT"
 cd "$WORK/game"
 timeout 900 "$GODOT" --headless --path . --import >/dev/null 2>&1 || true
