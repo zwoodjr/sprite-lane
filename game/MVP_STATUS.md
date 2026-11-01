@@ -1,5 +1,11 @@
 # MVP status (repo mirror)
 
+**Latest (Gear: set bonuses you can see):**
+
+- **Item card lists every tier.** Set pieces show each bonus tier (2/4/6, or 2/3 for survivor sets) with what it gives: lit = active, dimmed = not yet, amber "THIS PIECE UNLOCKS IT" for tiers this piece turns on, red "YOU'D LOSE THIS" when a swap drops one. Same in the Hangar inspect card.
+- **ACTIVE SETS card under the gear slots.** Each set the survivor wears: badge, n/total and the bonuses on right now (or what the next tier needs). Tap it for every tier of every set, with PIECES › into each set.
+- **SET → SET BONUSES.** The button now opens the set with its bonus tiers first, then its pieces.
+
 **Latest (special ammo: stacking, slots, combos, fewer drops):**
 
 - **Same type stacks.** Picking up a type you already have adds a stack, up to x3. Each stack is longer (15 → 22 → 30 s, plus the Ammo Bench bonus) and stronger (x1 / x1.35 / x1.7: burn dps, stun chance, slow depth, blast damage and radius).

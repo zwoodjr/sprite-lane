@@ -295,9 +295,9 @@ static func compare_box(it: Dictionary, hero: String) -> VBoxContainer:
 		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(l)
 		v.add_child(row)
-		var nxt := next_bonus(str(sp["set"]), int(sp["after"]))
-		if nxt != "":
-			v.add_child(UiTheme.body_label(nxt, UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+		## Every tier of the set: lit = active now, dim = not yet, amber = this
+		## piece unlocks it, red = swapping this in would lose it.
+		v.add_child(bonus_list(str(sp["set"]), int(sp["now"]), -1 if same else int(sp["after"])))
 	return v
 
 
@@ -325,6 +325,8 @@ static func set_overview(sid: String, hero: String) -> VBoxContainer:
 	top.add_child(tv)
 	var title := UiTheme.title_label(GearDefs.set_title(sid), UiTheme.T_TITLE, UiTheme.AMBER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tv.add_child(title)
 	var worn := int(GameState.worn_set_counts(hero).get(sid, 0))
 	var sh := GearDefs.set_hero(sid)
@@ -332,6 +334,10 @@ static func set_overview(sid: String, hero: String) -> VBoxContainer:
 	if sh != "":
 		sub += "  ·  %s only" % hero_name(sh)
 	tv.add_child(UiTheme.body_label(sub, UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+	## Bonuses first (what the set is for), then the pieces.
+	v.add_child(UiTheme.head_label("SET BONUSES", UiTheme.T_H3, UiTheme.AMBER))
+	v.add_child(bonus_list(sid, worn))
+	v.add_child(UiTheme.head_label("PIECES", UiTheme.T_H3, UiTheme.AMBER))
 	## Pieces: the best owned piece per slot, or the empty slot.
 	var grid := GridContainer.new()
 	grid.columns = 6 if GearDefs.set_total(sid) > 3 else 3
@@ -361,36 +367,106 @@ static func set_overview(sid: String, hero: String) -> VBoxContainer:
 			cell.add_child(tile(best, tpx, {"new": false}))
 		var cap := UiTheme.head_label(str(GearDefs.SLOT_NAME.get(str(sl), sl)).to_upper() if not best.is_empty() else "MISSING", UiTheme.T_SMALL, UiTheme.TEXT if not best.is_empty() else UiTheme.TEXT_DIM)
 		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cap.clip_text = true
+		cap.custom_minimum_size.x = tpx
 		cell.add_child(cap)
 		grid.add_child(cell)
 	v.add_child(UiTheme.body_label("Owned %d/%d pieces" % [owned_n, GearDefs.set_total(sid)], UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+	return v
+
+
+## Every bonus tier of a set, one row each: the piece count it needs, then
+## what it gives. Lit (teal) = active at `worn` pieces, dim = not yet.
+## `after` >= 0 is the count if this item went on: tiers it would turn on are
+## amber and tagged, tiers it would turn off are red and tagged.
+static func bonus_list(sid: String, worn: int, after: int = -1) -> VBoxContainer:
+	var v := VBoxContainer.new()
+	v.name = "SetBonuses_%s" % sid
+	v.add_theme_constant_override("separation", 8)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var th: Array = GearDefs.set_thresholds(sid)
 	var bo: Array = GearDefs.set_bonuses(sid)
-	for i in range(th.size()):
-		var on := worn >= int(th[i])
+	for i in range(mini(th.size(), bo.size())):
+		var need := int(th[i])
+		var on := worn >= need
+		var gain := after >= 0 and not on and after >= need
+		var lose := after >= 0 and on and after < need
+		var lit := on or gain or lose
+		var accent: Color = UiTheme.AMBER if gain else (UiTheme.DANGER if lose else (UiTheme.TEAL if on else Color("3a3436")))
 		var row := HBoxContainer.new()
+		row.name = "Tier%d" % need
 		row.add_theme_constant_override("separation", 8)
-		var pip := UiTheme.pixel_label("%d" % int(th[i]), UiTheme.PX_M, UiTheme.INK)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var pp := PanelContainer.new()
+		pp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = UiTheme.TEAL if on else Color("3a3436")
+		sb.bg_color = accent
 		sb.border_color = UiTheme.INK
 		sb.set_border_width_all(2)
 		sb.content_margin_left = 6
 		sb.content_margin_right = 6
-		sb.content_margin_top = 6
-		sb.content_margin_bottom = 6
+		sb.content_margin_top = 4
+		sb.content_margin_bottom = 4
 		pp.add_theme_stylebox_override("panel", sb)
-		if not on:
-			pip.add_theme_color_override("font_color", UiTheme.TEXT_DIM)
-		pp.add_child(pip)
-		pp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pp.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		pp.add_child(UiTheme.pixel_label("%d" % need, UiTheme.PX_M, UiTheme.INK if lit else UiTheme.TEXT_DIM))
 		row.add_child(pp)
-		var bl := UiTheme.body_label(str(bo[i]), UiTheme.T_BODY, UiTheme.TEXT if on else UiTheme.TEXT_DIM)
+		var tv := VBoxContainer.new()
+		tv.add_theme_constant_override("separation", 0)
+		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(tv)
+		var tc: Color = UiTheme.AMBER if gain else (UiTheme.DANGER if lose else (UiTheme.TEXT if on else UiTheme.TEXT_DIM))
+		var bl := UiTheme.body_label(str(bo[i]), UiTheme.T_SMALL, tc)
+		bl.name = "Text"
 		bl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(bl)
+		bl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tv.add_child(bl)
+		var tag := "NEEDS %d WORN" % need
+		if gain:
+			tag = "▲ THIS PIECE UNLOCKS IT"
+		elif lose:
+			tag = "▼ YOU'D LOSE THIS"
+		elif on:
+			tag = "ACTIVE"
+		var tl := UiTheme.head_label(tag, UiTheme.T_SMALL, accent if lit else UiTheme.TEXT_DIM)
+		tl.name = "Tag"
+		tv.add_child(tl)
+		if not lit:
+			row.modulate.a = 0.7
 		v.add_child(row)
 	return v
+
+
+## Bonus texts active for a set at n worn pieces.
+static func active_bonuses(sid: String, n: int) -> Array:
+	var out: Array = []
+	var th: Array = GearDefs.set_thresholds(sid)
+	var bo: Array = GearDefs.set_bonuses(sid)
+	for i in range(mini(th.size(), bo.size())):
+		if n >= int(th[i]):
+			out.append(str(bo[i]))
+	return out
+
+
+## Scrolling body for a popup card, so tall content stays on screen (the
+## shared touch scroll hooks every ScrollContainer). Returns the VBox to fill.
+static func scroll_body(v: VBoxContainer, host: Control) -> VBoxContainer:
+	var sc := ScrollContainer.new()
+	sc.name = "PopupScroll"
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	var inner := VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("separation", 16)
+	sc.add_child(inner)
+	var cap := maxf(320.0, host.get_viewport_rect().size.y - 420.0)
+	var fit := func() -> void:
+		if is_instance_valid(sc) and is_instance_valid(inner):
+			sc.custom_minimum_size.y = minf(inner.get_combined_minimum_size().y, cap)
+	inner.minimum_size_changed.connect(fit)
+	fit.call_deferred()
+	return inner
 
 
 ## Dimmed modal with a riveted card. Returns the card's VBox; its "root" meta

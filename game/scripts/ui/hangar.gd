@@ -1509,7 +1509,7 @@ func inspect_item(uid: int) -> void:
 		row.add_child(eq)
 	var sid := str(it.get("set", ""))
 	if sid != "":
-		var sb := UiTheme.big_button("SET", UiTheme.LINE, 64, 20)
+		var sb := UiTheme.big_button("SET BONUSES", UiTheme.LINE, 64, 20)
 		sb.icon = IconSet.tex(IconSet.emblem(sid), false)
 		sb.custom_minimum_size.x = 120
 		sb.pressed.connect(open_set.bind(sid))

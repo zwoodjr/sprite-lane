@@ -5,7 +5,8 @@ extends "res://scripts/ui/menu_base.gd"
 ## Top: who you are equipping (the survivor you deploy as — switching here
 ## switches the deploy survivor too, so prep and the match always match).
 ## Paper doll: armour left, accessories right, weapon + mods + patch below.
-## Below: no slot picked = stats + set progress (tap a set for its pieces);
+## Under the slots: ACTIVE SETS (count + live bonuses; tap = every tier).
+## Below: no slot picked = stats;
 ## slot picked = fitting stash items, icon-led; tap one to compare, EQUIP.
 
 var _hero: String = ""
@@ -28,6 +29,7 @@ var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _popup: Control
 var _auto: Button
+var _sets_box: VBoxContainer
 
 
 ## Lock only guards against salvage; extraction rules still apply.
@@ -85,6 +87,11 @@ func build(c: VBoxContainer) -> void:
 	_grid.add_theme_constant_override("h_separation", 16)
 	_grid.add_theme_constant_override("v_separation", 8)
 	c.add_child(_grid)
+	## ACTIVE SETS: each set this survivor wears pieces of, its count and the
+	## bonuses it has on right now. Tap for every tier of every set.
+	_sets_box = VBoxContainer.new()
+	_sets_box.name = "ActiveSets"
+	c.add_child(_sets_box)
 	## AUTO-EQUIP BEST: highest item power per slot, set-aware; locked and
 	## insured pieces stay, other survivors' pieces are never taken.
 	_auto = UiTheme.big_button("AUTO-EQUIP BEST", UiTheme.TEAL, UiTheme.MIN_TOUCH, 24)
@@ -221,6 +228,8 @@ func refresh() -> void:
 	_doll.visible = not picking
 	_grid.visible = not picking
 	_auto.visible = not picking
+	_sets_box.visible = not picking
+	_build_sets_strip()
 	_strip.visible = picking
 	var sets := [[_strip, GearDefs.LOADOUT_SLOTS, 96]] if picking else [[_left, LEFT_SLOTS, 112], [_right, RIGHT_SLOTS, 112], [_grid, BOTTOM_SLOTS, 112]]
 	for box in [_left, _right, _grid, _strip]:
@@ -297,7 +306,6 @@ func _build_summary(eq: Dictionary) -> void:
 	## Totals from what this survivor has on (same maths as a deploy).
 	GameState._compute_gear()
 	var stats: Dictionary = GameState.gear.get("stats", {})
-	var sets: Dictionary = GameState.gear.get("sets", {})
 	var leg := GameState.gear_legendary()
 	_list.add_child(_note("Tap a slot to equip. Insure one item to keep it through a death."))
 	var lines := PackedStringArray()
@@ -310,9 +318,6 @@ func _build_summary(eq: Dictionary) -> void:
 		for ln in lines:
 			fl.add_child(UiTheme.chip(ln, UiTheme.TEAL))
 		_list.add_child(fl)
-	## Sets: one tappable row each (badge, n/total, pips) → set overview.
-	for sid in sets.keys():
-		_list.add_child(_set_row(str(sid), int(sets[sid])))
 	if leg != "":
 		var wi: Dictionary = eq.get("weapon", {})
 		var p := card(UiTheme.AMBER, Color(0.11, 0.08, 0.055, 0.92))
@@ -341,49 +346,72 @@ func _build_summary(eq: Dictionary) -> void:
 		mats.add_child(hh)
 
 
-func _set_row(sid: String, n: int) -> Control:
-	var total := GearDefs.set_total(sid)
+## ACTIVE SETS card under the slots: one line per set worn (badge, n/total,
+## the bonuses on now or what the next tier needs). Tap = open_sets().
+func _build_sets_strip() -> void:
+	for ch in _sets_box.get_children():
+		_sets_box.remove_child(ch)
+		ch.queue_free()
+	var counts := GameState.worn_set_counts(_hero)
 	var p := card(UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
+	p.name = "ActiveSetsCard"
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
-	var hit := _hit_button(open_set.bind(sid))
-	p.add_child(hit)
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 16)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(h)
-	h.add_child(GearUi.set_badge(sid, 64))
+	_sets_box.add_child(p)
+	if not counts.is_empty():
+		var hit := _hit_button(open_sets)
+		hit.name = "ActiveSetsHit"
+		p.add_child(hit)
 	var v := VBoxContainer.new()
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 4)
+	v.add_theme_constant_override("separation", 8)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(v)
-	var t := UiTheme.head_label("%s  %d/%d" % [GearDefs.set_title(sid), n, total], UiTheme.T_H2, UiTheme.TEXT)
-	t.clip_text = true
-	v.add_child(t)
-	var pips := HBoxContainer.new()
-	pips.add_theme_constant_override("separation", 4)
-	pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var th: Array = GearDefs.set_thresholds(sid)
-	for i in range(total):
-		var pip := Panel.new()
-		pip.custom_minimum_size = Vector2(24, 16)
-		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = UiTheme.TEAL if i < n else Color("1f1a1d")
-		sb.border_color = UiTheme.AMBER if (i + 1) in th else UiTheme.INK
-		sb.set_border_width_all(2)
-		pip.add_theme_stylebox_override("panel", sb)
-		pips.add_child(pip)
-	v.add_child(pips)
-	var nx := GearUi.next_bonus(sid, n)
-	if nx != "":
-		var nl := UiTheme.body_label(nx, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
-		nl.max_lines_visible = 1
-		v.add_child(nl)
-	var more := UiTheme.head_label("›", UiTheme.T_H1, UiTheme.TEXT_DIM)
-	more.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(more)
-	return p
+	p.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(top)
+	var hd := UiTheme.head_label("ACTIVE SETS", UiTheme.T_H3, UiTheme.AMBER)
+	hd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(hd)
+	if counts.is_empty():
+		v.add_child(_note("No set pieces on. Wear 2+ pieces of a set for its bonuses."))
+		return
+	top.add_child(UiTheme.head_label("ALL BONUSES ›", UiTheme.T_SMALL, UiTheme.TEXT_DIM))
+	for sid in _sorted_sets(counts):
+		var n := int(counts[sid])
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(h)
+		var bd := GearUi.set_badge(sid, 40)
+		bd.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		h.add_child(bd)
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 0)
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(col)
+		var on := GearUi.active_bonuses(sid, n)
+		var t := UiTheme.head_label("%s  %d/%d" % [GearDefs.set_title(sid).to_upper(), n, GearDefs.set_total(sid)], UiTheme.T_SMALL, UiTheme.TEAL if not on.is_empty() else UiTheme.TEXT)
+		t.clip_text = true
+		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		col.add_child(t)
+		var line := ("✓ " + " · ✓ ".join(PackedStringArray(on))) if not on.is_empty() else GearUi.next_bonus(sid, n)
+		var bl := UiTheme.body_label(line, UiTheme.T_SMALL, UiTheme.TEXT if not on.is_empty() else UiTheme.TEXT_DIM)
+		bl.name = "Bonuses_%s" % sid
+		bl.max_lines_visible = 2
+		bl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		bl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(bl)
+
+
+## Most pieces first, then by name (stable across refreshes).
+func _sorted_sets(counts: Dictionary) -> Array:
+	var ids: Array = counts.keys()
+	ids.sort_custom(func(a: Variant, b: Variant) -> bool:
+		if int(counts[a]) != int(counts[b]):
+			return int(counts[a]) > int(counts[b])
+		return str(a) < str(b))
+	return ids
 
 
 ## Transparent full-card button behind a row's content (content ignores the
@@ -509,7 +537,9 @@ func _item_row(it: Dictionary, equipped: bool) -> PanelContainer:
 	v.add_child(extra)
 	var sid := str(it.get("set", ""))
 	if sid != "":
-		var sb := UiTheme.big_button("SET", UiTheme.LINE, 64, 20)
+		## Opens the set: every bonus tier (lit = active) and its pieces.
+		var sb := UiTheme.big_button("SET BONUSES", UiTheme.LINE, 64, 20)
+		sb.name = "SetBonusesButton"
 		sb.icon = IconSet.tex(IconSet.emblem(sid), false)
 		sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		sb.custom_minimum_size.x = 0
@@ -570,6 +600,41 @@ func open_set(sid: String) -> void:
 	var v := GearUi.overlay(self)
 	_popup = v.get_meta("root")
 	v.add_child(GearUi.set_overview(sid, _hero))
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
+	close.pressed.connect(close_popup)
+	v.add_child(close)
+
+
+## Every set this survivor wears: count, every bonus tier (lit = active),
+## and a PIECES button into that set's overview.
+func open_sets() -> void:
+	close_popup()
+	var v := GearUi.overlay(self)
+	_popup = v.get_meta("root")
+	_popup.name = "ActiveSetsPopup"
+	var title := UiTheme.title_label("%s'S SETS" % GearUi.hero_name(_hero).to_upper(), UiTheme.T_H1, UiTheme.AMBER)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(title)
+	var body := GearUi.scroll_body(v, self)
+	var counts := GameState.worn_set_counts(_hero)
+	for sid in _sorted_sets(counts):
+		var n := int(counts[sid])
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 16)
+		body.add_child(h)
+		h.add_child(GearUi.set_badge(sid, 48))
+		var t := UiTheme.head_label("%s  %d/%d" % [GearDefs.set_title(sid).to_upper(), n, GearDefs.set_total(sid)], UiTheme.T_H3, GearDefs.set_color(sid).lightened(0.45))
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		h.add_child(t)
+		var pc := UiTheme.big_button("PIECES ›", UiTheme.LINE, 64, 16)
+		pc.custom_minimum_size.x = 0
+		pc.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pc.mouse_force_pass_scroll_events = true
+		pc.pressed.connect(open_set.bind(str(sid)))
+		h.add_child(pc)
+		body.add_child(GearUi.bonus_list(str(sid), n))
 	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
 	close.pressed.connect(close_popup)
 	v.add_child(close)
