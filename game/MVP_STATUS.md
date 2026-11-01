@@ -1,5 +1,35 @@
 # MVP status (repo mirror)
 
+**Latest (special ammo: stacking, slots, combos, fewer drops):**
+
+- **Same type stacks.** Picking up a type you already have adds a stack, up to x3. Each stack is longer (15 → 22 → 30 s, plus the Ammo Bench bonus) and stronger (x1 / x1.35 / x1.7: burn dps, stun chance, slow depth, blast damage and radius).
+- **Different types combine.** Two types are active at once. A new type with both slots full pushes out the oldest; topping a type up makes it the newest again. Every active type applies on every hit.
+  - **Bandolier** (new uncommon card, rank 1) adds a third slot. It is only offered once special ammo can turn up (Ammo Bench, Supply Drop or a can already found).
+  - **Ammo Belt** (new evolution: Bandolier + Dust Rounds): ammo lasts 50% longer and each can adds two stacks.
+- **Combos** (a call-out when one starts, plus a label under the slots):
+
+  | Combo | Types | Effect |
+  |---|---|---|
+  | MELT | Incendiary + Frost | burns run 60% hotter and 1 s longer |
+  | SHATTER | Shock + Frost | hits on chilled enemies: 30% chance of an icy burst (70% of the hit, 0.9 s per-enemy cooldown) |
+  | NAPALM | Incendiary + Explosive | blasts leave a burning patch (12 dps, 2.5 s) |
+  | ARC BLAST | Shock + Explosive | blasts stun what they hit (0.45 s) |
+
+- **Fewer drops (about 40% fewer).** Kill odds 1.2 / 6 / 30% → 0.7 / 3.6 / 18% (normal / elite / boss). The crate share drops from 30% to 18%, Bentley's ammo gift lands 60% of the time (otherwise scrap), and Fortune's Favor drops from 5% to 3%. Supply Drop and the Black Market are unchanged.
+- **HUD.** The slots are small chips under the vitals: ammo icon, xN on the corner, and a timer strip that blinks for the last 3 s. Combos are listed under the chips, one per line. Checked at 390×844 (Normal text) and 375×812 (Extra Large). Nothing touches the top XP bar, the minimap or ABILITY/DASH.
+- **Tests:** `_test_ammo_slots` covers stacking and its x3 cap, the 2-slot cap, the oldest type being replaced, the top-up refresh, Bandolier (3 slots, gated), Ammo Belt, all four combos, hits with several types active, the HUD chip width, and the drop constants. The full test_runner passes on 4.6. The parse check passes on 4.3 and 4.6.
+- **Bot check** (Smog, stay 3 windows, Hangar maxed, 8 heroes × 4 seeds = 32 runs each, before vs after):
+
+  | | Before | After |
+  |---|---|---|
+  | Deaths | 22/32 | 24/32 |
+  | Ammo pickups per run | 7.3 | 3.6 |
+  | Types lost to a new pickup | 67 | 0 |
+  | Kills per run | 265 | 272 |
+  | Script errors | 0 | 0 |
+
+  The difference in deaths is within noise. Combos were up for about 4.6 s per run, since the bot never seeks out cans. The playtest bot now prints an `AMMO` line.
+
 **Latest (scrap sinks: Overdrive, Workbench, Supply Crates, Next-run Supplies):**
 
 A maxed bunker left late saves sitting on 30k+ scrap. Four sinks, all with the Hangar's two-column cards and the two-tap BUY? confirm:
