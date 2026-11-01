@@ -594,6 +594,55 @@ func _test_hangar() -> void:
 	for t in ["camp", "survivors", "kennel", "brew", "stash"]:
 		h.call("show_tab", t)
 		await get_tree().process_frame
+	## AUTO-EQUIP: best item power per slot; locked / insured pieces stay;
+	## another survivor's piece is never taken.
+	var keep_lo := GameState.loadouts.duplicate(true)
+	var keep_stash := GameState.stash.duplicate(true)
+	var arng := RandomNumberGenerator.new()
+	arng.seed = 11
+	var hero_a := "ash_rook"
+	for sl in ["head", "chest", "hands"]:
+		for rr in ["common", "rare", "epic"]:
+			GameState.add_to_stash(GearDefs.make_gear(sl, rr, arng))
+	var lockme := GearDefs.make_gear("boots", "common", arng)
+	GameState.add_to_stash(lockme)
+	var better_boots := GearDefs.make_gear("boots", "legendary", arng)
+	GameState.add_to_stash(better_boots)
+	var lock_uid := -1
+	var leg_uid := -1
+	for it in GameState.stash:
+		if str(it.get("slot", "")) == "boots" and str(it.get("rarity", "")) == "common":
+			lock_uid = int(it["uid"])
+		if str(it.get("slot", "")) == "boots" and str(it.get("rarity", "")) == "legendary":
+			leg_uid = int(it["uid"])
+	GameState.loadouts[hero_a] = {}
+	GameState.equip(hero_a, "boots", lock_uid)
+	if not GameState.is_locked(lock_uid):
+		GameState.toggle_lock(lock_uid)
+	GameState.loadouts["vesper_thorn"] = {}
+	var head_best := -1
+	var hp_best := -1.0
+	for it in GameState.stash:
+		if GearDefs.fits(it, "head", hero_a) and GearDefs.item_power(it) > hp_best:
+			hp_best = GearDefs.item_power(it)
+			head_best = int(it["uid"])
+	GameState.equip("vesper_thorn", "head", head_best)
+	var nchg := GameState.auto_equip(hero_a)
+	var lo_a := GameState.loadout_of(hero_a)
+	_check(nchg > 0 and int(lo_a.get("boots", -1)) == lock_uid, "auto-equip keeps a locked piece")
+	_check(int(lo_a.get("head", -1)) != head_best and lo_a.has("head"), "auto-equip never takes another survivor's piece")
+	var chest_best := -1
+	var cp := -1.0
+	for it in GameState.stash:
+		if GearDefs.fits(it, "chest", hero_a) and GameState.equipped_by(int(it["uid"])).size() in [0] or int(lo_a.get("chest", -2)) == int(it["uid"]):
+			if GearDefs.fits(it, "chest", hero_a) and GearDefs.item_power(it) > cp:
+				cp = GearDefs.item_power(it)
+				chest_best = int(it["uid"])
+	_check(int(lo_a.get("chest", -1)) == chest_best or str(GameState.stash_item(int(lo_a.get("chest", -1))).get("set", "")) != "", "auto-equip picks the strongest chest")
+	_check(GameState.auto_equip(hero_a) == 0, "auto-equip is stable")
+	GameState.loadouts = keep_lo
+	GameState.stash = keep_stash
+	GameState.reset_loadout_to_defaults()
 	## Two-tap buying on the upgrade cards: first tap arms, second buys.
 	h.call("show_tab", "camp")
 	await get_tree().process_frame

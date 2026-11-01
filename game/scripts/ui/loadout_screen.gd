@@ -27,6 +27,7 @@ const SORTS := {"rarity": "RARITY", "newest": "NEW", "set": "SET"}
 var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _popup: Control
+var _auto: Button
 
 
 ## Lock only guards against salvage; extraction rules still apply.
@@ -71,8 +72,8 @@ func build(c: VBoxContainer) -> void:
 	_left = VBoxContainer.new()
 	_left.add_theme_constant_override("separation", 8)
 	_doll.add_child(_left)
-	_doll_hero = StripAnim.make("", 256, 8.0)
-	_doll_hero.custom_minimum_size = Vector2(256, 256)
+	_doll_hero = StripAnim.make("", 384, 8.0)
+	_doll_hero.custom_minimum_size = Vector2(384, 384)
 	_doll_hero.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_doll_hero.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_doll.add_child(_doll_hero)
@@ -84,6 +85,12 @@ func build(c: VBoxContainer) -> void:
 	_grid.add_theme_constant_override("h_separation", 16)
 	_grid.add_theme_constant_override("v_separation", 8)
 	c.add_child(_grid)
+	## AUTO-EQUIP BEST: highest item power per slot, set-aware; locked and
+	## insured pieces stay, other survivors' pieces are never taken.
+	_auto = UiTheme.big_button("AUTO-EQUIP BEST", UiTheme.TEAL, UiTheme.MIN_TOUCH, 24)
+	_auto.name = "AutoEquip"
+	_auto.pressed.connect(auto_equip)
+	c.add_child(_auto)
 	## Picking: the doll folds into a 2 x 6 strip so the list gets the room.
 	_strip = GridContainer.new()
 	_strip.name = "SlotStrip"
@@ -106,16 +113,21 @@ func build(c: VBoxContainer) -> void:
 	_scroll.add_child(_list)
 
 	var from_select := GameState.loadout_from in ["character_select", "prep"]
-	var deploy := UiTheme.big_button("DONE" if from_select else "DEPLOY", UiTheme.AMBER, 80, 32)
-	deploy.pressed.connect(func() -> void:
-		_sync_hero()
-		if GameState.loadout_from == "prep":
-			GameState.go_prep()
-		elif from_select:
-			GameState.go_character_select()
-		else:
-			GameState.go_mode_select())
-	c.add_child(deploy)
+	if from_select:
+		var deploy := UiTheme.big_button("DONE", UiTheme.AMBER, 80, 32)
+		deploy.pressed.connect(func() -> void:
+			_sync_hero()
+			if GameState.loadout_from == "prep":
+				GameState.go_prep()
+			else:
+				GameState.go_character_select())
+		c.add_child(deploy)
+	else:
+		## From the Hangar / tab bar: the shared tab bar (PLAY deploys).
+		var nav := NavBar.make("")
+		for b in nav.get_children():
+			(b as Button).pressed.connect(_sync_hero)
+		c.add_child(nav)
 	_sync_hero()
 	refresh()
 
@@ -162,6 +174,16 @@ func set_hero(h: String) -> void:
 		refresh()
 
 
+func auto_equip() -> int:
+	var n := GameState.auto_equip(_hero)
+	Juice.sfx("ui_purchase" if n > 0 else "ui_tap")
+	_toast("%d slot%s upgraded" % [n, "" if n == 1 else "s"] if n > 0 else "Already wearing the best you own")
+	_slot = ""
+	_preview = -1
+	refresh()
+	return n
+
+
 func select_slot(sl: String) -> void:
 	_slot = "" if _slot == sl else sl
 	_preview = -1
@@ -198,6 +220,7 @@ func refresh() -> void:
 	var was_picking := _strip.visible
 	_doll.visible = not picking
 	_grid.visible = not picking
+	_auto.visible = not picking
 	_strip.visible = picking
 	var sets := [[_strip, GearDefs.LOADOUT_SLOTS, 96]] if picking else [[_left, LEFT_SLOTS, 112], [_right, RIGHT_SLOTS, 112], [_grid, BOTTOM_SLOTS, 112]]
 	for box in [_left, _right, _grid, _strip]:
@@ -561,3 +584,18 @@ func close_popup() -> void:
 ## Item icon inside its rarity frame (results, older callers).
 static func item_icon(it: Dictionary, size: float) -> Control:
 	return GearUi.tile(it, int(size), {"worn": false})
+
+
+func _toast(text: String) -> void:
+	var l := UiTheme.body_label(text, 20, UiTheme.AMBER)
+	l.name = "Toast"
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	l.offset_top = 96
+	l.offset_left = 30
+	l.offset_right = -30
+	add_child(l)
+	var tw := l.create_tween()
+	tw.tween_interval(2.5)
+	tw.tween_property(l, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(l.queue_free)

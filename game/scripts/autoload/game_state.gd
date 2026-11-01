@@ -1548,6 +1548,90 @@ func quick_equip(uid: int, hero: String = "") -> bool:
 	var sl := slot_for(uid, h)
 	return sl != "" and equip(h, sl, uid)
 
+## AUTO-EQUIP BEST: fills every slot with the highest item power from the
+## stash, set-aware (a set bonus threshold is worth +25), and never touches a
+## slot whose current piece is locked or insured, nor takes a piece another
+## survivor is wearing. Returns how many slots changed.
+const AUTO_SET_BONUS := 25.0
+
+func _auto_score(lo: Dictionary) -> float:
+	var sc := 0.0
+	var sets := {}
+	for sl in lo.keys():
+		var it := stash_item(int(lo[sl]))
+		sc += GearDefs.item_power(it)
+		var sid := str(it.get("set", ""))
+		if sid != "":
+			sets[sid] = int(sets.get(sid, 0)) + 1
+	for sid in sets.keys():
+		for th in GearDefs.set_thresholds(str(sid)):
+			if int(sets[sid]) >= int(th):
+				sc += AUTO_SET_BONUS
+	return sc
+
+func auto_equip(hero: String = "") -> int:
+	var h := hero if hero != "" else selected_character_id
+	var cur: Dictionary = loadout_of(h).duplicate()
+	var keep := {}
+	for sl in cur.keys():
+		var uid := int(cur[sl])
+		if is_locked(uid) or int(insured.get(h, -1)) == uid:
+			keep[str(sl)] = true
+	## Candidates per slot (free pieces, or already this survivor's).
+	var cands := {}
+	for sl in GearDefs.LOADOUT_SLOTS:
+		var arr: Array = []
+		for it in stash:
+			var d: Dictionary = it
+			if str(d.get("kind", "")) == "petgear" or not GearDefs.fits(d, str(sl), h):
+				continue
+			var by := equipped_by(int(d["uid"]))
+			if not by.is_empty() and str(by[0]) != h:
+				continue
+			arr.append(int(d["uid"]))
+		cands[str(sl)] = arr
+	var lo := cur.duplicate()
+	for _pass in range(3):
+		var changed := false
+		for sl in GearDefs.LOADOUT_SLOTS:
+			var s := str(sl)
+			if keep.has(s):
+				continue
+			var best_uid := int(lo.get(s, -1))
+			var best := _auto_score(lo)
+			for uid in cands[s]:
+				var used := false
+				for o in lo.keys():
+					if str(o) != s and int(lo[o]) == int(uid):
+						used = true
+				if used:
+					continue
+				var trial := lo.duplicate()
+				trial[s] = int(uid)
+				var v := _auto_score(trial)
+				if v > best + 0.001:
+					best = v
+					best_uid = int(uid)
+			if best_uid >= 0 and int(lo.get(s, -1)) != best_uid:
+				lo[s] = best_uid
+				changed = true
+		if not changed:
+			break
+	var n := 0
+	for sl in lo.keys():
+		if int(cur.get(sl, -1)) != int(lo[sl]):
+			## Free the target first if this survivor wears it in another slot.
+			for o in loadout_of(h).keys():
+				if str(o) != str(sl) and int(loadout_of(h)[o]) == int(lo[sl]):
+					loadout_of(h).erase(o)
+					break
+			if equip(h, str(sl), int(lo[sl])):
+				n += 1
+	if n > 0:
+		reset_loadout_to_defaults()
+		save_profile()
+	return n
+
 func unequip(hero: String, slot: String) -> void:
 	var lo := loadout_of(hero)
 	if lo.has(slot):

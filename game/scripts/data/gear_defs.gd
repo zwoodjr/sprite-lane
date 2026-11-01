@@ -511,6 +511,27 @@ static func mod_value(item: Dictionary) -> float:
 	return float(m.get("val", 0.0)) * float(RARITY_MULT.get(str(item.get("rarity", "common")), 1.0))
 
 
+## Item power: one number to rank pieces for AUTO-EQUIP. Rarity steps of 10
+## plus each stat in "base roll" units (x10); a legendary weapon's effect and
+## a mod's value count too.
+static func item_power(it: Dictionary) -> float:
+	if it.is_empty():
+		return 0.0
+	var p := 10.0 * float(RARITIES.find(str(it.get("rarity", "common"))) + 1)
+	var st: Dictionary = it.get("stats", {})
+	for k in st.keys():
+		p += 10.0 * absf(float(st[k])) / maxf(float(STAT_BASE.get(str(k), 1.0)), 0.0001)
+	match str(it.get("kind", "")):
+		"weapon":
+			if str(it.get("legendary", "")) != "":
+				p += 25.0
+		"mod":
+			p += 5.0 * float(RARITY_MULT.get(str(it.get("rarity", "common")), 1.0))
+	if bool(it.get("needs_heart", false)) and not bool(it.get("charged", false)):
+		p *= 0.5
+	return p
+
+
 ## Can this item go in this loadout slot for this hero?
 static func fits(item: Dictionary, slot: String, hero: String) -> bool:
 	var kind := str(item.get("kind", ""))
