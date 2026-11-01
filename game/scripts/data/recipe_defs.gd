@@ -43,6 +43,9 @@ const RECIPES: Array = [
 	{"id": "fortune", "name": "Fortune's Favor", "needs": ["scavengers_eye", "lucky_vial"],
 		"desc": "+50% scrap and kills sometimes drop special ammo.",
 		"ranks": [{"scrap": 0.5, "ammo_chance": 0.03}]},
+	{"id": "ammo_belt", "name": "Ammo Belt", "needs": ["bandolier", "dust_rounds"],
+		"desc": "Special ammo lasts 50% longer, and every can tops up by one extra stack.",
+		"ranks": [{"dur_mult": 1.5, "extra_stack": 1}]},
 	## --- Class recipes ---
 	{"id": "earthquake", "name": "Earthquake", "hero": "ash_rook", "needs": ["aftershock", "rubble_wall"],
 		"desc": "RUSH shakes the ground as you go; the Aftershock hits 50% harder.",

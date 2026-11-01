@@ -706,11 +706,14 @@ func add_special_ammo(ammo_id: String, dur: float) -> int:
 		return 0
 	ammo_pickups_run += 1
 	var a: Dictionary = UpgradeDefs.AMMO[ammo_id]
+	## Ammo Belt evolution: longer cans, and each can is worth two stacks.
+	dur *= float(GameState.up("ammo_belt", "dur_mult", 1.0))
+	var add := 1 + int(GameState.up("ammo_belt", "extra_stack", 0))
 	for i in range(_ammo_slots.size()):
 		var sl: Dictionary = _ammo_slots[i]
 		if str(sl["ammo"]) != ammo_id:
 			continue
-		var n := mini(int(sl["stacks"]) + 1, UpgradeDefs.AMMO_MAX_STACKS)
+		var n := mini(int(sl["stacks"]) + add, UpgradeDefs.AMMO_MAX_STACKS)
 		sl["stacks"] = n
 		sl["max_time"] = dur * (1.0 + UpgradeDefs.AMMO_STACK_TIME * float(n - 1))
 		sl["time_left"] = float(sl["max_time"])
@@ -723,9 +726,11 @@ func add_special_ammo(ammo_id: String, dur: float) -> int:
 		var old: Dictionary = _ammo_slots.pop_front()
 		ammo_replaced_run += 1
 		_float_ammo("%s OUT" % str(UpgradeDefs.AMMO_SHORT.get(str(old["ammo"]), "AMMO")), Color(0.75, 0.7, 0.65), 22.0)
-	_ammo_slots.append({"ammo": ammo_id, "stacks": 1, "time_left": dur, "max_time": dur})
+	var n0 := mini(add, UpgradeDefs.AMMO_MAX_STACKS)
+	var d0 := dur * (1.0 + UpgradeDefs.AMMO_STACK_TIME * float(n0 - 1))
+	_ammo_slots.append({"ammo": ammo_id, "stacks": n0, "time_left": d0, "max_time": d0})
 	_refresh_ammo_combos()
-	return 1
+	return n0
 
 func _float_ammo(txt: String, col: Color, dy: float = 0.0) -> void:
 	if is_inside_tree():

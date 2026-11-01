@@ -2552,6 +2552,11 @@ func _test_ammo_slots() -> void:
 		await get_tree().process_frame
 	var hud_slots := m.get_node("HUD").get("_ammo_slots") as Control
 	_check(hud_slots != null and hud_slots.visible and hud_slots.custom_minimum_size.x > 0.0 and hud_slots.custom_minimum_size.x <= 300.0, "ammo HUD chips fit the vitals column")
+	## Ammo Belt evolution (Bandolier + Dust Rounds): a new can lands at x2.
+	GameState.run_ranks["ammo_belt"] = 1
+	p.call("add_special_ammo", "explosive", d)
+	_check(int(p.call("ammo_stacks", "explosive")) == 2, "ammo belt: cans count double")
+	GameState.run_ranks.erase("ammo_belt")
 	## Melee heroes, no bench, no ammo seen: no Bandolier.
 	await _end_depth_match(m)
 	GameState.camp.clear()
