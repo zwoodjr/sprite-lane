@@ -1987,6 +1987,17 @@ func _test_depth_e6() -> void:
 	GameState.selected_pet_id = "rust_mule"
 	GameState.reset_loadout_to_defaults()
 	_check(GameState.pack_capacity() == cap0 + 2, "e6 mule pack room")
+	## Pet info: every pet has a role line, 2-3 key stats and a cooldown/details panel.
+	for pdef in PetDefs.all_pets():
+		var pid := str(pdef["id"])
+		_check(PetInfo.role_line(pid).contains(" — ") and PetInfo.key_stats(pid).size() >= 2, "pet info %s" % pid)
+		var host := Control.new()
+		add_child(host)
+		var sm := PetInfo.summary(pid, host)
+		host.add_child(sm)
+		var pop := PetInfo.open_details(host, pid)
+		_check(pop != null and sm.get_node_or_null("RoleLine") != null, "pet details %s" % pid)
+		host.queue_free()
 	## In match: each trick.
 	for mid in ["mech_hound", "drone_bat", "rust_mule"]:
 		GameState.selected_pet_id = mid

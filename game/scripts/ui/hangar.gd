@@ -504,6 +504,8 @@ func _pet_card(pid: String) -> PanelContainer:
 	v.add_theme_constant_override("separation", 6)
 	v.mouse_filter = Control.MOUSE_FILTER_PASS
 	p.add_child(v)
+	## What this pet does: role line, key stats, DETAILS.
+	v.add_child(PetInfo.summary(pid, self, false))
 	## Gear slot.
 	var gh := HBoxContainer.new()
 	gh.add_theme_constant_override("separation", 10)
@@ -702,12 +704,12 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
 	h.add_child(info)
-	info.add_child(UiTheme.head_label(str(d["name"]), UiTheme.T_H2, UiTheme.TEAL))
-	var ad := UiTheme.body_label(str(d["ability_desc"]), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
-	ad.max_lines_visible = 2
-	info.add_child(ad)
-	var need := HBoxContainer.new()
-	need.add_theme_constant_override("separation", 8)
+	var nl := UiTheme.head_label(str(d["name"]), UiTheme.T_H2, UiTheme.TEAL)
+	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.add_child(nl)
+	info.add_child(PetInfo.summary(mid, self, false))
+	var need := HFlowContainer.new()
+	need.add_theme_constant_override("h_separation", 8)
 	info.add_child(need)
 	var okc := GameState.can_build_mech(mid)
 	if not GameState.has_blueprint(mid):
@@ -731,6 +733,12 @@ func _mech_build_row(mid: String) -> PanelContainer:
 	btn.pressed.connect(build_mech.bind(mid))
 	h.add_child(btn)
 	return p
+
+
+## Full pet details (ability numbers, how to earn it, perk options).
+func open_pet_info(pid: String) -> void:
+	close_popup()
+	_popup = PetInfo.open_details(self, pid)
 
 
 func build_mech(mid: String) -> bool:

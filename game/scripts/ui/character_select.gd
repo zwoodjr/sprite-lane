@@ -18,8 +18,7 @@ var _ability: Label
 var _perks: VBoxContainer
 var _stats: VBoxContainer
 var _loadout: Label
-var _pet_name: Label
-var _pet_blurb: Label
+var _pet_box: VBoxContainer
 
 func build(c: VBoxContainer) -> void:
 	var portrait := MobileLayout.is_portrait()
@@ -93,29 +92,27 @@ func build(c: VBoxContainer) -> void:
 	_loadout = UiTheme.body_label("", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 	_loadout.visible = false
 	dv.add_child(_loadout)
+	## Dogs + any mech pets built in the Workshop: one tile row that scrolls
+	## sideways when it doesn't fit (never widens the screen), then what the
+	## picked pet does (role, key stats, gear, perks, DETAILS).
+	var pet_scroll := ScrollContainer.new()
+	pet_scroll.name = "PetStrip"
+	pet_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	pet_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	pet_scroll.custom_minimum_size = Vector2(0, 76)
+	dv.add_child(pet_scroll)
 	var pet_row := HBoxContainer.new()
 	pet_row.add_theme_constant_override("separation", 8)
-	dv.add_child(pet_row)
-	## Dogs + any mech pets built in the Workshop (tiles shrink to fit the row).
-	var pets: Array = []
+	pet_scroll.add_child(pet_row)
 	for pdef in PetDefs.all_pets():
 		if GameState.pet_available(str(pdef["id"])):
-			pets.append(pdef)
-	var tile := 80.0 if pets.size() <= 3 else (72.0 if pets.size() <= 5 else 64.0)
-	for pdef in pets:
-		var t := _pet_tile(pdef)
-		t.custom_minimum_size = Vector2(tile, tile)
-		pet_row.add_child(t)
-	var pet_txt := VBoxContainer.new()
-	pet_txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pet_txt.alignment = BoxContainer.ALIGNMENT_CENTER
-	pet_txt.add_theme_constant_override("separation", 0)
-	pet_row.add_child(pet_txt)
-	_pet_name = UiTheme.head_label("", UiTheme.T_H2, UiTheme.AMBER)
-	pet_txt.add_child(_pet_name)
-	_pet_blurb = UiTheme.body_label("", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
-	_pet_blurb.max_lines_visible = 2
-	pet_txt.add_child(_pet_blurb)
+			var t := _pet_tile(pdef)
+			t.custom_minimum_size = Vector2(68, 68)
+			pet_row.add_child(t)
+	_pet_box = VBoxContainer.new()
+	_pet_box.name = "PetBox"
+	_pet_box.add_theme_constant_override("separation", 0)
+	dv.add_child(_pet_box)
 
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 12)
@@ -297,13 +294,9 @@ func _refresh() -> void:
 		var on: bool = pid == GameState.selected_pet_id
 		UiTheme.skin_tile(pb, on, 4.0)
 		pb.self_modulate = Color.WHITE if on else Color(0.82, 0.8, 0.78)
-	_pet_name.text = str(pet.get("name", ""))
-	_pet_blurb.text = "%s — %s" % [pet.get("ability_name", ""), pet.get("ability_desc", "")]
-	var pg := GameState.pet_gear_item(GameState.selected_pet_id)
-	if not pg.is_empty():
-		_pet_blurb.text += "\nGear: %s" % str(pg.get("name", ""))
-	if not GameState.pending_perks(GameState.selected_pet_id).is_empty():
-		_pet_blurb.text += "\nBond perk ready: pick it in the Hangar Kennel"
+	for ch in _pet_box.get_children():
+		ch.queue_free()
+	_pet_box.add_child(PetInfo.summary(GameState.selected_pet_id, self))
 
 func _stat_bar(label: String, v: float, lo: float, hi: float) -> void:
 	var h := HBoxContainer.new()
