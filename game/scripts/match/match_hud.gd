@@ -31,6 +31,7 @@ const PAUSE_ROW := 64.0
 ## Visual tier slim HUD: PressStart2P pixel text, no plates behind the readouts.
 const PIXEL_FONT := "res://assets/fonts/PressStart2P.ttf"
 const XpLineScript := preload("res://scripts/ui/xp_line.gd")
+const AmmoSlotsScript := preload("res://scripts/ui/ammo_slots.gd")
 const PANEL_ALPHA := 0.5
 ## Locked "smashed readout" bars (scripts/ui/readout_bar.gd).
 const ReadoutScript := preload("res://scripts/ui/readout_bar.gd")
@@ -51,6 +52,8 @@ var _hp_text: Label
 var _ammo_label: Label
 var _reload_bar: ProgressBar
 var _buff_row: HBoxContainer
+## Special ammo slots (stacks, timers, combos) under the buff chips.
+var _ammo_slots: Control
 ## top-center
 var _phase_card: PanelContainer
 var _phase_label: Label
@@ -144,6 +147,8 @@ func setup(match_node: Node) -> void:
 func setup_nav(player: Node2D, pads: Array, landmarks: Array) -> void:
 	_player = player
 	_ammo_label.visible = not bool(player.call("is_melee"))
+	if _ammo_slots:
+		_ammo_slots.call("bind", player)
 	if player.has_signal("hurt"):
 		player.hurt.connect(func(_a: float) -> void: _flash_hit())
 	if player.has_signal("ammo_changed"):
@@ -315,6 +320,11 @@ func _build() -> void:
 	_buff_row.add_theme_constant_override("separation", 6)
 	_buff_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(_buff_row)
+	_ammo_slots = Control.new()
+	_ammo_slots.name = "AmmoSlots"
+	_ammo_slots.set_script(AmmoSlotsScript)
+	_ammo_slots.visible = false
+	vb.add_child(_ammo_slots)
 	## Pack / pouch / plague: a compact chip right under the vitals block.
 	_pack_panel = _panel(PANEL_ALPHA)
 	_pack_panel.name = "PackChip"

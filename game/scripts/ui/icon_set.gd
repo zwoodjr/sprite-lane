@@ -83,6 +83,8 @@ static func upgrade(u: Dictionary) -> String:
 		return "rec_" + id
 	if has("up_" + id):
 		return "up_" + id
+	if u.has("icon") and has(str(u["icon"])):
+		return str(u["icon"])
 	if has("rec_" + id):
 		return "rec_" + id
 	return "up_piercing"

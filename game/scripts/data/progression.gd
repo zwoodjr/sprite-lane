@@ -91,6 +91,10 @@ static func can_offer(u: Dictionary) -> bool:
 	var melee := GameState != null and GameState.weapon.has("melee")
 	if bool(u.get("ranged_only", false)) and melee:
 		return false
+	## Bandolier: only once special ammo can actually turn up this run.
+	if bool(u.get("needs_ammo", false)) and GameState and not (GameState.ammo_pickups_enabled()
+			or not GameState.run_ammo_seen.is_empty() or GameState.run_rank("supply_drop") > 0):
+		return false
 	var rank := GameState.run_rank(str(u["id"])) if GameState else 0
 	if rank >= int(u.get("max_rank", 1)):
 		return false

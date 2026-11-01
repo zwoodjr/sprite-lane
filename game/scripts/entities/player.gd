@@ -75,6 +75,14 @@ var _char: Dictionary = {}
 var _weapon: Dictionary = {}
 var _armor: Dictionary = {}
 var _buffs: Dictionary = {}  ## id -> {time_left, def}
+## Special ammo slots, oldest first: {ammo, stacks, time_left, max_time}.
+var _ammo_slots: Array = []
+## Combo ids active last tick (for the "MELT!" call-out on a new combo).
+var _ammo_combos: Array = []
+## Run tallies (bot / balance): pickups, stacks gained, types pushed out.
+var ammo_pickups_run: int = 0
+var ammo_replaced_run: int = 0
+var _napalm_cd: float = 0.0
 var _ability: Dictionary = {}
 var _target: Node2D = null
 var _swing_dir: Vector2 = Vector2.RIGHT
@@ -619,6 +627,17 @@ func _tick_buffs(delta: float) -> void:
 			_buffs.erase(id)
 			changed = true
 	resist_mult = 0.55 if _buffs.has("shield") else 1.0
+	_napalm_cd = maxf(0.0, _napalm_cd - delta)
+	var ammo_gone := false
+	for i in range(_ammo_slots.size() - 1, -1, -1):
+		var sl: Dictionary = _ammo_slots[i]
+		sl["time_left"] = float(sl["time_left"]) - delta
+		if float(sl["time_left"]) <= 0.0:
+			_ammo_slots.remove_at(i)
+			ammo_gone = true
+	if ammo_gone:
+		_refresh_ammo_combos()
+		changed = true
 	if changed:
 		buffs_changed.emit(_buffs)
 
@@ -632,11 +651,11 @@ func apply_powerup(def: Dictionary) -> void:
 		var amt := float(def.get("instant_heal", 35.0)) * _greed_heal()
 		hp = minf(max_hp, hp + amt)
 		health_changed.emit(hp, max_hp)
+	var dur := float(def.get("duration", 10.0))
 	if def.has("ammo"):
 		GameState.run_ammo_seen[str(def["ammo"])] = true
-	var dur := float(def.get("duration", 10.0))
-	if dur > 0.2:
-		## Special ammo lives in the "ammo" buff slot (one type at a time).
+		add_special_ammo(str(def["ammo"]), dur)
+	elif dur > 0.2:
 		_buffs[id] = {"time_left": dur, "def": def}
 	buffs_changed.emit(_buffs)
 	if id == "magnet":
@@ -645,11 +664,88 @@ func apply_powerup(def: Dictionary) -> void:
 func get_active_buffs() -> Dictionary:
 	return _buffs
 
-## Current special ammo id ("" = standard rounds).
+## Newest special ammo id ("" = standard rounds): sets the round's look.
 func special_ammo() -> String:
-	if not _buffs.has("ammo"):
+	if _ammo_slots.is_empty():
 		return ""
-	return str((_buffs["ammo"]["def"] as Dictionary).get("ammo", ""))
+	return str((_ammo_slots[_ammo_slots.size() - 1] as Dictionary)["ammo"])
+
+## How many special ammo types can be active at once (Bandolier adds one).
+func ammo_slot_cap() -> int:
+	return mini(UpgradeDefs.AMMO_SLOTS + GameState.run_rank("bandolier"), UpgradeDefs.AMMO_SLOTS_MAX)
+
+## Active slots, oldest first: [{ammo, stacks, time_left, max_time}].
+func get_ammo_slots() -> Array:
+	return _ammo_slots
+
+## Active combo ids (UpgradeDefs.AMMO_COMBOS keys).
+func get_ammo_combos() -> Array:
+	return _ammo_combos
+
+func has_ammo(ammo_id: String) -> bool:
+	return ammo_stacks(ammo_id) > 0
+
+func ammo_stacks(ammo_id: String) -> int:
+	for sl in _ammo_slots:
+		if str(sl["ammo"]) == ammo_id:
+			return int(sl["stacks"])
+	return 0
+
+## Effect strength of a type at its stack count (0 when not active).
+func ammo_power(ammo_id: String) -> float:
+	var n := ammo_stacks(ammo_id)
+	if n <= 0:
+		return 0.0
+	return float(UpgradeDefs.AMMO_STACK_POWER[clampi(n, 1, UpgradeDefs.AMMO_MAX_STACKS) - 1])
+
+## Picks up a can of special ammo. Same type: +1 stack (max 3), longer and
+## stronger, and it counts as fresh. New type: takes a free slot, or pushes out
+## the oldest when every slot is full. Returns the slot's stack count.
+func add_special_ammo(ammo_id: String, dur: float) -> int:
+	if not UpgradeDefs.AMMO.has(ammo_id):
+		return 0
+	ammo_pickups_run += 1
+	var a: Dictionary = UpgradeDefs.AMMO[ammo_id]
+	for i in range(_ammo_slots.size()):
+		var sl: Dictionary = _ammo_slots[i]
+		if str(sl["ammo"]) != ammo_id:
+			continue
+		var n := mini(int(sl["stacks"]) + 1, UpgradeDefs.AMMO_MAX_STACKS)
+		sl["stacks"] = n
+		sl["max_time"] = dur * (1.0 + UpgradeDefs.AMMO_STACK_TIME * float(n - 1))
+		sl["time_left"] = float(sl["max_time"])
+		_ammo_slots.remove_at(i)
+		_ammo_slots.append(sl)
+		_float_ammo("%s x%d" % [str(UpgradeDefs.AMMO_SHORT.get(ammo_id, a["name"])), n], a["color"])
+		_refresh_ammo_combos()
+		return n
+	while _ammo_slots.size() >= ammo_slot_cap():
+		var old: Dictionary = _ammo_slots.pop_front()
+		ammo_replaced_run += 1
+		_float_ammo("%s OUT" % str(UpgradeDefs.AMMO_SHORT.get(str(old["ammo"]), "AMMO")), Color(0.75, 0.7, 0.65), 22.0)
+	_ammo_slots.append({"ammo": ammo_id, "stacks": 1, "time_left": dur, "max_time": dur})
+	_refresh_ammo_combos()
+	return 1
+
+func _float_ammo(txt: String, col: Color, dy: float = 0.0) -> void:
+	if is_inside_tree():
+		Juice.float_text(global_position + Vector2(0, -52 - dy), txt, col, 14)
+
+func _refresh_ammo_combos() -> void:
+	var now: Array = []
+	for cid in UpgradeDefs.AMMO_COMBOS:
+		var nd: Array = UpgradeDefs.AMMO_COMBOS[cid]["needs"]
+		if has_ammo(str(nd[0])) and has_ammo(str(nd[1])):
+			now.append(str(cid))
+	for cid in now:
+		if not cid in _ammo_combos:
+			var c: Dictionary = UpgradeDefs.AMMO_COMBOS[cid]
+			_float_ammo(str(c["name"]) + "!", c["color"], 44.0)
+			Juice.haptic(Juice.HAPTIC_TICK)
+	_ammo_combos = now
+
+func has_ammo_combo(cid: String) -> bool:
+	return cid in _ammo_combos
 
 ## =============================================================================
 ## Dash
@@ -1746,11 +1842,12 @@ func hit_enemy(e: Node, dmg: float, dir: Vector2, knock: float = -1.0, crit: boo
 ## Element of a hit ("fire" / "shock" / ""): special ammo, weapon coatings,
 ## Juno's electric ability + chains, explosions count as fire.
 func hit_element(src: String) -> String:
-	match special_ammo():
-		"incendiary", "explosive":
-			return "fire"
-		"shock":
-			return "shock"
+	for i in range(_ammo_slots.size() - 1, -1, -1):
+		match str(_ammo_slots[i]["ammo"]):
+			"incendiary", "explosive":
+				return "fire"
+			"shock":
+				return "shock"
 	if src in ["ability", "chain"] and GameState.selected_character_id == CharacterDefs.BOLT_JUNO_ID:
 		return "shock"
 	if src == "blast":
@@ -1828,22 +1925,57 @@ func _on_hit_effects(e: Node2D, dmg: float, src: String) -> void:
 						e.call("apply_status", "stun", float(ce["time"]))
 				"frost":
 					e.call("apply_status", "slow", float(ce["time"]), clampf(1.0 - v / 100.0, 0.3, 1.0))
-	var ammo := special_ammo()
-	if ammo == "":
+	if _ammo_slots.is_empty() or not is_instance_valid(e):
 		return
-	var a: Dictionary = UpgradeDefs.AMMO[ammo]
-	match ammo:
-		"incendiary":
-			e.call("apply_status", "burn", float(a["burn_time"]), float(a["burn_dps"]))
-		"shock":
-			if randf() < float(a["stun_chance"]):
-				e.call("apply_status", "stun", float(a["stun_time"]))
-				RunFx.zap(get_parent(), e.global_position + Vector2(-10, -14), e.global_position + Vector2(10, 6), a["color"], 0.15, 2.0)
-		"frost":
-			e.call("apply_status", "slow", float(a["slow_time"]), float(a["slow_mult"]))
-		"explosive":
-			if src not in ["blast", "mine"]:
-				RunFx.explosion(self, e.global_position, float(a["blast_radius"]), dmg * float(a["blast_mult"]), a["color"], "blast", 140.0)
+	_ammo_on_hit(e, dmg, src)
+
+## Every active special ammo applies, scaled by its stacks; then combos.
+func _ammo_on_hit(e: Node2D, dmg: float, src: String) -> void:
+	## Chilled before this hit (Shatter / Melt key off it).
+	var chilled := bool(e.call("has_status", "slow")) if e.has_method("has_status") else false
+	var melt: Dictionary = UpgradeDefs.AMMO_COMBOS["melt"] if has_ammo_combo("melt") else {}
+	for sl in _ammo_slots.duplicate():
+		if not is_instance_valid(e):
+			return
+		var ammo := str(sl["ammo"])
+		var a: Dictionary = UpgradeDefs.AMMO[ammo]
+		var pw := ammo_power(ammo)
+		match ammo:
+			"incendiary":
+				var bdps := float(a["burn_dps"]) * pw
+				var bt := float(a["burn_time"])
+				if not melt.is_empty():
+					bdps *= float(melt["burn_mult"])
+					bt += float(melt["burn_add_time"])
+				e.call("apply_status", "burn", bt, bdps)
+			"shock":
+				if randf() < minf(0.85, float(a["stun_chance"]) * pw):
+					e.call("apply_status", "stun", float(a["stun_time"]) * (1.0 + 0.25 * (pw - 1.0)))
+					RunFx.zap(get_parent(), e.global_position + Vector2(-10, -14), e.global_position + Vector2(10, 6), a["color"], 0.15, 2.0)
+			"frost":
+				e.call("apply_status", "slow", float(a["slow_time"]) * (1.0 + 0.3 * (pw - 1.0)), maxf(0.3, 1.0 - (1.0 - float(a["slow_mult"])) * pw))
+			"explosive":
+				if src not in ["blast", "mine", "shatter"]:
+					var stun := 0.0
+					if has_ammo_combo("arc_blast"):
+						stun = float(UpgradeDefs.AMMO_COMBOS["arc_blast"]["stun"])
+					var r := float(a["blast_radius"]) * (1.0 + 0.15 * float(int(sl["stacks"]) - 1))
+					var at := e.global_position
+					RunFx.explosion(self, at, r, dmg * float(a["blast_mult"]) * pw, a["color"], "blast", 140.0, stun)
+					if has_ammo_combo("napalm") and _napalm_cd <= 0.0:
+						var nc: Dictionary = UpgradeDefs.AMMO_COMBOS["napalm"]
+						_napalm_cd = float(nc["cd"])
+						RunFx.ground(get_parent(), self, at, "burn", float(nc["radius"]), float(nc["time"]), float(nc["dps"]) * ammo_power("incendiary"))
+	## Shatter: chilled enemies can burst into ice (per-enemy cooldown).
+	if has_ammo_combo("shatter") and chilled and src not in ["shatter", "blast", "mine"] and is_instance_valid(e):
+		var sc: Dictionary = UpgradeDefs.AMMO_COMBOS["shatter"]
+		var now := Time.get_ticks_msec()
+		if now >= int(e.get_meta("_shatter_ms", 0)) and randf() < float(sc["chance"]):
+			e.set_meta("_shatter_ms", now + int(float(sc["cd"]) * 1000.0))
+			var pw2 := (ammo_power("shock") + ammo_power("frost")) * 0.5
+			var at2 := e.global_position
+			Juice.burst(at2 + Vector2(0, -12), sc["color"], 14, 200.0, 0.4)
+			RunFx.explosion(self, at2, float(sc["radius"]), dmg * float(sc["mult"]) * pw2, sc["color"], "shatter", 120.0, 0.0, "slam")
 
 ## Per-frame run-upgrade upkeep: mines, bayonet, supply drops, Bell Tower,
 ## Iron Tonic recharge, Rook's ram.

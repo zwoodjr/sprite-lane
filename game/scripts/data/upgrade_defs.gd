@@ -45,9 +45,40 @@ const AMMO := {
 		"bullet": "res://assets/sprites/fx/bullet_frost.png", "pickup": "res://assets/sprites/pickups/ammo_frost.png"},
 }
 ## Kill drop chance for a special-ammo pickup by tier (normal / elite / boss).
-const AMMO_DROP_CHANCE := [0.012, 0.06, 0.3]
-## Crate (breakable) buff rolls that become special ammo instead.
-const AMMO_CRATE_SHARE := 0.3
+## Ammo stacks + combines now, so drops were cut ~40% (was 0.012 / 0.06 / 0.3).
+const AMMO_DROP_CHANCE := [0.007, 0.036, 0.18]
+## Crate (breakable) buff rolls that become special ammo instead (was 0.3).
+const AMMO_CRATE_SHARE := 0.18
+## Bentley's "found ammo" gift: share of his great finds that stay ammo (the rest
+## become a scrap jackpot instead), so pet gifts are cut with the rest.
+const AMMO_GIFT_KEEP := 0.6
+
+## Ammo slots: same type stacks (longer + stronger), different types combine.
+## A new type with every slot full pushes out the oldest (least recently topped up).
+const AMMO_SLOTS := 2
+const AMMO_SLOTS_MAX := 3
+const AMMO_MAX_STACKS := 3
+## Effect strength by stack count (1 / 2 / 3).
+const AMMO_STACK_POWER := [1.0, 1.35, 1.7]
+## Each stack past the first adds this share of the base duration (15 → 22 → 30 s).
+const AMMO_STACK_TIME := 0.5
+## Short HUD tags for the slot chips.
+const AMMO_SHORT := {"incendiary": "FIRE", "shock": "SHOCK", "explosive": "BOOM", "frost": "FROST"}
+## Combos between two active types (shown as a small label on the HUD).
+const AMMO_COMBOS := {
+	"melt": {"name": "MELT", "needs": ["incendiary", "frost"], "color": Color(1.0, 0.62, 0.45),
+		"desc": "Incendiary burns run 60% hotter and 1s longer",
+		"burn_mult": 1.6, "burn_add_time": 1.0},
+	"shatter": {"name": "SHATTER", "needs": ["shock", "frost"], "color": Color(0.7, 0.92, 1.0),
+		"desc": "Hits on chilled enemies can shatter: an icy burst (70% dmg)",
+		"chance": 0.3, "mult": 0.7, "radius": 56.0, "cd": 0.9},
+	"napalm": {"name": "NAPALM", "needs": ["incendiary", "explosive"], "color": Color(1.0, 0.45, 0.15),
+		"desc": "Blasts leave a burning patch",
+		"dps": 12.0, "time": 2.5, "radius": 40.0, "cd": 0.5},
+	"arc_blast": {"name": "ARC BLAST", "needs": ["shock", "explosive"], "color": Color(0.55, 0.85, 1.0),
+		"desc": "Blasts stun what they hit",
+		"stun": 0.45},
+}
 
 ## Supply Drop: the first crate comes early so the pick pays off right away.
 const SUPPLY_FIRST_DROP := 8.0
@@ -158,6 +189,10 @@ static func all() -> Array:
 			"ranks": [{"scrap": 0.25}, {"scrap": 0.5}, {"scrap": 0.8}],
 			"desc": ["+25% scrap from kills", "+50% scrap from kills", "+80% scrap from kills"],
 			"combos": ["lucky_vial"]},
+		{"id": "bandolier", "name": "Bandolier", "rarity": "uncommon", "tags": ["Bullet", "Elemental"], "needs_ammo": true,
+			"max_rank": 1, "ranks": [{"slots": 1}], "icon": "ammo_explosive",
+			"desc": ["Hold 3 special ammo types at once (was 2)"],
+			"combos": ["dust_rounds", "supply_drop"]},
 		{"id": "lucky_vial", "name": "Lucky Vial", "rarity": "uncommon", "tags": ["Economy"],
 			"max_rank": 2,
 			"ranks": [{"charges": 2, "luck": 2.5}, {"charges": 3, "luck": 3.5}],

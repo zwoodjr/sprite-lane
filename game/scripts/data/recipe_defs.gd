@@ -42,7 +42,7 @@ const RECIPES: Array = [
 		"ranks": [{"drones": 1, "rate": 0.5}]},
 	{"id": "fortune", "name": "Fortune's Favor", "needs": ["scavengers_eye", "lucky_vial"],
 		"desc": "+50% scrap and kills sometimes drop special ammo.",
-		"ranks": [{"scrap": 0.5, "ammo_chance": 0.05}]},
+		"ranks": [{"scrap": 0.5, "ammo_chance": 0.03}]},
 	## --- Class recipes ---
 	{"id": "earthquake", "name": "Earthquake", "hero": "ash_rook", "needs": ["aftershock", "rubble_wall"],
 		"desc": "RUSH shakes the ground as you go; the Aftershock hits 50% harder.",

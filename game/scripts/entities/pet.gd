@@ -363,7 +363,7 @@ func _drop_gift() -> void:
 		if pick == 0:
 			LootDrop.spawn_burst(parent, feet, "tonic", 1, 18.0)
 			Juice.float_text(feet + Vector2(0, -40), "Bentley found a tonic!", Color(0.6, 1.0, 0.6), 15)
-		elif pick == 1:
+		elif pick == 1 and randf() < UpgradeDefs.AMMO_GIFT_KEEP:
 			RunFx.spawn_ammo_pickup(parent, feet)
 			Juice.float_text(feet + Vector2(0, -40), "Bentley found ammo!", Color(1.0, 0.85, 0.4), 15)
 		else:

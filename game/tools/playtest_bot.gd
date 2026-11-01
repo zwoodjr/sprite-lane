@@ -58,6 +58,9 @@ var _picking := false
 var _going := false
 var _pad_dist := INF
 var _force_ammo := ""
+## Special ammo tallies (pickups, types pushed out, most slots held) + combo time.
+var _ammo_tally := [0, 0, 0]
+var _ammo_combo_s := 0.0
 var _keep_camp: Dictionary = {}
 var _keep_gear: Array = []
 var _camp_override := false
@@ -499,6 +502,9 @@ func _wander_dir(delta: float) -> Vector2:
 
 func _extra(delta: float) -> void:
 	_min_hp = min(_min_hp, _p.hp)
+	_ammo_tally = [int(_p.get("ammo_pickups_run")), int(_p.get("ammo_replaced_run")), maxi(_ammo_tally[2], (_p.call("get_ammo_slots") as Array).size())]
+	if not (_p.call("get_ammo_combos") as Array).is_empty():
+		_ammo_combo_s += delta
 	if not GameState.run_finished:
 		_econ = [GameState.scrap_found, GameState.medicine_carried(), GameState.extract_bonus_scrap]
 	_max_exposure = maxf(_max_exposure, GameState.exposure)
@@ -672,6 +678,7 @@ func _summary() -> void:
 		GameState.run_level, _dmg_events, _abil_uses, _reload_s])
 	print("HPF end=%.2f min=%.2f windows=%d skipped=%d" % [clampf(_last_hp / maxf(_mx_hp, 1.0), 0.0, 1.0), maxf(_min_frac, 0.0), GameState.extract_windows_seen, GameState.windows_skipped])
 	print("BAL first_hit=%.1f hp_lost=%.0f max_hp=%.0f reload_frac=%.2f" % [_first_hit_t, _hp_lost, float(_p.get("max_hp")) if is_instance_valid(_p) else -1.0, _reload_s / maxf(1.0, _t)])
+	print("AMMO pickups=%d replaced=%d max_slots=%d combo_s=%.0f" % [_ammo_tally[0], _ammo_tally[1], _ammo_tally[2], _ammo_combo_s])
 	print("STUCK total=%.1f max_streak=%.2f at=(%.0f,%.0f)" % [_stuck_s, _stuck_max, _stuck_at.x, _stuck_at.y])
 	print("ECON scrap=%d med=%d bonus=%d kills=%d loot=%.2f payout=%d" % [_econ[0], _econ[1], _econ[2], GameState.kills, GameState.loot_mult, GameState.payout_this_run])
 	if not GameState.last_daily.is_empty():

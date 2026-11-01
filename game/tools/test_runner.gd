@@ -182,6 +182,7 @@ func _run() -> void:
 	await _test_petgear()
 	await _test_scrap_pull()
 	await _test_campaign_items()
+	await _test_ammo_slots()
 	await _test_settings()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
@@ -2491,6 +2492,73 @@ func _mob(m: Node, kind: String, at: Vector2) -> Node2D:
 	m.get_node("World").add_child(e)
 	e.set("_spawn_in", 0.0)
 	return e
+
+
+## Special ammo: same type stacks (max 3), two slots (three with Bandolier),
+## a new type with full slots pushes out the oldest, combos, HUD chips.
+func _test_ammo_slots() -> void:
+	var m: Node = await _depth_match("drift", "vesper_thorn", {"ammo_bench": 1})
+	var p: Node2D = m.get_node("World/Player")
+	var d := UpgradeDefs.AMMO_DURATION
+	p.call("apply_powerup", RunFx.ammo_def("incendiary"))
+	p.call("apply_powerup", RunFx.ammo_def("incendiary"))
+	var sl: Array = p.call("get_ammo_slots")
+	_check(sl.size() == 1 and int(sl[0]["stacks"]) == 2 and float(sl[0]["max_time"]) > d + 1.0, "ammo same type stacks (longer)")
+	_check(float(p.call("ammo_power", "incendiary")) > 1.0, "ammo stack is stronger")
+	for i in range(4):
+		p.call("add_special_ammo", "incendiary", d)
+	sl = p.call("get_ammo_slots")
+	_check(sl.size() == 1 and int(sl[0]["stacks"]) == UpgradeDefs.AMMO_MAX_STACKS, "ammo stacks cap at 3")
+	p.call("add_special_ammo", "frost", d)
+	sl = p.call("get_ammo_slots")
+	_check(sl.size() == 2 and int(p.call("ammo_slot_cap")) == 2, "ammo two types at once")
+	_check(p.call("has_ammo_combo", "melt"), "ammo combo melt (fire + frost)")
+	## Full slots: the oldest (incendiary) goes, frost stays.
+	p.call("add_special_ammo", "shock", d)
+	sl = p.call("get_ammo_slots")
+	_check(sl.size() == 2 and not bool(p.call("has_ammo", "incendiary")) and bool(p.call("has_ammo", "frost")) and bool(p.call("has_ammo", "shock")), "ammo full slots replace the oldest")
+	_check(p.call("has_ammo_combo", "shatter") and not p.call("has_ammo_combo", "melt"), "ammo combo shatter, melt gone")
+	## Topping up frost makes it the newest, so the next new type pushes shock.
+	p.call("add_special_ammo", "frost", d)
+	p.call("add_special_ammo", "explosive", d)
+	_check(bool(p.call("has_ammo", "frost")) and not bool(p.call("has_ammo", "shock")), "ammo top-up refreshes age")
+	## Bandolier: a third slot, still capped.
+	var u := UpgradeDefs.get_def("bandolier")
+	_check(not u.is_empty() and Progression.can_offer(u), "bandolier offered with the ammo bench")
+	GameState.apply_run_upgrade(u)
+	_check(int(p.call("ammo_slot_cap")) == 3 and not Progression.can_offer(u), "bandolier: 3 slots, once")
+	p.call("add_special_ammo", "incendiary", d)
+	sl = p.call("get_ammo_slots")
+	_check(sl.size() == 3, "bandolier holds three types")
+	p.call("add_special_ammo", "shock", d)
+	sl = p.call("get_ammo_slots")
+	_check(sl.size() == 3 and not bool(p.call("has_ammo", "frost")), "bandolier full: oldest replaced")
+	_check(p.call("has_ammo_combo", "napalm") and p.call("has_ammo_combo", "arc_blast"), "ammo combos napalm + arc blast")
+	## Hits apply every active type: burn + stun roll + blast; nothing errors.
+	var a := _mob(m, "rad_gator", p.global_position + Vector2(300, 0))
+	a.set("max_hp", 5000.0)
+	a.set("hp", 5000.0)
+	await get_tree().physics_frame
+	p.call("hit_enemy", a, 10.0, Vector2.RIGHT, 0.0, false, "main")
+	_check(bool(a.call("has_status", "burn")), "ammo hit burns with several types active")
+	## Shatter path: frost + shock on a chilled mob.
+	p.call("add_special_ammo", "frost", d)
+	a.call("apply_status", "slow", 3.0, 0.5)
+	for i in range(12):
+		p.call("hit_enemy", a, 10.0, Vector2.RIGHT, 0.0, false, "main")
+	_check(float(a.get("hp")) < 5000.0, "ammo shatter / combo hits land")
+	## HUD chips follow the slots.
+	for k in range(3):
+		await get_tree().process_frame
+	var hud_slots := m.get_node("HUD").get("_ammo_slots") as Control
+	_check(hud_slots != null and hud_slots.visible and hud_slots.custom_minimum_size.x > 0.0 and hud_slots.custom_minimum_size.x <= 300.0, "ammo HUD chips fit the vitals column")
+	## Melee heroes, no bench, no ammo seen: no Bandolier.
+	await _end_depth_match(m)
+	GameState.camp.clear()
+	GameState.begin_run()
+	_check(not Progression.can_offer(u), "bandolier hidden without special ammo")
+	## Drop rates cut ~40%.
+	_check(is_equal_approx(UpgradeDefs.AMMO_DROP_CHANCE[0], 0.007) and UpgradeDefs.AMMO_CRATE_SHARE < 0.2, "ammo drop rates cut")
 
 
 ## Depth E2: weaknesses, elite traits, infighting, raider crews.
