@@ -594,6 +594,19 @@ func _test_hangar() -> void:
 	for t in ["camp", "survivors", "kennel", "brew", "stash"]:
 		h.call("show_tab", t)
 		await get_tree().process_frame
+	## Two-tap buying on the upgrade cards: first tap arms, second buys.
+	h.call("show_tab", "camp")
+	await get_tree().process_frame
+	var bb := h.find_child("Buy_generator", true, false) as Button
+	var s0 := GameState.account_scrap
+	var r0 := GameState.camp_rank("generator")
+	if bb and not bb.disabled:
+		bb.emit_signal("pressed")
+		_check(GameState.account_scrap == s0 and GameState.camp_rank("generator") == r0 and bb.text == "BUY?", "hangar: first tap arms")
+		bb.emit_signal("pressed")
+		_check(GameState.camp_rank("generator") == r0 + 1, "hangar: second tap buys")
+	else:
+		_check(false, "hangar: generator card has a price button")
 	## Mech bays (Depth E6) open once the mech is built.
 	var keep_mechs := GameState.mechs_built.duplicate()
 	for mid in PetDefs.MECH_IDS:

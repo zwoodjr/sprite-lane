@@ -275,7 +275,7 @@ func show_tab(t: String) -> void:
 		_scroll_y_keep = 0
 	_tab = t
 	## The stash wants the room: fold the hangar picture down while it's open.
-	var vh := 208.0 if t == "stash" else 400.0
+	var vh := 208.0 if t == "stash" else 248.0
 	if _view != null and not is_equal_approx(_view.custom_minimum_size.y, vh):
 		if is_inside_tree():
 			_view.create_tween().tween_property(_view, "custom_minimum_size:y", vh, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -333,13 +333,14 @@ func _rebuild() -> void:
 	_set_scrap_shown(GameState.account_scrap)
 	match _tab:
 		"camp":
-			_list.add_child(_note("Shared upgrades help every survivor."))
+			_list.add_child(_note("Shared upgrades help every survivor. Tap a price, then tap again to buy."))
+			var g := _grid()
 			for id in HangarDefs.ids_for("shared"):
-				_list.add_child(_row(str(id), IconSet.tex("camp_" + str(id))))
-			_list.add_child(_row("backpack", IconSet.tex("camp_backpack")))
-			_list.add_child(_row(HangarDefs.INSURANCE_ID, IconSet.tex("ui_lock")))
+				g.add_child(_grid_card(str(id), IconSet.tex("camp_" + str(id))))
+			g.add_child(_grid_card("backpack", IconSet.tex("camp_backpack")))
+			g.add_child(_grid_card(HangarDefs.INSURANCE_ID, IconSet.tex("ui_lock")))
 			## Crafter Bench: craft-only sets (recipes open from here).
-			_list.add_child(_row(CraftDefs.BENCH_ID, IconSet.tex("camp_ammo_bench")))
+			g.add_child(_grid_card(CraftDefs.BENCH_ID, IconSet.tex("camp_ammo_bench")))
 			var cb := UiTheme.big_button("CRAFTER BENCH: RECIPES" if GameState.bench_rank() > 0 else "CRAFTER BENCH: PREVIEW RECIPES",
 				UiTheme.AMBER if GameState.bench_rank() > 0 else UiTheme.LINE, 64, 18)
 			cb.name = "CrafterButton"
@@ -354,9 +355,10 @@ func _rebuild() -> void:
 			var mine := HangarDefs.station_id(GameState.selected_character_id)
 			ids.erase(mine)
 			ids.push_front(mine)
+			var g := _grid()
 			for id in ids:
 				var hero := str(id).substr(8)
-				_list.add_child(_row(str(id), IconSet.tex(IconSet.ability(hero, "a"))))
+				g.add_child(_grid_card(str(id), IconSet.tex(IconSet.ability(hero, "a"))))
 		"kennel":
 			_list.add_child(_note("Noel guards, Bentley scouts, Lillie rams."))
 			for id in HangarDefs.ids_for("kennel"):
@@ -447,6 +449,106 @@ func _row(id: String, icon: Texture2D) -> PanelContainer:
 	btn.mouse_force_pass_scroll_events = true
 	h.add_child(btn)
 	return p
+
+
+## Two-column card grid (camp / crew).
+func _grid() -> GridContainer:
+	var g := GridContainer.new()
+	g.name = "UpgradeGrid"
+	g.columns = 2
+	g.add_theme_constant_override("h_separation", 8)
+	g.add_theme_constant_override("v_separation", 8)
+	g.mouse_filter = Control.MOUSE_FILTER_PASS
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_list.add_child(g)
+	return g
+
+
+## Upgrade card: icon, name, pips, next effect, price button. Buying takes two
+## taps on the price (BUY? -> bought), so a scroll-tap never spends scrap.
+var _armed_id: String = ""
+
+func _grid_card(id: String, icon: Texture2D) -> PanelContainer:
+	var rank := GameState.camp_rank(id)
+	var max_r := HangarDefs.max_rank(id)
+	var cost := GameState.camp_cost(id)
+	var maxed := cost < 0
+	var mine := HangarDefs.layer_of(id) == "station" and id.substr(8) == GameState.selected_character_id
+	var p := card(UiTheme.AMBER if mine else UiTheme.LINE, Color(0.11, 0.08, 0.055, 0.92))
+	p.name = "Card_" + id
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var v := VBoxContainer.new()
+	v.mouse_filter = Control.MOUSE_FILTER_PASS
+	v.add_theme_constant_override("separation", 4)
+	p.add_child(v)
+	var ir := TextureRect.new()
+	ir.texture = icon
+	ir.custom_minimum_size = Vector2(0, 80)
+	ir.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ir.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ir.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ir.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(ir)
+	var nm := UiTheme.head_label(HangarDefs.display_name(id), UiTheme.T_H3, UiTheme.AMBER if mine else UiTheme.TEXT)
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(nm)
+	var pc := CenterContainer.new()
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.add_child(UiTheme.rank_pips(rank, max_r, not maxed))
+	v.add_child(pc)
+	var nx := UiTheme.body_label(HangarDefs.rank_text(id, rank + 1) if not maxed else HangarDefs.rank_text(id, rank), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	nx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nx.max_lines_visible = 3
+	nx.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(nx)
+	var btn: Button
+	var gate := GameState.camp_gate(id) if not maxed else 0
+	if maxed:
+		btn = UiTheme.big_button("MAX", UiTheme.LINE, UiTheme.MIN_TOUCH, 18)
+		btn.disabled = true
+	elif gate > 0:
+		btn = UiTheme.big_button("NEEDS %s" % str(ModeDefs.tier_mode(gate).get("display_name", "")).to_upper(), UiTheme.LINE, UiTheme.MIN_TOUCH, 14)
+		btn.disabled = true
+		btn.clip_text = true
+		btn.tooltip_text = "Extract from %s to open this rank (%d scrap)" % [str(ModeDefs.tier_mode(gate).get("display_name", "")), cost]
+	else:
+		var afford := GameState.account_scrap >= cost
+		btn = UiTheme.big_button("%d" % cost, UiTheme.TEAL if afford else UiTheme.RUST, UiTheme.MIN_TOUCH, 16)
+		btn.add_theme_font_override("font", UiTheme.font_pixel)
+		btn.add_theme_font_size_override("font_size", UiTheme.PX_M)
+		btn.icon = IconSet.tex("cur_scrap", false)
+		btn.disabled = not afford
+		btn.pressed.connect(_price_tap.bind(id, btn, cost))
+	btn.name = "Buy_" + id
+	btn.custom_minimum_size.x = 0
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.mouse_force_pass_scroll_events = true
+	v.add_child(btn)
+	return p
+
+
+## First tap arms (BUY?), second tap within 3 s buys.
+func _price_tap(id: String, btn: Button, cost: int) -> void:
+	if _armed_id == id:
+		_armed_id = ""
+		buy(id)
+		return
+	_armed_id = id
+	Juice.sfx("ui_tap")
+	btn.remove_theme_font_override("font")
+	btn.add_theme_font_size_override("font_size", UiTheme.ui_size(18))
+	btn.text = "BUY?"
+	UiTheme.skin_button(btn, UiTheme.AMBER, 12.0)
+	get_tree().create_timer(3.0).timeout.connect(func() -> void:
+		if _armed_id == id:
+			_armed_id = ""
+			if is_instance_valid(btn):
+				btn.text = "%d" % cost
+				btn.add_theme_font_override("font", UiTheme.font_pixel)
+				btn.add_theme_font_size_override("font_size", UiTheme.PX_M)
+				UiTheme.skin_button(btn, UiTheme.TEAL, 12.0))
 
 
 ## Rank pips: filled teal squares for owned ranks.
