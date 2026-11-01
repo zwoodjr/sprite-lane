@@ -181,7 +181,19 @@ func _live_begin() -> void:
 		_apply_resume(res)
 	elif not GameState.in_campaign_run():
 		_drop_in_landing()
+		_head_start()
 	GameState.live_run_begin(self)
+
+
+## Next-run Head Start: straight to run level 2 (its pick opens after the drop).
+func _head_start() -> void:
+	if not GameState.supply_on("head_start") or GameState.run_level != 1:
+		return
+	get_tree().create_timer(1.0).timeout.connect(func() -> void:
+		if is_instance_valid(self) and GameState.run_level == 1 and not GameState.run_finished:
+			GameState.add_run_xp(maxi(1, Progression.run_xp_to_next(1) - GameState.run_xp))
+			if is_instance_valid(hud) and hud.has_method("show_toast"):
+				hud.call("show_toast", "HEAD START: level 2", UiTheme.TEAL))
 
 
 ## DROP IN: the hero's sprite falls in from above the frame and lands with a

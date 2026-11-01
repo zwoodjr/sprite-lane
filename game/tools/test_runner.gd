@@ -184,6 +184,7 @@ func _run() -> void:
 	await _test_campaign_items()
 	await _test_ammo_slots()
 	await _test_settings()
+	await _test_scrap_sinks()
 	GameState.tier_clears = keep_e7[0]
 	GameState.plane_parts = keep_e7[1]
 	GameState.pacts = keep_e7[2]
@@ -4948,3 +4949,295 @@ func _test_campaign_items() -> void:
 	GameState.campaign_autoplay = false
 	GameState.call("leave_campaign_run")
 	print("CAMPAIGN_ITEMS_OK")
+
+
+## Scrap sinks: Overdrive cost curve (uncapped, geometric, 30k buys several
+## levels), save migration, Workbench (locked never rerolled, insured kept),
+## crates (exact odds tables, auto-salvage tier), next-run supplies, and the
+## Hangar cards (two-tap, nothing past the screen edge at XL text).
+func _test_scrap_sinks() -> void:
+	const SS = preload("res://scripts/data/scrap_sink_defs.gd")
+	var keep := [GameState.account_scrap, GameState.stash.duplicate(true), GameState.endless.duplicate(), GameState.supplies_armed.duplicate(),
+		GameState.crate_cosmetics.duplicate(), GameState.insured.duplicate(), GameState.loadouts.duplicate(true), GameState.pending_rewards.duplicate(true),
+		GameState.salvage_bin.duplicate(true), GameState.settings.get("auto_salvage_tier", 0), GameState.camp.duplicate(), GameState.milestones.duplicate()]
+	## --- Cost curves
+	for id in SS.ENDLESS_ORDER:
+		var ok := SS.endless_cost(str(id), 0) == int(SS.ENDLESS[id]["base"])
+		for n in range(0, 80):
+			if SS.endless_cost(str(id), n + 1) <= SS.endless_cost(str(id), n):
+				ok = false
+		_check(ok, "overdrive %s: geometric, every level dearer" % id)
+		_check(SS.endless_cost(str(id), 5000) == SS.ENDLESS_COST_CAP and SS.endless_cost(str(id), 100000) > 0, "overdrive %s: never ends, no overflow" % id)
+	_check(SS.endless_cost("damage", 10) == int(round(500.0 * pow(1.25, 10.0) / 10.0)) * 10, "overdrive: x1.25 a level (%d)" % SS.endless_cost("damage", 10))
+	## 30k, spent greedily on the cheapest next level: several levels on every
+	## track, and every track still has a next level.
+	GameState.endless = {}
+	GameState.account_scrap = 30000
+	while true:
+		var best := ""
+		for id in SS.ENDLESS_ORDER:
+			if best == "" or GameState.endless_cost_next(str(id)) < GameState.endless_cost_next(best):
+				best = str(id)
+		if not GameState.try_buy_endless(best):
+			break
+	var lv_min := 999
+	var lv_sum := 0
+	for id in SS.ENDLESS_ORDER:
+		lv_min = mini(lv_min, GameState.endless_level(str(id)))
+		lv_sum += GameState.endless_level(str(id))
+		_check(GameState.endless_cost_next(str(id)) > GameState.account_scrap, "30k: %s still has a next level" % id)
+	_check(lv_min >= 4 and lv_sum >= 28 and lv_sum <= 45, "30k buys several levels on every track (min %d, total %d)" % [lv_min, lv_sum])
+	_check(SS.endless_total("damage", 12) <= 30000 and SS.endless_total("damage", 14) > 30000, "30k on one track: about 12 levels")
+	## Effects.
+	GameState.endless = {"damage": 10, "defense": 10, "speed": 5, "magnet": 3, "scrap": 20, "vitality": 7}
+	GameState.camp = {}
+	GameState.loadouts = {}
+	GameState._compute_gear()
+	_check(is_equal_approx(GameState.starting_damage_bonus(), HangarDefs.station_weapon_damage(0) + 0.10), "overdrive damage +10%")
+	_check(is_equal_approx(GameState.endless_taken_mult(), pow(0.99, 10.0)) and is_equal_approx(GameState.endless_hp_mult(), 1.07), "overdrive defense / HP")
+	_check(is_equal_approx(GameState.pickup_radius_bonus(), 6.0) and GameState.move_speed_bonus() >= 0.05 - 0.0001, "overdrive reach / speed")
+	_check(is_equal_approx(GameState.sink_scrap_mult(), 1.2), "overdrive scrap +20%")
+	## --- Saves: old saves load with nothing; junk is dropped; round trip.
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "migrated_hangar_v5": true, "migrated_hangar_v6": true, "account_scrap": 30000})
+	_check(GameState.endless.is_empty() and GameState.supplies_armed.is_empty() and GameState.crate_cosmetics.is_empty() and GameState.account_scrap == 30000, "old save: sinks start empty, scrap kept")
+	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "migrated_hangar_v5": true, "migrated_hangar_v6": true,
+		"endless": {"damage": -3, "bogus": 5, "speed": 4.0, "scrap": "x"}, "supplies_armed": ["medkit", "medkit", "nope", 7],
+		"crate_cosmetics": {"flag": true, "x": true}, "crates_opened": "lots"})
+	_check(GameState.endless == {"speed": 4} and GameState.supplies_armed == ["medkit"] and GameState.crate_cosmetics == {"flag": true} and GameState.crates_opened == 0, "junk sink data dropped")
+	GameState.endless = {"damage": 7}
+	GameState.supplies_armed = ["plate"]
+	GameState.save_profile()
+	GameState.endless = {}
+	GameState.supplies_armed = []
+	GameState.apply_save(GameState._parse_save(FileAccess.get_file_as_string(GameState.SAVE_PATH)))
+	_check(GameState.endless_level("damage") == 7 and GameState.supply_armed("plate"), "sinks save + load")
+	_check(GameState.has_cosmetic("flag"), "crate cosmetic shows in the hangar")
+	## --- Workbench
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.insured.clear()
+	GameState.camp = {"stash": 1, HangarDefs.INSURANCE_ID: 1}
+	GameState.add_to_stash(GearDefs.make_gear("head", "rare", rng))
+	GameState.add_to_stash(GearDefs.make_gear("chest", "common", rng))
+	GameState.add_to_stash(GearDefs.make_weapon("ash_rook", "common", rng))
+	GameState.add_to_stash(GearDefs.make_gear("vial", "rare", rng))
+	var u_head := int(GameState.stash[0]["uid"])
+	var u_chest := int(GameState.stash[1]["uid"])
+	var u_wpn := int(GameState.stash[2]["uid"])
+	var u_vial := int(GameState.stash[3]["uid"])
+	GameState.toggle_lock(u_head)
+	GameState.account_scrap = 100000
+	var st0: Dictionary = (GameState.stash_item(u_head)["stats"] as Dictionary).duplicate()
+	_check(GameState.reroll_block(u_head) != "" and not GameState.reroll_item(u_head, rng), "reroll refuses a locked item")
+	_check(GameState.account_scrap == 100000 and GameState.stash_item(u_head)["stats"] == st0, "locked: no scrap spent, stats untouched")
+	GameState.toggle_lock(u_head)
+	_check(GameState.reroll_item(u_head, rng) and GameState.account_scrap == 100000 - SS.reroll_cost("rare"), "reroll an unlocked item costs its tier price")
+	_check(str(GameState.stash_item(u_head).get("rarity", "")) == "rare" and not (GameState.stash_item(u_head)["stats"] as Dictionary).is_empty(), "reroll keeps the tier")
+	## Insured + worn: same uid, still insured, still worn.
+	GameState.selected_character_id = "ash_rook"
+	GameState.equip("ash_rook", "chest", u_chest)
+	GameState.set_insured("ash_rook", u_chest)
+	GameState.reroll_item(u_chest, rng)
+	_check(GameState.is_insured(u_chest) and not GameState.equipped_by(u_chest).is_empty(), "reroll keeps insurance + worn slot")
+	_check(GameState.upgrade_item(u_chest, rng) and str(GameState.stash_item(u_chest)["rarity"]) == "rare" and (GameState.stash_item(u_chest)["stats"] as Dictionary).size() == 2, "tier up: common -> rare adds a stat")
+	_check(GameState.is_insured(u_chest), "tier up keeps insurance")
+	GameState.toggle_lock(u_chest)
+	var s1 := GameState.account_scrap
+	_check(GameState.upgrade_item(u_chest, rng) and GameState.account_scrap == s1 - SS.upgrade_cost("rare"), "tier up works on a locked item (keeps its rolls)")
+	_check(GameState.upgrade_item(u_wpn, rng) and str(GameState.stash_item(u_wpn)["rarity"]) == "rare", "weapon tier up")
+	GameState.upgrade_item(u_wpn, rng)
+	_check(GameState.upgrade_block(u_wpn) != "" and GameState.reroll_block(u_wpn) != "", "no Legendary weapons / weapon rerolls")
+	_check(GameState.upgrade_block(u_vial) != "", "Heart Vials stop at Rare")
+	GameState.account_scrap = 0
+	_check(not GameState.reroll_item(u_head, rng) and not GameState.upgrade_item(u_head, rng), "workbench needs the scrap")
+	## --- Crates
+	GameState.stash.clear()
+	GameState.loadouts.clear()
+	GameState.insured.clear()
+	GameState.pending_rewards.clear()
+	GameState.camp = {"stash": 5}
+	GameState.set_auto_salvage_tier(0)
+	GameState.account_scrap = 10000000
+	var kinds := {}
+	var gear_r := {}
+	var spent_ok := true
+	for i in range(120):
+		var before := GameState.account_scrap
+		var res := GameState.open_crate("relic", rng)
+		kinds[str(res["type"])] = int(kinds.get(str(res["type"]), 0)) + 1
+		if str(res["type"]) == "gear":
+			gear_r[str(res["item"]["rarity"])] = true
+		if GameState.account_scrap != before - SS.crate_price("relic") + int(res["scrap"]):
+			spent_ok = false
+	_check(spent_ok, "crate charges its fixed price")
+	_check(not gear_r.has("common") and not gear_r.has("rare") and gear_r.has("epic"), "relic odds: epic+ only %s" % [gear_r.keys()])
+	_check(kinds.has("gear") and kinds.has("pet") and (kinds.has("cosmetic") or kinds.has("dup")), "relic: gear, pet items, cosmetics %s" % [kinds])
+	var all_cos := true
+	for cz in SS.COSMETIC_IDS:
+		all_cos = all_cos and GameState.has_cosmetic(str(cz))
+	_check(all_cos, "120 relic crates found every cosmetic")
+	for i in range(30):
+		var res2 := GameState.open_crate("kennel", rng)
+		if str(res2["type"]) == "gear" or (str(res2["type"]) == "pet" and str(res2["item"]["rarity"]) in ["common", "legendary"]):
+			_check(false, "kennel crate: pet items rare/epic only")
+			break
+	## Auto-salvage tier applies to crate drops; Legendary is never salvaged.
+	GameState.set_auto_salvage_tier(3)
+	var salv := 0
+	var bad_salv := false
+	for i in range(60):
+		var res3 := GameState.open_crate("scav", rng)
+		if str(res3["where"]) == "salvaged":
+			salv += 1
+			if str(res3["item"]["rarity"]) == "legendary" or int(res3["scrap"]) <= 0:
+				bad_salv = true
+	_check(salv > 0 and not bad_salv, "auto-salvage takes crate drops at its tier (%d)" % salv)
+	GameState.set_auto_salvage_tier(0)
+	GameState.camp = {"stash": 0}
+	while GameState.stash.size() < GameState.stash_capacity():
+		GameState.add_to_stash(GearDefs.make_gear("head", "common", rng))
+	var held0 := GameState.pending_rewards.size()
+	var got_held := false
+	for i in range(10):
+		var res4 := GameState.open_crate("hardened", rng)
+		if str(res4["where"]) == "held":
+			got_held = true
+	_check(got_held and GameState.pending_rewards.size() > held0, "full stash: crate drops wait, never lost")
+	GameState.account_scrap = 100
+	_check(not bool(GameState.open_crate("scav", rng)["ok"]) and GameState.account_scrap == 100, "crate needs the scrap")
+	_check(SS.odds_line(SS.CRATES["scav"]["kind"]) == "Gear 80% · Pet item 15% · Cosmetic 5%", "odds shown as rolled")
+	for cid in SS.CRATE_ORDER:
+		var t := 0
+		for k in (SS.CRATES[cid]["kind"] as Dictionary).values():
+			t += int(k)
+		var t2 := 0
+		for k2 in (SS.CRATES[cid]["rarity"] as Dictionary).values():
+			t2 += int(k2)
+		_check(t == 100 and t2 == 100, "crate %s odds add to 100%%" % cid)
+	## --- Next-run supplies
+	GameState.account_scrap = 5000
+	GameState.supplies_armed = []
+	_check(GameState.buy_supply("medkit") and not GameState.buy_supply("medkit") and GameState.account_scrap == 5000 - SS.supply_price("medkit"), "supply: one of each")
+	GameState.buy_supply("plate")
+	GameState.run_kind = "daily"
+	GameState._use_supplies()
+	_check(GameState.run_supplies.is_empty() and GameState.supplies_armed.size() == 2, "daily run leaves supplies packed")
+	GameState.run_kind = "wander"
+	GameState._use_supplies()
+	_check(GameState.supplies_armed.is_empty() and GameState.supply_on("medkit") and is_equal_approx(GameState.supply_taken_mult(), 0.85), "wander run uses them up")
+	_check(not GameState.use_medkit(50.0, 100.0) and GameState.use_medkit(20.0, 100.0) and not GameState.use_medkit(10.0, 100.0), "med kit fires once, under 30%")
+	GameState._use_supplies()
+	_check(GameState.run_supplies.is_empty(), "next run: nothing left")
+	## --- Screens
+	GameState.stash.clear()
+	GameState.camp = {"stash": 2}
+	GameState.endless = {}
+	GameState.supplies_armed = []
+	GameState.account_scrap = 30000
+	GameState.add_to_stash(GearDefs.make_gear("hands", "epic", rng))
+	var u_h := int(GameState.stash[0]["uid"])
+	GameState.toggle_lock(u_h)
+	var host: Node = (load("res://scenes/ui/hangar.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(host)
+	## iPhone 375x812 with XL text, 390x844 at normal and XL (2x pixels).
+	var keep_win := get_tree().root.size
+	var keep_ts := UiTheme.text_size_index()
+	for pass_i in range(3):
+		var ts: int = [2, 0, 2][pass_i]
+		get_tree().root.size = [Vector2i(750, 1624), Vector2i(780, 1688), Vector2i(780, 1688)][pass_i]
+		UiTheme.set_text_size(ts)
+		for i in range(3):
+			await get_tree().process_frame
+		host.call("show_tab", "camp")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(host.find_child("OverdriveGrid", true, false) != null and (host.find_child("OverdriveGrid", true, false) as Node).get_child_count() == 6, "camp tab: 6 Overdrive cards")
+		_fit_check(host, "camp ts%d %s" % [ts, get_viewport().get_visible_rect().size])
+		host.call("show_tab", "survivors")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(host.find_child("SuppliesGrid", true, false) != null, "crew tab: supplies")
+		_fit_check(host, "crew ts%d" % ts)
+		host.call("show_tab", "stash")
+		await get_tree().process_frame
+		if host.find_child("CrateGrid", true, false) == null:
+			host.call("toggle_crates")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(host.find_child("CrateGrid", true, false) != null, "stash: crate cards")
+		_fit_check(host, "stash+crates ts%d" % ts)
+		host.call("inspect_item", u_h)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var rb := host.find_child("Bench_REROLL", true, false) as Button
+		_check(rb != null and rb.disabled and host.find_child("Bench_TIER_UP", true, false) != null, "item card: locked reroll greyed")
+		_fit_check(host, "item card ts%d" % ts)
+		host.call("close_popup")
+		host.call("open_crate", "scav")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(host.find_child("CratePopup", true, false) != null, "crate result popup")
+		_fit_check(host, "crate popup ts%d" % ts)
+		host.call("close_popup")
+		await get_tree().process_frame
+	get_tree().root.size = keep_win
+	UiTheme.set_text_size(keep_ts)
+	await get_tree().process_frame
+	## Two-tap on an Overdrive card.
+	host.call("show_tab", "camp")
+	await get_tree().process_frame
+	var bb := host.find_child("Buy_od_damage", true, false) as Button
+	var s0 := GameState.account_scrap
+	if bb:
+		bb.emit_signal("pressed")
+		_check(GameState.endless_level("damage") == 0 and bb.text == "BUY?" and GameState.account_scrap == s0, "overdrive: first tap arms")
+		bb.emit_signal("pressed")
+		_check(GameState.endless_level("damage") == 1 and GameState.account_scrap == s0 - SS.ENDLESS["damage"]["base"], "overdrive: second tap buys")
+	else:
+		_check(false, "overdrive damage card")
+	host.queue_free()
+	await get_tree().process_frame
+	GameState.account_scrap = keep[0]
+	GameState.stash = keep[1]
+	GameState.endless = keep[2]
+	GameState.supplies_armed = keep[3]
+	GameState.crate_cosmetics = keep[4]
+	GameState.insured = keep[5]
+	GameState.loadouts = keep[6]
+	GameState.pending_rewards = keep[7]
+	GameState.salvage_bin = keep[8]
+	GameState.settings["auto_salvage_tier"] = keep[9]
+	GameState.camp = keep[10]
+	GameState.milestones = keep[11]
+	GameState.run_supplies = []
+	GameState._compute_gear()
+	GameState.reset_loadout_to_defaults()
+
+
+## No visible control in `root` reaches past the right edge of the screen, and
+## no popup panel is taller than it.
+func _fit_check(root: Node, what: String) -> void:
+	var vw := get_viewport().get_visible_rect().size
+	var worst := ""
+	for n in root.find_children("*", "Control", true, false):
+		var c := n as Control
+		if not c.is_visible_in_tree() or c.size.x <= 0.0:
+			continue
+		var r := c.get_global_rect()
+		if r.end.x > vw.x + 1.0 or r.position.x < -1.0:
+			worst = "%s %s" % [c.name, r]
+			break
+		## Outside a scroll list nothing may hang off the bottom either (popups).
+		var in_scroll := false
+		var pn := c.get_parent()
+		while pn != null and pn != root:
+			if pn is ScrollContainer:
+				in_scroll = true
+				break
+			pn = pn.get_parent()
+		if not in_scroll and r.end.y > vw.y + 1.0:
+			worst = "%s %s (below)" % [c.name, r]
+			break
+	_check(worst == "", "fit %s at %s: %s" % [what, vw, worst])

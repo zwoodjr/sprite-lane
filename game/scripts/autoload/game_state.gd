@@ -140,11 +140,22 @@ var run_has_cell: bool = false
 var run_job_rewards: Dictionary = {}
 var jobs_done_run: int = 0
 
+## Scrap sinks (ScrapSinkDefs): Overdrive levels (id -> level, uncapped),
+## next-run supplies bought and waiting, crate cosmetics owned.
+var endless: Dictionary = {}
+var supplies_armed: Array = []
+var crate_cosmetics: Dictionary = {}
+var crates_opened: int = 0
+## This run's supplies (consumed at deploy) and whether the Med Kit fired.
+var run_supplies: Array = []
+var run_medkit_used: bool = false
+
 
 ## Player settings + onboarding flags (persisted to user://).
 const SAVE_PATH := "user://wanderer_save.json"
 const CraftDefs = preload("res://scripts/data/craft_defs.gd")
 const PetGear = preload("res://scripts/data/pet_gear_defs.gd")
+const ScrapSinks = preload("res://scripts/data/scrap_sink_defs.gd")
 const SAVE_VERSION := 4
 ## Rolling backup (the save before the latest) + where an unreadable save is kept.
 const SAVE_BAK_PATH := "user://wanderer_save.bak"
@@ -333,6 +344,10 @@ func save_profile() -> void:
 		"weekly_opt_in": weekly_opt_in,
 		"daily_runs": daily_runs,
 		"run_history": run_history,
+		"endless": endless,
+		"supplies_armed": supplies_armed,
+		"crate_cosmetics": crate_cosmetics,
+		"crates_opened": crates_opened,
 	}
 	## A daily run borrows the day's tier / hero / pet: save the player's own.
 	if daily_armed and not _daily_restore.is_empty():
@@ -621,6 +636,30 @@ func _load_extras(d: Dictionary) -> void:
 		for e in (rh as Array):
 			if typeof(e) == TYPE_DICTIONARY and run_history.size() < RUN_HISTORY_MAX:
 				run_history.append(_clean_history(e))
+	_load_sinks(d)
+
+
+## Scrap sinks. Old saves have none of these keys: everything starts at zero.
+## Unknown ids, negative levels and wrong types are dropped, never trusted.
+func _load_sinks(d: Dictionary) -> void:
+	endless = {}
+	var en := _dict_or_empty(d.get("endless", {}))
+	for k in en.keys():
+		var lv := int(en[k]) if typeof(en[k]) in [TYPE_INT, TYPE_FLOAT] else 0
+		if ScrapSinks.ENDLESS.has(str(k)) and lv > 0:
+			endless[str(k)] = mini(lv, 100000)
+	supplies_armed = []
+	var sa: Variant = d.get("supplies_armed", [])
+	if typeof(sa) == TYPE_ARRAY:
+		for x in (sa as Array):
+			if ScrapSinks.SUPPLIES.has(str(x)) and not (str(x) in supplies_armed):
+				supplies_armed.append(str(x))
+	crate_cosmetics = {}
+	var cc := _dict_or_empty(d.get("crate_cosmetics", {}))
+	for k in cc.keys():
+		if str(k) in ScrapSinks.COSMETIC_IDS and bool(cc[k]):
+			crate_cosmetics[str(k)] = true
+	crates_opened = maxi(0, int(d.get("crates_opened", 0)) if typeof(d.get("crates_opened", 0)) in [TYPE_INT, TYPE_FLOAT] else 0)
 
 
 func _clean_daily(e: Dictionary) -> Dictionary:
@@ -1150,7 +1189,7 @@ func ammo_odds_mult() -> float:
 
 ## Survivor station + gear damage for the selected hero.
 func starting_damage_bonus() -> float:
-	return HangarDefs.station_weapon_damage(station_rank()) + gear_stat("damage")
+	return HangarDefs.station_weapon_damage(station_rank()) + gear_stat("damage") + endless_bonus("damage")
 
 ## Ability dict for the selected hero with its station + survivor set applied.
 func hero_ability() -> Dictionary:
@@ -1290,10 +1329,10 @@ func move_speed_bonus() -> float:
 	var m := gear_stat("move")
 	if has_set("night_runner", 2):
 		m += float(GearDefs.GENERAL_SETS["night_runner"]["move"])
-	return m + pact_fx("move")
+	return m + pact_fx("move") + endless_bonus("speed")
 
 func pickup_radius_bonus() -> float:
-	return gear_stat("pickup")
+	return gear_stat("pickup") + float(endless_level("magnet")) * ScrapSinks.MAGNET_PX_PER_LEVEL
 
 ## Pet Bond levels (extracting with the dog close by) add pet damage.
 func pet_power_mult() -> float:
@@ -2560,6 +2599,8 @@ func milestone_progress(id: String) -> int:
 	return _milestone_progress(QuestDefs.milestone(id))
 
 func has_cosmetic(c: String) -> bool:
+	if bool(crate_cosmetics.get(c, false)):
+		return true
 	for m in QuestDefs.MILESTONES:
 		if str(m.get("cosmetic", "")) == c and bool(milestones.get(str(m["id"]), false)):
 			return true
@@ -2625,6 +2666,10 @@ func reset_profile() -> void:
 	weekly_opt_in = false
 	daily_runs = {}
 	run_history = []
+	endless = {}
+	supplies_armed = []
+	crate_cosmetics = {}
+	crates_opened = 0
 	ensure_default_pet_gear()
 	save_profile()
 	meta_changed.emit()
@@ -2722,6 +2767,7 @@ func begin_run(drink_tonics: bool = true) -> void:
 	jobs_done_run = 0
 	if drink_tonics:
 		_drink_tonics()
+		_use_supplies()
 	## Reset in-run track completely.
 	run_xp = 0
 	run_level = 1
@@ -2788,7 +2834,7 @@ func total_find_mult() -> float:
 
 ## Add bag scrap with every find bonus applied.
 func add_scrap(amount: int) -> int:
-	var gained := maxi(0, int(round(float(amount) * total_find_mult() * event_scrap_mult * pact_fx("scrap"))))
+	var gained := maxi(0, int(round(float(amount) * total_find_mult() * event_scrap_mult * pact_fx("scrap") * sink_scrap_mult())))
 	scrap_found += gained
 	return gained
 
@@ -3825,7 +3871,7 @@ const LIVE_RUN_KEYS := {
 	"run_pack_locked": "b", "run_has_cell": "b",
 	"run_mods": "d", "run_ranks": "d", "run_kind_kills": "d", "run_ammo_seen": "d",
 	"run_materials": "d", "run_pack": "d", "run_job_rewards": "d",
-	"run_picks_taken": "a", "run_loot": "a", "run_tonics": "a",
+	"run_picks_taken": "a", "run_loot": "a", "run_tonics": "a", "run_supplies": "a", "run_medkit_used": "b",
 	"extract_bonus_notes": "s", "result_unlocks_pending": "s",
 	"run_time": "f", "run_dust_mods": "a", "run_kind": "t", "run_daily_date": "t",
 }
@@ -4118,3 +4164,297 @@ func _whole_numbers(d: Dictionary) -> Dictionary:
 			v = int(v)
 		out[str(k)] = v
 	return out
+
+
+## =============================================================================
+## Scrap sinks (ScrapSinkDefs): Overdrive, Workbench, Supply Crates, Supplies.
+
+## --- Overdrive: uncapped +1% upgrades ---------------------------------------
+
+func endless_level(id: String) -> int:
+	return int(endless.get(id, 0))
+
+func endless_cost_next(id: String) -> int:
+	return ScrapSinks.endless_cost(id, endless_level(id))
+
+func endless_bonus(id: String) -> float:
+	return ScrapSinks.endless_value(id, endless_level(id))
+
+func try_buy_endless(id: String) -> bool:
+	var c := endless_cost_next(id)
+	if c < 0 or account_scrap < c:
+		return false
+	account_scrap -= c
+	endless[id] = endless_level(id) + 1
+	save_profile()
+	meta_changed.emit()
+	return true
+
+## Damage taken: 1% less per Plate Liner level, compounding (never reaches 0).
+func endless_taken_mult() -> float:
+	return pow(1.0 - float(ScrapSinks.ENDLESS["defense"]["per"]), float(endless_level("defense")))
+
+func endless_hp_mult() -> float:
+	return 1.0 + endless_bonus("vitality")
+
+## Scrap found: Sharp Eye levels and this run's Scrap Charm (after the find cap).
+func sink_scrap_mult() -> float:
+	return (1.0 + endless_bonus("scrap")) * (1.0 + supply_fx("scrap"))
+
+## --- Workbench: reroll / raise tier -----------------------------------------
+## Both change the item in place: same uid, so it stays worn, locked and
+## insured. Locked items are never rerolled (a reroll can only lose what you
+## locked it for); raising the tier keeps every roll and only scales it up.
+
+## "" = can reroll, else why not.
+func reroll_block(uid: int) -> String:
+	var it := stash_item(uid)
+	if it.is_empty():
+		return "No item"
+	if bool(it.get("locked", false)):
+		return "Locked: unlock it to reroll"
+	if not (str(it.get("kind", "")) in ["armor", "accessory"]) or (it.get("stats", {}) as Dictionary).is_empty():
+		return "No rolled stats to reroll"
+	if account_scrap < ScrapSinks.reroll_cost(str(it.get("rarity", "common"))):
+		return "Not enough scrap"
+	return ""
+
+func reroll_item(uid: int, rng: RandomNumberGenerator = null) -> bool:
+	if reroll_block(uid) != "":
+		return false
+	var it := stash_item(uid)
+	var r := rng
+	if r == null:
+		r = RandomNumberGenerator.new()
+		r.randomize()
+	account_scrap -= ScrapSinks.reroll_cost(str(it.get("rarity", "common")))
+	it["stats"] = GearDefs._roll_stats(str(it.get("slot", "")), str(it.get("rarity", "common")), r)
+	_after_workbench()
+	return true
+
+## "" = can raise the tier, else why not.
+func upgrade_block(uid: int) -> String:
+	var it := stash_item(uid)
+	if it.is_empty():
+		return "No item"
+	var rar := str(it.get("rarity", "common"))
+	var nr := ScrapSinks.next_rarity(rar)
+	if nr == "":
+		return "Already Legendary"
+	match str(it.get("kind", "")):
+		"petgear":
+			if str(it.get("pet_type", "")) == "war_dog_rig" or GearDefs.RARITIES.find(nr) > GearDefs.RARITIES.find(ScrapSinks.PET_UPGRADE_MAX):
+				return "Top tier for pet gear"
+		"weapon":
+			if nr == "legendary":
+				return "Legendary weapons are found, not built"
+			if _weapon_variant_at(str(it.get("hero", "")), nr).is_empty():
+				return "No stronger version"
+		"armor", "accessory":
+			if str(it.get("slot", "")) == "vial" and nr in GearDefs.HEART_VIAL_RARITIES and not bool(it.get("needs_heart", false)):
+				return "Heart Vials can't be raised past Rare"
+		"mod":
+			pass
+		_:
+			return "Can't be upgraded"
+	if account_scrap < ScrapSinks.upgrade_cost(rar):
+		return "Not enough scrap"
+	return ""
+
+func _weapon_variant_at(hero: String, rarity: String) -> Dictionary:
+	for v in GearDefs.variants(hero):
+		if str(v.get("rarity", "")) == rarity and str(v.get("legendary", "")) == "":
+			return v
+	return {}
+
+func upgrade_item(uid: int, rng: RandomNumberGenerator = null) -> bool:
+	if upgrade_block(uid) != "":
+		return false
+	var it := stash_item(uid)
+	var r := rng
+	if r == null:
+		r = RandomNumberGenerator.new()
+		r.randomize()
+	var old := str(it.get("rarity", "common"))
+	var nr := ScrapSinks.next_rarity(old)
+	account_scrap -= ScrapSinks.upgrade_cost(old)
+	match str(it.get("kind", "")):
+		"petgear":
+			var pg := PetGear.make(str(it.get("pet_type", "")), nr, r)
+			it["fx"] = pg["fx"]
+			if str(it.get("bound", "")) == "":
+				it["name"] = pg["name"]
+		"mod":
+			var m := GearDefs.make_mod(str(it.get("mod", "")), nr)
+			it["name"] = m["name"]
+		"weapon":
+			var v := _weapon_variant_at(str(it.get("hero", "")), nr)
+			it["variant"] = str(v["id"])
+			it["name"] = str(v["name"])
+			it["coat"] = str(v.get("element", ""))
+		_:
+			_raise_stats(it, old, nr, r)
+	it["rarity"] = nr
+	_after_workbench()
+	return true
+
+## Scale every roll by the rarity step; add the stat a higher tier carries.
+func _raise_stats(it: Dictionary, old: String, nr: String, r: RandomNumberGenerator) -> void:
+	var st: Dictionary = (it.get("stats", {}) as Dictionary).duplicate()
+	var k := float(GearDefs.RARITY_MULT[nr]) / float(GearDefs.RARITY_MULT[old])
+	for s in st.keys():
+		st[s] = GearDefs._round_stat(str(s), float(st[s]) * k)
+	var pool: Array = (GearDefs.SLOT_STATS.get(str(it.get("slot", "")), ["max_hp"]) as Array).duplicate()
+	var want := mini(mini(int(GearDefs.RARITY_STATS[nr]), 2), pool.size())
+	var have := 0
+	for s in pool:
+		if st.has(s):
+			have += 1
+	for s in st.keys():
+		pool.erase(s)
+	while have < want and not pool.is_empty():
+		var ns: String = pool[r.randi() % pool.size()]
+		pool.erase(ns)
+		st[ns] = GearDefs._round_stat(ns, float(GearDefs.STAT_BASE[ns]) * float(GearDefs.RARITY_MULT[nr]) * r.randf_range(0.85, 1.15))
+		have += 1
+	if nr == "legendary":
+		var ex: String = GearDefs.EXTRA_STATS[r.randi() % GearDefs.EXTRA_STATS.size()]
+		st[ex] = GearDefs._round_stat(ex, float(st.get(ex, 0.0)) + float(GearDefs.STAT_BASE[ex]))
+	it["stats"] = st
+	## "Worn Visor" -> "Sturdy Visor" (set / named pieces keep their name).
+	var nm := str(it.get("name", ""))
+	for adj in (GearDefs.RARITY_ADJ.get(old, []) as Array):
+		if nm.begins_with(str(adj) + " "):
+			var na: Array = GearDefs.RARITY_ADJ[nr]
+			it["name"] = str(na[r.randi() % na.size()]) + nm.substr(str(adj).length())
+			break
+
+func _after_workbench() -> void:
+	_compute_gear()
+	reset_loadout_to_defaults()
+	save_profile()
+	meta_changed.emit()
+
+## --- Supply crates ------------------------------------------------------------
+## {"ok", "why", "type": gear|pet|cosmetic|dup, "item", "where": stash|held|salvaged,
+##  "scrap" (auto-salvage / duplicate refund), "cosmetic"}.
+func open_crate(cid: String, rng: RandomNumberGenerator = null) -> Dictionary:
+	var c: Dictionary = ScrapSinks.CRATES.get(cid, {})
+	if c.is_empty():
+		return {"ok": false, "why": "Unknown crate"}
+	var price := int(c["price"])
+	if account_scrap < price:
+		return {"ok": false, "why": "Not enough scrap"}
+	var r := rng
+	if r == null:
+		r = RandomNumberGenerator.new()
+		r.randomize()
+	account_scrap -= price
+	crates_opened += 1
+	var out := {"ok": true, "why": "", "type": "", "item": {}, "where": "", "scrap": 0, "cosmetic": ""}
+	var kind := ScrapSinks.pick(c["kind"], r)
+	match kind:
+		"cosmetic":
+			var left: Array = []
+			for cz in ScrapSinks.COSMETIC_IDS:
+				if not has_cosmetic(str(cz)):
+					left.append(str(cz))
+			if left.is_empty():
+				var back := int(floor(float(price) * ScrapSinks.COSMETIC_DUP_REFUND))
+				account_scrap += back
+				out["type"] = "dup"
+				out["scrap"] = back
+			else:
+				var pick := str(left[r.randi() % left.size()])
+				crate_cosmetics[pick] = true
+				out["type"] = "cosmetic"
+				out["cosmetic"] = pick
+		_:
+			var rar := ScrapSinks.pick(c["rarity"], r)
+			var it: Dictionary
+			if kind == "pet":
+				if GearDefs.RARITIES.find(rar) > GearDefs.RARITIES.find(ScrapSinks.PET_UPGRADE_MAX):
+					rar = ScrapSinks.PET_UPGRADE_MAX
+				var types: Array = PetGear.TYPES.keys()
+				it = PetGear.make(str(types[r.randi() % types.size()]), rar, r)
+			else:
+				it = _crate_gear(rar, r)
+			out["type"] = kind
+			_place_crate_item(it, out)
+	save_profile()
+	meta_changed.emit()
+	return out
+
+## A gear piece at exactly `rarity` (kind weights as drops; sets as drops).
+func _crate_gear(rarity: String, r: RandomNumberGenerator) -> Dictionary:
+	var hero := selected_character_id
+	var k := GearDefs._weighted_key(GearDefs.KIND_WEIGHT, r)
+	match k:
+		"weapon":
+			return GearDefs.make_weapon(hero, rarity, r)
+		"mod":
+			return GearDefs.make_mod(GearDefs.random_mod_id(GearDefs.is_melee_hero(hero), r), rarity)
+		"accessory":
+			return GearDefs.make_gear(GearDefs.ACCESSORY_SLOTS[r.randi() % GearDefs.ACCESSORY_SLOTS.size()], rarity, r)
+	var set_kind := ""
+	if rarity in ["epic", "legendary"] and r.randf() < GearDefs.SET_CHANCE:
+		set_kind = "survivor" if r.randf() < GearDefs.SURVIVOR_SET_SHARE else "general"
+	return GearDefs.make_gear(GearDefs.ARMOR_SLOTS[r.randi() % GearDefs.ARMOR_SLOTS.size()], rarity, r, set_kind, hero)
+
+## Auto-salvage tier applies like an extract (scrap + BUY BACK); a full stash
+## holds the piece (pending_rewards) instead of losing it.
+func _place_crate_item(it: Dictionary, out: Dictionary) -> void:
+	if auto_salvageable(it):
+		out["scrap"] = _salvage_found(it, 1.0)
+		out["where"] = "salvaged"
+		out["item"] = salvage_bin[0]["item"] if not salvage_bin.is_empty() else it
+	elif add_to_stash(it):
+		out["where"] = "stash"
+		out["item"] = stash.back()
+	else:
+		pending_rewards.append(it)
+		out["where"] = "held"
+		out["item"] = it
+
+## --- Next-run supplies ---------------------------------------------------------
+
+func supply_armed(sid: String) -> bool:
+	return sid in supplies_armed
+
+func buy_supply(sid: String) -> bool:
+	var p := ScrapSinks.supply_price(sid)
+	if p < 0 or supply_armed(sid) or account_scrap < p:
+		return false
+	account_scrap -= p
+	supplies_armed.append(sid)
+	save_profile()
+	meta_changed.emit()
+	return true
+
+## Deploy: a Wander run uses up every armed supply (Daily / Campaign keep them).
+func _use_supplies() -> void:
+	run_supplies = []
+	run_medkit_used = false
+	if run_kind != "wander":
+		return
+	run_supplies = supplies_armed.duplicate()
+	supplies_armed.clear()
+
+func supply_on(sid: String) -> bool:
+	return sid in run_supplies
+
+func supply_fx(key: String) -> float:
+	var t := 0.0
+	for sid in run_supplies:
+		t += float((ScrapSinks.SUPPLIES.get(str(sid), {}) as Dictionary).get(key, 0.0))
+	return t
+
+func supply_taken_mult() -> float:
+	return float(ScrapSinks.SUPPLIES["plate"]["taken"]) if supply_on("plate") else 1.0
+
+## Med Kit: true once per run when a hit leaves you under the line.
+func use_medkit(hp: float, max_hp: float) -> bool:
+	if run_medkit_used or not supply_on("medkit") or hp <= 0.0 or hp >= max_hp * float(ScrapSinks.SUPPLIES["medkit"]["below"]):
+		return false
+	run_medkit_used = true
+	return true

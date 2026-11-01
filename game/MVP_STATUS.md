@@ -1,5 +1,32 @@
 # MVP status (repo mirror)
 
+**Latest (scrap sinks: Overdrive, Workbench, Supply Crates, Next-run Supplies):**
+
+A maxed bunker left late saves sitting on 30k+ scrap. Four sinks, all with the Hangar's two-column cards and the two-tap BUY? confirm:
+
+- **Overdrive (HANGAR tab, under the camp cards).** Six uncapped permanent upgrades, +1% per level: Hot Loads (damage), Plate Liner (damage taken ×0.99 per level, so it never reaches zero), Field Rations (max HP), Light Boots (move speed), Long Reach (pickup range, +2 px per level) and Sharp Eye (scrap found, applied after the find cap).
+  - Price = base × 1.25^level (bases 300–600). 30k spent on the cheapest level each time buys 36 levels, at least 5 on every track. 30k on one track buys about 12. Level 20 costs 26–52k and level 40 costs 2.3–4.5M. Prices stop rising at 1e15, so nothing overflows and nothing ever ends.
+- **Workbench (STASH tab → tap an item).** REROLL gives new stats at the same tier: 150 / 400 / 1,000 / 2,500 by rarity. TIER UP keeps the rolls, scales them to the next rarity and adds the stat that tier carries: 600 / 2,000 / 6,000.
+  - Locked items are never rerolled; the button is greyed and says why. TIER UP still works on them because it can't lose a roll.
+  - Items are changed in place (same uid), so worn, insured and locked flags stay.
+  - Weapons and mods can tier up, but not into a Legendary weapon. Pet gear tops out at Epic. Heart Vials stop at Rare.
+- **Supply Crates (STASH tab → SUPPLY CRATES: SHOW).** Each card shows the exact odds it rolls.
+
+  | Crate | Price | Drop | Rarity |
+  |---|---|---|---|
+  | Scav | 1,200 | Gear 80 · Pet item 15 · Cosmetic 5 | C 55 · R 35 · E 9 · L 1 |
+  | Kennel | 2,500 | Pet item 85 · Cosmetic 15 | R 70 · E 30 |
+  | Hardened | 3,500 | Gear 75 · Pet item 18 · Cosmetic 7 | R 65 · E 30 · L 5 |
+  | Relic | 9,000 | Gear 85 · Pet item 7 · Cosmetic 8 | E 80 · L 20 |
+
+  - Cosmetics are the five hangar decorations (banner, flag, campfire, toys, case), unlocked early. A repeat pays back half the price.
+  - Auto-salvage tiers apply to drops just as on extract: scrap plus BUY BACK, never a Legendary.
+  - With a full stash, the drop waits in held items. AGAIN on the result card re-buys, also with two taps.
+- **Next-run supplies (CREW tab, top).** Med Kit 300: heals 50% once, when a hit leaves you under 30%. Armor Plate 400: −15% damage taken. Head Start 500: run level 2 right after the drop. Scrap Charm 450: +15% scrap.
+  - One of each can be packed. The next Wander run uses them up; Daily and Campaign runs leave them packed. They survive a force-quit resume.
+- **Save:** new keys `endless`, `supplies_armed`, `crate_cosmetics` and `crates_opened`. Old saves load with all four empty, and junk values (unknown ids, negative levels, wrong types) are dropped.
+- **Tests:** `_test_scrap_sinks` covers the cost curves (every level costs more, the 30k budget, no end, no overflow), that locked items never reroll, that insurance survives a reroll or tier-up, crate prices, odds and auto-salvage, supplies, save migration and the two-tap buy. It also fits every new card and popup at 375×812 with XL text and at 390×844, with nothing past the screen edge.
+
 **Latest (pet gear + bond perks):**
 
 - **Pet gear slot.** Each pet has one gear slot, managed under Kennel → CHANGE / INSURE. The pet select screen shows the worn piece.

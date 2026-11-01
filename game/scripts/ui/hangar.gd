@@ -18,6 +18,7 @@ const PET_ON_BED := {"noel": Vector2(110, 141.5), "bentley": Vector2(125, 141.5)
 ## Painted layers are cropped PNGs; this gives each one's rect on the painted canvas.
 const ART_LAYOUT := preload("res://scripts/data/hangar_art_layout.gd")
 const MenuFlow = preload("res://scripts/ui/menu_flow.gd")
+const ScrapSinks = preload("res://scripts/data/scrap_sink_defs.gd")
 
 var _scrap_label: Label
 var _view: Control
@@ -348,7 +349,10 @@ func _rebuild() -> void:
 			cb.mouse_force_pass_scroll_events = true
 			cb.pressed.connect(open_crafter)
 			_list.add_child(cb)
+			_build_overdrive()
 		"survivors":
+			_build_supplies()
+			_list.add_child(_section("SURVIVORS"))
 			_list.add_child(_note("Each survivor's weapon and signature trick."))
 			var ids: Array = HangarDefs.ids_for("station")
 			## Selected survivor first.
@@ -530,25 +534,319 @@ func _grid_card(id: String, icon: Texture2D) -> PanelContainer:
 
 
 ## First tap arms (BUY?), second tap within 3 s buys.
-func _price_tap(id: String, btn: Button, cost: int) -> void:
+## `action` runs on the second tap (default: a camp rank); `label` is a verb
+## shown before the price ("REROLL 400" arms as "REROLL?").
+func _price_tap(id: String, btn: Button, cost: int, action: Callable = Callable(), label: String = "") -> void:
 	if _armed_id == id:
 		_armed_id = ""
-		buy(id)
+		if action.is_valid():
+			action.call()
+		else:
+			buy(id)
 		return
 	_armed_id = id
 	Juice.sfx("ui_tap")
-	btn.remove_theme_font_override("font")
-	btn.add_theme_font_size_override("font_size", UiTheme.ui_size(18))
-	btn.text = "BUY?"
+	if label == "":
+		btn.remove_theme_font_override("font")
+		btn.add_theme_font_size_override("font_size", UiTheme.ui_size(18))
+	btn.text = "BUY?" if label == "" else label + "?"
 	UiTheme.skin_button(btn, UiTheme.AMBER, 12.0)
 	get_tree().create_timer(3.0).timeout.connect(func() -> void:
 		if _armed_id == id:
 			_armed_id = ""
 			if is_instance_valid(btn):
-				btn.text = "%d" % cost
-				btn.add_theme_font_override("font", UiTheme.font_pixel)
-				btn.add_theme_font_size_override("font_size", UiTheme.PX_M)
+				btn.text = _price_text(cost, label)
+				if label == "":
+					btn.add_theme_font_override("font", UiTheme.font_pixel)
+					btn.add_theme_font_size_override("font_size", UiTheme.PX_M)
 				UiTheme.skin_button(btn, UiTheme.TEAL, 12.0))
+
+
+func _price_text(cost: int, label: String = "") -> String:
+	return ScrapSinks.short_num(cost) if label == "" else "%s %s" % [label, ScrapSinks.short_num(cost)]
+
+
+## =========================================================================
+## Scrap sinks: Overdrive (camp), Next-run supplies (crew), Supply crates
+## (stash), Workbench reroll / tier-up (stash item card).
+
+func _section(text: String) -> Label:
+	var l := UiTheme.head_label(text, UiTheme.T_H3, UiTheme.AMBER)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return l
+
+
+## Card in the Hangar's two-column style: icon, name, level / state line,
+## description, a two-tap price button (or a disabled state button).
+## `state` "" = buyable at `cost`; anything else is shown on a disabled button.
+func _sink_card(id: String, icon: Texture2D, title: String, sub: String, desc: String, cost: int,
+		state: String, action: Callable, accent: Color = UiTheme.LINE) -> PanelContainer:
+	var p := card(accent, Color(0.11, 0.08, 0.055, 0.92))
+	p.name = "Card_" + id
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var v := VBoxContainer.new()
+	v.mouse_filter = Control.MOUSE_FILTER_PASS
+	v.add_theme_constant_override("separation", 4)
+	p.add_child(v)
+	var ir := TextureRect.new()
+	ir.texture = icon
+	ir.custom_minimum_size = Vector2(0, 72)
+	ir.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ir.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ir.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ir.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(ir)
+	var nm := UiTheme.head_label(title, UiTheme.T_H3, UiTheme.AMBER if accent == UiTheme.AMBER else UiTheme.TEXT)
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(nm)
+	if sub != "":
+		var sl := UiTheme.pixel_label(sub, UiTheme.PX_M, UiTheme.TEAL)
+		sl.name = "Sub"
+		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(sl)
+	var nx := UiTheme.body_label(desc, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	nx.name = "Desc"
+	nx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	nx.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(nx)
+	var btn: Button
+	if state != "":
+		btn = UiTheme.big_button(state, UiTheme.AMBER if state == "ARMED" else UiTheme.LINE, UiTheme.MIN_TOUCH, 16)
+		btn.disabled = true
+		btn.clip_text = true
+	else:
+		var afford := GameState.account_scrap >= cost
+		btn = UiTheme.big_button(ScrapSinks.short_num(cost), UiTheme.TEAL if afford else UiTheme.RUST, UiTheme.MIN_TOUCH, 16)
+		btn.add_theme_font_override("font", UiTheme.font_pixel)
+		btn.add_theme_font_size_override("font_size", UiTheme.PX_M)
+		btn.icon = IconSet.tex("cur_scrap", false)
+		btn.disabled = not afford
+		btn.pressed.connect(_price_tap.bind(id, btn, cost, action))
+	btn.name = "Buy_" + id
+	btn.custom_minimum_size.x = 0
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.mouse_force_pass_scroll_events = true
+	v.add_child(btn)
+	return p
+
+
+## --- Overdrive (Hangar tab): uncapped +1% upgrades ----------------------------
+
+func _build_overdrive() -> void:
+	var hd := _section("OVERDRIVE · NO CAP")
+	hd.name = "OverdriveHeader"
+	_list.add_child(hd)
+	_list.add_child(_note("+1% per level, forever. Each level costs a quarter more than the last."))
+	var g := _grid()
+	g.name = "OverdriveGrid"
+	for id in ScrapSinks.ENDLESS_ORDER:
+		var eid := str(id)
+		var d: Dictionary = ScrapSinks.ENDLESS[eid]
+		var lv := GameState.endless_level(eid)
+		var now := ScrapSinks.endless_text(eid, lv) if lv > 0 else "Not started"
+		g.add_child(_sink_card("od_" + eid, IconSet.tex(str(d["icon"])), str(d["name"]), "LV %d" % lv,
+			"%s\nNext: %s" % [now, ScrapSinks.endless_text(eid, lv + 1)], GameState.endless_cost_next(eid), "",
+			buy_endless.bind(eid), UiTheme.AMBER if lv > 0 else UiTheme.LINE))
+
+
+func buy_endless(id: String) -> bool:
+	if not GameState.try_buy_endless(id):
+		Juice.sfx("ui_denied")
+		_deny_shake()
+		return false
+	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_HIT)
+	_toast("%s  LV %d" % [str(ScrapSinks.ENDLESS[id]["name"]), GameState.endless_level(id)])
+	_rebuild()
+	return true
+
+
+## --- Next-run supplies (Crew tab) ----------------------------------------------
+
+func _build_supplies() -> void:
+	var hd := _section("NEXT RUN SUPPLIES")
+	hd.name = "SuppliesHeader"
+	_list.add_child(hd)
+	_list.add_child(_note("Bought now, used up by your next Wander run. Daily and Campaign runs leave them packed."))
+	var g := _grid()
+	g.name = "SuppliesGrid"
+	for sid in ScrapSinks.SUPPLY_ORDER:
+		var d: Dictionary = ScrapSinks.SUPPLIES[str(sid)]
+		var armed := GameState.supply_armed(str(sid))
+		g.add_child(_sink_card("sup_" + str(sid), IconSet.tex(str(d["icon"])), str(d["name"]), "", str(d["desc"]),
+			int(d["price"]), "ARMED" if armed else "", buy_supply.bind(str(sid)), UiTheme.AMBER if armed else UiTheme.LINE))
+
+
+func buy_supply(sid: String) -> bool:
+	if not GameState.buy_supply(sid):
+		Juice.sfx("ui_denied")
+		_deny_shake()
+		return false
+	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_HIT)
+	_toast("%s packed for the next run" % str(ScrapSinks.SUPPLIES[sid]["name"]))
+	_rebuild()
+	return true
+
+
+## --- Supply crates (Stash tab, folded behind one button) -------------------------
+
+var _crates_open: bool = false
+
+func _build_crates() -> void:
+	var tb := UiTheme.big_button("SUPPLY CRATES: %s" % ("HIDE" if _crates_open else "SHOW"), UiTheme.AMBER if _crates_open else UiTheme.TEAL, 64, 16)
+	tb.name = "CratesToggle"
+	tb.icon = IconSet.tex("hud_loot", false)
+	tb.custom_minimum_size.x = 0
+	tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tb.clip_text = true
+	tb.mouse_force_pass_scroll_events = true
+	tb.pressed.connect(toggle_crates)
+	_list.add_child(tb)
+	if not _crates_open:
+		return
+	var left := 0
+	for cz in ScrapSinks.COSMETIC_IDS:
+		if not GameState.has_cosmetic(str(cz)):
+			left += 1
+	_list.add_child(_note("Odds are exact. Auto-salvage applies to what drops. Cosmetics left: %d (a repeat pays back half)." % left))
+	var g := _grid()
+	g.name = "CrateGrid"
+	for cid in ScrapSinks.CRATE_ORDER:
+		var d: Dictionary = ScrapSinks.CRATES[str(cid)]
+		g.add_child(_sink_card("crate_" + str(cid), IconSet.tex(str(d["icon"])), str(d["name"]), "",
+			"%s\n%s" % [ScrapSinks.odds_line(d["kind"]), ScrapSinks.odds_line(d["rarity"])],
+			int(d["price"]), "", open_crate.bind(str(cid))))
+
+
+func toggle_crates() -> void:
+	_crates_open = not _crates_open
+	Juice.sfx("ui_toggle")
+	_rebuild()
+
+
+## Pay, roll, show what came out (OPEN ANOTHER keeps the two-tap rule).
+func open_crate(cid: String) -> Dictionary:
+	var res := GameState.open_crate(cid)
+	if not bool(res.get("ok", false)):
+		Juice.sfx("ui_denied")
+		_deny_shake()
+		return res
+	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_HIT)
+	_rebuild()
+	if str(res["type"]) == "cosmetic":
+		_refresh_view(true)
+	close_popup()
+	var v := GearUi.overlay(self)
+	_popup = v.get_meta("root")
+	_popup.name = "CratePopup"
+	v.add_child(UiTheme.head_label(str(ScrapSinks.CRATES[cid]["name"]).to_upper(), UiTheme.T_H2, UiTheme.AMBER))
+	var it: Dictionary = res.get("item", {})
+	match str(res["type"]):
+		"cosmetic":
+			var cz := str(res["cosmetic"])
+			v.add_child(UiTheme.title_label(str(ScrapSinks.COSMETIC_NAME.get(cz, cz)), UiTheme.T_H1, UiTheme.AMBER))
+			v.add_child(UiTheme.body_label("New hangar cosmetic. It's up in the hangar now.", UiTheme.T_BODY, UiTheme.TEXT))
+		"dup":
+			v.add_child(UiTheme.body_label("A cosmetic you already own: +%d scrap back." % int(res["scrap"]), UiTheme.T_BODY, UiTheme.TEXT))
+		_:
+			v.add_child(_item_head(it))
+			var lines: Array = PetGear.lines(it) if str(it.get("kind", "")) == "petgear" else Array(GearDefs.stat_lines(it))
+			if not lines.is_empty():
+				var sl := UiTheme.body_label("\n".join(PackedStringArray(lines)), UiTheme.T_BODY, UiTheme.TEXT)
+				sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				v.add_child(sl)
+			var where := {"stash": "Into the stash.", "held": "Stash full: it waits for room (salvage something).",
+				"salvaged": "Auto-salvaged: +%d scrap. BUY BACK undoes it." % int(res["scrap"])}
+			var wl := UiTheme.body_label(str(where.get(str(res["where"]), "")), UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+			wl.name = "CrateWhere"
+			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(wl)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	var price := ScrapSinks.crate_price(cid)
+	var again := UiTheme.big_button(_price_text(price, "AGAIN"), UiTheme.TEAL, 64, 18)
+	again.name = "CrateAgain"
+	again.icon = IconSet.tex("cur_scrap", false)
+	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	again.custom_minimum_size.x = 0
+	again.clip_text = true
+	again.disabled = GameState.account_scrap < price
+	again.pressed.connect(_price_tap.bind("again_" + cid, again, price, open_crate.bind(cid), "AGAIN"))
+	row.add_child(again)
+	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 18)
+	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close.custom_minimum_size.x = 0
+	close.pressed.connect(close_popup)
+	row.add_child(close)
+	return res
+
+
+## --- Workbench (item card): reroll stats / raise the tier ------------------------
+
+func _workbench_row(v: VBoxContainer, uid: int, it: Dictionary) -> void:
+	var rar := str(it.get("rarity", "common"))
+	var row := HBoxContainer.new()
+	row.name = "WorkbenchRow"
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	var why: PackedStringArray = []
+	var specs := [
+		["REROLL", ScrapSinks.reroll_cost(rar), GameState.reroll_block(uid), reroll.bind(uid)],
+		["TIER UP", ScrapSinks.upgrade_cost(rar), GameState.upgrade_block(uid), tier_up.bind(uid)],
+	]
+	for sp in specs:
+		var label := str(sp[0])
+		var cost := int(sp[1])
+		var block := str(sp[2])
+		var b := UiTheme.big_button(_price_text(cost, label) if cost >= 0 else label, UiTheme.TEAL if block == "" else UiTheme.LINE, 64, 18)
+		b.name = "Bench_" + label.replace(" ", "_")
+		b.icon = IconSet.tex("cur_scrap", false) if cost >= 0 else null
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size.x = 0
+		b.clip_text = true
+		b.disabled = block != ""
+		if block == "":
+			b.pressed.connect(_price_tap.bind("bench_%s_%d" % [label, uid], b, cost, sp[3], label))
+		elif not (block in why):
+			why.append("%s: %s" % [label.capitalize(), block])
+		row.add_child(b)
+	var hint := UiTheme.body_label("Reroll: new stats, same tier. Tier up: keeps the rolls and raises them." if why.is_empty() else "\n".join(why),
+		UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	hint.name = "BenchHint"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(hint)
+
+
+func reroll(uid: int) -> bool:
+	if not GameState.reroll_item(uid):
+		Juice.sfx("ui_denied")
+		_deny_shake()
+		return false
+	Juice.sfx("ui_purchase")
+	_toast("Rerolled")
+	_rebuild()
+	inspect_item(uid)
+	return true
+
+
+func tier_up(uid: int) -> bool:
+	if not GameState.upgrade_item(uid):
+		Juice.sfx("ui_denied")
+		_deny_shake()
+		return false
+	Juice.sfx("ui_purchase")
+	Juice.haptic(Juice.HAPTIC_HIT)
+	_toast("Now %s" % str(GearDefs.RARITY_NAME.get(str(GameState.stash_item(uid).get("rarity", "")), "")))
+	_rebuild()
+	inspect_item(uid)
+	return true
 
 
 ## Rank pips: filled teal squares for owned ranks.
@@ -1051,6 +1349,7 @@ func _build_stash() -> void:
 	arow.add_child(sb)
 	if ao:
 		_list.add_child(_note("On extract: %s turn into scrap. Never Legendary, locked, insured, worn or an upgrade. BUY BACK undoes it." % str(GameState.AUTO_SALVAGE_NAMES[GameState.auto_salvage_tier()]).to_lower()))
+	_build_crates()
 	var shown := GameState.stash_view(_sort, _filters)
 	if shown.size() < GameState.stash.size():
 		_list.add_child(_note("Showing %d of %d" % [shown.size(), GameState.stash.size()]))
@@ -1235,10 +1534,11 @@ func inspect_item(uid: int) -> void:
 	sal.disabled = locked
 	sal.pressed.connect(ask_salvage.bind(uid))
 	row2.add_child(sal)
-	lk.tooltip_text = "Locked = can't salvage. Still lost on death."
+	lk.tooltip_text = "Locked = can't salvage or reroll. Still lost on death."
 	var lh := UiTheme.body_label(lk.tooltip_text, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
 	lh.name = "LockHint"
 	v.add_child(lh)
+	_workbench_row(v, uid, it)
 	var close := UiTheme.big_button("CLOSE", UiTheme.LINE, 64, 20)
 	close.pressed.connect(close_popup)
 	v.add_child(close)

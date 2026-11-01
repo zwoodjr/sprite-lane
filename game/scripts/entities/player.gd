@@ -252,6 +252,8 @@ func _refresh_run_stats(reset_ammo: bool) -> void:
 		max_hp *= GameState.quirk_fx("max_hp_mult")
 	## Depth E7 Dust Pact: Brittle Bones.
 	max_hp *= GameState.pact_fx("max_hp")
+	## Overdrive: Field Rations (+1% max HP per level).
+	max_hp *= GameState.endless_hp_mult()
 	damage_mult = (1.0 + GameState.quirk_fx("damage")) * float(_char.get("damage_mult", 1.0)) \
 		* (1.0 + GameState.starting_damage_bonus()) \
 		* (1.0 + float(rm.get("damage", 0.0))) \
@@ -1665,6 +1667,8 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	if _brace_left > 0.0:
 		dmg *= float(_ability.get("brace_mult", 1.0))
 	dmg *= Admin.def_mult() * GameState.craft_taken_mult(attacker) * GameState.zone_guard
+	## Overdrive Plate Liner + this run's Armor Plate.
+	dmg *= GameState.endless_taken_mult() * GameState.supply_taken_mult()
 	## Pet gear / bond perks: dodge and guard while the pet is close.
 	if _pet_near():
 		if randf() < GameState.pet_fx("dodge"):
@@ -1726,6 +1730,10 @@ func take_damage(amount: float, attacker: Node = null) -> void:
 	if not (_anim.is_playing("dash") or _anim.is_playing("ability")):
 		_anim.play("hit")
 	Juice.damage_number(global_position + Vector2(0, -30), dmg, false, UiTheme.DANGER, self)
+	## Next-run Med Kit: one big heal the first time a hit leaves you low.
+	if GameState.use_medkit(hp, max_hp):
+		heal(max_hp * float(GameState.ScrapSinks.SUPPLIES["medkit"]["heal"]))
+		Juice.float_text(global_position + Vector2(0, -50), "MED KIT", UiTheme.TEAL, 22)
 	if hp <= 0.0 and _last_rites:
 		_last_rites = false
 		hp = max_hp * float(GearDefs.SURVIVOR_SETS["cathedral_vestments"]["revive_frac"])
