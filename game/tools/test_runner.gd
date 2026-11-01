@@ -3342,9 +3342,9 @@ func _test_p2_ui() -> void:
 				small.append("btn %s %dx%d" % [c.name, int(c.size.x), int(c.size.y)])
 		_check(small.is_empty(), "p2: %s readable + tappable %s" % [path.get_file(), ", ".join(small.slice(0, 6))])
 		if path.ends_with("main_menu.tscn"):
-			_check(inst.find_child("QuickDeploy", true, false) != null, "p2: main menu offers Quick Deploy")
+			_check(inst.find_child("Nav_play", true, false) != null, "p2: main menu offers one-tap PLAY")
 		if path.ends_with("hangar.tscn"):
-			_check(inst.find_child("QuickDeploy", true, false) != null, "p2: hangar offers Quick Deploy")
+			_check(inst.find_child("Nav_play", true, false) != null and inst.find_child("NavBar", true, false) != null, "p2: hangar has the tab bar + PLAY")
 		inst.queue_free()
 		await get_tree().process_frame
 	## --- pause cap: top-right, 44-pt target

@@ -29,6 +29,7 @@ var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _scroll_y_keep: int = 0
 var _popup: Control
+var _nav: HBoxContainer
 
 
 func build(c: VBoxContainer) -> void:
@@ -77,41 +78,24 @@ func build(c: VBoxContainer) -> void:
 	_scroll.add_child(_list)
 	_scroll.resized.connect(_sync_list_width)
 
+	## Logbook / Gear / Trophies, then the shared bottom tab bar (PLAY there).
 	var bottom := HBoxContainer.new()
+	bottom.name = "HangarLinks"
 	bottom.add_theme_constant_override("separation", 8)
 	c.add_child(bottom)
-	var log_b := UiTheme.big_button("LOGBOOK", UiTheme.TEAL, 64, 16)
-	log_b.custom_minimum_size.x = 0
-	log_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	log_b.pressed.connect(open_logbook)
-	bottom.add_child(log_b)
-	var gear_b := UiTheme.big_button("GEAR", UiTheme.TEAL, 64, 16)
-	gear_b.custom_minimum_size.x = 0
-	gear_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gear_b.pressed.connect(func() -> void: GameState.go_loadout("hangar"))
-	bottom.add_child(gear_b)
-	var tro_b := UiTheme.big_button("TROPHIES", UiTheme.TEAL, 64, 16)
-	tro_b.custom_minimum_size.x = 0
-	tro_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tro_b.pressed.connect(open_trophies)
-	bottom.add_child(tro_b)
-	var play := UiTheme.big_button("DEPLOY", UiTheme.AMBER, 64, 24)
-	play.custom_minimum_size.x = 0
-	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	play.size_flags_stretch_ratio = 1.4
-	play.pressed.connect(GameState.go_mode_select)
-	if MenuFlow.can_quick_deploy():
-		## Second row, under the thumb: DEPLOY (choose) + QUICK DEPLOY (last run's setup).
-		var go_row := HBoxContainer.new()
-		go_row.add_theme_constant_override("separation", 8)
-		c.add_child(go_row)
-		play.size_flags_stretch_ratio = 0.7
-		go_row.add_child(play)
-		go_row.add_child(MenuFlow.quick_button())
-	else:
-		bottom.add_child(play)
+	for it in [["LOGBOOK", open_logbook], ["GEAR", func() -> void: GameState.go_loadout("hangar")], ["TROPHIES", open_trophies]]:
+		var lb := UiTheme.big_button(str(it[0]), UiTheme.TEAL, UiTheme.MIN_TOUCH, 16)
+		lb.name = "Link_" + str(it[0])
+		lb.custom_minimum_size.x = 0
+		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lb.pressed.connect(it[1])
+		bottom.add_child(lb)
+	_nav = NavBar.make(GameState.hangar_tab if GameState.hangar_tab != "" else "camp", self)
+	c.add_child(_nav)
 
-	show_tab("camp")
+	var start_tab := GameState.hangar_tab if GameState.hangar_tab in TABS else "camp"
+	GameState.hangar_tab = ""
+	show_tab(start_tab)
 	if not GameState.check_milestones().is_empty():
 		GameState.save_profile()
 		_refresh_view(false)
@@ -301,6 +285,7 @@ func show_tab(t: String) -> void:
 		var b: Button = _tab_btns[k]
 		var on := str(k) == t
 		UiTheme.skin_button(b, UiTheme.AMBER if on else UiTheme.LINE, 12.0)
+	NavBar.set_active(_nav, t)
 	_rebuild()
 
 

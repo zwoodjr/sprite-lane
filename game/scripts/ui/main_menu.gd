@@ -15,25 +15,52 @@ func _ready() -> void:
 	super()
 
 func build(c: VBoxContainer) -> void:
-	var portrait := MobileLayout.is_portrait()
-	c.add_theme_constant_override("separation", 12)
+	c.add_theme_constant_override("separation", 10)
 
-	## Logo + one-line tagline; the logo slams in (title sting).
+	## Top bar: logo (slams in), account level, scrap.
+	var top := HBoxContainer.new()
+	top.name = "TopBar"
+	top.add_theme_constant_override("separation", 10)
+	c.add_child(top)
 	var logo := TextureRect.new()
 	if ResourceLoader.exists(LOGO):
 		logo.texture = load(LOGO)
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.custom_minimum_size = Vector2(0, 144 if portrait else 112)
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	logo.custom_minimum_size = Vector2(0, 72)
+	logo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(logo)
+	top.add_child(logo)
 	_sting(logo)
-	var tag := UiTheme.head_label("DROP IN.  GRAB IT.  GET OUT.", UiTheme.T_H3, UiTheme.TEXT_DIM)
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	c.add_child(tag)
+	var ab: Dictionary = GameState.account_bar_state()
+	var lvbox := VBoxContainer.new()
+	lvbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	lvbox.add_theme_constant_override("separation", 4)
+	top.add_child(lvbox)
+	var lv := UiTheme.pixel_label("LV %d" % int(ab["level"]), UiTheme.PX_M, UiTheme.AMBER)
+	lv.name = "AccountLevel"
+	lvbox.add_child(lv)
+	var xp_bar := ProgressBar.new()
+	xp_bar.min_value = 0.0
+	xp_bar.max_value = 1.0
+	xp_bar.value = float(ab["ratio"])
+	xp_bar.show_percentage = false
+	xp_bar.custom_minimum_size = Vector2(72, 10)
+	UiTheme.skin_bar(xp_bar, UiTheme.TEAL)
+	lvbox.add_child(xp_bar)
+	top.add_child(IconSet.rect("cur_scrap", 48))
+	var scrap := UiTheme.pixel_label(str(GameState.account_scrap), UiTheme.PX_M, UiTheme.AMBER)
+	scrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(scrap)
 
-	## Hero showcase: the selected wanderer idling on the dunes, pet at heel.
-	## Integer scales of the 128-px frame (x3 on tall phones, x2 otherwise).
+	## Headline goal: the next Hangar upgrade and how close the bank is.
+	if not MenuFlow.is_first_wander():
+		var goal := MenuFlow.goal_card()
+		if goal:
+			c.add_child(goal)
+
+	## Hero showcase: the selected wanderer idling, pet at heel. Integer
+	## scales of the 128-px frame.
 	var stage := Control.new()
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stage.custom_minimum_size = Vector2(0, 256)
@@ -41,7 +68,8 @@ func build(c: VBoxContainer) -> void:
 	c.add_child(stage)
 	var hid := GameState.selected_character_id
 	var hero := StripAnim.make("res://assets/sprites/characters/%s/%s_idle.png" % [hid, hid], 256, 8.0)
-	var pet := PetDefs.get_pet(GameState.selected_pet_id)
+	var pid := GameState.selected_pet_id if GameState.pet_available(GameState.selected_pet_id) else PetDefs.default_id()
+	var pet := PetDefs.get_pet(pid)
 	var dog := StripAnim.make(str(pet.get("sprite", "")), 192, 7.0)
 	var shadow := _Shadow.new()
 	stage.add_child(shadow)
@@ -58,97 +86,60 @@ func build(c: VBoxContainer) -> void:
 		shadow.size = Vector2(hs * 1.2, 24)
 		shadow.position = Vector2(hero.position.x - hs * 0.1, stage.size.y - 20.0)
 	)
-	## Idle breathing bob on top of the strip (keyed, 2 px steps).
 	var bob := hero.create_tween().set_loops()
 	bob.tween_property(hero, "position:y", -2.0, 0.5).as_relative().set_trans(Tween.TRANS_SINE)
 	bob.tween_property(hero, "position:y", 2.0, 0.5).as_relative().set_trans(Tween.TRANS_SINE)
 
-	## Account strip: level badge + XP bar, scrap total. Numbers in pixels.
-	var pc := card(UiTheme.LINE)
-	c.add_child(pc)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 16)
-	pc.add_child(top)
-	var ab: Dictionary = GameState.account_bar_state()
-	top.add_child(IconSet.rect("cur_level", 48))
-	var mid := VBoxContainer.new()
-	mid.add_theme_constant_override("separation", 8)
-	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mid.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.add_child(mid)
-	var who := HBoxContainer.new()
-	who.add_theme_constant_override("separation", 8)
-	mid.add_child(who)
-	var nm := UiTheme.head_label(str(GameState.get_character().get("display_name", "")).to_upper(), UiTheme.T_H3, UiTheme.TEXT)
-	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	who.add_child(nm)
-	var lv := UiTheme.pixel_label("LV %d" % int(ab["level"]), UiTheme.PX_M, UiTheme.AMBER)
-	lv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	who.add_child(lv)
-	var xp_bar := ProgressBar.new()
-	xp_bar.min_value = 0.0
-	xp_bar.max_value = 1.0
-	xp_bar.value = float(ab["ratio"])
-	xp_bar.show_percentage = false
-	xp_bar.custom_minimum_size = Vector2(0, 16)
-	UiTheme.skin_bar(xp_bar, UiTheme.TEAL)
-	mid.add_child(xp_bar)
-	var sep := Control.new()
-	sep.custom_minimum_size = Vector2(8, 0)
-	top.add_child(sep)
-	top.add_child(IconSet.rect("cur_scrap", 48))
-	var scrap := UiTheme.pixel_label(str(GameState.account_scrap), UiTheme.PX_M, UiTheme.AMBER)
-	scrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(scrap)
+	## Who deploys: tap to change survivor / pet.
+	var who := UiTheme.big_button("%s  ·  %s" % [str(GameState.get_character().get("display_name", "")).to_upper(), str(pet.get("name", "")).to_upper()], UiTheme.LINE, UiTheme.MIN_TOUCH, 24)
+	who.name = "WhoButton"
+	who.custom_minimum_size.x = 0
+	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.clip_text = true
+	who.pressed.connect(GameState.go_character_select)
+	c.add_child(who)
 
-	## Headline goal: the next Hangar upgrade and how close the bank is.
-	if not MenuFlow.is_first_wander():
-		var goal := MenuFlow.goal_card()
-		if goal:
-			c.add_child(goal)
-	## Actions — bottom of the screen, under the thumb.
-	## QUICK DEPLOY (after the first run): last hero / gear / pet / tier, one tap.
-	if MenuFlow.can_quick_deploy():
-		c.add_child(MenuFlow.quick_button())
-	## PLAY -> CAMPAIGN (the story) or WANDER (the endless runs).
-	var play := UiTheme.big_button("PLAY", UiTheme.AMBER, 96, 40)
-	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if MenuFlow.is_first_wander():
-		## First run: straight into Haze with the default survivor.
-		play.name = "FirstPlay"
-		play.text = "PLAY — INTO THE HAZE"
-		play.pressed.connect(MenuFlow.first_run_deploy)
-	else:
-		play.pressed.connect(GameState.go_mode_choice)
-	c.add_child(play)
-	_pulse(play)
-	var sub := HBoxContainer.new()
-	sub.add_theme_constant_override("separation", 16)
-	c.add_child(sub)
-	var items: Array = [["HANGAR", UiTheme.TEAL, GameState.go_hangar, "tab_camp"], ["HELP", UiTheme.LINE, GameState.go_how_to_play, "set_hints"],
-		["SETTINGS", UiTheme.LINE, open_settings, "tab_workshop"]]
-	if MobileLayout.is_desktop():
-		items.append(["QUIT", UiTheme.RUST, func() -> void: get_tree().quit(), "set_reset"])
-	for it in items:
-		var b := UiTheme.big_button(str(it[0]), it[1], 64, 20)
+	## Zone card: where PLAY goes, and CHANGE (campaign / Wander tiers / ascension).
+	c.add_child(_zone_card())
+
+	## DAILY · CAMPAIGN · SETTINGS
+	var chips := HBoxContainer.new()
+	chips.name = "Chips"
+	chips.add_theme_constant_override("separation", 8)
+	c.add_child(chips)
+	for it in [["DAILY", GameState.go_daily, "tab_daily"], ["CAMPAIGN", GameState.go_campaign_map, "tab_stories"], ["SETTINGS", open_settings, "tab_workshop"]]:
+		var b := UiTheme.big_button(str(it[0]), UiTheme.LINE, UiTheme.MIN_TOUCH, 18)
+		b.name = "Chip_" + str(it[0])
 		b.custom_minimum_size.x = 0
-		b.icon = IconSet.tex(str(it[3]), false)
+		b.icon = IconSet.tex(str(it[2]), false)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.size_flags_stretch_ratio = 0.7 if str(it[0]) == "QUIT" else 1.0
-		b.pressed.connect(it[2])
+		b.clip_text = true
+		b.pressed.connect(it[1])
+		chips.add_child(b)
+	## HELP · FEEDBACK (· QUIT on desktop), smaller.
+	var sub := HBoxContainer.new()
+	sub.add_theme_constant_override("separation", 8)
+	c.add_child(sub)
+	var items: Array = [["HELP", GameState.go_how_to_play, "set_hints", "HelpButton"], ["FEEDBACK", func() -> void: Feedback.open(self), "tab_notes", "FeedbackButton"]]
+	if MobileLayout.is_desktop():
+		items.append(["QUIT", func() -> void: get_tree().quit(), "set_reset", "QuitButton"])
+	for it in items:
+		var b := UiTheme.big_button(str(it[0]), UiTheme.LINE, UiTheme.MIN_TOUCH, 16)
+		b.name = str(it[3])
+		b.custom_minimum_size.x = 0
+		b.icon = IconSet.tex(str(it[2]), false)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(it[1])
 		sub.add_child(b)
-	## Tester report (screenshot + context), one tap from the title.
-	var fb := UiTheme.big_button("SEND FEEDBACK", UiTheme.LINE, 64, 20)
-	fb.name = "FeedbackButton"
-	fb.icon = IconSet.tex("tab_notes", false)
-	fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fb.pressed.connect(func() -> void: Feedback.open(self))
-	c.add_child(fb)
 	## Build stamp: testers quote it in reports.
 	var ver := UiTheme.body_label(BuildInfo.stamp(), 14, UiTheme.TEXT_DIM, false)
 	ver.name = "BuildStamp"
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	c.add_child(ver)
+	## The bottom tab bar; PLAY is one tap into a run.
+	var nav := NavBar.make("play")
+	c.add_child(nav)
+	_pulse(nav.get_node("Nav_play"))
 	## The app closed mid-run (force quit / crash): resume or abandon first.
 	if GameState.has_live_run():
 		_live_prompt.call_deferred()
@@ -279,6 +270,39 @@ class _Shadow extends Control:
 				var a := TAU * i / 28.0
 				pts.append((c + Vector2(cos(a) * size.x * 0.5 * st[0], sin(a) * size.y * 0.5 * st[0])).floor())
 			draw_colored_polygon(pts, Color(0.078, 0.047, 0.055, st[1]))
+
+
+## Where PLAY goes: tier (or first run) + payout; CHANGE opens campaign /
+## Wander tier / ascension choice.
+func _zone_card() -> Control:
+	var p := card(UiTheme.LINE)
+	p.name = "ZoneCard"
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 12)
+	p.add_child(h)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 2)
+	h.add_child(v)
+	var m: Dictionary = ModeDefs.get_mode(MenuFlow.quick_mode_id() if not MenuFlow.is_first_wander() else ModeDefs.HAZE_ID)
+	var title := "%s  ·  TIER %d" % [str(m.get("display_name", "")).to_upper(), int(m.get("tier", 1))]
+	if GameState.ascension > 0 and not MenuFlow.is_first_wander():
+		title += "  ·  A%d" % GameState.ascension
+	var t := UiTheme.head_label(title, UiTheme.T_H3, UiTheme.AMBER)
+	t.name = "ZoneTitle"
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(t)
+	var sub := "First run: the tutorial drop" if MenuFlow.is_first_wander() else "Payout x%.1f  ·  %s" % [float(m.get("payout_mult", 1.0)), str(m.get("blurb", ""))]
+	var d := UiTheme.body_label(sub, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	d.max_lines_visible = 2
+	v.add_child(d)
+	var ch := UiTheme.big_button("CHANGE", UiTheme.LINE, UiTheme.MIN_TOUCH, 18)
+	ch.name = "ZoneChange"
+	ch.custom_minimum_size.x = 132
+	ch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ch.pressed.connect(GameState.go_mode_choice)
+	h.add_child(ch)
+	return p
 
 
 ## Settings as an overlay: closing it comes straight back here.

@@ -3234,6 +3234,9 @@ func go_logbook() -> void:
 	get_tree().paused = false
 	get_tree().change_scene_to_file("res://scenes/ui/logbook.tscn")
 
+## Tab the next Hangar opens on (NavBar); "" = CAMP.
+var hangar_tab: String = ""
+
 func go_hangar() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
