@@ -6,6 +6,10 @@ extends Control
 
 var ratio: float = 0.0
 var level: int = 1
+## "label": only "LV n" (the thin top bar carries the fill).
+## "top": a thin full-width bar across the top of the screen, no text.
+## "": label + bar (old look).
+var mode: String = ""
 var _font: Font
 
 
@@ -28,6 +32,13 @@ func set_level(lv: int) -> void:
 
 
 func _draw() -> void:
+	if mode == "top":
+		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x, size.y)), Color(0.05, 0.04, 0.03, 0.85))
+		if ratio > 0.0:
+			var tw := (size.x - 2.0) * ratio
+			draw_rect(Rect2(Vector2(1, 1), Vector2(tw, size.y - 2.0)), Color(0.36, 0.78, 0.46))
+			draw_rect(Rect2(Vector2(1 + tw - 3.0, 1), Vector2(3, size.y - 2.0)), Color(0.8, 1.0, 0.82))
+		return
 	var x0 := 10.0
 	var fs := UiTheme.pixel_px(UiTheme.PX_M)
 	var ty := float(fs) * 0.5 ## bar centre line
@@ -38,6 +49,8 @@ func _draw() -> void:
 		draw_string_outline(_font, Vector2(x0, fs + 1), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.04, 0.03, 0.02, 0.9))
 		draw_string(_font, Vector2(x0, fs + 1), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.62, 0.92, 0.6))
 		x0 += _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 8.0
+	if mode == "label":
+		return
 	var w := size.x - x0 + 10.0
 	draw_rect(Rect2(Vector2(x0, ty - 3.0), Vector2(w, 8)), Color(0.05, 0.04, 0.03, 0.85))
 	if ratio > 0.0:

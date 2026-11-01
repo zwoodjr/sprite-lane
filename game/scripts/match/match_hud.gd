@@ -105,6 +105,8 @@ var _hp_readout: Control
 var _xp_readout: Control
 var _pixel: Font = null
 var _xp_line: Control = null
+var _xp_top: Control = null
+const XP_TOP_H := 10.0
 var _run_lv: int = 1
 var _phase_id: String = ""
 var _phase_shown_t: float = 0.0
@@ -253,7 +255,14 @@ func _build() -> void:
 	_xp_line = Control.new()
 	_xp_line.set_script(XpLineScript)
 	_xp_line.custom_minimum_size = Vector2(HP_READOUT.x - 20.0, UiTheme.pixel_px(UiTheme.PX_M) + 4)
+	_xp_line.set("mode", "label")
 	vb.add_child(_xp_line)
+	## Thin run-XP bar across the very top of the screen.
+	_xp_top = Control.new()
+	_xp_top.name = "XpTop"
+	_xp_top.set_script(XpLineScript)
+	_xp_top.set("mode", "top")
+	root.add_child(_xp_top)
 	var hp_row := Control.new()
 	hp_row.visible = false
 	hp_row.custom_minimum_size = Vector2(BAR_W, HP_BAR_H)
@@ -445,6 +454,12 @@ func _layout() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	root.position = Vector2.ZERO
 	root.size = vp
+	if _xp_top:
+		_xp_top.position = Vector2(0, m.position.y)
+		_xp_top.size = Vector2(vp.x, XP_TOP_H)
+		## Everything else sits under the bar.
+		m.position.y += XP_TOP_H + 4.0
+		m.size.y -= XP_TOP_H + 4.0
 	_vignette.position = Vector2.ZERO
 	_vignette.size = vp
 	_hit_flash.position = Vector2.ZERO
@@ -866,6 +881,8 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 	_run_xp_bar.value = float(rp["ratio"])
 	if _xp_line:
 		_xp_line.call("set_ratio", float(rp["ratio"]))
+	if _xp_top:
+		_xp_top.call("set_ratio", float(rp["ratio"]))
 	if int(rp["level"]) != _run_lv and _pack_label:
 		_run_lv = int(rp["level"])
 		if _xp_line:

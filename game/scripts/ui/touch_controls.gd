@@ -26,6 +26,8 @@ const FADE_TIME := 0.35
 ## Pause cap: drawn 56 px, hit area MIN_TOUCH (88 px = 48 pt). Top-right per
 ## the mobile review; the HUD drops the minimap below it (match_hud PAUSE_ROW).
 const PAUSE_RADIUS := 28.0
+## The ability is the big right-thumb button (stacked over DASH).
+const ABILITY_RADIUS := 64.0
 
 @onready var root: Control = $Root
 @onready var stick_draw: Control = $Root/StickDraw
@@ -60,7 +62,7 @@ func _ready() -> void:
 	_read_settings()
 
 	btn_dash = _make_button("DASH", 58.0, UiTheme.TEAL)
-	btn_ability = _make_button("ABILITY", 40.0, UiTheme.AMBER,
+	btn_ability = _make_button("ABILITY", ABILITY_RADIUS, UiTheme.AMBER,
 		IconSet.path(IconSet.ability(GameState.selected_character_id, GameState.kit_ability(GameState.selected_character_id))))
 	btn_pause = _make_button("II", PAUSE_RADIUS, Color(0.75, 0.68, 0.58))
 	for b in [btn_dash, btn_ability, btn_pause]:
@@ -127,10 +129,10 @@ func _layout() -> void:
 	root.offset_bottom = -(win.y - (m.position.y + m.size.y))
 	var w := m.size.x
 	var h := m.size.y
-	## Bottom-right thumb cluster (mirrored when left-handed): big DASH in the
-	## corner, ABILITY up-and-left of it.
+	## Bottom-right thumb cluster (mirrored when left-handed): DASH in the
+	## corner, the big ABILITY stacked right above it (one-thumb reach).
 	_place(btn_dash, Vector2(w - 82, h - 96))
-	_place(btn_ability, Vector2(w - 186, h - 136))
+	_place(btn_ability, Vector2(w - 92, h - 96 - 58.0 - ABILITY_RADIUS - 22.0))
 	## Pause: top-right corner (the iOS convention), never mirrored, clear of
 	## both thumbs so it can't be hit by accident mid-fight.
 	_place(btn_pause, Vector2(w - PAUSE_RADIUS - 4.0, PAUSE_RADIUS + 2.0), false)
