@@ -1339,26 +1339,56 @@ func _test_p0_ui() -> void:
 		## Making room pulls held gear in.
 		GameState.salvage(int(GameState.stash[0]["uid"]))
 		_check(GameState.pending_rewards.size() == 3 and GameState.stash.size() == GameState.stash_capacity(), "salvage claims a held item")
-	## Admin: a touch + its emulated mouse copy count once; 5 real taps toggle.
+	## Admin: PIN-locked. Old "admin/enabled" saves stay locked; 5 logo taps
+	## open the pad; only the hashed PIN unlocks (found by search, never typed).
+	var cfg_keep := FileAccess.get_file_as_string("user://admin.cfg") if FileAccess.file_exists("user://admin.cfg") else ""
+	var old_cf := ConfigFile.new()
+	old_cf.set_value("admin", "enabled", true)
+	old_cf.save("user://admin.cfg")
 	var adm: Node = (load("res://scripts/autoload/admin.gd") as GDScript).new()
 	add_child(adm)
 	await get_tree().process_frame
 	_check(bool(adm.get("allowed")), "admin allowed in this build")
 	if adm:
-		var was := bool(adm.get("enabled"))
+		_check(not bool(adm.get("enabled")), "admin: old save stays locked until PIN")
+		_check(not bool((adm.get("_chip") as Control).visible), "admin: chip hidden by default")
 		var t0 := 1000000
-		var toggled := false
+		var opened := false
 		for i in range(3):
-			toggled = bool(adm.call("register_tap", Vector2(20, 20), t0 + i * 300)) or toggled
-			toggled = bool(adm.call("register_tap", Vector2(20, 20), t0 + i * 300 + 5)) or toggled
-		_check(not toggled and bool(adm.get("enabled")) == was, "3 doubled taps do not unlock")
+			opened = bool(adm.call("logo_tap", t0 + i * 300)) or opened
+			opened = bool(adm.call("logo_tap", t0 + i * 300 + 5)) or opened
+		_check(not opened, "3 doubled logo taps do not open the PIN pad")
 		adm.set("_taps", [])
 		for i in range(5):
-			toggled = bool(adm.call("register_tap", Vector2(20, 20), t0 + 5000 + i * 300))
-		_check(toggled and bool(adm.get("enabled")) != was, "5 taps toggle admin")
-		adm.call("set_enabled", was)
+			opened = bool(adm.call("logo_tap", t0 + 5000 + i * 300))
+		_check(opened and adm.get("_pad") != null, "5 logo taps open the PIN pad")
+		adm.call("close_pin_pad")
+		var good: Array = []
+		for n in range(10000):
+			if bool(adm.call("pin_ok", "%04d" % n)):
+				good.append("%04d" % n)
+		_check(good.size() == 1, "admin: exactly one PIN matches the hash")
+		var bad := "0000" if good.size() > 0 and str(good[0]) != "0000" else "1111"
+		_check(str(adm.call("try_pin", bad, t0)) == "wrong" and not bool(adm.get("enabled")), "admin: wrong PIN does not unlock")
+		for i in range(3):
+			adm.call("try_pin", bad, t0)
+		_check(str(adm.call("try_pin", bad, t0)) == "locked", "admin: 5 misses lock the pad")
+		if good.size() == 1:
+			_check(str(adm.call("try_pin", str(good[0]), t0 + 1000)) == "locked" and not bool(adm.get("enabled")), "admin: lockout holds even the right PIN")
+			_check(str(adm.call("try_pin", str(good[0]), t0 + 31000)) == "ok" and bool(adm.get("enabled")), "admin: right PIN unlocks after lockout")
+			_check(bool((adm.get("_chip") as Control).visible), "admin: chip shows once unlocked")
+			var cf2 := ConfigFile.new()
+			_check(cf2.load("user://admin.cfg") == OK and bool(cf2.get_value("lock", "unlocked", false)), "admin: unlock remembered on device")
+		adm.call("set_enabled", false)
+		_check(not bool(adm.get("enabled")) and not bool((adm.get("_chip") as Control).visible), "admin: Lock admin hides it again")
 		adm.set("_taps", [])
 		adm.queue_free()
+	if cfg_keep == "":
+		DirAccess.remove_absolute("user://admin.cfg")
+	else:
+		var fw := FileAccess.open("user://admin.cfg", FileAccess.WRITE)
+		fw.store_string(cfg_keep)
+		fw.close()
 	GameState.settings["auto_salvage_commons"] = keep_auto
 	GameState.salvage_bin = keep_bin
 	GameState.stash = keep_stash
@@ -4473,14 +4503,34 @@ func _test_admin() -> void:
 	_check(Admin.get("_hitbox_node") != null, "admin: hitbox overlay attaches")
 	Admin.hitboxes = false
 	await get_tree().process_frame
-	## A tainted extract banks scrap but records no clear / best.
-	var keep := [GameState.best_payout, GameState.tier_extracts.duplicate(), GameState.best_tier_extracted, GameState.account_scrap, GameState.tier_clears.duplicate(true)]
+	## Admin mode disables nothing: a flagged extract banks scrap, XP, loot,
+	## bests and tier clears exactly like a clean run, and saves them.
+	_check(Admin.run_tainted, "admin: run still flagged (info only)")
+	var keep := [GameState.best_payout, GameState.tier_extracts.duplicate(), GameState.best_tier_extracted, GameState.account_scrap, GameState.tier_clears.duplicate(true), GameState.account_xp, GameState.successful_extracts, GameState.total_runs]
+	GameState.best_payout = 0
 	GameState.call("on_extract_success")
-	_check(GameState.best_payout == int(keep[0]) and GameState.tier_extracts == keep[1], "admin: flagged run keeps bests clean")
+	var paid := int(GameState.payout_this_run)
+	_check(paid > 0 and GameState.account_scrap >= int(keep[3]) + paid, "admin: scrap banked on admin run (%d -> %d, +%d)" % [int(keep[3]), GameState.account_scrap, paid])
+	_check(GameState.account_xp >= int(keep[5]) and GameState.successful_extracts == int(keep[6]) + 1 and GameState.total_runs == int(keep[7]) + 1, "admin: XP / extract / run counts awarded")
+	_check(GameState.best_payout == paid, "admin: best payout recorded on admin run")
+	var tk := str(int(GameState.get_mode().get("tier", 1)))
+	_check(GameState.in_campaign_run() or int(GameState.tier_extracts.get(tk, 0)) == int((keep[1] as Dictionary).get(tk, 0)) + 1, "admin: tier extract recorded on admin run")
+	_check(not GameState.result_unlocks.has("ADMIN RUN: bests, tier clears and Ascension not recorded"), "admin: no voided-run note")
+	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	_check(saved is Dictionary and int((saved as Dictionary).get("account_scrap", -1)) == GameState.account_scrap and int((saved as Dictionary).get("best_payout", -1)) == paid, "admin: rewards saved to profile")
+	var drow := {"date": "2099-01-01", "kind": "daily", "hero": "", "pet": "", "extracted": true, "kills": 1, "seconds": 60, "mods": [], "admin": true}
+	var dres: Dictionary = GameState.call("_record_daily", drow, {"total": 123, "scrap": 10})
+	_check(not bool(dres["practice"]) and int(dres["counted"]) == 123, "admin: daily counts on admin run")
+	GameState.daily_runs.erase("2099-01-01")
 	_check(bool(GameState.run_history[0].get("admin", false)), "admin: history entry flagged")
 	GameState.best_payout = int(keep[0])
 	GameState.account_scrap = int(keep[3])
 	GameState.tier_clears = keep[4]
+	GameState.tier_extracts = keep[1]
+	GameState.best_tier_extracted = int(keep[2])
+	GameState.account_xp = int(keep[5])
+	GameState.successful_extracts = int(keep[6])
+	GameState.total_runs = int(keep[7])
 	GameState.run_history.pop_front()
 	GameState.begin_run()
 	_check(not Admin.run_tainted, "admin: next run starts clean")

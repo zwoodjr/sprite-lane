@@ -29,7 +29,9 @@ func build(c: VBoxContainer) -> void:
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 	logo.custom_minimum_size = Vector2(0, 72)
 	logo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	## Owner-only: 5 quick taps on the logo open the admin PIN pad.
+	logo.mouse_filter = Control.MOUSE_FILTER_STOP
+	logo.gui_input.connect(_on_logo_input)
 	top.add_child(logo)
 	_sting(logo)
 	var ab: Dictionary = GameState.account_bar_state()
@@ -225,6 +227,12 @@ func _web_save_prompt() -> void:
 		[["GOT IT", UiTheme.AMBER, func() -> void:
 			GameState.set_setting("web_notice_seen", true)
 			_close_dialog()]])
+
+
+func _on_logo_input(ev: InputEvent) -> void:
+	var down: bool = (ev is InputEventScreenTouch and ev.pressed) or (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT)
+	if down:
+		Admin.logo_tap(Time.get_ticks_msec())
 
 
 ## Title sting: the logo drops in big, lands with a shake and a dust puff.

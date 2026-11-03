@@ -1,13 +1,20 @@
 extends CanvasLayer
 
-## Hidden admin panel (owner only). Unlock/lock: tap the top-left corner of
-## the screen 5 times quickly (do it on the main menu). Once unlocked, a small
-## ADMIN chip sits top-left on every screen; it opens a panel of rescue and
-## test controls. The unlock is stored in user://admin.cfg, not the save.
+## Hidden admin panel (owner only). Unlock: tap the WANDERER logo on the main
+## menu 5 times quickly; a PIN pad opens. The PIN is never stored: only a
+## salted SHA-256 hash is. Once unlocked the device stays unlocked (flag in
+## user://admin.cfg, not the save) and a small ADMIN chip shows on every
+## screen. "Lock admin" in the panel hides it again. Old admin.cfg files from
+## before the PIN stay locked until the PIN is entered.
 
 const CFG := "user://admin.cfg"
-const CORNER := 110.0
 const TAPS := 5
+const TAP_WINDOW_MS := 2500
+const PIN_SALT := "wanderer.dust.admin.v2:"
+const PIN_HASH := "608a2bdd47e2cca5dcfe0e750beaf0f41cf7ee03ccc9e8b72f1607cc35b5eaac"
+const PIN_LEN := 4
+const MAX_TRIES := 5
+const LOCKOUT_MS := 30000
 ## One finger tap arrives twice (ScreenTouch + emulated mouse, or the reverse
 ## on desktop); a second press inside this window is the same tap.
 const TAP_DEDUPE_MS := 80
@@ -38,8 +45,8 @@ var time_scale: float = 1.0
 ## Ignore the live-enemy soft cap (stress tests).
 var no_cap: bool = false
 var hitboxes: bool = false
-## Anything that changes the outcome was used this run: the result is
-## flagged and kept out of bests, tier clears and Ascension records.
+## Anything that changes the outcome was used this run: info-only tag (run
+## history, feedback). Admin runs still count fully: nothing is voided.
 var run_tainted: bool = false
 var _tab: String = "RUN"
 var _confirm_reset_until: int = 0
@@ -51,6 +58,13 @@ var _chip: Button
 var _panel: Control
 var _was_paused: bool = false
 var _fps: Label
+var _fails: int = 0
+var _locked_until: int = 0
+var _pad: Control
+var _pad_box: Control
+var _pin: String = ""
+var _pin_dots: Label
+var _pin_msg: Label
 
 
 func _ready() -> void:
@@ -59,7 +73,8 @@ func _ready() -> void:
 	allowed = admin_allowed()
 	var cf := ConfigFile.new()
 	if allowed and cf.load(CFG) == OK:
-		enabled = bool(cf.get_value("admin", "enabled", false))
+		## Only the PIN-era flag counts; the old "admin/enabled" key is ignored.
+		enabled = bool(cf.get_value("lock", "unlocked", false))
 	_chip = Button.new()
 	_chip.text = "ADMIN"
 	_chip.focus_mode = Control.FOCUS_NONE
@@ -90,7 +105,6 @@ func _ready() -> void:
 	_chip.visible = enabled
 	if not allowed:
 		set_process(false)
-		set_process_input(false)
 
 
 ## Settings > Video > Show FPS (works in release builds too; the admin
@@ -125,6 +139,8 @@ func _place_chip() -> void:
 func _process(_delta: float) -> void:
 	if run_tainted == false and _match() != null and cheats_on():
 		run_tainted = true
+	if _pad and is_instance_valid(_pad) and _locked_until > 0:
+		_pad_refresh()
 	if _fps.visible:
 		_fps.text = "%d fps %.1f ms" % [Engine.get_frames_per_second(), 1000.0 / maxf(1.0, Engine.get_frames_per_second())]
 		## Layout inputs (viewport / window / safe area / transform) so a device
@@ -187,42 +203,155 @@ func _sync_hitboxes() -> void:
 		_hitbox_node = null
 
 
-func _input(event: InputEvent) -> void:
-	if not allowed:
-		return
-	var pos := Vector2.INF
-	## Emulated events (touch->mouse or mouse->touch) are copies of a real one.
-	if event.device == InputEvent.DEVICE_ID_EMULATION:
-		return
-	if event is InputEventScreenTouch and event.pressed:
-		pos = event.position
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		pos = event.position
-	if pos == Vector2.INF:
-		return
-	## Event positions are in window pixels; convert to the stretched UI space.
-	var vp := get_viewport()
-	var ui_pos: Vector2 = vp.get_screen_transform().affine_inverse() * pos if vp else pos
-	register_tap(ui_pos, Time.get_ticks_msec())
-
-
-## One corner press at `now` ms. True when it toggled the panel unlock.
-func register_tap(ui_pos: Vector2, now: int) -> bool:
-	if not allowed:
-		return false
-	if ui_pos.x > CORNER or ui_pos.y > CORNER:
-		_taps.clear()
+## Main-menu logo tap at `now` ms. True when the 5th quick tap opened the
+## PIN pad (does nothing once the device is unlocked).
+func logo_tap(now: int) -> bool:
+	if not allowed or enabled:
 		return false
 	if _taps.size() > 0 and now - int(_taps[_taps.size() - 1]) < TAP_DEDUPE_MS:
 		return false
 	_taps.append(now)
-	while _taps.size() > 0 and now - int(_taps[0]) > 2500:
+	while _taps.size() > 0 and now - int(_taps[0]) > TAP_WINDOW_MS:
 		_taps.pop_front()
 	if _taps.size() >= TAPS:
 		_taps.clear()
-		set_enabled(not enabled)
+		open_pin_pad()
 		return true
 	return false
+
+
+static func pin_ok(pin: String) -> bool:
+	return (PIN_SALT + pin).sha256_text() == PIN_HASH
+
+
+## "ok" (unlocked + saved), "wrong", or "locked" (5 misses: 30 s lockout).
+func try_pin(pin: String, now: int) -> String:
+	if now < _locked_until:
+		return "locked"
+	if pin_ok(pin):
+		_fails = 0
+		set_enabled(true)
+		return "ok"
+	_fails += 1
+	if _fails >= MAX_TRIES:
+		_fails = 0
+		_locked_until = now + LOCKOUT_MS
+		return "locked"
+	return "wrong"
+
+
+func lockout_left_ms(now: int) -> int:
+	return maxi(0, _locked_until - now)
+
+
+func open_pin_pad() -> void:
+	if _pad and is_instance_valid(_pad):
+		return
+	_pin = ""
+	_pad = Control.new()
+	_pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pad.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_pad)
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.015, 0.01, 0.86)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pad.add_child(dim)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pad.add_child(cc)
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.PANEL, UiTheme.LINE, 14, 2, 18))
+	cc.add_child(box)
+	_pad_box = box
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	box.add_child(v)
+	var t := UiTheme.head_label("ENTER PIN", UiTheme.T_H3, UiTheme.AMBER)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	_pin_dots = UiTheme.pixel_label("", UiTheme.PX_M, UiTheme.TEXT)
+	_pin_dots.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_pin_dots)
+	_pin_msg = UiTheme.body_label("", 15, UiTheme.TEXT_DIM, false)
+	_pin_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_pin_msg)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	v.add_child(grid)
+	for k in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "DEL"]:
+		var key := str(k)
+		var b := Button.new()
+		b.text = key
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(84, 64)
+		b.add_theme_font_size_override("font_size", 24 if key.length() == 1 else 16)
+		UiTheme.skin_button(b, UiTheme.AMBER if key.length() == 1 else UiTheme.LINE)
+		b.pressed.connect(func() -> void: _pad_key(key))
+		grid.add_child(b)
+	var cancel := UiTheme.big_button("CANCEL", UiTheme.LINE, 52.0, 18)
+	cancel.pressed.connect(close_pin_pad)
+	v.add_child(cancel)
+	_pad_refresh()
+
+
+func close_pin_pad() -> void:
+	if _pad and is_instance_valid(_pad):
+		_pad.queue_free()
+	_pad = null
+	_pad_box = null
+	_pin = ""
+
+
+func _pad_key(key: String) -> void:
+	var now := Time.get_ticks_msec()
+	if lockout_left_ms(now) > 0:
+		_pad_shake()
+		return
+	match key:
+		"CLR": _pin = ""
+		"DEL": _pin = _pin.substr(0, maxi(0, _pin.length() - 1))
+		_:
+			if _pin.length() < PIN_LEN:
+				_pin += key
+	if _pin.length() >= PIN_LEN:
+		var r := try_pin(_pin, now)
+		_pin = ""
+		if r == "ok":
+			close_pin_pad()
+			_toast("Admin unlocked on this device")
+			return
+		_pad_shake()
+		Juice.haptic(120)
+	_pad_refresh()
+
+
+func _pad_refresh() -> void:
+	if _pin_dots == null or not is_instance_valid(_pin_dots):
+		return
+	var d := ""
+	for i in range(PIN_LEN):
+		d += ("* " if i < _pin.length() else "_ ")
+	_pin_dots.text = d.strip_edges()
+	var left := lockout_left_ms(Time.get_ticks_msec())
+	if left > 0:
+		_pin_msg.text = "Too many tries. Wait %d s" % int(ceil(float(left) / 1000.0))
+		_pin_msg.add_theme_color_override("font_color", UiTheme.DANGER)
+	elif _fails > 0:
+		_pin_msg.text = "Wrong PIN (%d left)" % (MAX_TRIES - _fails)
+		_pin_msg.add_theme_color_override("font_color", UiTheme.DANGER)
+	else:
+		_pin_msg.text = ""
+
+
+func _pad_shake() -> void:
+	if _pad_box == null or not is_instance_valid(_pad_box):
+		return
+	var x0 := _pad_box.position.x
+	var tw := _pad_box.create_tween()
+	for k in [14.0, -12.0, 9.0, -6.0, 3.0, 0.0]:
+		tw.tween_property(_pad_box, "position:x", x0 + float(k), 0.04)
 
 
 func set_enabled(on: bool) -> void:
@@ -235,7 +364,7 @@ func set_enabled(on: bool) -> void:
 	## Settings → Show FPS only shows while admin mode is on.
 	SettingsDefs.apply("show_fps")
 	var cf := ConfigFile.new()
-	cf.set_value("admin", "enabled", on)
+	cf.set_value("lock", "unlocked", on)
 	cf.save(CFG)
 	Juice.haptic(60)
 
@@ -293,7 +422,7 @@ func _build_panel() -> void:
 	flag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	flag.add_theme_font_size_override("font_size", 13)
 	if run_tainted:
-		flag.text = "ADMIN RUN: no bests / clears"
+		flag.text = "ADMIN RUN (counts fully)"
 		flag.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35))
 	else:
 		flag.text = "clean run" if _match() != null else ""
@@ -593,7 +722,7 @@ func _tab_debug(v: VBoxContainer) -> void:
 		["Enemy cap: %s" % ("OFF" if no_cap else "ON"), func() -> void:
 			no_cap = not no_cap
 			_refresh()],
-		["Hide admin", func() -> void: set_enabled(false)],
+		["Lock admin", func() -> void: set_enabled(false)],
 	])
 	var n := get_tree().get_nodes_in_group("enemies").size()
 	_note(v, "Live enemies: %d · nodes: %d · speed %.1fx" % [n, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), time_scale])

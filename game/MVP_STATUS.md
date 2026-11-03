@@ -165,7 +165,8 @@ A maxed bunker left late saves sitting on 30k+ scrap. Four sinks, all with the H
   - **SPAWN:** elite, zone boss, every named boss, the Warden, or any enemy kind.
   - **ACCOUNT:** scrap and XP, tier and Ascension steppers, unlock tiers / Ascension / stations / mechs, gear grants (by rarity, set piece, Legendary weapon), the onboarding phase-in toggle, and a reset that asks for a second tap.
   - **DEBUG:** game speed 0.5/1/2/3×, FPS + frame-time overlay, hitboxes, enemy-cap toggle.
-  - **Admin runs:** using god mode, damage/defense boosts, timer pause or speed flags the run **ADMIN RUN**. Scrap still banks, but bests, tier clears, Ascension records and the daily score are skipped, and the history entry is flagged.
+  - **Admin runs count fully:** admin mode never disables anything. Scrap, XP, loot, bests, tier clears, Ascension records and the daily score all save as normal. Using god mode, damage/defense boosts, timer pause or speed only tags the run **ADMIN RUN** in history and feedback (info only).
+  - **Lock:** the ADMIN chip is hidden by default. 5 quick taps on the WANDERER logo (main menu, top-left) open a PIN pad. Only a salted SHA-256 hash of the PIN is stored. 5 wrong tries lock the pad for 30 s. Unlock is remembered on the device (`user://admin.cfg`, `lock/unlocked`); **Lock admin** (DEBUG tab) hides it again. Old saves with the pre-PIN admin flag stay locked until the PIN is entered.
 - **Bunker economy v6.** Bot payouts per extract when leaving at window 2 (with max camp from T5 up): Haze 183, Drift 277, Smog 399, Pall 435, Blight 671, Shroud ~1,260, Blackout ~1,590, Deadfall ~1,900, Dustfall ~2,490. Choke had no clean extracts. The top-tier payout multipliers were trimmed (T7–T10: 2.5/3.0/3.5/4.5 → 2.3/2.6/3.0/3.6), so Dustfall now pays about 2,000.
 
   | Item | Ranks (scrap) | Gates |
