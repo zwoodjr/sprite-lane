@@ -54,11 +54,13 @@ var _laid_for: Vector2 = Vector2.ZERO
 ## even if the old finger's lift was never delivered.
 var _stale: bool = false
 var _idle_t: float = 0.0
+var _last_dbg: String = ""
 var _player: Node = null
 
 func _ready() -> void:
 	layer = 20
 	add_to_group("touch_controls")
+	MobileLayout.registered_vp = get_viewport()
 	## ALWAYS so finger-up events that happen while a menu has the tree paused
 	## still release the stick / buttons (otherwise they stay "held" on resume).
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -123,6 +125,8 @@ func stick_alpha() -> float:
 
 
 func _exit_tree() -> void:
+	if MobileLayout.registered_vp == get_viewport():
+		MobileLayout.registered_vp = null
 	if TouchInput.sticks_cleared.is_connected(_reset_touches):
 		TouchInput.sticks_cleared.disconnect(_reset_touches)
 	if DisplayFit.layout_changed.is_connected(_on_fold):
@@ -132,8 +136,10 @@ func _exit_tree() -> void:
 	TouchInput.clear_sticks()
 
 func _layout() -> void:
-	var m := MobileLayout.control_safe_margin()
+	## Everything anchors to THIS viewport's visible rect (canvas space), so a
+	## host whose root / window size differs can't pull the cluster inward.
 	var win := get_viewport().get_visible_rect().size
+	var m := MobileLayout.control_safe_margin(win)
 	## Live fold / rotation: a held stick keeps its place relative to the
 	## screen (same fraction across), so the thumb doesn't lose it.
 	if _laid_for != Vector2.ZERO and win != _laid_for and _laid_for.x > 0.0 and _laid_for.y > 0.0:
@@ -141,6 +147,11 @@ func _layout() -> void:
 		_move_origin *= f
 		_move_knob *= f
 	_laid_for = win
+	var dbg := MobileLayout.debug_line(get_viewport())
+	if dbg != _last_dbg:
+		_last_dbg = dbg
+		MobileLayout.last_debug = dbg
+		print("[layout] ", dbg)
 	thumb_k = MobileLayout.thumb_scale()
 	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0)) * thumb_k
 	var k := thumb_k
@@ -174,7 +185,7 @@ func _layout() -> void:
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	var c := center
 	if mirror and _left_handed:
-		c.x = MobileLayout.control_safe_margin().size.x - center.x
+		c.x = MobileLayout.control_safe_margin(get_viewport().get_visible_rect().size).size.x - center.x
 	var r := float(b.get("radius"))
 	b.size = Vector2(r * 2.0, r * 2.0)
 	b.pivot_offset = b.size * 0.5
@@ -326,19 +337,17 @@ func paint_sticks(c: Control) -> void:
 		_paint_ghost(c, _ghost_pos() - o, tint, "MOVE")
 
 ## MOVE hint: anchored to the bottom-left corner of the safe area (mirrored
-## when left-handed), offsets scaled with the thumbs. On a 720-wide iPhone it
-## lands exactly where it always did (26% across, 80% down).
+## when left-handed), offsets scaled with the thumbs.
 const GHOST_IN := 165.0
-const GHOST_UP := 312.0
+const GHOST_BOTTOM_FRAC := 0.05
 
 func _ghost_pos() -> Vector2:
 	var vp := get_viewport().get_visible_rect().size
-	var m := MobileLayout.control_safe_margin()
+	var m := MobileLayout.control_safe_margin(vp)
+	## Ring bottom ~5% above the screen bottom (the MOVE caption under it
+	## stays inside the safe area), same corner reach as DASH.
 	var p := Vector2(minf(vp.x * 0.26, m.position.x + GHOST_IN * thumb_k),
-		vp.y - minf(vp.y * 0.20, GHOST_UP * thumb_k))
-	## Keep the ring out of the central half around the hero (a few px lower
-	## than it used to sit on a 720x1558 iPhone).
-	p.y = clampf(maxf(p.y, vp.y * 0.75 + stick_radius + 4.0), 0.0, m.end.y - stick_radius - 26.0)
+		minf(vp.y * (1.0 - GHOST_BOTTOM_FRAC), m.end.y - 26.0) - stick_radius)
 	if _left_handed:
 		p.x = vp.x - p.x
 	return p

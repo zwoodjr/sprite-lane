@@ -6,11 +6,14 @@ extends RefCounted
 const VERSION := "0.11.0"
 const COMMIT := "dev"
 const BUILT := ""
+## Bumped with each HUD-layout change: the pause menu shows it, so a device
+## screenshot proves which layout code is running (Xogot may lag a pull).
+const LAYOUT_REV := "L3"
 
 
 ## "v0.11.0 · dev" (+ " · 2026-10-29 06:10" when a build time is stamped).
 static func stamp() -> String:
-	var s := "v%s \u00b7 %s" % [VERSION, COMMIT]
+	var s := "v%s \u00b7 %s \u00b7 %s" % [VERSION, COMMIT, LAYOUT_REV]
 	if BUILT != "":
 		s += " \u00b7 " + BUILT
 	return s

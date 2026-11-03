@@ -390,8 +390,9 @@ func _build() -> void:
 	## Right-aligned: when the LOOT readout grows (text changes, Text size)
 	## keep its right edge on the safe margin instead of growing off-screen.
 	_threat_panel.resized.connect(func() -> void:
-		var mr := MobileLayout.control_safe_margin()
+		var mr := MobileLayout.control_safe_margin(get_viewport().get_visible_rect().size)
 		_threat_panel.position.x = mr.position.x + mr.size.x - _threat_panel.size.x
+		_update_radio_lane()
 	)
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 2)
@@ -457,11 +458,18 @@ func _build() -> void:
 	_kill_chain.set_script(load("res://scripts/ui/kill_chain.gd"))
 	root.add_child(_kill_chain)
 
+## Boss bar + radio lane (UI px, canvas space); see _layout.
+var lane_rect := Rect2()
+var radio_rect := Rect2()
+signal lane_changed(rect: Rect2)
+
+
 func _layout() -> void:
 	if root == null:
 		return
-	var m := MobileLayout.control_safe_margin()
+	## Anchored to this viewport's visible rect (canvas space), never the root.
 	var vp := get_viewport().get_visible_rect().size
+	var m := MobileLayout.control_safe_margin(vp)
 	root.position = Vector2.ZERO
 	root.size = vp
 	if _xp_top:
@@ -530,18 +538,34 @@ func _layout() -> void:
 		_extract_bar.size = Vector2(tw, 8)
 		## Under the "EXTRACT IN 0:53" row (it used to cut through the words).
 		_extract_bar.position = Vector2(phase_cx - tw * 0.5, m.position.y + 36.0)
+	## Message lane: under the top strip, between the vitals / pack column and
+	## the minimap / pause column. The boss bar heads it, the event chip and
+	## the radio panel stack under it (run_events reads lane_rect()), so none
+	## of them can run under the HP / XP, LOOT plate, minimap or pause.
+	var lane_l := m.position.x + left_w
+	if _pack_panel and _pack_panel.visible:
+		lane_l = maxf(lane_l, _pack_panel.position.x + _pack_panel.size.x + 8.0)
+	var lane_r := right - map_s - 10.0
+	if ob > 0.0:
+		## Pause cap sits left of the minimap there (touch_controls).
+		lane_r -= 2.0 * 28.0 + 8.0
+	var lane_top := maxf(m.position.y + 74.0, _phase_card.position.y + _phase_card.size.y + 6.0) if not campaign else m.position.y + 74.0
+	lane_rect = Rect2(lane_l, lane_top, maxf(lane_r - lane_l, 0.0), 50.0 + 48.0 + 6.0 + 120.0)
 	if _boss_bar:
-		## Under the extract strip, between the vitals and the minimap columns.
-		var bw := clampf(vp.x - 2.0 * (map_s + m.position.x + 12.0), 220.0, 420.0)
+		var bw := clampf(lane_rect.size.x, 160.0, 420.0)
 		_boss_bar.size = Vector2(bw, 44)
-		_boss_bar.position = Vector2(vp.x * 0.5 - bw * 0.5, m.position.y + 74.0)
+		_boss_bar.position = Vector2(lane_rect.get_center().x - bw * 0.5, lane_top)
 	if _kill_chain:
 		_kill_chain.size = Vector2(map_s + 40.0, 76)
 		_kill_chain.position = Vector2(right - _kill_chain.size.x, _threat_panel.position.y + _threat_panel.size.y + 10.0)
+	_update_radio_lane()
 	var below := maxf(_threat_panel.position.y + _threat_panel.size.y, m.position.y + vit.size.y + 60.0) + 10.0
 	below = maxf(below, _phase_card.position.y + _phase_card.size.y + 54.0)
 	if campaign:
 		below = _phase_card.position.y + _phase_card.size.y + 12.0
+	elif radio_rect.size.x > 0.0:
+		## Toasts go under the radio panel's usual height, not through it.
+		below = maxf(below, radio_rect.position.y + 100.0)
 	_banner.position = Vector2(0, vp.y * 0.26)
 	_banner.size = Vector2(vp.x, 60)
 	_banner_sub.position = Vector2(0, vp.y * 0.26 + 58)
@@ -551,6 +575,29 @@ func _layout() -> void:
 	_toast_box.size = Vector2(toast_w, 120)
 	_extract_prompt.position = Vector2(0, vp.y * 0.58)
 	_extract_prompt.size = Vector2(vp.x, 34)
+
+
+## Radio panel: under the event chip, its right edge clear of the LOOT plate
+## and kill-chain column (they reach further left than the minimap), at least
+## RADIO_MIN_W wide. It starts below the vitals, so it may grow left over the
+## pack chips for its few seconds on screen.
+const RADIO_MIN_W := 300.0
+
+
+func _update_radio_lane() -> void:
+	if lane_rect.size.x <= 0.0:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var m := MobileLayout.control_safe_margin(vp)
+	var rr := lane_rect.end.x
+	for c in [_threat_panel, _kill_chain]:
+		if c:
+			rr = minf(rr, (c as Control).position.x - 8.0)
+	var rl := minf(lane_rect.position.x, rr - RADIO_MIN_W)
+	rl = maxf(rl, m.position.x)
+	radio_rect = Rect2(rl, lane_rect.position.y + 104.0, maxf(rr - rl, 0.0), 0.0)
+	lane_changed.emit(lane_rect)
+
 
 ## Pack (weight / room), medicine count, tonics drunk, plague exposure meter.
 func _build_depth(vb: VBoxContainer) -> void:

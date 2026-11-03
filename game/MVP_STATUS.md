@@ -1,6 +1,14 @@
 # MVP status (repo mirror)
 
 
+**Duo HUD fix, round 2 (L3):** Zach's second Duo screenshot still showed the old layout: the pause cap above the minimap and the MOVE hint at 26% across, which is the pre-fix code, so Xogot was most likely still running the old pull. Hardening anyway:
+- Every HUD and thumb anchor now uses the caller's own `get_viewport().get_visible_rect()`.
+- The display safe area only adds small insets, as a fraction of the window. When the game is embedded (not running in the root viewport) it uses only the baseline padding.
+- ABILITY over DASH sit bottom-right (mirrored left-handed) and the MOVE ring sits in the opposite corner, both about 4-6% above the bottom.
+- A message lane holds the boss bar, then the event chip, then the radio panel. They stay clear of HP/XP, the LOOT plate, the kill chain, the minimap and the pause cap, and toasts go below them.
+- The pause menu stamp shows `L3`, so a screenshot proves which layout code is running. With Show FPS on, the admin readout logs the viewport, root, window, safe area, canvas transform and stretch values.
+- layout_check adds the bottom-gap, lane (longest texts) and embedded-SubViewport checks. LAYOUT_PASS, TEST_PASS (4.6), PARSE_OK (4.3, 4.6).
+
 **iPhone Duo HUD fix (Nov 2026):** On the Duo inner screen under Xogot, DASH / ABILITY, the pause cap, minimap and LOOT / CARNAGE hugged a centred column. Likely cause (inferred from the screenshot): Xogot reports a safe area ~69% as wide as the window, so the "right inset" was ~290 UI px. `MobileLayout.sane_insets` now drops any inset over 9% of the window side (real notches / home bars are under 7%). On squarer screens the minimap starts below Xogot's top-right run toolbar and the pause cap sits beside it. The MOVE hint is anchored to the bottom-left corner (mirrored left-handed). Regular iPhones are unchanged; the MOVE hint sits a few px lower so it stays out of the central half. `layout_check` asserts corner placement and no overlap with the central 50% at every size, in both hands, and with the bogus Xogot safe area simulated. LAYOUT_PASS, TEST_PASS on 4.6, PARSE_OK on 4.3 and 4.6.
 
 **Latest (iPhone Duo: video settings, squarer screens, live fold):**

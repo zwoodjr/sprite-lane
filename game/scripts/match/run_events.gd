@@ -60,7 +60,7 @@ func _build_ui() -> void:
 	_radio.add_theme_stylebox_override("panel", UiTheme.plate("panel_steel", 14.0, Color(0.85, 1.0, 0.85, 0.95)))
 	_radio.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	## Left of the minimap / loot / kill-chain column so it never covers them.
-	var sm := MobileLayout.control_safe_margin()
+	var sm := MobileLayout.control_safe_margin(get_viewport().get_visible_rect().size if get_viewport() else Vector2.ZERO)
 	var vpw := 720.0
 	if get_viewport():
 		vpw = get_viewport().get_visible_rect().size.x
@@ -91,6 +91,43 @@ func _build_ui() -> void:
 	_arrow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_arrow.draw.connect(_draw_arrow)
 	_layer.add_child(_arrow)
+	_place_lane()
+	if hud and hud.has_signal("lane_changed"):
+		hud.connect("lane_changed", func(_r: Rect2) -> void: _place_lane())
+
+
+## Chip + radio panel live in the HUD's message lane (under the boss bar,
+## between the vitals and the minimap / pause column): never over the HP /
+## XP, the LOOT plate, the minimap or the pause cap.
+const LANE_BOSS_H := 50.0
+const LANE_CHIP_H := 48.0
+
+
+func _place_lane() -> void:
+	if hud == null or not is_instance_valid(hud) or _chip == null:
+		return
+	var r: Rect2 = hud.get("lane_rect") if "lane_rect" in hud else Rect2()
+	if r.size.x <= 0.0:
+		return
+	_chip.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_chip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_chip.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_chip.position = Vector2(r.position.x, r.position.y + LANE_BOSS_H)
+	_chip.size = Vector2(r.size.x, LANE_CHIP_H)
+	_chip.custom_minimum_size = Vector2(r.size.x, 0)
+	var rr: Rect2 = hud.get("radio_rect") if "radio_rect" in hud else Rect2()
+	if rr.size.x <= 0.0:
+		rr = Rect2(r.position.x, r.position.y + LANE_BOSS_H + LANE_CHIP_H + 6.0, r.size.x, 0.0)
+	_radio.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_radio.custom_minimum_size = Vector2(rr.size.x, 0)
+	_radio.position = rr.position
+	_radio.size = Vector2(rr.size.x, 0)
+	if _radio_text:
+		## Known wrap width (panel padding ~14 a side), so the panel's height
+		## is the real wrapped height, not one word per line.
+		_radio_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_radio_text.custom_minimum_size = Vector2(maxf(rr.size.x - 32.0, 40.0), 0)
+	_radio.reset_size()
 
 
 func radio(text: String) -> void:

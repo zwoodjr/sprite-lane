@@ -127,6 +127,10 @@ func _process(_delta: float) -> void:
 		run_tainted = true
 	if _fps.visible:
 		_fps.text = "%d fps %.1f ms" % [Engine.get_frames_per_second(), 1000.0 / maxf(1.0, Engine.get_frames_per_second())]
+		## Layout inputs (viewport / window / safe area / transform) so a device
+		## screenshot shows why the HUD sits where it does.
+		if MobileLayout.last_debug != "":
+			_fps.text += "\n" + MobileLayout.last_debug
 	## Game speed: only in a match, never over hitstop / slow-mo (Juice owns those).
 	if not get_tree().paused and not Juice.slowmo_active() and not Juice.hitstop_active():
 		var want := game_speed()

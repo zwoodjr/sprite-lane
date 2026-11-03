@@ -20,11 +20,43 @@ static func is_desktop() -> bool:
 
 
 static func is_portrait() -> bool:
+	var s := game_vp_size()
+	return s.y >= s.x
+
+
+## The viewport the game actually draws in (canvas coordinates). Normally the
+## root window; under an embedding host (Xogot Play can run the game inside
+## its own view) it is the current scene's viewport, which can differ from
+## the root in size and scale. Every HUD / thumb anchor uses this, never the
+## root or the raw window size.
+## The in-run viewport, registered by the thumb controls while a match runs
+## (an embedding host may not make the match the tree's current_scene).
+static var registered_vp: Viewport = null
+
+
+static func game_viewport() -> Viewport:
 	var tree := Engine.get_main_loop() as SceneTree
-	if tree and tree.root:
-		var s := tree.root.get_visible_rect().size
-		return s.y >= s.x
-	return true
+	if tree == null:
+		return null
+	if registered_vp != null and is_instance_valid(registered_vp) and registered_vp.is_inside_tree():
+		return registered_vp
+	if tree.current_scene and tree.current_scene.is_inside_tree():
+		return tree.current_scene.get_viewport()
+	return tree.root
+
+
+static func game_vp_size() -> Vector2:
+	var vp := game_viewport()
+	if vp:
+		return vp.get_visible_rect().size
+	return Vector2(720, 1280)
+
+
+## True when the game viewport is not the root window (embedded host).
+static func is_embedded() -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	var vp := game_viewport()
+	return tree != null and vp != null and vp != tree.root
 
 
 static func safe_margin() -> Rect2:
@@ -51,7 +83,7 @@ static func stretch() -> float:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null or tree.root == null or DisplayServer.get_name() == "headless":
 		return 1.0
-	var vis := tree.root.get_visible_rect().size
+	var vis := game_vp_size()
 	var win := Vector2(DisplayServer.window_get_size())
 	if vis.x <= 0.0 or win.x <= 0.0:
 		return 1.0
@@ -100,33 +132,35 @@ static func sane_insets(win_size: Vector2, wa: Rect2) -> Vector4:
 	return ins
 
 
-static func control_safe_margin() -> Rect2:
+## Safe rect (UI px, in the given viewport's canvas space). Pass the
+## caller's own get_viewport().get_visible_rect().size; the default is the
+## game viewport. The display safe area only adds small insets, converted as a
+## FRACTION of the window, so a host whose window / root space differs from
+## the game viewport can't drag the anchors inward; when the game is embedded
+## the host already keeps its view clear of the notch, so only the baseline
+## padding applies.
+static func control_safe_margin(vp_size: Vector2 = Vector2.ZERO) -> Rect2:
 	## Extra padding for thumbs / notch / home indicator - used by controls & HUD text only.
 	## Game world should still render edge-to-edge behind the HUD.
-	## Safe area comes back in real window pixels; the UI lives in stretched
-	## viewport space, so convert before using it.
-	var vp_size := Vector2(720, 1280)
+	if vp_size.x <= 0.0 or vp_size.y <= 0.0:
+		vp_size = game_vp_size()
 	var tree := Engine.get_main_loop() as SceneTree
-	if tree and tree.root:
-		vp_size = tree.root.get_visible_rect().size
 	var win_size := Vector2(DisplayServer.window_get_size())
 	var wa := DisplayServer.get_display_safe_area()
-	var mobile := OS.has_feature("mobile")
+	var mobile := OS.has_feature("mobile") and not is_embedded()
 	if sim_display_safe.size != Vector2i.ZERO:
 		wa = sim_display_safe
 		mobile = true
 		if DisplayServer.get_name() == "headless" and tree and tree.root:
 			win_size = Vector2(tree.root.size)
-	var k := Vector2.ONE
-	if win_size.x > 0 and win_size.y > 0:
-		k = vp_size / win_size
 	## Baseline padding for portrait thumbs + Dynamic Island / home bar.
 	var left := 22.0
 	var top := 18.0
 	var right := 22.0
 	var bottom := 22.0
-	if mobile:
+	if mobile and win_size.x > 0.0 and win_size.y > 0.0:
 		var ins := sane_insets(win_size, Rect2(wa))
+		var k := vp_size / win_size
 		if ins.x > 0.0:
 			left = maxf(left, ins.x * k.x + 8.0)
 		if ins.y > 0.0:
@@ -141,6 +175,32 @@ static func control_safe_margin() -> Rect2:
 		right = maxf(right, sim_safe.z)
 		bottom = maxf(bottom, sim_safe.w)
 	return Rect2(left, top, vp_size.x - left - right, vp_size.y - top - bottom)
+
+
+static var last_debug: String = ""
+
+
+## One line with the real layout inputs (logged on every HUD re-anchor and
+## shown under the admin FPS readout) so a device screenshot says why.
+static func debug_line(vp: Viewport) -> String:
+	var tree := Engine.get_main_loop() as SceneTree
+	var root_vis := tree.root.get_visible_rect().size if tree and tree.root else Vector2.ZERO
+	var vis := vp.get_visible_rect().size if vp else Vector2.ZERO
+	var xf := vp.canvas_transform if vp else Transform2D.IDENTITY
+	var win := DisplayServer.window_get_size()
+	var cs := Vector2i.ZERO
+	var mode := -1
+	var aspect := -1
+	if tree and tree.root:
+		cs = tree.root.content_scale_size
+		mode = tree.root.content_scale_mode
+		aspect = tree.root.content_scale_aspect
+	var m := control_safe_margin(vis)
+	return "vp %dx%d root %dx%d win %dx%d safe %s emb %s xf s%.2f o%d,%d cs %dx%d m%d a%d -> m %d,%d,%d,%d" % [
+		int(vis.x), int(vis.y), int(root_vis.x), int(root_vis.y), win.x, win.y,
+		str(DisplayServer.get_display_safe_area()), str(is_embedded()),
+		xf.get_scale().x, int(xf.origin.x), int(xf.origin.y), cs.x, cs.y, mode, aspect,
+		int(m.position.x), int(m.position.y), int(vis.x - m.end.x), int(vis.y - m.end.y)]
 
 
 ## Squarer screens (iPhone Duo, iPads) under Xogot Play get its run toolbar

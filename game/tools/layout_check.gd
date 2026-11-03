@@ -501,7 +501,7 @@ func _corner_checks(m: Node, what: String) -> void:
 	for lh in [false, true]:
 		GameState.set_setting("left_handed", lh, false)
 		await _wait(2)
-		var vp := get_viewport().get_visible_rect().size
+		var vp: Vector2 = (tc as Node).get_viewport().get_visible_rect().size
 		var mid := Rect2(vp * 0.25, vp * 0.5)
 		var dash: Control = tc.get("btn_dash")
 		var abil: Control = tc.get("btn_ability")
@@ -541,11 +541,96 @@ func _corner_checks(m: Node, what: String) -> void:
 				_fail("%s%s: %s %s covers the central 50%% %s" % [what, " LH" if lh else "", nm, r, mid])
 		if not lh and what.begins_with("hud") and UiTheme.text_size_index() == 0:
 			print("   corners %s: dash %s abil %s move %s pause %s" % [vp, dash.get_global_rect(), abil.get_global_rect(), stick, pause.get_global_rect()])
+		## DASH and the MOVE ring sit ~4-6% above the bottom edge.
+		for pair in [["DASH", dash.get_global_rect()], ["MOVE", stick]]:
+			var gap: float = (vp.y - (pair[1] as Rect2).end.y) / vp.y
+			_checked += 1
+			if gap < 0.025 or gap > 0.065:
+				_fail("%s%s: %s bottom gap %.1f%% (want ~4-6%%)" % [what, " LH" if lh else "", pair[0], gap * 100.0])
 		_checked += 1
 		if dash.get_global_rect().get_center().y <= abil.get_global_rect().get_center().y:
 			_fail("%s: ABILITY not stacked over DASH" % what)
 	GameState.set_setting("left_handed", false, false)
 	await _wait(2)
+	_lane_checks(m, what)
+
+
+## Boss bar, event chip and radio panel (longest texts) keep to their lane:
+## clear of the HP / XP, pack, LOOT plate, minimap, kill chain and pause.
+func _lane_checks(m: Node, what: String) -> void:
+	var hud: Node = m.get_node_or_null("HUD")
+	var ev: Node = m.get_node_or_null("RunEvents")
+	var tc := _tc()
+	if hud == null or ev == null or tc == null:
+		_fail("%s: no HUD / RunEvents for the lane check" % what)
+		return
+	var hroot: Control = hud.get("root")
+	var chip: Label = ev.get("_chip")
+	var radio: Control = ev.get("_radio")
+	chip.text = "TOXIC RAIN  30s  ×1.5 SCRAP, BURNING"
+	chip.visible = true
+	ev.call("radio", "Raiders on the ridge. Hold the line until the caravan clears, then get to a pad.")
+	chip.reset_size()
+	radio.reset_size()
+	var movers := {"BossBar": (hud.get("_boss_bar") as Control).get_global_rect(),
+		"chip": chip.get_global_rect(), "radio": radio.get_global_rect()}
+	var keep := {"Vitals": (hroot.get_node("Vitals") as Control).get_global_rect(),
+		"XP": (hud.get("_xp_top") as Control).get_global_rect() if hud.get("_xp_top") else Rect2(),
+		"PAUSE": (tc.get("btn_pause") as Control).get_global_rect()}
+	for nm in ["_minimap", "_threat_panel", "_pack_panel", "_kill_chain", "_phase_card"]:
+		var c: Control = hud.get(nm)
+		if c and c.visible:
+			keep[nm] = c.get_global_rect()
+	var vp: Vector2 = hroot.get_viewport().get_visible_rect().size
+	for a in movers:
+		var ra: Rect2 = movers[a]
+		_checked += 1
+		if ra.position.x < -1.0 or ra.end.x > vp.x + 1.0:
+			_fail("%s: %s off screen %s" % [what, a, ra])
+		for b in keep:
+			var rb: Rect2 = keep[b]
+			_checked += 1
+			## The radio panel may cover the pack chips for its few seconds.
+			if a == "radio" and b == "_pack_panel":
+				continue
+			if rb.size != Vector2.ZERO and ra.grow(-1.0).intersects(rb):
+				_fail("%s: %s %s overlaps %s %s" % [what, a, ra, b, rb])
+	ev.set("_radio_left", 0.0)
+	radio.visible = false
+	chip.visible = false
+
+
+## Embedded host (Xogot Play can run the game inside its own view): the match
+## lives in a SubViewport whose size and scale differ from the root window.
+## Every anchor must follow that viewport, not the root.
+func _embedded_pass() -> void:
+	for pair in [[Vector2i(1400, 1000), Vector2i(900, 1280)], [Vector2i(700, 1000), Vector2i(720, 1558)], [Vector2i(1000, 1400), Vector2i(1820, 1280)]]:
+		get_window().size = pair[0]
+		await _wait(3)
+		TouchInput.touch_primary = true
+		GameState.selected_character_id = "ash_rook"
+		GameState.selected_mode_id = "haze"
+		GameState.fast_timers = true
+		GameState.begin_run()
+		var box := SubViewportContainer.new()
+		var sv := SubViewport.new()
+		sv.size = pair[1]
+		box.add_child(sv)
+		get_tree().root.add_child(box)
+		var m: Node = (load("res://scenes/match/match.tscn") as PackedScene).instantiate()
+		sv.add_child(m)
+		## current_scene must be a root child: the host's view, not the match.
+		get_tree().current_scene = box
+		await _wait(24)
+		get_tree().paused = false
+		var what := "embedded %dx%d in %dx%d" % [pair[1].x, pair[1].y, pair[0].x, pair[0].y]
+		_checked += 1
+		if not MobileLayout.is_embedded():
+			_fail(what + ": not seen as embedded")
+		await _corner_checks(m, what)
+		await _end_match(m)
+		box.queue_free()
+		await _wait(2)
 
 
 func _hud_pass(sz: Vector2i) -> void:
@@ -679,6 +764,10 @@ func _run() -> void:
 			await _levelup_pass()
 			await _hud_pass(sz)
 			print("   failures: %d" % (_bad - b0))
+	print("-- embedded viewport")
+	var be := _bad
+	await _embedded_pass()
+	print("   failures: %d" % (_bad - be))
 	print("-- fold / unfold")
 	var bf := _bad
 	await _fold_pass()
