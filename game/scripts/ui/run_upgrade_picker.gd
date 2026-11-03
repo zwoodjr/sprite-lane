@@ -42,6 +42,22 @@ func _ready() -> void:
 	add_child(_root)
 	if not GameState.run_level_up.is_connected(_on_level_up):
 		GameState.run_level_up.connect(_on_level_up)
+	DisplayFit.layout_changed.connect(_on_layout_changed)
+
+
+## Fold / unfold mid-pick: rebuild the cards for the new width (same choices).
+func _on_layout_changed(_sz: Vector2) -> void:
+	if not _open or _picking:
+		return
+	if _paths and is_instance_valid(_paths):
+		_paths.queue_free()
+		_paths = null
+	_build()
+
+
+func _exit_tree() -> void:
+	if DisplayFit.layout_changed.is_connected(_on_layout_changed):
+		DisplayFit.layout_changed.disconnect(_on_layout_changed)
 
 func _process(delta: float) -> void:
 	_guard = maxf(0.0, _guard - delta)

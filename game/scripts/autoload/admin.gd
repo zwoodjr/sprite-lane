@@ -228,8 +228,8 @@ func set_enabled(on: bool) -> void:
 	if not on:
 		close_panel()
 		god = false
-		if not bool(GameState.settings.get("show_fps", false)):
-			_fps.visible = false
+	## Settings → Show FPS only shows while admin mode is on.
+	SettingsDefs.apply("show_fps")
 	var cf := ConfigFile.new()
 	cf.set_value("admin", "enabled", on)
 	cf.save(CFG)

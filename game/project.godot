@@ -32,6 +32,8 @@ window/stretch/scale_mode="fractional"
 ; 1 = portrait (single-stick survivor layout)
 window/handheld/orientation=1
 window/ios/hide_home_indicator=true
+; ProMotion: let the display link run at 120 (Settings → Frame rate cap limits it).
+window/ios/allow_high_refresh_rate=true
 window/per_pixel_transparency/allowed=false
 
 [input_devices]

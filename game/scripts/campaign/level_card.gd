@@ -34,8 +34,14 @@ func _open(bg_alpha: float) -> VBoxContainer:
 	_root.add_child(dim)
 	var m := MobileLayout.control_safe_margin()
 	var frame := MarginContainer.new()
-	frame.position = m.position + Vector2(24, 24)
-	frame.size = m.size - Vector2(48, 48)
+	## Anchored to the screen (insets from the safe area) so a fold / unfold
+	## while the card is up keeps it fitted.
+	var vp := get_viewport().get_visible_rect().size
+	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	frame.offset_left = m.position.x + 24.0
+	frame.offset_top = m.position.y + 24.0
+	frame.offset_right = -(vp.x - m.position.x - m.size.x + 24.0)
+	frame.offset_bottom = -(vp.y - m.position.y - m.size.y + 24.0)
 	_root.add_child(frame)
 	_box = VBoxContainer.new()
 	_box.add_theme_constant_override("separation", 16)

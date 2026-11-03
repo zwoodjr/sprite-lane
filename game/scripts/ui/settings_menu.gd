@@ -13,6 +13,8 @@ const SCRIPT_PATH := "res://scripts/ui/settings_menu.gd"
 const RESET_HOLD_MS := 2000
 const CREDIT_FILES := ["res://assets/ATTRIBUTION.md"]
 const LICENCE_DIRS := ["res://assets/fonts", "res://assets"]
+## Rows that move the Quality preset (or are moved by it): repaint the tab.
+const PRESET_ROWS := ["quality", "fps_cap", "render_scale", "fx_quality", "heat_shimmer", "battery_saver"]
 
 ## Remembered between openings (per session).
 static var last_tab: String = "audio"
@@ -151,9 +153,27 @@ func show_tab(id: String) -> void:
 	for r in t["rows"]:
 		if bool(r.get("desktop", false)) and not MobileLayout.is_desktop():
 			continue
+		if bool(r.get("admin", false)) and not _admin_on():
+			continue
 		_list.add_child(_make_row(r))
 	_reset_tab.visible = id != "about"
 	_scroll.scroll_vertical = 0
+
+
+## Rebuild the current tab in place (keeps the scroll), e.g. after a Quality
+## preset changed several rows at once.
+func refresh_tab() -> void:
+	var sv := _scroll.scroll_vertical
+	show_tab(_tab)
+	_scroll.scroll_vertical = sv
+	(func() -> void:
+		if is_instance_valid(_scroll):
+			_scroll.scroll_vertical = sv).call_deferred()
+
+
+func _admin_on() -> bool:
+	var adm := get_node_or_null("/root/Admin")
+	return adm != null and bool(adm.get("enabled"))
 
 
 ## Every stored key on the current tab back to its default (applied + saved).
@@ -190,7 +210,10 @@ func _make_row(r: Dictionary) -> Control:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 8)
 	col.add_child(top)
-	var lab := UiTheme.head_label(str(r["label"]), UiTheme.T_H3, UiTheme.TEXT)
+	var label_text := str(r["label"])
+	if key == "quality" and int(SettingsDefs.get_value(key)) == SettingsDefs.QUALITY_CUSTOM:
+		label_text += " \u00b7 CUSTOM"
+	var lab := UiTheme.head_label(label_text, UiTheme.T_H3, UiTheme.TEXT)
 	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(lab)
@@ -207,6 +230,8 @@ func _make_row(r: Dictionary) -> Control:
 			b.toggled.connect(func(on: bool) -> void:
 				GameState.set_setting(key, on)
 				_style_toggle(b)
+				if key in PRESET_ROWS:
+					refresh_tab.call_deferred()
 				Juice.sfx("ui_toggle")
 				if key == "haptics" and on:
 					Juice.haptic(Juice.HAPTIC_HIT))
@@ -308,7 +333,9 @@ func _choice_row(key: String, options: Array) -> HBoxContainer:
 				GameState.set_setting(key, i)
 			Juice.sfx("ui_toggle")
 			if key == "shake_level" and i > 0:
-				Juice.shake(0.5))
+				Juice.shake(0.5)
+			if key in PRESET_ROWS:
+				refresh_tab.call_deferred())
 	return row
 
 
@@ -349,6 +376,13 @@ func _wire_action(key: String, b: Button) -> void:
 				GameState.tutorial_done = false
 				GameState.save_profile()
 				b.text = "TUTORIAL NEXT RUN")
+		"video_auto":
+			b.pressed.connect(func() -> void:
+				var auto := SettingsDefs.auto_video()
+				SettingsDefs.apply_preset(int(auto["quality"]))
+				GameState.save_profile()
+				Juice.sfx("ui_toggle")
+				refresh_tab.call_deferred())
 		"credits":
 			b.pressed.connect(show_credits)
 		"feedback":

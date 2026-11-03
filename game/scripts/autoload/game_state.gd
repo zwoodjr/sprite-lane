@@ -2621,6 +2621,10 @@ func set_setting(key: String, value: Variant, save: bool = true) -> void:
 
 static func _default_settings() -> Dictionary:
 	var d: Dictionary = SettingsDefs.DEFAULTS.duplicate(true)
+	## Fresh installs start on this device's Quality preset (iPhone Duo / A20: HIGH at 120).
+	var auto := SettingsDefs.auto_video()
+	for k in auto:
+		d[k] = auto[k]
 	d["sfx"] = true
 	d["dither_v1"] = true
 	d["settings_v"] = SettingsDefs.VERSION

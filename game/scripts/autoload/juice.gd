@@ -500,6 +500,8 @@ const AGG_WINDOW := 0.3
 const DN_POOL := 48
 const DN_LIFE := 0.75
 const DN_SOFT_CAP := 14
+## Settings → Damage numbers FEWER.
+const DN_FEW_CAP := 6
 var _dn_layer: CanvasLayer
 var _dn_pool: Array[Label] = []
 var _dn_live: Array[Dictionary] = []
@@ -507,7 +509,8 @@ var _dn_by_key: Dictionary = {}
 
 
 func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color = Color(1, 0.97, 0.9), target: Node2D = null) -> void:
-	if get_tree().current_scene == null or not bool(GameState.settings.get("damage_numbers", true)):
+	var dn_lvl := SettingsDefs.dmg_numbers()
+	if get_tree().current_scene == null or dn_lvl == 0:
 		return
 	_ensure_dn_layer()
 	var key: Variant = null
@@ -524,6 +527,9 @@ func damage_number(pos: Vector2, amount: float, crit: bool = false, color: Color
 		return
 	## A horde under a blade storm would paint the screen with numbers:
 	## past DN_SOFT_CAP live numbers only crits start new ones.
+	## FEWER: only crits start a number, and at most DN_FEW_CAP on screen.
+	if dn_lvl == 1 and (not crit or _dn_live.size() >= DN_FEW_CAP):
+		return
 	if _dn_live.size() >= DN_SOFT_CAP and not crit:
 		return
 	var l := _dn_take()

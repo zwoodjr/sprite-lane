@@ -7,11 +7,18 @@ const PetGear = preload("res://scripts/data/pet_gear_defs.gd")
 ## overflow its card. Builds the Gear screen (every slot picker with the
 ## longest item open, sets popups) and the Hangar (every tab, crates open,
 ## Workbench item card, Kennel + pet gear picker) with the longest item and
-## set names in the data, at phone sizes and every text size.
+## set names in the data, at phone sizes and every text size. Also the main
+## menu, every Settings tab, the level-up cards and a live match HUD with the
+## thumb controls, at the iPhone Duo's inner (1878x2670), cover (1398x2034)
+## and landscape (2670x1878) sizes as well, plus a live fold / unfold pass
+## (Hangar, level-up, a match with the stick held through the resize).
 ##   godot --headless --path game res://tools/layout_check.tscn
 ## Prints LAYOUT_PASS / LAYOUT_FAIL n.
 
-const SIZES := [Vector2i(390, 844), Vector2i(375, 812), Vector2i(375, 667)]
+const SIZES := [Vector2i(390, 844), Vector2i(375, 812), Vector2i(375, 667),
+	Vector2i(1878, 2670), Vector2i(1398, 2034), Vector2i(2670, 1878)]
+## Fold / unfold / rotate order for the live-resize pass.
+const FOLD := [Vector2i(1398, 2034), Vector2i(1878, 2670), Vector2i(2670, 1878), Vector2i(1398, 2034), Vector2i(390, 844)]
 
 var _bad: int = 0
 var _checked: int = 0
@@ -205,6 +212,9 @@ func _check(root: Node) -> void:
 		var p := (c as Control).get_parent()
 		if not (p is Container) or p is ScrollContainer and (p as ScrollContainer).horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
 			continue
+		## Mid-animation (a pulsing / popping logo or card): not a layout fault.
+		if (c as Control).scale != Vector2.ONE:
+			continue
 		var pr := (p as Control).get_global_rect()
 		var cr := (c as Control).get_global_rect()
 		_checked += 1
@@ -322,8 +332,258 @@ func _hangar_pass() -> void:
 	await _wait(2)
 
 
+## Main menu + every Settings tab (as the overlay from the main menu).
+func _menu_pass() -> void:
+	## No "resume your run?" dialog from the match passes.
+	GameState.live_run = {}
+	DirAccess.remove_absolute(GameState.RUN_PATH)
+	GameState.save_profile()
+	var mm := _scene("res://scenes/ui/main_menu.tscn")
+	await _settle()
+	_where = "main menu"
+	await _check(mm)
+	_check_inside(mm, "main menu")
+	mm.call("open_settings")
+	await _settle()
+	var scr: Node = get_tree().root.find_child("SettingsMenu", true, false)
+	if scr != null:
+		for t in SettingsDefs.TABS:
+			scr.call("show_tab", str(t["id"]))
+			await _settle()
+			_where = "settings %s" % t["id"]
+			await _check(scr)
+			_check_inside(scr.find_child("Tabs", true, false), "settings tab bar")
+		scr.call("close")
+	await _wait(2)
+	if is_instance_valid(mm):
+		mm.queue_free()
+	await _wait(2)
+
+
+## Level-up cards (3 choices) and the BUILD PATHS overlay.
+func _levelup_pass() -> void:
+	var pk := CanvasLayer.new()
+	pk.set_script(load("res://scripts/ui/run_upgrade_picker.gd"))
+	get_tree().root.add_child(pk)
+	await _wait(1)
+	var keep_fast := GameState.fast_timers
+	GameState.fast_timers = false
+	pk.call("open", 7, Progression.roll_run_choices())
+	await _settle()
+	_where = "level-up cards"
+	await _check(pk)
+	_check_inside(pk.get("_root").get_child(1), "level-up cards")
+	GameState.fast_timers = keep_fast
+	get_tree().paused = false
+	pk.queue_free()
+	await _wait(2)
+
+
+## Every visible control of `root` lies inside the screen.
+func _check_inside(root: Node, what: String) -> void:
+	if root == null:
+		return
+	var vp := get_viewport().get_visible_rect()
+	var all: Array = []
+	if root is Control:
+		all.append(root)
+	_collect(root, all)
+	for c in all:
+		## Buttons and text only: painted backdrops may bleed past the edge.
+		if not (c is Button or c is Label):
+			continue
+		var r := _shown(c as Control)
+		if r.size.x <= 2.0 or r.size.y <= 2.0:
+			continue
+		_checked += 1
+		if not vp.grow(1.0).encloses(r):
+			_fail("%s: off screen %s (screen %s)" % [what, _desc(c), vp.size])
+			return
+
+
+func _start_match() -> Node:
+	TouchInput.touch_primary = true
+	GameState.selected_character_id = "ash_rook"
+	GameState.selected_mode_id = "haze"
+	GameState.fast_timers = true
+	GameState.begin_run()
+	var m := _scene("res://scenes/match/match.tscn")
+	await _wait(24)
+	get_tree().paused = false
+	return m
+
+
+func _end_match(m: Node) -> void:
+	get_tree().paused = false
+	if is_instance_valid(m):
+		m.queue_free()
+	await _wait(3)
+	GameState.fast_timers = false
+	GameState.live_run = {}
+	DirAccess.remove_absolute(GameState.RUN_PATH)
+
+
+func _tc() -> Node:
+	return get_tree().get_first_node_in_group("touch_controls")
+
+
+## HUD + thumb controls: DASH / ABILITY inside the safe area, in the bottom
+## corner within thumb reach, apart, and clear of the HUD panels; spawns land
+## off-screen (the camera's view cap).
+func _hud_checks(m: Node, what: String) -> void:
+	var hud: Node = m.get_node_or_null("HUD")
+	_where = what
+	await _check(hud)
+	_check_inside(hud.get("root") if hud else null, what + " HUD")
+	var tc := _tc()
+	if tc == null:
+		_fail("%s: no touch controls" % what)
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var safe := MobileLayout.control_safe_margin()
+	var corner := safe.end
+	var dash: Control = tc.get("btn_dash")
+	var abil: Control = tc.get("btn_ability")
+	for b in [dash, abil]:
+		var r := (b as Control).get_global_rect()
+		_checked += 3
+		if not safe.grow(2.0).encloses(r):
+			_fail("%s: %s outside the safe area %s / %s" % [what, b.get("label_text"), r, safe])
+		var c := r.get_center()
+		if c.x < vp.x * 0.5 or c.y < vp.y * 0.5:
+			_fail("%s: %s not in the bottom-right corner (%s)" % [what, b.get("label_text"), c])
+		## Thumb reach: within ~1.6 in of the corner on an iPhone (380 UI px).
+		if c.distance_to(corner) > 380.0:
+			_fail("%s: %s out of thumb reach (%d px from the corner)" % [what, b.get("label_text"), int(c.distance_to(corner))])
+	_checked += 1
+	if dash.get_global_rect().intersects(abil.get_global_rect()):
+		_fail("%s: DASH and ABILITY overlap" % what)
+	if hud:
+		for nm in ["Vitals"]:
+			var n: Control = hud.get("root").get_node_or_null(nm)
+			if n and n.visible:
+				for b in [dash, abil]:
+					_checked += 1
+					if n.get_global_rect().intersects((b as Control).get_global_rect()):
+						_fail("%s: %s covers the %s" % [what, b.get("label_text"), nm])
+	## Fairness: a spawn never lands inside the visible world.
+	var cam: Camera2D = m.get_node("World/Player").get_node_or_null("Camera2D")
+	if cam:
+		var pl := m.get_node("World/Player") as Node2D
+		var view := Rect2(pl.global_position + cam.offset - vp / cam.zoom * 0.5, vp / cam.zoom)
+		var hd := (vp / cam.zoom).length() * 0.5
+		_checked += 1
+		if hd > 640.5:
+			_fail("%s: visible world radius %d > cap" % [what, int(hd)])
+		for i in range(16):
+			var a := TAU * float(i) / 16.0
+			var sp: Vector2 = m.call("_spawn_point_outside_view", Vector2(cos(a), sin(a)))
+			_checked += 1
+			if view.grow(-8.0).has_point(sp):
+				_fail("%s: spawn on screen at %s (view %s)" % [what, sp, view])
+				break
+
+
+func _hud_pass(sz: Vector2i) -> void:
+	var m: Node = await _start_match()
+	await _hud_checks(m, "hud %dx%d" % [sz.x, sz.y])
+	await _end_match(m)
+
+
+func _touch(idx: int, pos: Vector2, down: bool) -> void:
+	var e := InputEventScreenTouch.new()
+	e.index = idx
+	e.position = pos
+	e.pressed = down
+	_tc().call("_input", e)
+
+
+func _drag(idx: int, pos: Vector2) -> void:
+	var e := InputEventScreenDrag.new()
+	e.index = idx
+	e.position = pos
+	_tc().call("_input", e)
+
+
+## Live fold / unfold / rotate: the Hangar and the level-up cards refit, and
+## in a match the stick held through the resize keeps steering; a touch
+## whose lift was lost in the fold doesn't block the next one.
+func _fold_pass() -> void:
+	UiTheme.set_text_size(0)
+	get_window().size = FOLD[0]
+	await _wait(4)
+	var h := _scene("res://scenes/ui/hangar.tscn")
+	await _settle()
+	for i in range(1, FOLD.size()):
+		get_window().size = FOLD[i]
+		await _settle()
+		h.call("show_tab", "camp")
+		await _settle()
+		_where = "fold hangar %dx%d" % [FOLD[i].x, FOLD[i].y]
+		await _check(h)
+		_check_inside(h, _where)
+	h.queue_free()
+	await _wait(2)
+	get_window().size = FOLD[0]
+	await _wait(4)
+	var m: Node = await _start_match()
+	for i in range(1, FOLD.size()):
+		var vp := get_viewport().get_visible_rect().size
+		var p0 := vp * Vector2(0.3, 0.75)
+		_touch(0, p0, true)
+		_drag(0, p0 + Vector2(70, 0))
+		await _wait(1)
+		var before := TouchInput.get_move()
+		get_window().size = FOLD[i]
+		await _settle()
+		var vp2 := get_viewport().get_visible_rect().size
+		var p1 := vp2 * Vector2(0.3, 0.75)
+		## The held thumb moves on in the new layout (same spot on the glass).
+		_drag(0, p1 + Vector2(70, 0))
+		await _wait(1)
+		var after := TouchInput.get_move()
+		_checked += 2
+		if before.x <= 0.1:
+			_fail("fold %d: stick did not steer before the fold" % i)
+		if after.x <= 0.1:
+			_fail("fold %d: stick lost across the fold (%s -> %s)" % [i, before, after])
+		## Lift lost in a fold (finger 0 never lifts or moves again): after
+		## the next fold a new finger still gets the stick.
+		_tc().call("_on_fold", vp2)
+		_touch(3, p1 + Vector2(0, -40), true)
+		_drag(3, p1 + Vector2(-80, -40))
+		await _wait(1)
+		_checked += 1
+		if TouchInput.get_move().x >= -0.1:
+			_fail("fold %d: new touch after a lost lift got no stick (%s)" % [i, TouchInput.get_move()])
+		_touch(3, p1, false)
+		_touch(0, p1, false)
+		await _wait(1)
+		_checked += 1
+		if TouchInput.get_move().length() > 0.01:
+			_fail("fold %d: stick stuck after release" % i)
+		await _hud_checks(m, "fold hud %dx%d" % [FOLD[i].x, FOLD[i].y])
+	await _end_match(m)
+	## Level-up cards open while folding.
+	var pk := CanvasLayer.new()
+	pk.set_script(load("res://scripts/ui/run_upgrade_picker.gd"))
+	get_tree().root.add_child(pk)
+	await _wait(1)
+	pk.call("open", 7, Progression.roll_run_choices())
+	for i in range(1, FOLD.size()):
+		get_window().size = FOLD[i]
+		await _settle()
+		_where = "fold level-up %dx%d" % [FOLD[i].x, FOLD[i].y]
+		await _check(pk)
+		_check_inside(pk.get("_root").get_child(pk.get("_root").get_child_count() - 1), _where)
+	get_tree().paused = false
+	pk.queue_free()
+	await _wait(2)
+
+
 func _run() -> void:
 	var save_backup := FileAccess.get_file_as_string(GameState.SAVE_PATH) if FileAccess.file_exists(GameState.SAVE_PATH) else ""
+	var run_backup := FileAccess.get_file_as_string(GameState.RUN_PATH) if FileAccess.file_exists(GameState.RUN_PATH) else ""
 	var ts0 := UiTheme.text_size_index()
 	GameState.tutorial_done = true
 	_stock()
@@ -336,13 +596,26 @@ func _run() -> void:
 			var b0 := _bad
 			await _gear_pass()
 			await _hangar_pass()
+			await _menu_pass()
+			await _levelup_pass()
+			await _hud_pass(sz)
 			print("   failures: %d" % (_bad - b0))
+	print("-- fold / unfold")
+	var bf := _bad
+	await _fold_pass()
+	print("   failures: %d" % (_bad - bf))
 	UiTheme.set_text_size(ts0)
 	if save_backup != "":
 		var f := FileAccess.open(GameState.SAVE_PATH, FileAccess.WRITE)
 		if f:
 			f.store_string(save_backup)
 			f.close()
+	DirAccess.remove_absolute(GameState.RUN_PATH)
+	if run_backup != "":
+		var rf := FileAccess.open(GameState.RUN_PATH, FileAccess.WRITE)
+		if rf:
+			rf.store_string(run_backup)
+			rf.close()
 	print("checks: %d" % _checked)
 	print("LAYOUT_PASS" if _bad == 0 else "LAYOUT_FAIL %d" % _bad)
 	get_tree().quit(0 if _bad == 0 else 1)

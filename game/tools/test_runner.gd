@@ -4021,6 +4021,9 @@ func _test_settings() -> void:
 	## --- round trip: a non-default value for every key
 	var want := {}
 	for k in SettingsDefs.keys():
+		## The preset is derived from the values below (checked in _test_video).
+		if k == "quality":
+			continue
 		var d: Variant = SettingsDefs.DEFAULTS[k]
 		var r := SettingsDefs.row(k)
 		match typeof(d):
@@ -4058,7 +4061,7 @@ func _test_settings() -> void:
 	_check(absf(float(st["vol_music"]) - 0.3) < 0.001 and absf(float(st["vol_master"]) - 0.6) < 0.001 and absf(float(st["vol_ui"]) - 0.4) < 0.001, "settings: volumes kept")
 	_check(bool(st["left_handed"]) and not bool(st["haptics"]) and not bool(st["show_hints"]) and bool(st["auto_salvage_commons"]) and bool(st["edge_dither"]) and not st.has("film_grain"), "settings: toggles kept (film_grain -> edge_dither)")
 	_check(absf(float(st["stick_scale"]) - 1.2) < 0.001, "settings: stick size kept")
-	_check(absf(float(st["vol_voice"]) - 1.0) < 0.001 and bool(st["mute_background"]) and int(st["fps_cap"]) == 1 and int(st["fx_quality"]) == 2, "settings: new keys default")
+	_check(absf(float(st["vol_voice"]) - 1.0) < 0.001 and bool(st["mute_background"]) and int(st["fps_cap"]) == int(SettingsDefs.auto_video()["fps_cap"]) and int(st["fx_quality"]) == int(SettingsDefs.auto_video()["fx_quality"]), "settings: new keys default")
 	(old["settings"] as Dictionary)["screen_shake"] = true
 	GameState.settings = GameState._default_settings()
 	GameState.apply_save(old)
@@ -4096,11 +4099,11 @@ func _test_settings() -> void:
 	## --- frame-rate cap / battery saver
 	for i in range(3):
 		GameState.set_setting("fps_cap", i, false)
-		_check(Engine.max_fps == [30, 60, 0][i], "settings: fps cap %d -> max_fps %d" % [i, Engine.max_fps])
+		_check(Engine.max_fps == [30, 60, 120][i], "settings: fps cap %d -> max_fps %d" % [i, Engine.max_fps])
 	GameState.set_setting("battery_saver", true, false)
 	_check(Engine.max_fps == 30 and SettingsDefs.fx_level() == 0 and not SettingsDefs.heat_shimmer_on(), "settings: battery saver = 30 fps, low fx")
 	GameState.set_setting("battery_saver", false, false)
-	_check(Engine.max_fps == 0, "settings: battery saver off restores the cap")
+	_check(Engine.max_fps == 120, "settings: battery saver off restores the cap")
 	## --- screen shake OFF / LOW / FULL, reduce motion
 	var shake_at := func(lvl: int, calm: bool) -> float:
 		GameState.set_setting("shake_level", lvl, false)
@@ -4127,9 +4130,9 @@ func _test_settings() -> void:
 	_check(probe.modulate == Color.WHITE, "settings: flash off")
 	probe.queue_free()
 	GameState.set_setting("flash_intensity", 1.0, false)
-	for i in range(3):
+	for i in range(4):
 		GameState.set_setting("fx_quality", i, false)
-		_check(is_equal_approx(SettingsDefs.fx_mult(), [0.35, 0.65, 1.0][i]), "settings: fx quality %d" % i)
+		_check(is_equal_approx(SettingsDefs.fx_mult(), [0.35, 0.65, 1.0, 1.3][i]), "settings: fx quality %d" % i)
 	GameState.set_setting("brightness", 0.5, false)
 	_check(is_equal_approx(SettingsDefs.gamma(), 1.0), "settings: brightness 50 = neutral gamma")
 	GameState.set_setting("brightness", 1.0, false)
@@ -4244,6 +4247,7 @@ func _test_settings() -> void:
 	_check(not get_tree().paused, "settings: resume unpauses")
 	pm.queue_free()
 	GameState.run_finished = keep_fin
+	await _test_video()
 	## --- restore
 	GameState.settings = keep
 	SettingsDefs.apply()
@@ -4251,6 +4255,114 @@ func _test_settings() -> void:
 	GameState.save_profile()
 	await get_tree().process_frame
 	print("SETTINGS_OK")
+
+
+## iPhone Duo pass: Quality presets, device auto-detect, old-save migration,
+## render scale, damage-number amount, admin-only FPS, the camera's view cap
+## and the thumb-control scale.
+func _test_video() -> void:
+	GameState.settings = GameState._default_settings()
+	SettingsDefs.apply()
+	## Presets set their values; a hand change makes CUSTOM, changing it back
+	## finds the preset again.
+	for q in range(4):
+		GameState.set_setting("quality", q, false)
+		var ok := int(GameState.settings["quality"]) == q
+		for k in SettingsDefs.PRESETS[q]:
+			ok = ok and str(GameState.settings[k]) == str(SettingsDefs.PRESETS[q][k])
+		_check(ok, "video: preset %s sets its values" % SettingsDefs.QUALITY_NAMES[q])
+	GameState.set_setting("quality", 2, false)
+	_check(Engine.max_fps == 120 and not SettingsDefs.render_low() and SettingsDefs.fx_level() == 2, "video: HIGH = 120 fps, full res, high fx")
+	GameState.set_setting("fps_cap", 1, false)
+	_check(int(GameState.settings["quality"]) == SettingsDefs.QUALITY_CUSTOM and Engine.max_fps == 60, "video: hand change -> CUSTOM")
+	GameState.set_setting("fps_cap", 2, false)
+	_check(int(GameState.settings["quality"]) == 2, "video: back to the HIGH values -> HIGH")
+	GameState.set_setting("quality", 0, false)
+	_check(SettingsDefs.render_low() and Engine.max_fps == 60 and SettingsDefs.fx_level() == 0, "video: LOW = 60 fps, 50% render, low fx")
+	## Render scale: same UI size either way, viewport stretch at 50%.
+	var vis0 := get_tree().root.get_visible_rect().size
+	_check(get_tree().root.content_scale_mode == Window.CONTENT_SCALE_MODE_VIEWPORT, "video: 50% render = viewport stretch")
+	GameState.set_setting("render_scale", 0, false)
+	await get_tree().process_frame
+	_check(get_tree().root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS and get_tree().root.get_visible_rect().size.distance_to(vis0) < 1.5, "video: 100% render = canvas items, same UI size")
+	GameState.set_setting("battery_saver", true, false)
+	_check(SettingsDefs.render_low() and Engine.max_fps == 30, "video: battery saver = 30 fps + 50% render")
+	GameState.set_setting("battery_saver", false, false)
+	_check(not SettingsDefs.render_low(), "video: battery saver off = full render again")
+	## Device auto-detect.
+	_check(SettingsDefs.device_tier_for("iPhone19,1", "Apple A20 Pro GPU", false, true, 6) == 2, "video: A20 Pro (iPhone Duo) = high")
+	_check(SettingsDefs.device_tier_for("iPhone19,2", "", false, true, 6) == 2, "video: new iPhone model id = high")
+	_check(SettingsDefs.device_tier_for("iPhone14,2", "Apple A15 GPU", false, true, 6) == 1, "video: A15 = medium")
+	_check(SettingsDefs.device_tier_for("iPhone12,1", "Apple A13 GPU", false, true, 6) == 0, "video: A13 = low")
+	_check(SettingsDefs.device_tier_for("iPad14,3", "", false, true, 8) == 2, "video: M-series iPad = high")
+	_check(SettingsDefs.device_tier_for("", "", true, false, 8) == 1, "video: web = medium")
+	var hi := SettingsDefs.auto_video(2)
+	_check(int(hi["quality"]) == 2 and int(hi["fps_cap"]) == 2 and int(hi["render_scale"]) == 0, "video: auto for A20 = HIGH at 120")
+	_check(int(SettingsDefs.auto_video(1)["fps_cap"]) == 1 and int(SettingsDefs.auto_video(0)["quality"]) == 0, "video: auto mid = 60, old = LOW")
+	## Old saves keep their own values (full res); the preset is inferred.
+	GameState.settings = GameState._default_settings()
+	GameState.apply_save({"settings": {"fps_cap": 2, "fx_quality": 2, "heat_shimmer": false, "damage_numbers": false, "settings_v": 2}})
+	var st := GameState.settings
+	_check(int(st["dmg_numbers"]) == 0 and not st.has("damage_numbers"), "video: damage numbers off -> OFF")
+	_check(int(st["render_scale"]) == 0 and int(st["quality"]) == 2 and int(st["settings_v"]) == SettingsDefs.VERSION, "video: old HIGH-like save -> HIGH, full res")
+	GameState.settings = GameState._default_settings()
+	GameState.apply_save({"settings": {"fps_cap": 0, "fx_quality": 1, "damage_numbers": true}})
+	st = GameState.settings
+	_check(int(st["quality"]) == SettingsDefs.QUALITY_CUSTOM and int(st["fps_cap"]) == 0 and int(st["dmg_numbers"]) == 2, "video: old odd save -> CUSTOM, values kept")
+	GameState.settings = GameState._default_settings()
+	GameState.apply_save({"settings": {"quality": 9, "render_scale": 5, "fx_quality": 7, "dmg_numbers": -2}})
+	st = GameState.settings
+	_check(int(st["quality"]) == SettingsDefs.QUALITY_CUSTOM and int(st["render_scale"]) == 1 and int(st["fx_quality"]) == 3 and int(st["dmg_numbers"]) == 0, "video: bad values clamped")
+	GameState.settings = GameState._default_settings()
+	SettingsDefs.apply()
+	## Damage numbers: OFF none, FEWER crits only.
+	var live: Array = Juice.get("_dn_live")
+	if get_tree().current_scene != null:
+		var n0 := live.size()
+		GameState.set_setting("dmg_numbers", 0, false)
+		Juice.damage_number(Vector2(10, 10), 5.0, true)
+		_check(live.size() == n0, "video: damage numbers OFF")
+		GameState.set_setting("dmg_numbers", 1, false)
+		Juice.damage_number(Vector2(10, 10), 5.0, false)
+		_check(live.size() == n0, "video: FEWER skips plain hits")
+		Juice.damage_number(Vector2(20, 10), 9.0, true)
+		_check(live.size() == n0 + 1, "video: FEWER shows crits")
+		GameState.set_setting("dmg_numbers", 2, false)
+	## FPS counter only with admin on.
+	var adm: Node = get_tree().root.get_node("Admin")
+	var keep_en := bool(adm.get("enabled"))
+	adm.set("enabled", false)
+	GameState.set_setting("show_fps", true, false)
+	_check(not (adm.get("_fps") as Label).visible, "video: FPS hidden while admin is off")
+	if bool(adm.get("allowed")):
+		adm.set("enabled", true)
+		SettingsDefs.apply("show_fps")
+		_check((adm.get("_fps") as Label).visible, "video: FPS shown with admin on")
+	adm.set("enabled", keep_en)
+	GameState.set_setting("show_fps", false, false)
+	## Camera view cap: tall iPhones and the Duo in portrait keep their
+	## integer texel zoom; landscape zooms in under the cap.
+	var Cam: GDScript = load("res://scripts/entities/game_camera.gd")
+	var iph: Array = Cam.call("capped_zoom", 1179.0 / 720.0, Vector2(720, 1563))
+	_check(is_equal_approx(float(iph[0]), Cam.call("pixel_zoom_for", 1179.0 / 720.0)) and int(iph[1]) == 2, "video: iPhone zoom unchanged")
+	var duo: Array = Cam.call("capped_zoom", 1878.0 / 900.0, Vector2(900, 1280))
+	_check(is_equal_approx(float(duo[0]), Cam.call("pixel_zoom_for", 1878.0 / 900.0)), "video: Duo portrait keeps the texel zoom")
+	_check((Vector2(900, 1280) / float(duo[0])).x > (Vector2(720, 1563) / float(iph[0])).x * 1.4, "video: Duo shows 40%+ more width")
+	var land: Array = Cam.call("capped_zoom", 2670.0 / 1820.0, Vector2(1820, 1280))
+	_check((Vector2(1820, 1280) / float(land[0])).length() * 0.5 <= 640.5 and int(land[1]) == 2, "video: landscape capped (texel x2)")
+	var desk: Array = Cam.call("capped_zoom", 1080.0 / 1280.0, Vector2(2275, 1280))
+	_check((Vector2(2275, 1280) / float(desk[0])).length() * 0.5 <= 640.5, "video: wide desktop capped")
+	## Thumb controls: every iPhone 1.0, the Duo inner screen smaller.
+	MobileLayout.sim_stretch = 1179.0 / 720.0
+	var k1 := MobileLayout.thumb_scale()
+	MobileLayout.sim_stretch = 1290.0 / 720.0
+	var k2 := MobileLayout.thumb_scale()
+	MobileLayout.sim_stretch = 1878.0 / 900.0
+	var k3 := MobileLayout.thumb_scale()
+	MobileLayout.sim_stretch = 0.0
+	_check(k1 == 1.0 and k2 == 1.0 and k3 > 0.8 and k3 < 0.9, "video: thumb scale 1 on iPhones, %.2f on the Duo" % k3)
+	_check(DisplayFit.is_squarish(Vector2(1878, 2670)) and DisplayFit.is_squarish(Vector2(1398, 2034)) and not DisplayFit.is_squarish(Vector2(1179, 2556)), "video: Duo screens rotate, iPhones stay portrait")
+	print("VIDEO_OK")
 
 
 ## Onboarding phase-in: run 1 is core only; each finished run adds a system;

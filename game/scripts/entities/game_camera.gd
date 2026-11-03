@@ -36,6 +36,7 @@ func _ready() -> void:
 	amb.set_script(load("res://scripts/fx/ambient_fx.gd"))
 	add_child(amb)
 	amb.call("setup", self)
+	_fit_particles()
 
 
 ## Slow wind-blown dust drifting across the screen — sells the wasteland.
@@ -131,11 +132,50 @@ static func pixel_zoom_for(s: float) -> float:
 	return float(n) / (s * UnitAnim.TEXEL)
 
 
+## Fairness cap on how much world a wide screen shows: the half-diagonal of
+## the visible world (world px). A tall iPhone sees ~520 (390x844) and the
+## iPhone Duo inner screen ~605 in portrait, so both keep their integer
+## texel zoom; landscape (2670x1878) and desktop windows zoom in to stay
+## under it, so enemies always spawn off-screen and nobody out-ranges the
+## horde just by holding the phone sideways.
+const MAX_VIEW_RADIUS := 640.0
+
+
+## Zoom for stretch `s` and UI viewport `vp`: the integer texel zoom, stepped
+## up an integer (or, if that overshoots by 25%+, the exact zoom) until the
+## visible world fits MAX_VIEW_RADIUS. Returns [zoom, texel scale].
+static func capped_zoom(s: float, vp: Vector2) -> Array:
+	var n := maxi(1, roundi(s))
+	var z := float(n) / (s * UnitAnim.TEXEL)
+	var half := vp.length() * 0.5
+	var need := half / MAX_VIEW_RADIUS
+	if z >= need:
+		return [z, n]
+	var n2 := maxi(n + 1, ceili(need * s * UnitAnim.TEXEL))
+	var z2 := float(n2) / (s * UnitAnim.TEXEL)
+	if z2 <= need * 1.25:
+		return [z2, n2]
+	return [need, maxi(1, roundi(need * s * UnitAnim.TEXEL))]
+
+
 func _apply_pixel_zoom() -> void:
 	var s := stretch_factor(get_viewport())
-	pixel_scale = maxi(1, roundi(s))
-	var z := pixel_zoom_for(s) * punch
-	zoom = Vector2(z, z)
+	var cz := capped_zoom(s, get_viewport_rect().size)
+	pixel_scale = int(cz[1])
+	var z := float(cz[0]) * punch
+	if not is_equal_approx(z, zoom.x):
+		zoom = Vector2(z, z)
+		_fit_particles()
+
+
+## Dust / motes cover the whole (possibly wider) view after a fold.
+func _fit_particles() -> void:
+	var half := view_world_size() * 0.5
+	for c in get_children():
+		if c is CPUParticles2D:
+			var p := c as CPUParticles2D
+			var base := Vector2(520, 900) if str(p.name) != "Motes" else Vector2(420, 760)
+			p.emission_rect_extents = Vector2(maxf(base.x, half.x + 60.0), maxf(base.y, half.y + 60.0))
 
 
 func _process(delta: float) -> void:

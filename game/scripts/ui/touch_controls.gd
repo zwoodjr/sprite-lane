@@ -46,6 +46,13 @@ var _move_active: bool = false
 var _fade: float = 0.0 ## 1 while held, decays after release
 
 var _left_handed: bool = false
+## Thumb scale (MobileLayout.thumb_scale) in use for the button layout.
+var thumb_k: float = 1.0
+## Screen size the stick / buttons were laid out for (live fold remap).
+var _laid_for: Vector2 = Vector2.ZERO
+## Set by a fold / rotation: the next stick-zone touch takes the stick over
+## even if the old finger's lift was never delivered.
+var _stale: bool = false
 var _idle_t: float = 0.0
 var _player: Node = null
 
@@ -74,6 +81,7 @@ func _ready() -> void:
 
 	_layout()
 	get_viewport().size_changed.connect(_layout)
+	DisplayFit.layout_changed.connect(_on_fold)
 	TouchInput.sticks_cleared.connect(_reset_touches)
 	GameState.settings_changed.connect(_on_setting)
 	if not TouchInput.touch_primary:
@@ -86,6 +94,7 @@ func _make_button(text: String, r: float, tint: Color, icon_path: String = "") -
 	b.set_script(ActionButton)
 	b.set("label_text", text)
 	b.set("radius", r)
+	b.set_meta("base_radius", r)
 	b.set("tint", tint)
 	if icon_path != "" and ResourceLoader.exists(icon_path):
 		b.set("icon", load(icon_path))
@@ -96,7 +105,8 @@ func _make_button(text: String, r: float, tint: Color, icon_path: String = "") -
 ## Settings > Controls apply live (also from the pause menu).
 func _read_settings() -> void:
 	_left_handed = bool(GameState.settings.get("left_handed", false))
-	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0))
+	thumb_k = MobileLayout.thumb_scale()
+	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0)) * thumb_k
 
 
 func _on_setting(key: String) -> void:
@@ -115,6 +125,8 @@ func stick_alpha() -> float:
 func _exit_tree() -> void:
 	if TouchInput.sticks_cleared.is_connected(_reset_touches):
 		TouchInput.sticks_cleared.disconnect(_reset_touches)
+	if DisplayFit.layout_changed.is_connected(_on_fold):
+		DisplayFit.layout_changed.disconnect(_on_fold)
 	if GameState.settings_changed.is_connected(_on_setting):
 		GameState.settings_changed.disconnect(_on_setting)
 	TouchInput.clear_sticks()
@@ -122,6 +134,19 @@ func _exit_tree() -> void:
 func _layout() -> void:
 	var m := MobileLayout.control_safe_margin()
 	var win := get_viewport().get_visible_rect().size
+	## Live fold / rotation: a held stick keeps its place relative to the
+	## screen (same fraction across), so the thumb doesn't lose it.
+	if _laid_for != Vector2.ZERO and win != _laid_for and _laid_for.x > 0.0 and _laid_for.y > 0.0:
+		var f := win / _laid_for
+		_move_origin *= f
+		_move_knob *= f
+	_laid_for = win
+	thumb_k = MobileLayout.thumb_scale()
+	stick_radius = BASE_STICK_RADIUS * float(GameState.settings.get("stick_scale", 1.0)) * thumb_k
+	var k := thumb_k
+	for b in [btn_dash, btn_ability]:
+		if b:
+			b.set("radius", float(b.get_meta("base_radius", b.get("radius"))) * k)
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.offset_left = m.position.x
 	root.offset_top = m.position.y
@@ -131,8 +156,10 @@ func _layout() -> void:
 	var h := m.size.y
 	## Bottom-right thumb cluster (mirrored when left-handed): DASH in the
 	## corner, the big ABILITY stacked right above it (one-thumb reach).
-	_place(btn_dash, Vector2(w - 82, h - 96))
-	_place(btn_ability, Vector2(w - 92, h - 96 - 58.0 - ABILITY_RADIUS - 22.0))
+	## Anchored to the bottom corner of the safe area; on a big screen the
+	## offsets shrink with the caps so the cluster stays in thumb reach.
+	_place(btn_dash, Vector2(w - 82 * k, h - 96 * k))
+	_place(btn_ability, Vector2(w - 92 * k, h - (96 + 58.0 + ABILITY_RADIUS + 22.0) * k))
 	## Pause: top-right corner (the iOS convention), never mirrored, clear of
 	## both thumbs so it can't be hit by accident mid-fight.
 	_place(btn_pause, Vector2(w - PAUSE_RADIUS - 4.0, PAUSE_RADIUS + 2.0), false)
@@ -145,6 +172,15 @@ func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	b.size = Vector2(r * 2.0, r * 2.0)
 	b.pivot_offset = b.size * 0.5
 	b.position = c - b.size * 0.5
+
+## DisplayFit: the window settled on a new size (fold / unfold / rotate).
+func _on_fold(_sz: Vector2) -> void:
+	_read_settings()
+	_layout()
+	_stale = true
+	if stick_draw:
+		stick_draw.queue_redraw()
+
 
 func _reset_touches() -> void:
 	for b in _buttons:
@@ -192,8 +228,13 @@ func _begin_touch(index: int, pos: Vector2) -> bool:
 		return true
 	if not TouchInput.touch_primary:
 		return false  ## desktop mouse emulation: don't spawn sticks
-	if not _in_stick_zone(pos) or _move_id >= 0:
+	if not _in_stick_zone(pos):
 		return false
+	## After a fold the old stick finger's lift may never arrive: a new touch
+	## takes the stick over instead of being ignored.
+	if _move_id >= 0 and not _stale and index != _move_id:
+		return false
+	_stale = false
 	_move_id = index
 	_move_origin = pos
 	_move_knob = pos
@@ -211,6 +252,7 @@ func _in_stick_zone(pos: Vector2) -> bool:
 
 func _drag_touch(index: int, pos: Vector2) -> bool:
 	if index == _move_id:
+		_stale = false
 		## Base follows the thumb past the rim → never "run out" of stick.
 		var d := pos - _move_origin
 		if d.length() > stick_radius:

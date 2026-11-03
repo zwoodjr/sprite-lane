@@ -1960,7 +1960,12 @@ func _sync_list_width() -> void:
 	var vbar := _scroll.get_v_scroll_bar()
 	if vbar != null:
 		bar_w = vbar.get_combined_minimum_size().x
-	var w := _scroll.size.x - bar_w
+	## The pinned list width also pins the scroller, so after a fold to a
+	## narrower screen take the room the frame has now, not the old width.
+	var avail := _scroll.size.x
+	if frame != null:
+		avail = minf(avail, get_viewport_rect().size.x - frame.get_theme_constant("margin_left") - frame.get_theme_constant("margin_right"))
+	var w := avail - bar_w
 	if w > 1.0:
 		_list.custom_minimum_size.x = w
 
@@ -1974,6 +1979,16 @@ func _clamp_scroll() -> void:
 		return
 	var max_y := maxi(0, int(vbar.max_value - vbar.page))
 	_scroll.scroll_vertical = clampi(_scroll_y_keep, 0, max_y)
+
+
+## Fold / unfold / rotate: the list width was pinned to the old scroller
+## width; let it shrink, then rebuild the open tab at the new width.
+func relayout() -> void:
+	if _list != null:
+		_list.custom_minimum_size.x = 0
+	if _scroll != null:
+		show_tab(_tab)
+		_sync_list_width.call_deferred()
 
 
 func open_settings() -> void:

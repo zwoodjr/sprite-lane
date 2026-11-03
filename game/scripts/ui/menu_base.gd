@@ -20,6 +20,7 @@ func _ready() -> void:
 	frame.add_child(content)
 	_apply_margins()
 	get_viewport().size_changed.connect(_apply_margins)
+	DisplayFit.layout_changed.connect(_on_layout_changed)
 	build(content)
 	## Entrance: fade in. (No position tween: moving an anchored container
 	## freezes its size, and autowrap labels report a huge height on the first
@@ -41,13 +42,35 @@ func _fit_frame() -> void:
 func _apply_margins() -> void:
 	var m := MobileLayout.control_safe_margin()
 	var vp := get_viewport_rect().size
-	frame.add_theme_constant_override("margin_left", int(m.position.x + 4))
-	frame.add_theme_constant_override("margin_right", int(vp.x - m.position.x - m.size.x + 4))
+	## Wide screens (a landscape fold): a centred phone-width column.
+	var pad := MobileLayout.column_pad(vp.x, m.size.x - 8.0)
+	frame.add_theme_constant_override("margin_left", int(m.position.x + 4 + pad))
+	frame.add_theme_constant_override("margin_right", int(vp.x - m.position.x - m.size.x + 4 + pad))
 	frame.add_theme_constant_override("margin_top", int(m.position.y + 6))
 	frame.add_theme_constant_override("margin_bottom", int(vp.y - m.position.y - m.size.y + 6))
 
 func build(_c: VBoxContainer) -> void:
 	pass
+
+
+## The window settled on a new size (iPhone Duo fold / unfold, rotation).
+## Margins already follow size_changed; screens that size cards from the
+## screen width override relayout().
+func _on_layout_changed(_sz: Vector2) -> void:
+	if not is_inside_tree():
+		return
+	_apply_margins()
+	_fit_frame()
+	relayout()
+
+
+func relayout() -> void:
+	pass
+
+
+func _exit_tree() -> void:
+	if DisplayFit.layout_changed.is_connected(_on_layout_changed):
+		DisplayFit.layout_changed.disconnect(_on_layout_changed)
 
 func header(title: String, back_cb: Callable = Callable()) -> HBoxContainer:
 	var h := HBoxContainer.new()

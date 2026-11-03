@@ -23,6 +23,8 @@ func _ready() -> void:
 	_frame = MarginContainer.new()
 	_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_frame)
+	## Fold / unfold / rotate while paused: refit the frame to the new screen.
+	get_viewport().size_changed.connect(_fit_margins)
 
 func open() -> void:
 	if GameState.run_finished:
@@ -45,14 +47,22 @@ func _unhandled_input(event: InputEvent) -> void:
 func _set_content(c: Control) -> void:
 	for ch in _frame.get_children():
 		ch.queue_free()
-	var m := MobileLayout.control_safe_margin()
-	var vp := get_viewport().get_visible_rect().size
-	_frame.add_theme_constant_override("margin_left", int(m.position.x + vp.x * 0.06))
-	_frame.add_theme_constant_override("margin_right", int(vp.x - m.position.x - m.size.x + vp.x * 0.06))
-	_frame.add_theme_constant_override("margin_top", int(m.position.y + 10))
-	_frame.add_theme_constant_override("margin_bottom", int(vp.y - m.position.y - m.size.y + 10))
+	_fit_margins()
 	_frame.add_child(c)
 	_content = c
+
+
+func _fit_margins() -> void:
+	if _frame == null:
+		return
+	var m := MobileLayout.control_safe_margin()
+	var vp := get_viewport().get_visible_rect().size
+	var side := vp.x * 0.06 + MobileLayout.column_pad(vp.x, m.size.x - vp.x * 0.12)
+	_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_frame.add_theme_constant_override("margin_left", int(m.position.x + side))
+	_frame.add_theme_constant_override("margin_right", int(vp.x - m.position.x - m.size.x + side))
+	_frame.add_theme_constant_override("margin_top", int(m.position.y + 10))
+	_frame.add_theme_constant_override("margin_bottom", int(vp.y - m.position.y - m.size.y + 10))
 
 func _show_main() -> void:
 	_confirm_abandon = false

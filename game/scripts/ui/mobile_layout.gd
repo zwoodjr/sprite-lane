@@ -33,6 +33,45 @@ static func safe_margin() -> Rect2:
 
 ## Review tools only: simulated notch / home-bar insets in UI px (l, t, r, b).
 static var sim_safe := Vector4.ZERO
+## Review tools / tests only: forced device px per UI px (0 = measure).
+static var sim_stretch := 0.0
+
+## Device px per UI px above which the thumb controls shrink toward their
+## iPhone physical size: 1.8 = a Pro Max (1290 px / 720), so every regular
+## iPhone keeps exactly the old layout; the iPhone Duo inner screen (1878 px
+## over a 900-wide UI, 2.09) gets 0.86.
+const THUMB_REF_STRETCH := 1.8
+const THUMB_MIN := 0.8
+
+
+## Device px per UI px (1 in headless runs).
+static func stretch() -> float:
+	if sim_stretch > 0.0:
+		return sim_stretch
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null or DisplayServer.get_name() == "headless":
+		return 1.0
+	var vis := tree.root.get_visible_rect().size
+	var win := Vector2(DisplayServer.window_get_size())
+	if vis.x <= 0.0 or win.x <= 0.0:
+		return 1.0
+	return win.x / vis.x
+
+
+## Scale for DASH / ABILITY / the stick so they keep a thumb-sized physical
+## size (and reach) on big screens: 1.0 on every regular iPhone.
+static func thumb_scale() -> float:
+	return clampf(THUMB_REF_STRETCH / maxf(stretch(), 0.01), THUMB_MIN, 1.0)
+
+
+## Widest a menu column gets (UI px): a landscape fold (1820 wide) keeps a
+## readable phone-width column instead of stretching every card edge to edge.
+const MENU_MAX_W := 900.0
+
+
+## Extra side margin (each side) that keeps a menu column at MENU_MAX_W.
+static func column_pad(vp_w: float, used_w: float) -> float:
+	return maxf(0.0, (used_w - MENU_MAX_W) * 0.5) if vp_w > 0.0 else 0.0
 
 
 static func control_safe_margin() -> Rect2:

@@ -861,7 +861,8 @@ func _spawn_enemy() -> void:
 	world.add_child(enemy)
 
 ## Just outside the visible screen along dir (from the camera's view centre),
-## kept within SPAWN_MIN..SPAWN_MAX of the hero so mobs walk in quickly.
+## kept within SPAWN_MIN..SPAWN_MAX of the hero so mobs walk in quickly
+## (further only when the view itself reaches past SPAWN_MAX).
 const SPAWN_MARGIN := 84.0
 const SPAWN_MIN := 540.0
 const SPAWN_MAX := 820.0
@@ -873,18 +874,29 @@ func _spawn_point_outside_view(dir: Vector2) -> Vector2:
 	if cam:
 		center += cam.offset
 		half = get_viewport().get_visible_rect().size / cam.zoom * 0.5
+	var spot := _edge_spot(dir, center, half)
+	## Keep spawn lanes clear: never drop a mob inside a wreck / wall footprint.
+	## A blocked spot turns the direction and finds that direction's own
+	## off-screen distance (keeping the old distance could land on-screen
+	## when it swings from the short side of the view to the long one).
+	for k in range(4):
+		if _spot_free(spot, 26.0):
+			break
+		spot = _edge_spot(dir.rotated(0.35 * (k + 1) * (1.0 if k % 2 == 0 else -1.0)), center, half)
+	return spot
+
+
+func _edge_spot(dir: Vector2, center: Vector2, half: Vector2) -> Vector2:
 	var tx := INF if absf(dir.x) < 0.001 else half.x / absf(dir.x)
 	var ty := INF if absf(dir.y) < 0.001 else half.y / absf(dir.y)
 	var edge := center + dir * (minf(tx, ty) + SPAWN_MARGIN)
 	var from_hero := edge - player.global_position
-	var d := clampf(from_hero.length(), SPAWN_MIN, SPAWN_MAX)
-	var spot := player.global_position + from_hero.normalized() * d
-	## Keep spawn lanes clear: never drop a mob inside a wreck / wall footprint.
-	for k in range(4):
-		if _spot_free(spot, 26.0):
-			break
-		spot = player.global_position + from_hero.normalized().rotated(0.35 * (k + 1) * (1.0 if k % 2 == 0 else -1.0)) * d
-	return spot
+	## Never pull a spawn back onto the screen: on a wide view (iPhone Duo,
+	## landscape) the edge can sit past SPAWN_MAX, so the cap grows with the
+	## view (the camera caps the view itself at MAX_VIEW_RADIUS).
+	var far := maxf(SPAWN_MAX, (center - player.global_position).length() + half.length() + SPAWN_MARGIN)
+	var d := clampf(from_hero.length(), SPAWN_MIN, far)
+	return player.global_position + from_hero.normalized() * d
 
 func _spot_free(p: Vector2, r: float) -> bool:
 	var q := PhysicsShapeQueryParameters2D.new()
