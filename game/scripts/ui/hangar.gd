@@ -24,7 +24,6 @@ var _scrap_label: Label
 var _view: Control
 var _layers: Dictionary = {} ## layer name -> TextureRect
 var _pets: Dictionary = {} ## pet id -> TextureRect (dog on its bed)
-var _tab_btns: Dictionary = {}
 var _tab: String = "camp"
 var _scroll: ScrollContainer
 var _list: VBoxContainer
@@ -54,19 +53,9 @@ func build(c: VBoxContainer) -> void:
 	_view = _build_view()
 	c.add_child(_view)
 
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 8)
-	c.add_child(tabs)
-	for t in TABS:
-		var b := UiTheme.big_button(TAB_LABEL[t], UiTheme.LINE, 64, 16)
-		b.icon = IconSet.tex(str(TAB_ICON[t]), false)
-		b.add_theme_constant_override("h_separation", 4)
-		b.custom_minimum_size.x = 0
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.pressed.connect(show_tab.bind(t))
-		tabs.add_child(b)
-		_tab_btns[t] = b
-
+	## One navigation structure: the shared bottom tab bar picks the tab
+	## (STASH · HANGAR · PLAY · KENNEL · CREW). Brew opens from the HANGAR tab;
+	## Logbook / Gear / Trophies live at the top of the CREW tab.
 	_scroll = ScrollContainer.new()
 	_scroll.name = "HangarScroll"
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -79,18 +68,6 @@ func build(c: VBoxContainer) -> void:
 	_scroll.add_child(_list)
 	_scroll.resized.connect(_sync_list_width)
 
-	## Logbook / Gear / Trophies, then the shared bottom tab bar (PLAY there).
-	var bottom := HBoxContainer.new()
-	bottom.name = "HangarLinks"
-	bottom.add_theme_constant_override("separation", 8)
-	c.add_child(bottom)
-	for it in [["LOGBOOK", open_logbook], ["GEAR", func() -> void: GameState.go_loadout("hangar")], ["TROPHIES", open_trophies]]:
-		var lb := UiTheme.big_button(str(it[0]), UiTheme.TEAL, UiTheme.MIN_TOUCH, 16)
-		lb.name = "Link_" + str(it[0])
-		lb.custom_minimum_size.x = 0
-		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lb.pressed.connect(it[1])
-		bottom.add_child(lb)
 	_nav = NavBar.make(GameState.hangar_tab if GameState.hangar_tab != "" else "camp", self)
 	c.add_child(_nav)
 
@@ -191,12 +168,7 @@ func _pet_frame(pet_id: String, tight: bool = false) -> Texture2D:
 	var path := str(def.get("anim", "")) + "_idle.png"
 	if not ResourceLoader.exists(path):
 		return null
-	var strip: Texture2D = load(path)
-	var at := AtlasTexture.new()
-	at.atlas = strip
-	var h := float(strip.get_height())
-	at.region = Rect2(h * 0.2, h * 0.28, h * 0.6, h * 0.6) if tight else Rect2(0, 0, h, h)
-	return at
+	return UnitAnim.strip_frame(path, 0, Rect2(0.2, 0.28, 0.6, 0.6) if tight else Rect2(0, 0, 1, 1))
 
 
 ## Art-space (240x150) → view-space transform for the stacked layers.
@@ -282,10 +254,6 @@ func show_tab(t: String) -> void:
 			_view.create_tween().tween_property(_view, "custom_minimum_size:y", vh, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		else:
 			_view.custom_minimum_size.y = vh
-	for k in _tab_btns.keys():
-		var b: Button = _tab_btns[k]
-		var on := str(k) == t
-		UiTheme.skin_button(b, UiTheme.AMBER if on else UiTheme.LINE, 12.0)
 	NavBar.set_active(_nav, t)
 	_rebuild()
 
@@ -334,6 +302,13 @@ func _rebuild() -> void:
 	_set_scrap_shown(GameState.account_scrap)
 	match _tab:
 		"camp":
+			var brew := UiTheme.big_button("BREW TONICS  ›", UiTheme.TEAL, UiTheme.MIN_TOUCH, 20)
+			brew.name = "BrewButton"
+			brew.icon = IconSet.tex(str(TAB_ICON["brew"]), false)
+			brew.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			brew.mouse_force_pass_scroll_events = true
+			brew.pressed.connect(show_tab.bind("brew"))
+			_list.add_child(brew)
 			_list.add_child(_note("Shared upgrades help every survivor. Tap a price, then tap again to buy."))
 			var g := _grid()
 			for id in HangarDefs.ids_for("shared"):
@@ -351,6 +326,7 @@ func _rebuild() -> void:
 			_list.add_child(cb)
 			_build_overdrive()
 		"survivors":
+			_build_profile_links()
 			_build_supplies()
 			_list.add_child(_section("SURVIVORS"))
 			_list.add_child(_note("Each survivor's weapon and signature trick."))
@@ -371,6 +347,12 @@ func _rebuild() -> void:
 					_list.add_child(_pet_card(str(id).substr(7)))
 			_build_workshop()
 		"brew":
+			var back := UiTheme.big_button("‹  HANGAR", UiTheme.LINE, UiTheme.MIN_TOUCH, 20)
+			back.name = "BrewBack"
+			back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			back.mouse_force_pass_scroll_events = true
+			back.pressed.connect(show_tab.bind("camp"))
+			_list.add_child(back)
 			_build_brew()
 		"stash":
 			_build_stash()
@@ -380,6 +362,23 @@ func _rebuild() -> void:
 	_list.add_child(pad)
 	_sync_list_width()
 	call_deferred("_clamp_scroll")
+
+
+## CREW tab header: the profile screens (Logbook, Gear, Trophies).
+func _build_profile_links() -> void:
+	var row := HBoxContainer.new()
+	row.name = "HangarLinks"
+	row.add_theme_constant_override("separation", 8)
+	_list.add_child(row)
+	for it in [["LOGBOOK", open_logbook], ["GEAR", func() -> void: GameState.go_loadout("hangar")], ["TROPHIES", open_trophies]]:
+		var lb := UiTheme.big_button(str(it[0]), UiTheme.TEAL, UiTheme.MIN_TOUCH, 20)
+		lb.name = "Link_" + str(it[0])
+		lb.custom_minimum_size.x = 0
+		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lb.mouse_force_pass_scroll_events = true
+		lb.clip_text = true
+		lb.pressed.connect(it[1])
+		row.add_child(lb)
 
 
 func _note(text: String) -> Label:

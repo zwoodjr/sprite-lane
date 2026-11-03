@@ -52,7 +52,7 @@ func build(c: VBoxContainer) -> void:
 	hist.pressed.connect(func() -> void: GameState.go_run_history("logbook", "runs"))
 	bottom.add_child(hist)
 	## The shared tab bar (back to the Hangar is its HANGAR tab / the header).
-	c.add_child(NavBar.make(""))
+	c.add_child(NavBar.make("survivors"))
 	show_tab("daily")
 
 
@@ -212,12 +212,7 @@ func _beast_icon(kind: String) -> Texture2D:
 	var path := str(def.get("anim", "")) + "_idle.png"
 	if not ResourceLoader.exists(path):
 		return null
-	var strip: Texture2D = load(path)
-	var at := AtlasTexture.new()
-	at.atlas = strip
-	var h := float(strip.get_height())
-	at.region = Rect2(h * 0.1, h * 0.1, h * 0.8, h * 0.8)
-	return at
+	return UnitAnim.strip_frame(path, 0, Rect2(0.1, 0.1, 0.8, 0.8))
 
 
 func _beast_row(kind: String) -> PanelContainer:

@@ -27,10 +27,11 @@ const T_TITLE_XL := 56
 const T_TITLE := 40
 const T_H1 := 32
 const T_H2 := 24
-const T_H3 := 20
-const T_BODY := 20
-## Was 16: raised to the iPhone floor (MIN_FONT). Small = body size now.
-const T_SMALL := 20
+const T_H3 := 24
+const T_BODY := 24
+## Was 16, then 20: a blind playtest at 390x844 found 20 too small. 22 px is
+## 12 pt on a 393-pt iPhone; body text is 24 (13 pt).
+const T_SMALL := 22
 ## Pixel font (numbers / short readouts): 8 / 16 / 24 only.
 ## The 8-px pixel size is retired (unreadable on a phone).
 const PX_S := 16
@@ -38,11 +39,11 @@ const PX_M := 16
 const PX_L := 24
 ## iPhone readability floor (P2). The UI is 720 design px wide and fills the
 ## phone's width, so on the 393-pt reference iPhone 1 pt = 720 / 393 = 1.83 px:
-##   11 pt text   -> 20 design px (Barlow); the pixel face's 16 has the same cap height.
+##   12 pt text   -> 22 design px (Barlow); body 24 (13 pt). The pixel face keeps 16 (same cap height as Barlow 22).
 ##   44 pt target -> 81 px on 393 pt, 84 px on 375-pt phones: 88 (48 pt / 46 pt)
 ##   clears every iPhone and sits on the 8-px grid.
 ## Enforced on every Label / Button as it enters the tree (see _fit_text).
-const MIN_FONT := 20
+const MIN_FONT := 22
 const MIN_PIXEL_FONT := 16
 const MIN_TOUCH := 88.0
 ## Settings "Text size": Normal / Large / Extra large.
@@ -358,13 +359,16 @@ static func title_size(size: int) -> int:
 
 
 static func ui_size(size: int) -> int:
+	## An explicit T_SMALL stays small (22); other sizes snap to the scale.
+	if size == T_SMALL:
+		return T_SMALL
 	if size >= 50:
 		return T_TITLE_XL
 	if size >= 36:
 		return T_TITLE
 	if size >= 28:
 		return T_H1
-	if size >= 22:
+	if size >= 23:
 		return T_H2
 	if size >= 18:
 		return T_H3

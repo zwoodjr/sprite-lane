@@ -11,6 +11,7 @@ var loop: bool = true
 var end_frame: int = -1
 var _atlas: AtlasTexture
 var _frames: int = 1
+var _lay: Dictionary = {}
 var _t: float = 0.0
 var _frame: int = -1
 
@@ -34,8 +35,9 @@ func set_strip(path: String) -> void:
 	var tex := load(path) as Texture2D
 	if tex == null:
 		return
-	var h := float(tex.get_height())
-	_frames = maxi(1, int(round(float(tex.get_width()) / h)))
+	## Wide strips are stored as grids (UnitAnim.strip_layout: GPU size limit).
+	_lay = UnitAnim.strip_layout(path, tex)
+	_frames = int(_lay["n"])
 	## Units with a per-state fps sidecar (<prefix>_anim.json) play at their own rate.
 	var cut := path.rfind("_")
 	if cut > 0 and path.ends_with(".png"):
@@ -46,7 +48,7 @@ func set_strip(path: String) -> void:
 			fps = float(f[st])
 	_atlas = AtlasTexture.new()
 	_atlas.atlas = tex
-	_atlas.region = Rect2(0, 0, h, h)
+	_atlas.region = UnitAnim.strip_region(_lay, 0)
 	texture = _atlas
 	_frame = 0
 	_t = 0.0
@@ -61,5 +63,4 @@ func _process(delta: float) -> void:
 	f = f % _frames if loop else mini(f, last)
 	if f != _frame:
 		_frame = f
-		var h := _atlas.region.size.y
-		_atlas.region = Rect2(h * f, 0, h, h)
+		_atlas.region = UnitAnim.strip_region(_lay, f)

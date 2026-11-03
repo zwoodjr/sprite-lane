@@ -181,13 +181,10 @@ func _first_frame(path: String) -> Texture2D:
 	var tex := load(path) as Texture2D
 	if tex == null:
 		return null
-	var h := float(tex.get_height())
-	if float(tex.get_width()) <= h * 1.5:
+	var lay := UnitAnim.strip_layout(path, tex)
+	if int(lay["n"]) <= 1:
 		return tex
-	var at := AtlasTexture.new()
-	at.atlas = tex
-	at.region = Rect2(0, 0, h, h)
-	return at
+	return UnitAnim.strip_frame(path, 0)
 
 const STRIP_SEP := 6
 const TILE_MAX := 76.0

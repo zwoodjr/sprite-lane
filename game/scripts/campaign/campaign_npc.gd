@@ -66,7 +66,7 @@ func _ready() -> void:
 		_feet = RadioDefs.NPC_FEET
 	var st := UnitAnim.load_states(prefix)
 	if st.has("idle"):
-		fs = float((st["idle"]["tex"] as Texture2D).get_height())
+		fs = float(st["idle"].get("fs", (st["idle"]["tex"] as Texture2D).get_height()))
 	if enemy_art != "":
 		_feet = 16.0 * (2.05 if fs >= 256.0 else (1.5 if fs >= 192.0 else 1.0)) * UnitAnim.BODY_K
 	_anim.setup(_body, prefix, UnitAnim.native(fs), _feet)

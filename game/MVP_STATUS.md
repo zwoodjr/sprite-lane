@@ -1,5 +1,34 @@
 # MVP status (repo mirror)
 
+**Blind playtest fixes (navigation, text size, render glitches, admin lock, save seal):** A blind tester on the 390×844 web build reported five problems.
+- **One navigation bar.** The Hangar had three stacked bars: the bottom tab bar, its own Camp / Crew / Kennel / Brew / Stash tabs, and the Logbook / Gear / Trophies buttons. Now the bottom tab bar (STASH · HANGAR · PLAY · KENNEL · CREW) is the only navigation.
+  - BREW opens from a BREW TONICS button at the top of the HANGAR tab, with a back button in Brew.
+  - Logbook, Gear and Trophies sit at the top of the CREW tab. CREW stays lit on the Logbook and Gear screens.
+  - Every screen is still reachable.
+- **Bigger text.**
+  - The font floor goes from 20 to 22 px (about 12 pt on a 393-pt iPhone), and body and H3 text from 20 to 24.
+  - GEAR LOST is an H2 header, and the result stat chips use the 24-px pixel face.
+  - The HUD level now reads **RUN LV n**, follows the run level the moment it changes, and matches the LEVEL n cards. Before, it could lag behind.
+  - The event chip uses the condensed face, so its text still fits the lane in two lines.
+- **Black boxes over the hero and pet (WebGL "texImage2D: width or height out of range").**
+  - Cause: textures wider than the GPU's maximum texture size. The 256-px pet and boss strips were 9216 px wide, and the hero's in-memory 2× idle strip was also 9216 px. Headless Chromium allows at most 8192.
+  - Fix: every strip wider than 4096 px is now stored as a grid (`tools/repack_strips.py`, listed in `assets/sprites/strip_grids.json`). The 2× hero copy is built as a grid too. Every strip reader goes through `UnitAnim.strip_layout()` / `strip_region()`: units, StripAnim, the Hangar, the Logbook, character select, campaign NPCs and the hero's ghosts.
+  - Checked with Playwright in headless Chromium at 390×844, swiftshader WebGL2, max texture size 8192. The old build logs the warning 7 times and draws a black square over the hero and Noel. The new build logs 0, the hero and pet draw, and the WIPED screen is clean.
+- **Admin PIN guard.**
+  - Wrong tries and the lockout are saved in `user://admin.cfg` with wall-clock times, so a reload no longer resets them.
+  - Lockouts escalate: 30 s, then 2 min, 10 min, 30 min, and 1 h after that. A lockout time pushed past its step is capped. The right PIN resets the ladder.
+  - The pad shows one dot per digit typed, with no fixed slots, and submits on OK, so it no longer gives away the PIN length.
+  - Logo taps: 5 taps, each within 1.2 s of the last. There is no 2.5 s total window any more. A browser's echoed mouse press after a touch counts as the same tap.
+- **Sealed save.**
+  - `wanderer_save.json` is now `{wsave, n, body: base64(deflate(json)), sig: sha256(key + body)}`, so it is no longer plain JSON.
+  - On load, an edited body, or a plain file on a device that already writes sealed saves (`user://wanderer_seal.cfg`), is handled gently. The profile still loads. Scrap and garage tokens are clamped down to the last sealed backup's values, or kept when there is no trustworthy backup. The event goes in `tamper_log` and a warning is logged.
+  - Plain saves from before the seal (Zach's included) load with nothing lost and are sealed on the next save; the backup is sealed too.
+- **Tests:**
+  - `_test_save_seal`: legacy migration, the save not being plain, the round trip, a forged signature, a plain file on a sealing device, and no backup.
+  - `_test_admin_lockout`: misses and the lockout surviving a reload, the 30 s / 2 min / 10 min ladder, the cap, no slots, no auto-submit, the reset on the right PIN, steady taps with echoes, and slow taps.
+  - Tests read saves through `GameState.read_save_file()`.
+  - TEST_PASS (4.6), PARSE_OK (4.3, 4.6), LAYOUT_PASS at every size and text size.
+
 **Blind playtest fixes (resume, prologue, WIPED screen, pause):** A blind tester on the 390×844 web build hit four problems.
 - **Resume.**
   - The prologue (and every campaign level) now resumes at the objective that was running. A checkpoint is saved each time an objective starts. What earlier objectives left behind comes back without replaying them: story choices, NPCs, Noel joining. The hero starts at the last objective's spot with the health they had, and the intro card isn't shown again.

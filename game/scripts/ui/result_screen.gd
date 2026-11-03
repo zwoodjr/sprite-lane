@@ -139,7 +139,7 @@ func build(c: VBoxContainer) -> void:
 		held = GameState.pending_rewards.slice(maxi(0, GameState.pending_rewards.size() - GameState.result_held_n))
 		gear_list.append_array(held)
 	if not gear_list.is_empty():
-		var gh := UiTheme.head_label("GEAR TO STASH" if _won else "GEAR LOST  (%d)" % gear_list.size(), UiTheme.T_H3 if _won else UiTheme.T_H2, UiTheme.AMBER if _won else UiTheme.DANGER)
+		var gh := UiTheme.head_label("GEAR TO STASH" if _won else "GEAR LOST  (%d)" % gear_list.size(), UiTheme.T_H2, UiTheme.AMBER if _won else UiTheme.DANGER)
 		gh.name = "GearHeader"
 		mid.add_child(gh)
 		var grid := HFlowContainer.new()
@@ -548,7 +548,7 @@ func _stat(parent: Control, icon_id: String, value: String, col: Color) -> void:
 	h.add_theme_constant_override("separation", 8)
 	p.add_child(h)
 	h.add_child(IconSet.rect(icon_id, 48))
-	var l := UiTheme.pixel_label(value, UiTheme.PX_M, col)
+	var l := UiTheme.pixel_label(value, UiTheme.PX_L, col)
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(l)
 	parent.add_child(p)

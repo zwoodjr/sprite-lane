@@ -232,7 +232,7 @@ func _web_save_prompt() -> void:
 func _on_logo_input(ev: InputEvent) -> void:
 	var down: bool = (ev is InputEventScreenTouch and ev.pressed) or (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT)
 	if down:
-		Admin.logo_tap(Time.get_ticks_msec())
+		Admin.logo_tap(Time.get_ticks_msec(), "touch" if ev is InputEventScreenTouch else "mouse")
 
 
 ## Title sting: the logo drops in big, lands with a shake and a dust puff.

@@ -160,6 +160,23 @@ const SAVE_VERSION := 4
 ## Rolling backup (the save before the latest) + where an unreadable save is kept.
 const SAVE_BAK_PATH := "user://wanderer_save.bak"
 const SAVE_DAMAGED_PATH := "user://wanderer_save.damaged.json"
+## Sealed save (tamper check). The profile is written as
+##   {"wsave": 1, "n": bytes, "body": base64(deflate(json)), "sig": sha256(key + body)}
+## so it is no longer plain JSON to edit, and an edited body or a re-written
+## plain file is caught on load. Plain JSON saves from before the seal load as
+## they are (migrated on the next save), unless this device has already
+## written a sealed save (SEAL_MARK), which makes a plain file suspect.
+## A mismatch is handled gently: the profile still loads, currency is clamped
+## back to the last sealed backup, and the event is logged (tamper_log).
+const SAVE_SEAL_KEY := "wanderer.save.seal.v1:6f1d0c3b-dust:"
+const SAVE_SEAL_VERSION := 1
+const SEAL_MARK_PATH := "user://wanderer_seal.cfg"
+## Currency a tampered save is clamped on (to the last good backup's value).
+const SEAL_CURRENCY := ["account_scrap", "garage_tokens"]
+## Last _parse_save: "sealed" (sig ok), "bad_sig", "plain" or "".
+var _last_seal: String = ""
+## Detected tamper events (kept in the save, newest last, at most 10).
+var tamper_log: Array = []
 ## Live-run snapshot (written while a run is in progress; gone once it ends).
 const RUN_PATH := "user://wanderer_run.json"
 ## Short: on the web a reload / tab close sends no notification, so the last
@@ -350,14 +367,37 @@ func save_profile() -> void:
 		"supplies_armed": supplies_armed,
 		"crate_cosmetics": crate_cosmetics,
 		"crates_opened": crates_opened,
+		"tamper_log": tamper_log,
 	}
 	## A daily run borrows the day's tier / hero / pet: save the player's own.
 	if daily_armed and not _daily_restore.is_empty():
 		data["selected_mode_id"] = str(_daily_restore.get("mode", selected_mode_id))
 		data["selected_character_id"] = str(_daily_restore.get("hero", selected_character_id))
 		data["selected_pet_id"] = str(_daily_restore.get("pet", selected_pet_id))
-	if not _atomic_write(SAVE_PATH, JSON.stringify(data, "\t"), true):
+	if not _atomic_write(SAVE_PATH, seal_save(JSON.stringify(data)), true):
 		push_warning("Save failed: %s" % SAVE_PATH)
+	elif not FileAccess.file_exists(SEAL_MARK_PATH):
+		var mk := ConfigFile.new()
+		mk.set_value("seal", "since", int(Time.get_unix_time_from_system()))
+		mk.save(SEAL_MARK_PATH)
+
+
+## Save text -> sealed envelope (see SAVE_SEAL_KEY).
+static func seal_save(json_text: String) -> String:
+	var raw := json_text.to_utf8_buffer()
+	var body := Marshalls.raw_to_base64(raw.compress(FileAccess.COMPRESSION_DEFLATE))
+	return JSON.stringify({"wsave": SAVE_SEAL_VERSION, "n": raw.size(), "body": body, "sig": seal_sig(body)})
+
+
+static func seal_sig(body: String) -> String:
+	return (SAVE_SEAL_KEY + body).sha256_text()
+
+
+## Parsed save file (sealed or plain), or null. Tools / tests use this.
+func read_save_file(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	return _parse_save(FileAccess.get_file_as_string(path))
 
 ## Safe save: write a temp file, read it back and parse it, then rename it over
 ## the real file (atomic on iOS / desktop). With `backup`, the last good save is
@@ -375,7 +415,18 @@ func _atomic_write(path: String, text: String, backup: bool) -> bool:
 		return false
 	if backup and _main_save_ok and FileAccess.file_exists(path):
 		var bt := SAVE_BAK_PATH + ".tmp"
-		if DirAccess.copy_absolute(path, bt) == OK:
+		var prev := FileAccess.get_file_as_string(path)
+		var ok := false
+		if _parse_save(prev) != null and _last_seal == "plain":
+			## First sealed save over a pre-seal profile: seal the backup too.
+			var fb := FileAccess.open(bt, FileAccess.WRITE)
+			if fb:
+				fb.store_string(seal_save(prev))
+				fb.close()
+				ok = true
+		else:
+			ok = DirAccess.copy_absolute(path, bt) == OK
+		if ok:
 			DirAccess.rename_absolute(bt, SAVE_BAK_PATH)
 	if DirAccess.rename_absolute(tmp, path) != OK:
 		return false
@@ -384,7 +435,9 @@ func _atomic_write(path: String, text: String, backup: bool) -> bool:
 	return true
 
 ## Parsed save dictionary, or null when the text is empty / cut off / not JSON.
+## Sealed files are unwrapped; _last_seal says how it went.
 func _parse_save(text: String) -> Variant:
+	_last_seal = ""
 	if text.strip_edges() == "":
 		return null
 	var j := JSON.new()
@@ -393,7 +446,23 @@ func _parse_save(text: String) -> Variant:
 	var v: Variant = j.data
 	if typeof(v) != TYPE_DICTIONARY:
 		return null
-	return v
+	if not (v as Dictionary).has("wsave"):
+		_last_seal = "plain"
+		return v
+	var env: Dictionary = v
+	var body := str(env.get("body", ""))
+	var packed := Marshalls.base64_to_raw(body)
+	var n := int(env.get("n", 0))
+	if packed.is_empty() or n <= 0 or n > 64 * 1024 * 1024:
+		return null
+	var raw := packed.decompress(n, FileAccess.COMPRESSION_DEFLATE)
+	if raw.size() != n:
+		return null
+	var j2 := JSON.new()
+	if j2.parse(raw.get_string_from_utf8()) != OK or typeof(j2.data) != TYPE_DICTIONARY:
+		return null
+	_last_seal = "sealed" if seal_sig(body) == str(env.get("sig", "")) else "bad_sig"
+	return j2.data
 
 ## Load order: the save, then a finished-but-unrenamed temp, then the rolling
 ## backup. A damaged save is copied aside and never silently replaced with a
@@ -411,7 +480,10 @@ func load_profile() -> void:
 		if parsed == null:
 			push_warning("Save unreadable: %s" % p)
 			continue
+		var seal := _last_seal
 		apply_save(parsed)
+		if seal == "bad_sig" or (seal == "plain" and FileAccess.file_exists(SEAL_MARK_PATH)):
+			_on_save_tamper(p, seal)
 		if p == SAVE_PATH:
 			load_source = "main"
 			_main_save_ok = true
@@ -433,6 +505,32 @@ func load_profile() -> void:
 	migrated_hangar_v5 = true
 	migrated_hangar_v6 = true
 	_sync_account_level()
+
+## The loaded save failed its seal (edited body, or a plain file on a device
+## that writes sealed saves). Gentle: everything else is kept; each currency
+## goes back down to the last sealed backup's value (never up), or stays as
+## it is when there is no trustworthy backup. Logged in tamper_log + warning.
+func _on_save_tamper(path: String, why: String) -> void:
+	var ref: Variant = null
+	if path != SAVE_BAK_PATH and FileAccess.file_exists(SAVE_BAK_PATH):
+		ref = _parse_save(FileAccess.get_file_as_string(SAVE_BAK_PATH))
+		if _last_seal != "sealed":
+			ref = null
+	var clamped: Dictionary = {}
+	if ref is Dictionary:
+		for k in SEAL_CURRENCY:
+			var was := int(get(k))
+			var good := maxi(0, int((ref as Dictionary).get(k, 0)))
+			if was > good:
+				set(k, good)
+				clamped[k] = [was, good]
+	tamper_log.append({"t": int(Time.get_unix_time_from_system()), "file": path.get_file(), "why": why, "clamped": clamped})
+	while tamper_log.size() > 10:
+		tamper_log.pop_front()
+	push_warning("Save seal check failed (%s, %s): currency %s" % [path.get_file(), why, str(clamped) if not clamped.is_empty() else "kept (no sealed backup)"])
+	_sync_account_level()
+	save_profile()
+
 
 ## Copy an unreadable save aside (wanderer_save.damaged.json) before anything
 ## writes over it.
@@ -662,6 +760,12 @@ func _load_sinks(d: Dictionary) -> void:
 		if str(k) in ScrapSinks.COSMETIC_IDS and bool(cc[k]):
 			crate_cosmetics[str(k)] = true
 	crates_opened = maxi(0, int(d.get("crates_opened", 0)) if typeof(d.get("crates_opened", 0)) in [TYPE_INT, TYPE_FLOAT] else 0)
+	tamper_log = []
+	var tl_raw: Variant = d.get("tamper_log", [])
+	if tl_raw is Array:
+		for e in (tl_raw as Array).slice(-10):
+			if e is Dictionary:
+				tamper_log.append((e as Dictionary).duplicate(true))
 
 
 func _clean_daily(e: Dictionary) -> Dictionary:

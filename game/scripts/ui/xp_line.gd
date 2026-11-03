@@ -16,6 +16,15 @@ var _font: Font
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_font = UiTheme.font_pixel
+	## Follow the run level the moment it changes (the level-up cards pause the
+	## match, so the per-frame HUD update would lag behind "LEVEL n").
+	if not GameState.run_xp_changed.is_connected(_on_run_xp):
+		GameState.run_xp_changed.connect(_on_run_xp)
+	set_level(GameState.run_level)
+
+
+func _on_run_xp(_xp: int, lv: int) -> void:
+	set_level(lv)
 
 
 func set_ratio(r: float) -> void:
@@ -45,7 +54,9 @@ func _draw() -> void:
 	if custom_minimum_size.y < fs + 4:
 		custom_minimum_size.y = fs + 4
 	if _font:
-		var t := "LV %d" % level
+		## "RUN LV": the run's level (the LEVEL n level-up cards), never the
+		## account level the menus show.
+		var t := "RUN LV %d" % level
 		draw_string_outline(_font, Vector2(x0, fs + 1), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.04, 0.03, 0.02, 0.9))
 		draw_string(_font, Vector2(x0, fs + 1), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.62, 0.92, 0.6))
 		x0 += _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 8.0

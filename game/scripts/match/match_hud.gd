@@ -948,7 +948,7 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 		_set_text(_counter_label, "AT STAKE %d" % GameState.extract_estimate())
 		_set_col(_counter_label, UiTheme.DANGER if GameState.windows_skipped >= 2 else (UiTheme.RUST if GameState.windows_skipped == 1 else Color(0.86, 0.75, 0.52, 0.85)))
 	var rp: Dictionary = GameState.run_bar_state()
-	_set_text(_run_level_label, "LV %d%s" % [
+	_set_text(_run_level_label, "RUN LV %d%s" % [
 		int(rp["level"]),
 		"  MAX" if bool(rp.get("capped", false)) else "",
 	])
@@ -957,7 +957,7 @@ func update_match(phase: Dictionary, time_left: float, tl: int, loot: float, pla
 		_xp_line.call("set_ratio", float(rp["ratio"]))
 	if _xp_top:
 		_xp_top.call("set_ratio", float(rp["ratio"]))
-	if int(rp["level"]) != _run_lv and _pack_label:
+	if int(rp["level"]) != _run_lv:
 		_run_lv = int(rp["level"])
 		if _xp_line:
 			_xp_line.call("set_level", _run_lv)

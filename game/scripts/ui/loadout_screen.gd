@@ -131,7 +131,7 @@ func build(c: VBoxContainer) -> void:
 		c.add_child(deploy)
 	else:
 		## From the Hangar / tab bar: the shared tab bar (PLAY deploys).
-		var nav := NavBar.make("")
+		var nav := NavBar.make("survivors")
 		for b in nav.get_children():
 			(b as Button).pressed.connect(_sync_hero)
 		c.add_child(nav)

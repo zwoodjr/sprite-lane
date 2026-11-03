@@ -798,6 +798,7 @@ func _spawn_afterimage() -> void:
 	var ghost := Sprite2D.new()
 	ghost.texture = body.texture
 	ghost.hframes = body.hframes
+	ghost.vframes = body.vframes
 	ghost.frame = body.frame
 	ghost.offset = body.offset
 	ghost.flip_h = body.flip_h
@@ -2228,6 +2229,7 @@ func _gear_on_dash() -> void:
 		var ghost := Sprite2D.new()
 		ghost.texture = body.texture
 		ghost.hframes = body.hframes
+		ghost.vframes = body.vframes
 		ghost.frame = body.frame
 		ghost.offset = body.offset
 		ghost.flip_h = body.flip_h

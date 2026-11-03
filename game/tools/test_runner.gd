@@ -25,6 +25,8 @@ const MENUS := [
 var _bad: int = 0
 var _bak_backup: String = ""
 var _had_damaged: bool = false
+var _seal_mark: String = ""
+var _admin_cfg: String = ""
 var _campaign_levels_run: int = 0
 
 
@@ -37,6 +39,8 @@ func _run() -> void:
 	var save_backup := FileAccess.get_file_as_string(GameState.SAVE_PATH) if FileAccess.file_exists(GameState.SAVE_PATH) else ""
 	_bak_backup = FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH) if FileAccess.file_exists(GameState.SAVE_BAK_PATH) else ""
 	_had_damaged = FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH)
+	_seal_mark = FileAccess.get_file_as_string(GameState.SEAL_MARK_PATH) if FileAccess.file_exists(GameState.SEAL_MARK_PATH) else ""
+	_admin_cfg = FileAccess.get_file_as_string("user://admin.cfg") if FileAccess.file_exists("user://admin.cfg") else ""
 	## Every system on regardless of how many runs this save has (onboarding).
 	GameState.onboard_skip = true
 	## `-- only=depth_e1`: run just one section (fast iteration), then finish.
@@ -170,6 +174,8 @@ func _run() -> void:
 	await _test_safe_save()
 	await _test_resume_v2()
 	await _test_prologue_flow()
+	await _test_save_seal()
+	await _test_admin_lockout()
 	await _test_wander_extras()
 	await _test_feedback()
 	await _test_onboarding()
@@ -239,6 +245,11 @@ func _finish(save_backup: String) -> void:
 		DirAccess.remove_absolute(GameState.SAVE_BAK_PATH)
 	if not _had_damaged and FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH):
 		DirAccess.remove_absolute(GameState.SAVE_DAMAGED_PATH)
+	for pair in [[GameState.SEAL_MARK_PATH, _seal_mark], ["user://admin.cfg", _admin_cfg]]:
+		if str(pair[1]) != "":
+			_write_raw(str(pair[0]), str(pair[1]))
+		elif FileAccess.file_exists(str(pair[0])):
+			DirAccess.remove_absolute(str(pair[0]))
 	print("TEST_PASS" if _bad == 0 else "TEST_FAIL bad=%d" % _bad)
 	get_tree().quit(0 if _bad == 0 else 1)
 
@@ -1171,7 +1182,7 @@ func _test_loot2() -> void:
 	_check(str(SettingsDefs.row("auto_salvage_tier").get("type", "")) == "choice", "settings row")
 	GameState.settings.erase("auto_salvage_commons")
 	GameState.save_profile()
-	var old_save: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	var old_save: Variant = GameState.read_save_file(GameState.SAVE_PATH)
 	(old_save["settings"] as Dictionary).erase("auto_salvage_commons")
 	old_save["version"] = 3
 	GameState.apply_save(old_save)
@@ -2843,7 +2854,7 @@ func _test_depth_e3() -> void:
 	_check(BestiaryDefs.stage_for(GameState.bestiary_kills("scrap_hound")) == 2 and is_equal_approx(GameState.bestiary_bonus("scrap_hound"), 0.1), "e3 weak spot")
 	_check(GameState.find_page("p_war") and not GameState.find_page("p_war") and not GameState.find_page("nope"), "e3 lore page once")
 	GameState.save_profile()
-	GameState.apply_save(JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH)))
+	GameState.apply_save(GameState.read_save_file(GameState.SAVE_PATH))
 	_check(GameState.bestiary_kills("scrap_hound") == 40 and GameState.lore_pages.has("p_war"), "e3 notes saved")
 	GameState.apply_save({"version": 4, "migrated_hangar_v4": true, "bestiary": {"rad_gator": "x", "toxic_scorp": 5}, "lore_pages": {"bogus": true}})
 	_check(GameState.bestiary == {"toxic_scorp": 5} and GameState.lore_pages.is_empty(), "e3 notes sanitised")
@@ -3129,12 +3140,12 @@ func _test_campaign() -> void:
 	_check(JSON.stringify(GameState.campaign) == JSON.stringify(snap), "campaign: JSON round trip")
 	GameState.save_profile()
 	var raw := FileAccess.get_file_as_string(GameState.SAVE_PATH)
-	var old: Dictionary = JSON.parse_string(raw)
+	var old: Dictionary = GameState._parse_save(raw)
 	old.erase("campaign")
 	var scrap_before := GameState.account_scrap
 	GameState.apply_save(old)
 	_check(GameState.campaign_done_count() == 0 and GameState.account_scrap == scrap_before, "campaign: pre-campaign save loads, Wander untouched")
-	GameState.apply_save(JSON.parse_string(raw))
+	GameState.apply_save(GameState._parse_save(raw))
 	_check(GameState.campaign_level_done("p0_mayday"), "campaign: saved progress loads back")
 	## --- unlocks + flags
 	GameState.campaign = GameState._fresh_campaign()
@@ -3407,7 +3418,7 @@ func _test_plane_unified() -> void:
 	ks.sort()
 	_check(ks == ["fuel", "tail"], "plane: old destroy-ending save drops the wrongly given Dust Heart (%s)" % str(ks))
 	GameState.save_profile()
-	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	var raw: Dictionary = GameState.read_save_file(GameState.SAVE_PATH)
 	GameState.plane_parts = {}
 	GameState.apply_save(raw)
 	_check(GameState.has_plane_part("fuel") and GameState.has_plane_part("tail") and GameState.plane_part_count() == 2, "plane: unified tracker survives a save round trip")
@@ -3475,7 +3486,7 @@ func _test_p2_ui() -> void:
 	_check(ok_stale, "p2: a saved daily for locked content is replaced")
 	## --- Text size setting persists and scales
 	UiTheme.set_text_size(2)
-	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	var raw: Variant = GameState.read_save_file(GameState.SAVE_PATH)
 	_check(typeof(raw) == TYPE_DICTIONARY and int((raw as Dictionary).get("settings", {}).get("text_size", -1)) == 2, "p2: text size saved")
 	GameState.settings["text_size"] = 0
 	GameState.apply_save(raw)
@@ -3589,7 +3600,7 @@ func _write_raw(path: String, text: String) -> void:
 
 
 func _saved() -> Dictionary:
-	var v: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	var v: Variant = GameState.read_save_file(GameState.SAVE_PATH)
 	return v if typeof(v) == TYPE_DICTIONARY else {}
 
 
@@ -3607,6 +3618,170 @@ func _relaunch() -> void:
 	GameState.load_profile()
 
 
+## Sealed save: not plain JSON, a round trip keeps everything, an edited body
+## (or a plain file once this device seals) is caught and currency goes back
+## to the last sealed backup; a pre-seal plain save migrates with no loss.
+func _test_save_seal() -> void:
+	var keep_scrap := GameState.account_scrap
+	var keep_log: Array = GameState.tamper_log.duplicate(true)
+	if FileAccess.file_exists(GameState.SEAL_MARK_PATH):
+		DirAccess.remove_absolute(GameState.SEAL_MARK_PATH)
+	## --- legacy plain save (pre-seal, like Zach's): loads whole, then seals
+	GameState.account_scrap = 4321
+	GameState.account_xp = 777
+	GameState.tamper_log = []
+	GameState.save_profile()
+	var inner: Dictionary = GameState.read_save_file(GameState.SAVE_PATH)
+	DirAccess.remove_absolute(GameState.SEAL_MARK_PATH)
+	DirAccess.remove_absolute(GameState.SAVE_BAK_PATH)
+	_write_raw(GameState.SAVE_PATH, JSON.stringify(inner, "\t"))
+	GameState.account_scrap = 0
+	GameState.account_xp = 0
+	GameState.load_profile()
+	_check(GameState.account_scrap == 4321 and GameState.account_xp == 777 and GameState.tamper_log.is_empty(), "seal: pre-seal plain save loads with no loss (%d)" % GameState.account_scrap)
+	GameState.save_profile()
+	var txt := FileAccess.get_file_as_string(GameState.SAVE_PATH)
+	_check(not txt.contains("account_scrap") and txt.contains("\"sig\""), "seal: save is no longer plain JSON")
+	_check(FileAccess.file_exists(GameState.SEAL_MARK_PATH), "seal: device marked as sealing")
+	var bak_txt := FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH)
+	var bak: Variant = GameState._parse_save(bak_txt)
+	_check(bak is Dictionary and GameState._last_seal == "sealed" and int((bak as Dictionary).get("account_scrap", -1)) == 4321, "seal: migrated backup is sealed too")
+	## --- round trip
+	GameState.account_scrap = 0
+	GameState.load_profile()
+	_check(GameState.account_scrap == 4321 and GameState.load_source == "main" and GameState.tamper_log.is_empty(), "seal: sealed round trip")
+	## --- edited body (re-encoded without the key): currency clamped to backup
+	GameState.account_scrap = 5000
+	GameState.save_profile()   ## backup = 4321, main = 5000
+	var forged: Dictionary = GameState.read_save_file(GameState.SAVE_PATH)
+	forged["account_scrap"] = 999999
+	var env: Dictionary = JSON.parse_string(GameState.seal_save(JSON.stringify(forged)))
+	env["sig"] = "0".repeat(64)
+	_write_raw(GameState.SAVE_PATH, JSON.stringify(env))
+	GameState.load_profile()
+	_check(GameState.account_scrap == 4321, "seal: forged scrap clamped to the sealed backup (%d)" % GameState.account_scrap)
+	_check(GameState.tamper_log.size() == 1 and str(GameState.tamper_log[0].get("why", "")) == "bad_sig", "seal: tamper logged")
+	_check(GameState.account_xp == 777, "seal: the rest of the profile is kept")
+	var re: Variant = GameState.read_save_file(GameState.SAVE_PATH)
+	_check(GameState._last_seal == "sealed" and int((re as Dictionary).get("account_scrap", -1)) == 4321, "seal: re-sealed after the check")
+	## --- plain file written over a sealing device's save
+	GameState.save_profile()
+	var plain: Dictionary = GameState.read_save_file(GameState.SAVE_PATH)
+	plain["account_scrap"] = 888888
+	_write_raw(GameState.SAVE_PATH, JSON.stringify(plain))
+	GameState.load_profile()
+	_check(GameState.account_scrap == 4321 and str(GameState.tamper_log[GameState.tamper_log.size() - 1].get("why", "")) == "plain", "seal: plain file on a sealing device is caught (%d)" % GameState.account_scrap)
+	## --- forged with no usable backup: kept (gentle), still logged
+	DirAccess.remove_absolute(GameState.SAVE_BAK_PATH)
+	var env2: Dictionary = JSON.parse_string(GameState.seal_save(JSON.stringify(plain)))
+	env2["sig"] = "f".repeat(64)
+	_write_raw(GameState.SAVE_PATH, JSON.stringify(env2))
+	var n_log: int = (plain.get("tamper_log", []) as Array).size()
+	GameState.load_profile()
+	_check(GameState.account_scrap == 888888 and GameState.tamper_log.size() == n_log + 1, "seal: no sealed backup = kept + logged")
+	_check(str(GameState.tamper_log[GameState.tamper_log.size() - 1].get("why", "")) == "bad_sig", "seal: logged as bad_sig")
+	GameState.tamper_log = keep_log
+	GameState.account_scrap = keep_scrap
+	GameState.save_profile()
+	GameState.save_profile()
+	GameState.load_notice = ""
+	print("SAVE_SEAL_OK")
+
+
+## Admin PIN guard: misses + lockout survive a reload (new Admin node = page
+## reload), lockouts escalate 30 s -> 2 min -> 10 min, the pad has no slots.
+func _test_admin_lockout() -> void:
+	var keep := FileAccess.get_file_as_string("user://admin.cfg") if FileAccess.file_exists("user://admin.cfg") else ""
+	if FileAccess.file_exists("user://admin.cfg"):
+		DirAccess.remove_absolute("user://admin.cfg")
+	var script := load("res://scripts/autoload/admin.gd") as GDScript
+	var a1: Node = script.new()
+	add_child(a1)
+	await get_tree().process_frame
+	var good := ""
+	for n in range(10000):
+		if bool(a1.call("pin_ok", "%04d" % n)):
+			good = "%04d" % n
+			break
+	var bad := "0000" if good != "0000" else "1111"
+	var t0: int = int(a1.call("now_ms"))
+	for i in range(3):
+		a1.call("try_pin", bad, t0)
+	a1.queue_free()
+	## Reload: the 3 misses are remembered, 2 more lock it.
+	var a2: Node = script.new()
+	add_child(a2)
+	await get_tree().process_frame
+	_check(int(a2.get("_fails")) == 3, "lockout: misses survive a reload (%d)" % int(a2.get("_fails")))
+	a2.call("try_pin", bad, t0)
+	_check(str(a2.call("try_pin", bad, t0)) == "locked", "lockout: 5th miss locks")
+	_check(int(a2.call("lockout_left_ms", t0)) == 30000, "lockout: first lockout 30 s")
+	a2.queue_free()
+	var a3: Node = script.new()
+	add_child(a3)
+	await get_tree().process_frame
+	_check(int(a3.call("lockout_left_ms", t0 + 1000)) == 29000, "lockout: lockout survives a reload")
+	if good != "":
+		_check(str(a3.call("try_pin", good, t0 + 1000)) == "locked" and not bool(a3.get("enabled")), "lockout: right PIN refused while locked after reload")
+	## Second run of misses: 2 minutes; third: 10 minutes.
+	var t1 := t0 + 31000
+	for i in range(5):
+		a3.call("try_pin", bad, t1)
+	_check(int(a3.call("lockout_left_ms", t1)) == 120000, "lockout: second lockout 2 min (%d)" % int(a3.call("lockout_left_ms", t1)))
+	var t2 := t1 + 121000
+	for i in range(5):
+		a3.call("try_pin", bad, t2)
+	_check(int(a3.call("lockout_left_ms", t2)) == 600000, "lockout: third lockout 10 min")
+	## A clock wound far forward in the file can't hold the pad longer than its step.
+	var cf := ConfigFile.new()
+	cf.load("user://admin.cfg")
+	cf.set_value("guard", "locked_until", int(a3.call("now_ms")) + 999999999)
+	cf.save("user://admin.cfg")
+	a3.queue_free()
+	var a4: Node = script.new()
+	add_child(a4)
+	await get_tree().process_frame
+	_check(int(a4.call("lockout_left_ms", int(a4.call("now_ms")))) <= 600000, "lockout: bogus lockout capped to its step")
+	## Pad: no fixed slots, OK submits, any length accepted.
+	cf.load("user://admin.cfg")
+	cf.set_value("guard", "locked_until", 0)
+	cf.save("user://admin.cfg")
+	a4.set("_locked_until", 0)
+	a4.call("open_pin_pad")
+	var dots: Label = a4.get("_pin_dots")
+	_check(dots != null and not dots.text.contains("_"), "pad: no digit slots shown (%s)" % (dots.text if dots else "?"))
+	for k in ["1", "2"]:
+		a4.call("_pad_key", k)
+	_check(dots.text == "**" and int(a4.get("_fails")) == 0, "pad: dots only for digits typed")
+	for k in ["3", "4", "5", "6"]:
+		a4.call("_pad_key", k)
+	_check(str(a4.get("_pin")).length() == 6, "pad: does not auto-submit at a fixed length")
+	a4.call("close_pin_pad")
+	if good != "":
+		_check(str(a4.call("try_pin", good, int(a4.call("now_ms")))) == "ok" and int(a4.get("_strikes")) == 0, "lockout: right PIN resets the ladder")
+		a4.call("set_enabled", false)
+	## Taps: 5 steady taps ~1 s apart open the pad; touch + echoed mouse = 1 tap.
+	a4.set("_taps", [])
+	var opened := false
+	for i in range(5):
+		opened = bool(a4.call("logo_tap", 5000000 + i * 1000, "touch")) or opened
+		opened = bool(a4.call("logo_tap", 5000000 + i * 1000 + 120, "mouse")) or opened
+	_check(opened and int(a4.get("_taps").size()) == 0, "taps: 5 steady taps (with mouse echoes) open the pad")
+	a4.call("close_pin_pad")
+	a4.set("_taps", [])
+	opened = false
+	for i in range(5):
+		opened = bool(a4.call("logo_tap", 9000000 + i * 2000, "touch")) or opened
+	_check(not opened, "taps: slow taps (2 s apart) do not")
+	a4.queue_free()
+	await get_tree().process_frame
+	if keep != "":
+		_write_raw("user://admin.cfg", keep)
+	elif FileAccess.file_exists("user://admin.cfg"):
+		DirAccess.remove_absolute("user://admin.cfg")
+	print("ADMIN_LOCKOUT_OK")
+
+
 func _test_safe_save() -> void:
 	var keep_scrap := GameState.account_scrap
 	var keep_mode := GameState.selected_mode_id
@@ -3616,7 +3791,7 @@ func _test_safe_save() -> void:
 	GameState.save_profile()
 	GameState.account_scrap = 222
 	GameState.save_profile()
-	var bak: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH))
+	var bak: Variant = GameState.read_save_file(GameState.SAVE_BAK_PATH)
 	_check(typeof(bak) == TYPE_DICTIONARY and int(bak.get("account_scrap", -1)) == 111, "save: backup holds the previous save")
 	_check(int(_saved().get("account_scrap", -1)) == 222, "save: main holds the latest")
 	_check(not FileAccess.file_exists(GameState.SAVE_PATH + ".tmp"), "save: no temp file left behind")
@@ -3631,7 +3806,7 @@ func _test_safe_save() -> void:
 	_check(GameState.load_notice != "", "save: the player is told the save was restored")
 	_check(FileAccess.file_exists(GameState.SAVE_DAMAGED_PATH), "save: the damaged file is kept aside")
 	_check(int(_saved().get("account_scrap", -1)) == 111, "save: main rewritten from the backup, not defaults")
-	var bak2: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_BAK_PATH))
+	var bak2: Variant = GameState.read_save_file(GameState.SAVE_BAK_PATH)
 	_check(typeof(bak2) == TYPE_DICTIONARY and int(bak2.get("account_scrap", -1)) == 111, "save: backup not replaced by the damaged save")
 	## --- junk / empty / missing main
 	_write_raw(GameState.SAVE_PATH, "{\"version\": 4, \"account_scr")
@@ -4518,7 +4693,7 @@ func _test_admin() -> void:
 	var tk := str(int(GameState.get_mode().get("tier", 1)))
 	_check(GameState.in_campaign_run() or int(GameState.tier_extracts.get(tk, 0)) == int((keep[1] as Dictionary).get(tk, 0)) + 1, "admin: tier extract recorded on admin run")
 	_check(not GameState.result_unlocks.has("ADMIN RUN: bests, tier clears and Ascension not recorded"), "admin: no voided-run note")
-	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(GameState.SAVE_PATH))
+	var saved: Variant = GameState.read_save_file(GameState.SAVE_PATH)
 	_check(saved is Dictionary and int((saved as Dictionary).get("account_scrap", -1)) == GameState.account_scrap and int((saved as Dictionary).get("best_payout", -1)) == paid, "admin: rewards saved to profile")
 	var drow := {"date": "2099-01-01", "kind": "daily", "hero": "", "pet": "", "extracted": true, "kills": 1, "seconds": 60, "mods": [], "admin": true}
 	var dres: Dictionary = GameState.call("_record_daily", drow, {"total": 123, "scrap": 10})

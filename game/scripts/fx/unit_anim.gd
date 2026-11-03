@@ -177,7 +177,8 @@ static func load_states(prefix: String) -> Dictionary:
 		var tex := load(p) as Texture2D
 		if tex == null or tex.get_height() <= 0:
 			continue
-		out[s] = {"tex": tex, "n": maxi(1, int(round(float(tex.get_width()) / float(tex.get_height()))))}
+		var lay := strip_layout(p, tex)
+		out[s] = {"tex": tex, "n": lay["n"], "fs": lay["fs"], "cols": lay["cols"], "rows": lay["rows"]}
 	var side := load_json(prefix + "_anim.json")
 	var fps_over: Dictionary = side.get("fps", {})
 	for s in fps_over:
@@ -209,18 +210,77 @@ static func load_states_2x(prefix: String) -> Dictionary:
 		if img.is_compressed():
 			img.decompress()
 		img.convert(Image.FORMAT_RGBA8)
-		var fs := img.get_height()
+		var fs := int(e.get("fs", img.get_height()))
 		var n := int(e["n"])
-		var big := Image.create(fs * 2 * n, fs * 2, false, Image.FORMAT_RGBA8)
+		var scols := int(e.get("cols", n))
+		## The 2x copy is folded into a grid that stays under the GPU limit
+		## (36 frames x 256 px = 9216 px in one row drew as a black box on WebGL).
+		var cols := clampi(MAX_TEX / (fs * 2), 1, n)
+		var rows := int(ceil(float(n) / float(cols)))
+		var big := Image.create(fs * 2 * cols, fs * 2 * rows, false, Image.FORMAT_RGBA8)
 		for i in range(n):
-			var fr := img.get_region(Rect2i(i * fs, 0, fs, fs))
+			var fr := img.get_region(Rect2i((i % scols) * fs, (i / scols) * fs, fs, fs))
 			fr.resize(fs * 2, fs * 2, Image.INTERPOLATE_LANCZOS)
-			big.blit_rect(fr, Rect2i(0, 0, fs * 2, fs * 2), Vector2i(i * fs * 2, 0))
+			big.blit_rect(fr, Rect2i(0, 0, fs * 2, fs * 2), Vector2i((i % cols) * fs * 2, (i / cols) * fs * 2))
+		e["fs"] = fs * 2
+		e["cols"] = cols
+		e["rows"] = rows
 		e["tex"] = ImageTexture.create_from_image(big)
 		out[s] = e
 	_alive_cache[key] = _alive_cache.get(prefix, {})
 	_cache[key] = out
 	return out
+
+
+## --- GPU-safe strips --------------------------------------------------------
+## WebGL / phone GPUs reject textures over their MAX_TEXTURE_SIZE (often 4096
+## or 8192): the upload fails and the sprite draws as a black box. Strips wider
+## than MAX_TEX are stored as row-major grids of square frames
+## (tools/repack_strips.py) and listed in GRID_MANIFEST.
+const MAX_TEX := 4096
+const GRID_MANIFEST := "res://assets/sprites/strip_grids.json"
+static var _grids: Dictionary = {}
+static var _grids_loaded: bool = false
+
+
+## {"n": frames, "fs": frame px, "cols", "rows"} for a strip file.
+static func strip_layout(path: String, tex: Texture2D) -> Dictionary:
+	if not _grids_loaded:
+		_grids_loaded = true
+		_grids = load_json(GRID_MANIFEST).get("grids", {})
+	var key := path.trim_prefix("res://")
+	if _grids.has(key):
+		var g: Dictionary = _grids[key]
+		return {"n": int(g["n"]), "fs": int(g["fs"]), "cols": int(g["cols"]), "rows": int(g["rows"])}
+	if tex == null:
+		return {"n": 1, "fs": 1, "cols": 1, "rows": 1}
+	var h := maxi(1, tex.get_height())
+	var n := maxi(1, int(round(float(tex.get_width()) / float(h))))
+	return {"n": n, "fs": h, "cols": n, "rows": 1}
+
+
+## Texture rect of frame `i` (wraps) in a strip / grid.
+static func strip_region(lay: Dictionary, i: int) -> Rect2:
+	var n := maxi(1, int(lay["n"]))
+	var cols := maxi(1, int(lay["cols"]))
+	var fs := float(lay["fs"])
+	i = posmod(i, n)
+	return Rect2(float(i % cols) * fs, float(i / cols) * fs, fs, fs)
+
+
+## One frame of a strip file as an AtlasTexture; `sub` is a fraction of the
+## frame (e.g. Rect2(0.2, 0.28, 0.6, 0.6) for a tight crop).
+static func strip_frame(path: String, i: int = 0, sub: Rect2 = Rect2(0, 0, 1, 1)) -> Texture2D:
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var tex := load(path) as Texture2D
+	if tex == null:
+		return null
+	var r := strip_region(strip_layout(path, tex), i)
+	var at := AtlasTexture.new()
+	at.atlas = tex
+	at.region = Rect2(r.position + sub.position * r.size, sub.size * r.size)
+	return at
 
 
 static func has_art(prefix: String) -> bool:
@@ -418,7 +478,7 @@ func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0
 		return false
 	_rate = 1.0 + randf_range(-1.0, 1.0) * float(_alive["rate_jitter"])
 	var any: Dictionary = states.get("idle", states.values()[0])
-	frame_size = (any["tex"] as Texture2D).get_height()
+	frame_size = int(any.get("fs", (any["tex"] as Texture2D).get_height()))
 	feet_y = feet
 	_px_scale = world_frame_px / float(frame_size)
 	_ffb = FEET_FROM_BOTTOM * hd
@@ -605,11 +665,13 @@ func _show(f: int, emit: bool = true) -> void:
 	var tex: Texture2D = entry["tex"]
 	var n := int(entry["n"])
 	f = clampi(f, 0, n - 1)
-	if sprite.texture != tex or sprite.hframes != n:
+	var cols := int(entry.get("cols", n))
+	var rows := int(entry.get("rows", 1))
+	if sprite.texture != tex or sprite.hframes != cols or sprite.vframes != rows:
 		sprite.frame = 0
 		sprite.texture = tex
-		sprite.hframes = n
-		sprite.vframes = 1
+		sprite.hframes = cols
+		sprite.vframes = rows
 	sprite.frame = f
 	frame = f
 	if emit:

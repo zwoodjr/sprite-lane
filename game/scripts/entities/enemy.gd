@@ -288,7 +288,7 @@ func _apply_look() -> void:
 		var states := UnitAnim.load_states(prefix)
 		var fs := 128
 		if states.has("idle"):
-			fs = (states["idle"]["tex"] as Texture2D).get_height()
+			fs = int(states["idle"].get("fs", (states["idle"]["tex"] as Texture2D).get_height()))
 		## Size class from the art: normal 128 (per-kind scale), elite 192, boss 256.
 		## Gameplay size (collision, reach, separation) grows with BODY_K; the art
 		## itself always draws at native density (1 texel = 1 screen px).

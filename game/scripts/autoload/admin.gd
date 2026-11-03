@@ -6,18 +6,29 @@ extends CanvasLayer
 ## user://admin.cfg, not the save) and a small ADMIN chip shows on every
 ## screen. "Lock admin" in the panel hides it again. Old admin.cfg files from
 ## before the PIN stay locked until the PIN is entered.
+## Wrong tries and the lockout are kept in user://admin.cfg with wall-clock
+## times, so a reload does not reset them; each lockout in a row is longer
+## (LOCKOUTS_S). The pad shows no digit slots and waits for OK, so it does not
+## give away how long the PIN is.
 
 const CFG := "user://admin.cfg"
 const TAPS := 5
-const TAP_WINDOW_MS := 2500
+## Each tap must follow the last within this gap (no fixed total window: a
+## slow, steady 5 taps used to miss and the tester needed ~10).
+const TAP_GAP_MS := 1200
 const PIN_SALT := "wanderer.dust.admin.v2:"
 const PIN_HASH := "608a2bdd47e2cca5dcfe0e750beaf0f41cf7ee03ccc9e8b72f1607cc35b5eaac"
-const PIN_LEN := 4
+## Longest entry the pad takes (not the PIN length).
+const PIN_MAX := 12
 const MAX_TRIES := 5
-const LOCKOUT_MS := 30000
+## Lockout after each run of MAX_TRIES misses: 30 s, 2 min, 10 min, 30 min,
+## then 1 h for every later one. A right PIN resets the ladder.
+const LOCKOUTS_S: Array = [30, 120, 600, 1800, 3600]
 ## One finger tap arrives twice (ScreenTouch + emulated mouse, or the reverse
-## on desktop); a second press inside this window is the same tap.
+## on desktop); a second press inside this window is the same tap. A press of
+## the other kind (touch vs mouse) inside TAP_ECHO_MS is the browser's echo.
 const TAP_DEDUPE_MS := 80
+const TAP_ECHO_MS := 500
 
 ## RELEASE GATE. The panel is available when this is a debug build, or the
 ## export has the "admin" feature tag, or ADMIN_IN_RELEASE is true.
@@ -54,12 +65,17 @@ var _hitbox_node: Node2D
 const TABS: Array = ["RUN", "PLAYER", "SPAWN", "ACCOUNT", "DEBUG"]
 const SPEEDS: Array = [0.5, 1.0, 2.0, 3.0]
 var _taps: Array = []
+var _last_kind: String = ""
+var _last_kind_at: int = -100000
 var _chip: Button
 var _panel: Control
 var _was_paused: bool = false
 var _fps: Label
 var _fails: int = 0
+## Unix ms (wall clock, survives reloads) the pad is locked until.
 var _locked_until: int = 0
+## Lockouts in a row (picks the next LOCKOUTS_S step).
+var _strikes: int = 0
 var _pad: Control
 var _pad_box: Control
 var _pin: String = ""
@@ -75,6 +91,7 @@ func _ready() -> void:
 	if allowed and cf.load(CFG) == OK:
 		## Only the PIN-era flag counts; the old "admin/enabled" key is ignored.
 		enabled = bool(cf.get_value("lock", "unlocked", false))
+	_load_guard()
 	_chip = Button.new()
 	_chip.text = "ADMIN"
 	_chip.focus_mode = Control.FOCUS_NONE
@@ -204,15 +221,22 @@ func _sync_hitboxes() -> void:
 
 
 ## Main-menu logo tap at `now` ms. True when the 5th quick tap opened the
-## PIN pad (does nothing once the device is unlocked).
-func logo_tap(now: int) -> bool:
+## PIN pad (does nothing once the device is unlocked). `kind` is "touch" or
+## "mouse" ("" = unknown): a press of the other kind right after one is the
+## same finger echoed, not a new tap.
+func logo_tap(now: int, kind: String = "") -> bool:
 	if not allowed or enabled:
+		return false
+	if kind != "" and _last_kind != "" and kind != _last_kind and now - _last_kind_at < TAP_ECHO_MS:
 		return false
 	if _taps.size() > 0 and now - int(_taps[_taps.size() - 1]) < TAP_DEDUPE_MS:
 		return false
+	if kind != "":
+		_last_kind = kind
+		_last_kind_at = now
+	if _taps.size() > 0 and now - int(_taps[_taps.size() - 1]) > TAP_GAP_MS:
+		_taps.clear()
 	_taps.append(now)
-	while _taps.size() > 0 and now - int(_taps[0]) > TAP_WINDOW_MS:
-		_taps.pop_front()
 	if _taps.size() >= TAPS:
 		_taps.clear()
 		open_pin_pad()
@@ -224,24 +248,64 @@ static func pin_ok(pin: String) -> bool:
 	return (PIN_SALT + pin).sha256_text() == PIN_HASH
 
 
-## "ok" (unlocked + saved), "wrong", or "locked" (5 misses: 30 s lockout).
+## Wall clock in ms (persists across reloads, unlike ticks).
+static func now_ms() -> int:
+	return int(Time.get_unix_time_from_system() * 1000.0)
+
+
+## Lockout length (ms) for the `strike`-th lockout in a row (1-based).
+static func lockout_ms(strike: int) -> int:
+	return int(LOCKOUTS_S[clampi(strike - 1, 0, LOCKOUTS_S.size() - 1)]) * 1000
+
+
+## "ok" (unlocked + saved), "wrong", or "locked". `now` is wall-clock ms
+## (now_ms()); misses and lockouts are saved as they happen.
 func try_pin(pin: String, now: int) -> String:
+	_load_guard()
 	if now < _locked_until:
 		return "locked"
 	if pin_ok(pin):
 		_fails = 0
+		_strikes = 0
+		_locked_until = 0
 		set_enabled(true)
 		return "ok"
 	_fails += 1
+	var r := "wrong"
 	if _fails >= MAX_TRIES:
 		_fails = 0
-		_locked_until = now + LOCKOUT_MS
-		return "locked"
-	return "wrong"
+		_strikes += 1
+		_locked_until = now + lockout_ms(_strikes)
+		r = "locked"
+	_save_guard()
+	return r
 
 
 func lockout_left_ms(now: int) -> int:
 	return maxi(0, _locked_until - now)
+
+
+## Misses / lockout live beside the unlock flag in admin.cfg.
+func _load_guard() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(CFG) != OK:
+		return
+	_fails = int(cf.get_value("guard", "fails", 0))
+	_strikes = int(cf.get_value("guard", "strikes", 0))
+	_locked_until = int(cf.get_value("guard", "locked_until", 0))
+	## A clock set back can't stretch a lockout past its own length.
+	var cap := now_ms() + lockout_ms(maxi(1, _strikes))
+	if _locked_until > cap:
+		_locked_until = cap
+
+
+func _save_guard() -> void:
+	var cf := ConfigFile.new()
+	cf.load(CFG)
+	cf.set_value("guard", "fails", _fails)
+	cf.set_value("guard", "strikes", _strikes)
+	cf.set_value("guard", "locked_until", _locked_until)
+	cf.save(CFG)
 
 
 func open_pin_pad() -> void:
@@ -280,7 +344,7 @@ func open_pin_pad() -> void:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	v.add_child(grid)
-	for k in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "DEL"]:
+	for k in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "DEL", "0", "OK"]:
 		var key := str(k)
 		var b := Button.new()
 		b.text = key
@@ -305,17 +369,17 @@ func close_pin_pad() -> void:
 
 
 func _pad_key(key: String) -> void:
-	var now := Time.get_ticks_msec()
+	var now := now_ms()
 	if lockout_left_ms(now) > 0:
 		_pad_shake()
 		return
 	match key:
-		"CLR": _pin = ""
 		"DEL": _pin = _pin.substr(0, maxi(0, _pin.length() - 1))
+		"OK": pass
 		_:
-			if _pin.length() < PIN_LEN:
+			if _pin.length() < PIN_MAX:
 				_pin += key
-	if _pin.length() >= PIN_LEN:
+	if key == "OK" and _pin != "":
 		var r := try_pin(_pin, now)
 		_pin = ""
 		if r == "ok":
@@ -330,13 +394,12 @@ func _pad_key(key: String) -> void:
 func _pad_refresh() -> void:
 	if _pin_dots == null or not is_instance_valid(_pin_dots):
 		return
-	var d := ""
-	for i in range(PIN_LEN):
-		d += ("* " if i < _pin.length() else "_ ")
-	_pin_dots.text = d.strip_edges()
-	var left := lockout_left_ms(Time.get_ticks_msec())
+	## Neutral entry: one dot per digit typed, no empty slots.
+	_pin_dots.text = "*".repeat(_pin.length()) if _pin != "" else "-"
+	var left := lockout_left_ms(now_ms())
 	if left > 0:
-		_pin_msg.text = "Too many tries. Wait %d s" % int(ceil(float(left) / 1000.0))
+		var sec := int(ceil(float(left) / 1000.0))
+		_pin_msg.text = "Too many tries. Wait %s" % ("%d s" % sec if sec < 120 else "%d min" % int(ceil(float(sec) / 60.0)))
 		_pin_msg.add_theme_color_override("font_color", UiTheme.DANGER)
 	elif _fails > 0:
 		_pin_msg.text = "Wrong PIN (%d left)" % (MAX_TRIES - _fails)
@@ -364,7 +427,12 @@ func set_enabled(on: bool) -> void:
 	## Settings → Show FPS only shows while admin mode is on.
 	SettingsDefs.apply("show_fps")
 	var cf := ConfigFile.new()
+	cf.load(CFG)
 	cf.set_value("lock", "unlocked", on)
+	if on:
+		cf.set_value("guard", "fails", 0)
+		cf.set_value("guard", "strikes", 0)
+		cf.set_value("guard", "locked_until", 0)
 	cf.save(CFG)
 	Juice.haptic(60)
 

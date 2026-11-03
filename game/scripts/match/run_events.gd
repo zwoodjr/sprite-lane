@@ -79,6 +79,8 @@ func _build_ui() -> void:
 	_radio_text = UiTheme.body_label("", 16, UiTheme.TEXT)
 	v.add_child(_radio_text)
 	_chip = UiTheme.body_label("", 17, UiTheme.AMBER, false)
+	## Condensed caps: the 22-px floor still fits the narrow lane in 2 lines.
+	_chip.add_theme_font_override("font", UiTheme.font_button)
 	_chip.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_chip.offset_top = 238
 	_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
