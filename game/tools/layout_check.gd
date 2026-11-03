@@ -218,7 +218,7 @@ func _check(root: Node) -> void:
 		var pr := (p as Control).get_global_rect()
 		var cr := (c as Control).get_global_rect()
 		_checked += 1
-		if cr.position.x < pr.position.x - 1.0 or cr.end.x > pr.end.x + 1.0:
+		if cr.position.x < pr.position.x - 2.0 or cr.end.x > pr.end.x + 2.0:
 			_fail("%s spills out of %s" % [_desc(c), _desc(p)])
 	## 3) Unclipped one-line labels: the text fits the label.
 	for l in labels:

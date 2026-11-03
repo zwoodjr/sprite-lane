@@ -226,15 +226,17 @@ static func preset_for(st: Dictionary) -> int:
 
 ## Device class from the chip / model: 2 = A17 Pro and newer (A18, A19, the
 ## iPhone Duo's A20 Pro), M-series iPads and desktops; 1 = A14-A16 phones,
-## the web build and mid Android; 0 = older.
+## the web build on other GPUs and mid Android; 0 = older.
 static func device_tier() -> int:
 	return device_tier_for(OS.get_model_name(), RenderingServer.get_video_adapter_name(),
 		OS.has_feature("web"), OS.has_feature("mobile"), OS.get_processor_count())
 
 
 static func device_tier_for(model: String, gpu: String, web: bool, mobile: bool, cores: int) -> int:
+	## Web: Apple GPUs (iPhone / iPad / Mac browsers) handle HIGH; the
+	## browser itself holds the frame rate to what the screen allows.
 	if web:
-		return 1
+		return 2 if gpu.contains("Apple") else 1
 	for chip in ["A17", "A18", "A19", "A20", "A21", " M1", " M2", " M3", " M4", " M5"]:
 		if gpu.contains(chip):
 			return 2

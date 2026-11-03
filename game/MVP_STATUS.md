@@ -1,5 +1,31 @@
 # MVP status (repo mirror)
 
+**Latest (iPhone Duo: video settings, squarer screens, live fold):**
+
+The iPhone Duo's screens are much squarer than a regular iPhone: the inner screen is 1878×2670 (about 1:1.42) and the cover screen 1398×2034. A regular iPhone is about 1:2.16. The UI space widens from 720 to about 900 wide on the Duo. Regular iPhones (390×844 and the rest) look exactly as before.
+
+- **Settings → Video:**
+
+  | Setting | Options |
+  |---|---|
+  | Quality | LOW / MEDIUM / HIGH / ULTRA. Sets the frame cap, render scale, effects and heat haze. Changing one of those by hand shows CUSTOM. |
+  | Auto-detect | Picks the preset for the device. A17 Pro and newer (A20 Pro on the Duo), M-series iPads, desktops and browsers on Apple GPUs get HIGH at 120. A14–A16 get MEDIUM at 60. Older devices get LOW. New installs start on this. |
+  | Frame rate cap | 30 / 60 / 120. Sets Engine.max_fps with vsync on. 120 needs ProMotion; `allow_high_refresh_rate` is set. |
+  | Render scale | 100% / 50%. 50% draws at the 720-wide base resolution and scales it up: 48% of the pixels per side on the Duo, 61% on an iPhone 15. A 2D canvas can't render at an in-between scale without resizing the UI, so these are the two real steps. |
+  | Particles & effects | LOW / MED / HIGH / ULTRA (ULTRA adds 30% more particles). |
+  | Damage numbers | OFF / FEWER (crits only, at most 6 on screen) / ALL |
+  | Battery saver | 30 fps, 50% render, low effects, no heat haze |
+  | Show FPS | Only listed and shown while admin mode is on |
+
+  Old saves keep their values at 100% render. The preset is worked out from those values, or shows CUSTOM. The damage-numbers on/off switch becomes ALL or OFF.
+- **More play field, kept fair.** In portrait the Duo shows about 1.6× the width of a regular iPhone at the same crisp texel size. The camera caps the visible world at a 640 px half-diagonal. Landscape (2670×1878) and wide desktop windows zoom in to stay under the cap. Spawns can't land on-screen any more: the spawn distance grows with the view, and a blocked spawn spot now looks for an off-screen spot in its new direction, where it used to keep the old distance.
+- **Menus on wide screens** keep a centred column at most 900 wide: Settings, Hangar, main menu, pause, every menu screen. The HUD, the tab bars and the level-up cards follow the screen size.
+- **Live fold / unfold / rotate.** `DisplayFit.layout_changed` fires once after the window settles. The Hangar, pause menu, level-up cards and level cards refit without a restart. A stick held through the resize keeps steering from the same spot on the glass. If the fold drops a finger's lift, the next touch still gets the stick. On squarer screens (Duo, iPad) the game follows device rotation. Tall iPhones stay locked to portrait.
+- **Thumb reach and safe areas.** ABILITY / DASH stay anchored to the bottom corner of the iOS safe area. On the Duo inner screen the buttons, their corner offsets and the stick scale to 0.86, about iPhone size, so they stay in thumb reach. Every regular iPhone stays at 1.0.
+- **Checks:**
+  - `tools/layout_check` now covers 1878×2670, 1398×2034 and 2670×1878 as well as 390×844, 375×812 and 375×667, at every text size. It now checks the main menu, every Settings tab, the level-up cards, a live HUD (thumb controls inside the safe area and in reach, view cap, no on-screen spawns) and a fold pass (Hangar, level-up, and a stick held through the resize). LAYOUT_PASS headless; under xvfb the HUD, Settings, level-up, main menu and Hangar screenshots at the Duo sizes were checked by eye.
+  - `_test_video` in test_runner covers presets, CUSTOM, auto-detect, old-save migration, render scale, damage numbers, admin-only FPS, the camera cap and thumb scale. The full test_runner passes on 4.6. The parse check passes on 4.3 and 4.6.
+
 **Latest (Gear: set bonuses you can see):**
 
 - **Item card lists every tier.** Set pieces show each bonus tier (2/4/6, or 2/3 for survivor sets) with what it gives: lit = active, dimmed = not yet, amber "THIS PIECE UNLOCKS IT" for tiers this piece turns on, red "YOU'D LOSE THIS" when a swap drops one. Same in the Hangar inspect card.

@@ -4296,6 +4296,7 @@ func _test_video() -> void:
 	_check(SettingsDefs.device_tier_for("iPhone12,1", "Apple A13 GPU", false, true, 6) == 0, "video: A13 = low")
 	_check(SettingsDefs.device_tier_for("iPad14,3", "", false, true, 8) == 2, "video: M-series iPad = high")
 	_check(SettingsDefs.device_tier_for("", "", true, false, 8) == 1, "video: web = medium")
+	_check(SettingsDefs.device_tier_for("", "Apple GPU", true, false, 8) == 2, "video: web on an Apple GPU = high")
 	var hi := SettingsDefs.auto_video(2)
 	_check(int(hi["quality"]) == 2 and int(hi["fps_cap"]) == 2 and int(hi["render_scale"]) == 0, "video: auto for A20 = HIGH at 120")
 	_check(int(SettingsDefs.auto_video(1)["fps_cap"]) == 1 and int(SettingsDefs.auto_video(0)["quality"]) == 0, "video: auto mid = 60, old = LOW")
