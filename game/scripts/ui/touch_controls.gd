@@ -162,7 +162,14 @@ func _layout() -> void:
 	_place(btn_ability, Vector2(w - 92 * k, h - (96 + 58.0 + ABILITY_RADIUS + 22.0) * k))
 	## Pause: top-right corner (the iOS convention), never mirrored, clear of
 	## both thumbs so it can't be hit by accident mid-fight.
-	_place(btn_pause, Vector2(w - PAUSE_RADIUS - 4.0, PAUSE_RADIUS + 2.0), false)
+	## Squarer screens: Xogot's run toolbar covers that corner, so the cap
+	## sits just under it, left of the minimap's top edge.
+	var ob := MobileLayout.overlay_bottom(win)
+	if ob > 0.0:
+		var map_s := MobileLayout.minimap_side(win.x)
+		_place(btn_pause, Vector2(w - map_s - 10.0 - PAUSE_RADIUS, ob + 4.0 + PAUSE_RADIUS - m.position.y), false)
+	else:
+		_place(btn_pause, Vector2(w - PAUSE_RADIUS - 4.0, PAUSE_RADIUS + 2.0), false)
 
 func _place(b: Control, center: Vector2, mirror: bool = true) -> void:
 	var c := center
@@ -318,9 +325,20 @@ func paint_sticks(c: Control) -> void:
 	elif TouchInput.touch_primary and GameState.settings.get("show_hints", true):
 		_paint_ghost(c, _ghost_pos() - o, tint, "MOVE")
 
+## MOVE hint: anchored to the bottom-left corner of the safe area (mirrored
+## when left-handed), offsets scaled with the thumbs. On a 720-wide iPhone it
+## lands exactly where it always did (26% across, 80% down).
+const GHOST_IN := 165.0
+const GHOST_UP := 312.0
+
 func _ghost_pos() -> Vector2:
 	var vp := get_viewport().get_visible_rect().size
-	var p := Vector2(vp.x * 0.26, vp.y * 0.80)
+	var m := MobileLayout.control_safe_margin()
+	var p := Vector2(minf(vp.x * 0.26, m.position.x + GHOST_IN * thumb_k),
+		vp.y - minf(vp.y * 0.20, GHOST_UP * thumb_k))
+	## Keep the ring out of the central half around the hero (a few px lower
+	## than it used to sit on a 720x1558 iPhone).
+	p.y = clampf(maxf(p.y, vp.y * 0.75 + stick_radius + 4.0), 0.0, m.end.y - stick_radius - 26.0)
 	if _left_handed:
 		p.x = vp.x - p.x
 	return p

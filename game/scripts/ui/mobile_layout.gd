@@ -74,6 +74,32 @@ static func column_pad(vp_w: float, used_w: float) -> float:
 	return maxf(0.0, (used_w - MENU_MAX_W) * 0.5) if vp_w > 0.0 else 0.0
 
 
+## Review tools only: a simulated DisplayServer safe area (window px) run
+## through the same mobile path, e.g. the bogus one Xogot reported on the Duo.
+static var sim_display_safe := Rect2i()
+
+## A real notch / home-bar / Dynamic Island inset is at most ~7% of the
+## screen side (59 pt of 852). Anything bigger is not a hardware inset: Xogot
+## on the iPhone Duo inner screen reported a safe area ~69% as wide as the
+## window, which pinned DASH / ABILITY, the pause cap and the minimap to a
+## centred column. Such a side falls back to the baseline padding.
+const MAX_INSET_FRAC := 0.09
+
+
+## Window-px insets (l, t, r, b) from a safe-area rect, implausible sides
+## dropped to 0. Pure (tests).
+static func sane_insets(win_size: Vector2, wa: Rect2) -> Vector4:
+	if win_size.x <= 0.0 or win_size.y <= 0.0 or wa.size.x <= 0.0 or wa.size.y <= 0.0:
+		return Vector4.ZERO
+	var ins := Vector4(wa.position.x, wa.position.y,
+		win_size.x - (wa.position.x + wa.size.x), win_size.y - (wa.position.y + wa.size.y))
+	var lim := Vector4(win_size.x, win_size.y, win_size.x, win_size.y) * MAX_INSET_FRAC
+	for i in range(4):
+		if ins[i] < 0.0 or ins[i] > lim[i]:
+			ins[i] = 0.0
+	return ins
+
+
 static func control_safe_margin() -> Rect2:
 	## Extra padding for thumbs / notch / home indicator - used by controls & HUD text only.
 	## Game world should still render edge-to-edge behind the HUD.
@@ -84,26 +110,60 @@ static func control_safe_margin() -> Rect2:
 	if tree and tree.root:
 		vp_size = tree.root.get_visible_rect().size
 	var win_size := Vector2(DisplayServer.window_get_size())
+	var wa := DisplayServer.get_display_safe_area()
+	var mobile := OS.has_feature("mobile")
+	if sim_display_safe.size != Vector2i.ZERO:
+		wa = sim_display_safe
+		mobile = true
+		if DisplayServer.get_name() == "headless" and tree and tree.root:
+			win_size = Vector2(tree.root.size)
 	var k := Vector2.ONE
 	if win_size.x > 0 and win_size.y > 0:
 		k = vp_size / win_size
-	var wa := DisplayServer.get_display_safe_area()
 	## Baseline padding for portrait thumbs + Dynamic Island / home bar.
 	var left := 22.0
 	var top := 18.0
 	var right := 22.0
 	var bottom := 22.0
-	if wa.size.x > 0 and wa.size.y > 0 and OS.has_feature("mobile"):
-		left = maxf(left, float(wa.position.x) * k.x + 8.0)
-		top = maxf(top, float(wa.position.y) * k.y + 6.0)
-		right = maxf(right, (win_size.x - float(wa.position.x + wa.size.x)) * k.x + 8.0)
-		bottom = maxf(bottom, (win_size.y - float(wa.position.y + wa.size.y)) * k.y + 10.0)
+	if mobile:
+		var ins := sane_insets(win_size, Rect2(wa))
+		if ins.x > 0.0:
+			left = maxf(left, ins.x * k.x + 8.0)
+		if ins.y > 0.0:
+			top = maxf(top, ins.y * k.y + 6.0)
+		if ins.z > 0.0:
+			right = maxf(right, ins.z * k.x + 8.0)
+		if ins.w > 0.0:
+			bottom = maxf(bottom, ins.w * k.y + 10.0)
 	if sim_safe != Vector4.ZERO:
 		left = maxf(left, sim_safe.x)
 		top = maxf(top, sim_safe.y)
 		right = maxf(right, sim_safe.z)
 		bottom = maxf(bottom, sim_safe.w)
 	return Rect2(left, top, vp_size.x - left - right, vp_size.y - top - bottom)
+
+
+## Squarer screens (iPhone Duo, iPads) under Xogot Play get its run toolbar
+## floating over the top-right corner (it ends ~100 UI px down on the Duo).
+## There the minimap starts below it and the pause cap moves beside the
+## minimap; tall iPhones keep the exact old layout (0 = no overlay).
+const OVERLAY_TR_BOTTOM := 108.0
+
+
+static func overlay_bottom(vp: Vector2) -> float:
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return 0.0
+	if minf(vp.x, vp.y) / maxf(vp.x, vp.y) < 0.6:
+		return 0.0
+	return OVERLAY_TR_BOTTOM
+
+
+## In-run minimap side (UI px); the pause cap lines up with it.
+const MINIMAP_SIZE := 135.0
+
+
+static func minimap_side(vp_w: float) -> float:
+	return minf(MINIMAP_SIZE, vp_w * 0.3)
 
 
 static func apply_menu_root(root: Control) -> void:

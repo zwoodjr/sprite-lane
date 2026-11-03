@@ -466,6 +466,7 @@ func _hud_checks(m: Node, what: String) -> void:
 					_checked += 1
 					if n.get_global_rect().intersects((b as Control).get_global_rect()):
 						_fail("%s: %s covers the %s" % [what, b.get("label_text"), nm])
+	await _corner_checks(m, what)
 	## Fairness: a spawn never lands inside the visible world.
 	var cam: Camera2D = m.get_node("World/Player").get_node_or_null("Camera2D")
 	if cam:
@@ -484,9 +485,87 @@ func _hud_checks(m: Node, what: String) -> void:
 				break
 
 
+## Max gap (UI px) between a control's outer edges and its screen corner.
+const CORNER_N := 240.0
+
+
+## Controls hug the real screen corners (not a centred column): ABILITY over
+## DASH bottom-right (bottom-left when left-handed), the MOVE hint
+## bottom-left (mirrored), vitals top-left, pause + minimap top-right; none
+## of them reaches into the central 50% of the screen around the hero.
+func _corner_checks(m: Node, what: String) -> void:
+	var tc := _tc()
+	var hud: Node = m.get_node_or_null("HUD")
+	if tc == null or hud == null:
+		return
+	for lh in [false, true]:
+		GameState.set_setting("left_handed", lh, false)
+		await _wait(2)
+		var vp := get_viewport().get_visible_rect().size
+		var mid := Rect2(vp * 0.25, vp * 0.5)
+		var dash: Control = tc.get("btn_dash")
+		var abil: Control = tc.get("btn_ability")
+		var pause: Control = tc.get("btn_pause")
+		var sr: float = float(tc.get("stick_radius"))
+		var gp: Vector2 = tc.call("_ghost_pos")
+		var stick := Rect2(gp - Vector2.ONE * sr, Vector2.ONE * sr * 2.0)
+		var hroot: Control = hud.get("root")
+		var items := {
+			"DASH": [dash.get_global_rect(), "br"],
+			"ABILITY": [abil.get_global_rect(), "br"],
+			"MOVE": [stick, "bl"],
+			"PAUSE": [pause.get_global_rect(), "tr"],
+			"Vitals": [(hroot.get_node("Vitals") as Control).get_global_rect(), "tl"],
+		}
+		var mm: Control = hud.get("_minimap")
+		if mm:
+			items["Minimap"] = [mm.get_global_rect(), "tr"]
+		var tp: Control = hud.get("_threat_panel")
+		if tp and tp.visible:
+			## Under the minimap: hugs the right edge, stays in the top band.
+			items["LOOT"] = [tp.get_global_rect(), "tr", vp.y * 0.3]
+		for nm in items:
+			var r: Rect2 = items[nm][0]
+			var cn: String = items[nm][1]
+			var ny: float = float(items[nm][2]) if items[nm].size() > 2 else CORNER_N
+			if lh and nm in ["DASH", "ABILITY", "MOVE"]:
+				cn = ("bl" if cn == "br" else "br")
+			var gx := r.position.x if cn.ends_with("l") else vp.x - r.end.x
+			var gy := r.position.y if cn.begins_with("t") else vp.y - r.end.y
+			_checked += 2
+			if gx < -1.0 or gy < -1.0 or gx > CORNER_N or gy > ny:
+				_fail("%s%s: %s %d,%d px from the %s corner (max %d)" % [what, " LH" if lh else "", nm, int(gx), int(gy), cn, int(CORNER_N)])
+			## LOOT is a label (allowed up top, checked to the top 30% above);
+			## the controls themselves never reach the central half.
+			if nm != "LOOT" and r.intersects(mid):
+				_fail("%s%s: %s %s covers the central 50%% %s" % [what, " LH" if lh else "", nm, r, mid])
+		if not lh and what.begins_with("hud") and UiTheme.text_size_index() == 0:
+			print("   corners %s: dash %s abil %s move %s pause %s" % [vp, dash.get_global_rect(), abil.get_global_rect(), stick, pause.get_global_rect()])
+		_checked += 1
+		if dash.get_global_rect().get_center().y <= abil.get_global_rect().get_center().y:
+			_fail("%s: ABILITY not stacked over DASH" % what)
+	GameState.set_setting("left_handed", false, false)
+	await _wait(2)
+
+
 func _hud_pass(sz: Vector2i) -> void:
 	var m: Node = await _start_match()
 	await _hud_checks(m, "hud %dx%d" % [sz.x, sz.y])
+	if sz.x > 1000:
+		## Xogot on the Duo inner screen reported a safe area ~69% as wide as
+		## the window: the bogus side must not drag the controls inward.
+		MobileLayout.sim_display_safe = Rect2i(0, int(sz.y * 0.03), int(sz.x * 0.69), int(sz.y * 0.95))
+		get_viewport().size_changed.emit()
+		await _wait(3)
+		var sm := MobileLayout.control_safe_margin()
+		var vp := get_viewport().get_visible_rect().size
+		_checked += 1
+		if vp.x - sm.end.x > 40.0:
+			_fail("hud %dx%d bogus safe area: right margin %d" % [sz.x, sz.y, int(vp.x - sm.end.x)])
+		await _hud_checks(m, "hud %dx%d xogot-safe" % [sz.x, sz.y])
+		MobileLayout.sim_display_safe = Rect2i()
+		get_viewport().size_changed.emit()
+		await _wait(3)
 	await _end_match(m)
 
 

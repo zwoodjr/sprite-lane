@@ -1,5 +1,8 @@
 # MVP status (repo mirror)
 
+
+**iPhone Duo HUD fix (Nov 2026):** On the Duo inner screen under Xogot, DASH / ABILITY, the pause cap, minimap and LOOT / CARNAGE hugged a centred column. Likely cause (inferred from the screenshot): Xogot reports a safe area ~69% as wide as the window, so the "right inset" was ~290 UI px. `MobileLayout.sane_insets` now drops any inset over 9% of the window side (real notches / home bars are under 7%). On squarer screens the minimap starts below Xogot's top-right run toolbar and the pause cap sits beside it. The MOVE hint is anchored to the bottom-left corner (mirrored left-handed). Regular iPhones are unchanged; the MOVE hint sits a few px lower so it stays out of the central half. `layout_check` asserts corner placement and no overlap with the central 50% at every size, in both hands, and with the bogus Xogot safe area simulated. LAYOUT_PASS, TEST_PASS on 4.6, PARSE_OK on 4.3 and 4.6.
+
 **Latest (iPhone Duo: video settings, squarer screens, live fold):**
 
 The iPhone Duo's screens are much squarer than a regular iPhone: the inner screen is 1878×2670 (about 1:1.42) and the cover screen 1398×2034. A regular iPhone is about 1:2.16. The UI space widens from 720 to about 900 wide on the Duo. Regular iPhones (390×844 and the rest) look exactly as before.

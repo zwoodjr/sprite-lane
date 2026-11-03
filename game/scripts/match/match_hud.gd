@@ -24,7 +24,7 @@ const BAR_W := 200.0 ## on-screen width of the slim bars
 ## panel under it, a slim phase strip at the top centre, hints that fade.
 const HP_BAR_H := 15.0
 const XP_BAR_H := 7.0
-const MAP_SIZE := 135.0 ## +30% (icons, rim markers)
+const MAP_SIZE := MobileLayout.MINIMAP_SIZE ## 135: +30% (icons, rim markers)
 ## The pause cap owns the top-right corner (touch_controls PAUSE_RADIUS);
 ## the minimap column starts under it.
 const PAUSE_ROW := 64.0
@@ -485,15 +485,19 @@ func _layout() -> void:
 		_pack_panel.reset_size()
 	## Top-right: a big minimap, the loot / threat panel under it.
 	var right := m.position.x + m.size.x
-	var map_s := minf(MAP_SIZE, vp.x * 0.3)
+	var map_s := MobileLayout.minimap_side(vp.x)
+	## Squarer screens: the minimap column starts below Xogot's top-right run
+	## toolbar (the pause cap sits beside it there); 0 on tall iPhones.
+	var ob := MobileLayout.overlay_bottom(vp)
+	var drop := maxf(0.0, ob + 4.0 - (m.position.y + PAUSE_ROW)) if ob > 0.0 else 0.0
 	if _minimap:
 		_minimap.custom_minimum_size = Vector2(map_s, map_s)
 		_minimap.size = Vector2(map_s, map_s)
-		_minimap.position = Vector2(right - map_s, m.position.y + PAUSE_ROW)
+		_minimap.position = Vector2(right - map_s, m.position.y + PAUSE_ROW + drop)
 	_threat_panel.custom_minimum_size = Vector2(map_s, 0)
 	_threat_panel.reset_size()
 	## Clear of the minimap's SEALED / OPEN plate on its lower rim (they touched at 720x1560).
-	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + PAUSE_ROW + map_s + 12.0)
+	_threat_panel.position = Vector2(right - _threat_panel.size.x, m.position.y + PAUSE_ROW + drop + map_s + 12.0)
 	## Top-centre: a slim phase strip between the two corners.
 	var left_w := vit.size.x + 8.0
 	## Slim HUD: the extract readout sits centred in the gap between the vitals
@@ -520,7 +524,7 @@ func _layout() -> void:
 		_phase_bar.custom_minimum_size = Vector2(minf(ow - 120.0, 360.0), 6)
 		_phase_bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		_phase_card.reset_size()
-		_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y + PAUSE_ROW + map_s + 14.0)
+		_phase_card.position = Vector2(vp.x * 0.5 - _phase_card.size.x * 0.5, m.position.y + PAUSE_ROW + drop + map_s + 14.0)
 	if _extract_bar:
 		var tw := minf(220.0, phase_w - 20.0)
 		_extract_bar.size = Vector2(tw, 8)
