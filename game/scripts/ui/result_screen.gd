@@ -78,49 +78,10 @@ func build(c: VBoxContainer) -> void:
 	stage.add_child(hero)
 
 	## Scrap readout: icon, big pixel count-up, banked total.
-	var sc := card(UiTheme.AMBER if _won else UiTheme.LINE)
-	c.add_child(sc)
-	var sr := HBoxContainer.new()
-	sr.add_theme_constant_override("separation", 16)
-	sc.add_child(sr)
-	sr.add_child(IconSet.rect("cur_scrap", 96))
-	var sv := VBoxContainer.new()
-	sv.add_theme_constant_override("separation", 8)
-	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sv.alignment = BoxContainer.ALIGNMENT_CENTER
-	sr.add_child(sv)
-	sv.add_child(UiTheme.head_label("SCRAP BANKED" if _won else "SCRAP KEPT", UiTheme.T_H3, UiTheme.TEXT_DIM))
-	_scrap_label = UiTheme.pixel_label("+0", UiTheme.PX_L, UiTheme.AMBER)
-	sv.add_child(_scrap_label)
-	var extra := _scrap_after() - GameState.result_scrap_before - GameState.result_scrap_banked
-	if extra > 0:
-		var xl := UiTheme.body_label("+%d from salvage & rewards" % extra, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
-		xl.name = "ScrapExtraLine"
-		sv.add_child(xl)
-	elif not _won and GameState.result_scrap_lost > 0:
-		## Teach the loop on the loss screen: what you kept, and how not to lose it.
-		var keep := int(round(float(GameState.get_mode().get("death_keep", 0.1)) * 100.0))
-		var msg := "Kept %d%% of the bag. Extract to keep it all." % keep
-		if GameState.result_would_have > GameState.result_scrap_banked:
-			msg = "Kept %d%%. Extracting would have paid %d." % [keep, GameState.result_would_have]
-		var kl := UiTheme.body_label(msg, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
-		kl.name = "KeepLine"
-		sv.add_child(kl)
-	var right := VBoxContainer.new()
-	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	right.add_theme_constant_override("separation", 8)
-	sr.add_child(right)
-	if not _won and GameState.result_scrap_lost > 0:
-		var lost := UiTheme.pixel_label("-%d" % GameState.result_scrap_lost, UiTheme.PX_M, UiTheme.DANGER)
-		lost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		right.add_child(lost)
-	_bank_label = UiTheme.pixel_label("%d" % GameState.result_scrap_before, UiTheme.PX_M, UiTheme.TEXT)
-	_bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_bank_label.name = "ScrapTotal"
-	right.add_child(_bank_label)
-	var bl := UiTheme.head_label("TOTAL", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
-	bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	right.add_child(bl)
+	if not _won:
+		c.add_child(_wipe_scrap_card())
+	else:
+		_won_scrap_card(c)
 
 	## Account XP: level badge + bar that fills from the old value.
 	var xr := HBoxContainer.new()
@@ -178,7 +139,8 @@ func build(c: VBoxContainer) -> void:
 		held = GameState.pending_rewards.slice(maxi(0, GameState.pending_rewards.size() - GameState.result_held_n))
 		gear_list.append_array(held)
 	if not gear_list.is_empty():
-		var gh := UiTheme.head_label("GEAR TO STASH" if _won else "GEAR LOST", UiTheme.T_H3, UiTheme.AMBER if _won else UiTheme.DANGER)
+		var gh := UiTheme.head_label("GEAR TO STASH" if _won else "GEAR LOST  (%d)" % gear_list.size(), UiTheme.T_H3 if _won else UiTheme.T_H2, UiTheme.AMBER if _won else UiTheme.DANGER)
+		gh.name = "GearHeader"
 		mid.add_child(gh)
 		var grid := HFlowContainer.new()
 		grid.add_theme_constant_override("h_separation", 8)
@@ -190,7 +152,21 @@ func build(c: VBoxContainer) -> void:
 		sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(order.get(str(a.get("rarity", "")), 0)) < int(order.get(str(b.get("rarity", "")), 0)))
 		for i in range(mini(sorted.size(), 5)):
 			var w := _loot_well(sorted[i])
-			grid.add_child(w)
+			if _won:
+				grid.add_child(w)
+			else:
+				## Lost gear: the icon with its name under it, readable at a glance.
+				var cell := VBoxContainer.new()
+				cell.name = "LostGear"
+				cell.add_theme_constant_override("separation", 2)
+				cell.add_child(w)
+				var nm := UiTheme.body_label(str(sorted[i].get("name", "item")), UiTheme.T_SMALL, IconSet.rarity_color(str(sorted[i].get("rarity", "common"))))
+				nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				nm.custom_minimum_size = Vector2(112, 0)
+				nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				nm.max_lines_visible = 2
+				cell.add_child(nm)
+				grid.add_child(cell)
 			_loot_wells.append(w)
 		if gear_list.size() > 5:
 			var more := UiTheme.pixel_label("+%d" % (gear_list.size() - 5), UiTheme.PX_M, UiTheme.TEXT_DIM)
@@ -268,6 +244,93 @@ func build(c: VBoxContainer) -> void:
 	_set_actions_live(false)
 
 	_sequence()
+
+
+## EXTRACTED: icon, big count-up, banked total.
+func _won_scrap_card(c: VBoxContainer) -> void:
+	var sc := card(UiTheme.AMBER)
+	c.add_child(sc)
+	var sr := HBoxContainer.new()
+	sr.add_theme_constant_override("separation", 16)
+	sc.add_child(sr)
+	sr.add_child(IconSet.rect("cur_scrap", 96))
+	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 8)
+	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sv.alignment = BoxContainer.ALIGNMENT_CENTER
+	sr.add_child(sv)
+	sv.add_child(UiTheme.head_label("SCRAP BANKED", UiTheme.T_H3, UiTheme.TEXT_DIM))
+	_scrap_label = UiTheme.pixel_label("+0", UiTheme.PX_L, UiTheme.AMBER)
+	sv.add_child(_scrap_label)
+	var extra := _scrap_after() - GameState.result_scrap_before - GameState.result_scrap_banked
+	if extra > 0:
+		var xl := UiTheme.body_label("+%d from salvage & rewards" % extra, UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+		xl.name = "ScrapExtraLine"
+		sv.add_child(xl)
+	var right := VBoxContainer.new()
+	right.alignment = BoxContainer.ALIGNMENT_CENTER
+	right.add_theme_constant_override("separation", 8)
+	sr.add_child(right)
+	_bank_label = UiTheme.pixel_label("%d" % GameState.result_scrap_before, UiTheme.PX_M, UiTheme.TEXT)
+	_bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_bank_label.name = "ScrapTotal"
+	right.add_child(_bank_label)
+	var bl := UiTheme.head_label("TOTAL", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	right.add_child(bl)
+
+
+## WIPED (blind playtest: "+0 / -61 / 473 total" next to "Kept 10%" read as
+## noise): one plain line each. Scrap kept (X of Y, n%), scrap lost, the bank
+## total now, and what extracting would have paid.
+func _wipe_scrap_card() -> Control:
+	var sc := card(UiTheme.LINE)
+	sc.name = "WipeScrap"
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	sc.add_child(v)
+	var kept := GameState.result_scrap_banked
+	var lost := GameState.result_scrap_lost
+	var bag := kept + lost
+	var pct := int(round(float(GameState.get_mode().get("death_keep", 0.1)) * 100.0))
+	if bag > 0:
+		pct = int(round(100.0 * float(kept) / float(bag)))
+	_scrap_label = UiTheme.pixel_label("+0", UiTheme.PX_L, UiTheme.AMBER)
+	var kr := _wipe_line(v, "cur_scrap", "SCRAP KEPT", _scrap_label)
+	kr.name = "KeptRow"
+	var kl := UiTheme.body_label("%d of %d (%d%%) came home with you" % [kept, bag, pct], UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	kl.name = "KeepLine"
+	v.add_child(kl)
+	var ll := UiTheme.pixel_label("-%d" % lost, UiTheme.PX_L, UiTheme.DANGER if lost > 0 else UiTheme.TEXT_DIM)
+	ll.name = "ScrapLost"
+	_wipe_line(v, "hud_threat", "SCRAP LOST", ll)
+	_bank_label = UiTheme.pixel_label("%d" % GameState.result_scrap_before, UiTheme.PX_L, UiTheme.TEXT)
+	_bank_label.name = "ScrapTotal"
+	_wipe_line(v, "tab_stash", "BANK TOTAL NOW", _bank_label)
+	if GameState.result_would_have > kept:
+		var wl := UiTheme.body_label("Extracting would have paid %d. Reach a pad to keep it all." % GameState.result_would_have, UiTheme.T_SMALL, UiTheme.AMBER)
+		wl.name = "WouldHaveLine"
+		wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(wl)
+	return sc
+
+
+func _wipe_line(parent: Control, icon_id: String, label: String, value: Label) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 12)
+	parent.add_child(h)
+	if IconSet.has(icon_id):
+		var ic := IconSet.rect(icon_id, 40)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(ic)
+	var l := UiTheme.head_label(label, UiTheme.T_H3, UiTheme.TEXT)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(value)
+	return h
 
 
 ## DAILY SCORE: scrap hauled + kills + time (0 if down), counted or practice.

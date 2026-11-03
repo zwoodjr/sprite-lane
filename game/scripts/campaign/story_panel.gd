@@ -214,7 +214,8 @@ func _layout() -> void:
 	(_slots[1]["frame"] as Control).position = Vector2(x + w - 216.0, py)
 	_choices.position = Vector2(x + 24.0, _plate.position.y - 24.0)
 	_choices.size = Vector2(w - 48.0, 0)
-	_skip.position = Vector2(m.position.x + m.size.x - 136.0, m.position.y + 8.0)
+	## Left of the pause cap (top-right corner), which works over scenes too.
+	_skip.position = Vector2(m.position.x + m.size.x - 136.0 - 76.0, m.position.y + 8.0)
 	var rw := minf(560.0, vp.x - 32.0)
 	_radio_box.custom_minimum_size = Vector2(rw, 0)
 	_radio_box.size = Vector2(rw, 0)
@@ -391,13 +392,18 @@ func _ask(d: Dictionary) -> Dictionary:
 
 func _on_input(ev: InputEvent) -> void:
 	var press: bool = (ev is InputEventScreenTouch and ev.pressed) or (ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT)
-	if press and active:
+	if press and active and not _menu_over():
 		_tap = true
 
 
 func _unhandled_input(ev: InputEvent) -> void:
-	if active and (ev.is_action_pressed("ui_accept") or ev.is_action_pressed("dash")):
+	if active and not _menu_over() and (ev.is_action_pressed("ui_accept") or ev.is_action_pressed("dash")):
 		_tap = true
+
+
+## The pause menu opened over the scene: taps belong to it.
+func _menu_over() -> bool:
+	return is_inside_tree() and get_tree().get_first_node_in_group("pause_menu_open") != null
 
 
 ## ---------------------------------------------------------------------------

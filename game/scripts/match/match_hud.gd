@@ -767,7 +767,11 @@ func _flash_hit() -> void:
 	tw.tween_property(_hit_flash, "modulate:a", 0.0, 0.35)
 
 func _open_pause() -> void:
-	if _pause == null or get_tree().paused:
+	if _pause == null or bool(_pause.get("visible")):
+		return
+	## Paused by something else: only a story scene or the resume countdown
+	## let the pause menu open on top (level-up cards and menus own the screen).
+	if get_tree().paused and not can_pause_over():
 		return
 	if _match and is_instance_valid(_match) and _match.has_method("is_run_over") and bool(_match.call("is_run_over")):
 		return
@@ -775,6 +779,15 @@ func _open_pause() -> void:
 
 func open_pause() -> void:
 	_open_pause()
+
+
+func can_pause_over() -> bool:
+	if _match == null or not is_instance_valid(_match):
+		return false
+	if bool(_match.get("resume_hold")):
+		return true
+	var st: Variant = _match.get("story")
+	return st is Object and is_instance_valid(st) and bool((st as Object).get("active"))
 
 ## ---------------------------------------------------------------------------
 ## Campaign: the phase strip becomes the objective tracker (title, count /

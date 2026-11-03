@@ -215,8 +215,14 @@ func _reset_touches() -> void:
 func _input(event: InputEvent) -> void:
 	if get_tree().paused:
 		## Menus own input while paused; only track lifts so nothing sticks.
-		if event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
-			_end_touch((event as InputEventScreenTouch).index)
+		## The pause cap still works over a story scene / resume countdown.
+		if event is InputEventScreenTouch:
+			var pt := event as InputEventScreenTouch
+			if not pt.pressed:
+				_end_touch(pt.index)
+			elif btn_pause and btn_pause.visible and btn_pause.call("hit", pt.position) and _pause_over_ok():
+				get_viewport().set_input_as_handled()
+				TouchInput.pulse_pause()
 		return
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
@@ -230,6 +236,15 @@ func _input(event: InputEvent) -> void:
 		var sd := event as InputEventScreenDrag
 		if _drag_touch(sd.index, sd.position):
 			get_viewport().set_input_as_handled()
+
+func _pause_over_ok() -> bool:
+	var hud := get_tree().get_first_node_in_group("match_hud")
+	if hud == null:
+		var ctl := get_tree().get_first_node_in_group("match_ctl")
+		if ctl:
+			hud = ctl.get_node_or_null("HUD")
+	return hud != null and hud.has_method("can_pause_over") and bool(hud.call("can_pause_over"))
+
 
 func _begin_touch(index: int, pos: Vector2) -> bool:
 	## Buttons first (pick the closest one under the finger).

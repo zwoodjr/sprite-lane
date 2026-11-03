@@ -168,6 +168,8 @@ func _run() -> void:
 	await _test_depth_e7()
 	await _test_p2_ui()
 	await _test_safe_save()
+	await _test_resume_v2()
+	await _test_prologue_flow()
 	await _test_wander_extras()
 	await _test_feedback()
 	await _test_onboarding()
@@ -5070,6 +5072,331 @@ func _test_scrap_pull() -> void:
 	await get_tree().create_timer(3.0, true, false, true).timeout
 	print("SCRAP_PULL_OK")
 
+## Blind playtest: a Wander resume puts HP, the phase clock, pads, the hero's
+## spot and the mobs back exactly, holds on a READY count with a grace
+## period, and a finished run leaves no resume state behind.
+func _test_resume_v2() -> void:
+	var keep_hero := GameState.selected_character_id
+	var keep_mode := GameState.selected_mode_id
+	var hero := "ash_rook"
+	GameState.selected_character_id = hero
+	var m: Node = await _depth_match("drift", hero)
+	var pl: Node2D = m.get_node("World/Player")
+	m.set("_match_time", 120.0)
+	m.set("_phase_time_left", 17.5)
+	m.set("_elapsed_in_phases", 80.0)
+	m.call("_place_window_pads", 1)
+	var pad_pos: Vector2 = (m.get("_pads")[0] as Node2D).global_position
+	pl.global_position = Vector2(300, 200)
+	pl.set("hp", 63.0)
+	m.set("_spawn_accum", -9999.0)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	await get_tree().physics_frame
+	var mobs: Array = []
+	for i in range(3):
+		var e := _mob(m, "rad_gator", Vector2(500 + i * 60, 200))
+		e.set("hp", 5.0 + i)
+		mobs.append(e)
+	await get_tree().physics_frame
+	pl.global_position = Vector2(300, 200)
+	_check(GameState.live_run_snapshot(), "resume v2: snapshot written")
+	var snap := GameState.read_live_snapshot()
+	var sm: Dictionary = snap.get("match", {})
+	_check(int(sm.get("v", 0)) == 2 and (sm.get("enemies", []) as Array).size() == 3, "resume v2: snapshot keeps the mobs (%d)" % (sm.get("enemies", []) as Array).size())
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_relaunch()
+	var scene := GameState.prepare_resume()
+	m = (load(scene) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(4):
+		await get_tree().process_frame
+	pl = m.get_node("World/Player")
+	_check(absf(float(pl.get("hp")) - 63.0) < 0.5, "resume v2: HP exact (%.1f)" % float(pl.get("hp")))
+	_check(absf(float(m.get("_phase_time_left")) - 17.5) < 0.3 and absf(float(m.get("_elapsed_in_phases")) - 80.0) < 0.3, "resume v2: extract timer exact (%.2f)" % float(m.get("_phase_time_left")))
+	_check(absf(float(m.get("_match_time")) - 120.0) < 0.3, "resume v2: run clock exact")
+	_check(pl.global_position.distance_to(Vector2(300, 200)) < 2.0, "resume v2: hero where they stood")
+	var pads: Array = m.get("_pads")
+	_check(pads.size() >= 1 and (pads[0] as Node2D).global_position.distance_to(pad_pos) < 1.0 and int(m.get("_pads_pinged_for")) == 1, "resume v2: marked pads back in place")
+	var hps: Array = []
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e) and not (e as Node).is_queued_for_deletion():
+			hps.append(int(round(float(e.get("hp")))))
+	hps.sort()
+	_check(hps == [5, 6, 7], "resume v2: mobs back with their health %s" % str(hps))
+	_check(bool(m.get("resume_hold")) and get_tree().paused and m.find_child("ReadyLabel", true, false) != null, "resume v2: READY countdown holds the sim")
+	_check(float(pl.get("_iframes")) >= 2.0, "resume v2: invulnerable during the count")
+	var h0 := float(pl.get("hp"))
+	pl.call("take_damage", 30.0, null)
+	_check(is_equal_approx(float(pl.get("hp")), h0), "resume v2: no damage during the grace")
+	await get_tree().create_timer(3.3, true, false, true).timeout
+	_check(not bool(m.get("resume_hold")) and not get_tree().paused, "resume v2: play resumes after READY")
+	_check(float(pl.get("_iframes")) > 1.0, "resume v2: grace period after READY (%.2f)" % float(pl.get("_iframes")))
+	## --- a finished run leaves nothing to resume
+	GameState.live_run_snapshot()
+	var stale := FileAccess.get_file_as_string(GameState.RUN_PATH)
+	GameState.on_extract_success()
+	_check(not GameState.has_live_run() and _saved().get("live_run", {}).is_empty(), "resume v2: extract leaves no resume state")
+	## Web: the delete may not reach storage before a reload. The ended run's
+	## leftover snapshot is recognised and dropped, never offered.
+	_write_raw(GameState.RUN_PATH, stale)
+	_relaunch()
+	_check(not GameState.has_live_run() and not FileAccess.file_exists(GameState.RUN_PATH), "resume v2: a finished run's leftover snapshot is not offered")
+	GameState.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	GameState.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await get_tree().create_timer(GameState.LIVE_SNAPSHOT_SEC + 0.5, true, false, true).timeout
+	_check(not FileAccess.file_exists(GameState.RUN_PATH) and GameState.live_run.is_empty(), "resume v2: nothing re-written after the end (file %s, marker %s)" % [FileAccess.file_exists(GameState.RUN_PATH), str(GameState.live_run)])
+	await _end_depth_match(m)
+	## v1 snapshots (older builds) still resume.
+	m = await _depth_match("haze", hero)
+	GameState.live_run_snapshot()
+	var raw := GameState.read_live_snapshot()
+	var mm: Dictionary = raw["match"]
+	for k2 in ["v", "phase_left", "elapsed", "pads", "pads_for", "enemies", "pos", "rng", "storm_left"]:
+		mm.erase(k2)
+	raw["match"] = mm
+	_write_raw(GameState.RUN_PATH, JSON.stringify(raw))
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	_relaunch()
+	scene = GameState.prepare_resume()
+	m = (load(scene) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(3):
+		await get_tree().process_frame
+	_check(bool(m.get_meta("resumed", false)) and bool(m.get("resume_hold")), "resume v2: an old snapshot still resumes")
+	GameState.on_wipe()
+	_check(not GameState.has_live_run(), "resume v2: a death leaves no resume state")
+	await _end_depth_match(m)
+	GameState.selected_character_id = keep_hero
+	GameState.selected_mode_id = keep_mode
+	GameState.reset_loadout_to_defaults()
+	print("RESUME_V2_OK")
+
+
+## Prologue: checkpoints (resume at the objective, with what earlier ones left
+## behind), a finished prologue leaves no RUN INTERRUPTED, skip offer, the
+## objective pointer / distance readout / idle hint, pause over a story
+## scene, and the clearer WIPED screen.
+func _prologue_to(m: Node, want: int) -> Node:
+	var rn: Node = m.get("runner")
+	var frames := 0
+	while rn != null and frames < 4000 and not bool(rn.get("finished")) and not bool(m.get("_ended")) and not (int(rn.get("idx")) >= want and not bool(rn.get("busy"))):
+		frames += 1
+		await get_tree().physics_frame
+		if frames % 30 == 0 and not bool(rn.get("busy")) and int(rn.get("idx")) >= 0 and int(rn.get("idx")) < want:
+			m.call("debug_complete_objective")
+	return rn
+
+
+func _test_prologue_flow() -> void:
+	var keep_c: Dictionary = GameState.campaign.duplicate(true)
+	var keep_set: Dictionary = GameState.settings.duplicate(true)
+	var keep_runs := GameState.total_runs
+	var keep_ext := GameState.successful_extracts
+	var keep_hero := GameState.selected_character_id
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.campaign_autoplay = true
+	GameState.campaign_autoplay_exit = false
+	GameState.set_meta("auto_choice", 0)
+	var lv: Dictionary = CampaignDefs.level("p0_mayday")
+	## --- tightened: fewer kills, a short hold, three med kits
+	var objs: Array = lv.get("objectives", [])
+	var hold_t := 0.0
+	var mobs := 0
+	for o in objs:
+		if str(o.get("type", "")) == "hold":
+			hold_t = float(o.get("time", 0))
+		for w in o.get("waves", []):
+			mobs += int(w.get("n", 0))
+	_check(objs.size() <= 7 and hold_t <= 30.0 and mobs <= 40, "prologue: tightened (%d objectives, hold %ds, %d scripted mobs)" % [objs.size(), int(hold_t), mobs])
+	## --- checkpoint: reload at "Hold the hangar door" resumes there, Noel in tow
+	GameState.prepare_campaign_level("p0_mayday")
+	var m: Node = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	var hold_i := -1
+	for i in range(objs.size()):
+		if str(objs[i].get("type", "")) == "hold":
+			hold_i = i
+	var rn: Node = await _prologue_to(m, hold_i)
+	_check(rn != null and int(rn.get("idx")) == hold_i, "prologue: reached the hold (%d)" % (int(rn.get("idx")) if rn else -9))
+	## Pointer + distance readout + idle hint.
+	var ptr: Node2D = m.get("pointer")
+	_check(ptr != null and ptr.call("target") != Vector2.INF, "prologue: objective pointer has a target")
+	var pl: Node2D = m.get_node("World/Player")
+	pl.global_position = Vector2(0, -1800)
+	for k in range(3):
+		await get_tree().physics_frame
+	var tl: Label = m.get_node("HUD").get("_timer_label")
+	_check(tl != null and " m" in tl.text, "prologue: distance readout outside the ring ('%s')" % (tl.text if tl else ""))
+	_check(ptr.visible, "prologue: pointer shows when the target is far")
+	var h0 := int(rn.get("hints_shown"))
+	rn.set("_idle_t", float((rn.get_script() as Script).get_script_constant_map()["IDLE_HINT_SEC"]) - 0.05)
+	for k in range(6):
+		await get_tree().physics_frame
+	_check(int(rn.get("hints_shown")) == h0 + 1, "prologue: 20 s idle gives a hint")
+	pl.set("hp", 41.0)
+	GameState.live_run_snapshot()
+	var sm: Dictionary = GameState.read_live_snapshot().get("match", {})
+	_check(int(sm.get("objective", -1)) == hold_i, "prologue: snapshot holds the checkpoint")
+	var jerky: Variant = GameState.campaign_flag("noel_jerky", null)
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	get_tree().paused = false
+	GameState.leave_campaign_run()
+	_relaunch()
+	var cs := GameState.prepare_resume()
+	m = (load(cs) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(6):
+		await get_tree().process_frame
+	rn = m.get("runner")
+	pl = m.get_node("World/Player")
+	var cp: Vector2 = m.call("checkpoint_pos", hold_i)
+	_check(int(rn.get("idx")) == hold_i, "prologue checkpoint: resumes at the objective (%d)" % int(rn.get("idx")))
+	_check(pl.global_position.distance_to(cp) < 4.0, "prologue checkpoint: hero at the checkpoint")
+	_check(not bool((m.get("card") as CanvasLayer).visible), "prologue checkpoint: no intro card again")
+	_check(get_tree().get_nodes_in_group("pets").size() >= 1, "prologue checkpoint: Noel has joined again")
+	_check(jerky != null and GameState.campaign_flag("noel_jerky", null) == jerky, "prologue checkpoint: this attempt's choice stands")
+	_check(absf(float(pl.get("hp")) - 41.0) < 1.0, "prologue checkpoint: health back (%.1f)" % float(pl.get("hp")))
+	_check(bool(m.get("resume_hold")), "prologue checkpoint: READY count")
+	await get_tree().create_timer(3.3, true, false, true).timeout
+	## --- finish it: no RUN INTERRUPTED afterwards
+	rn = await _prologue_to(m, objs.size())
+	var frames := 0
+	while not bool(m.get("won")) and frames < 600:
+		frames += 1
+		await get_tree().physics_frame
+		if frames % 30 == 0 and not bool(rn.get("busy")):
+			m.call("debug_complete_objective")
+	_check(bool(m.get("won")) and GameState.campaign_level_done("p0_mayday"), "prologue: extracted")
+	_check(not GameState.has_live_run() and not FileAccess.file_exists(GameState.RUN_PATH) and _saved().get("live_run", {}).is_empty(), "prologue: a finished prologue leaves no resume state")
+	GameState.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await get_tree().create_timer(GameState.LIVE_SNAPSHOT_SEC + 0.5, true, false, true).timeout
+	_check(not GameState.has_live_run(), "prologue: still nothing to resume a moment later")
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	get_tree().paused = false
+	GameState.leave_campaign_run()
+	_relaunch()
+	_check(not GameState.has_live_run(), "prologue: relaunch after the prologue: no RUN INTERRUPTED")
+	## --- skip offer: returning players / after a death; skipping clears it
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.total_runs = 0
+	GameState.successful_extracts = 0
+	GameState.settings["prologue_starts"] = 1
+	GameState.settings["prologue_deaths"] = 0
+	_check(not GameState.prologue_skip_ok(), "prologue skip: not on a first try")
+	GameState.settings["prologue_deaths"] = 1
+	_check(GameState.prologue_skip_ok(), "prologue skip: offered after a death")
+	GameState.settings["prologue_deaths"] = 0
+	GameState.settings["prologue_starts"] = 2
+	_check(GameState.prologue_skip_ok(), "prologue skip: offered to a returning player")
+	GameState.prepare_campaign_level("p0_mayday")
+	m = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(3):
+		await get_tree().process_frame
+	var card: CanvasLayer = m.get("card")
+	card.set("skip_offer", true)
+	card.call("show_fail", lv, "test")
+	_check(card.find_child("SkipPrologue", true, false) != null, "prologue skip: SKIP PROLOGUE on the card")
+	card.call("close")
+	GameState.fail_campaign_level("test")
+	GameState.skip_campaign_level()
+	_check(GameState.campaign_level_done("p0_mayday") and GameState.campaign_has_survivor("ash_rook") and "noel" in GameState.campaign["pets"], "prologue skip: counts as cleared, rewards land")
+	_check(not GameState.has_live_run(), "prologue skip: no resume state")
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	get_tree().paused = false
+	GameState.leave_campaign_run()
+	## --- pause works over a story scene and gives the pause back
+	GameState.campaign_autoplay = false
+	GameState.campaign = GameState._fresh_campaign()
+	GameState.prepare_campaign_level("p0_mayday")
+	m = (load(CampaignDefs.MATCH_SCENE) as PackedScene).instantiate()
+	get_tree().root.add_child(m)
+	get_tree().current_scene = m
+	for k in range(4):
+		await get_tree().process_frame
+	(m.get("card") as CanvasLayer).visible = false
+	var story: Node = m.get("story")
+	story.set("active", true)
+	get_tree().paused = true
+	var hud: Node = m.get_node("HUD")
+	_check(bool(hud.call("can_pause_over")), "pause: allowed over a story scene")
+	TouchInput.pulse_pause()
+	await get_tree().process_frame
+	var pm: CanvasLayer = hud.get("_pause")
+	_check(pm.visible and pm.layer > 45, "pause: menu opens over the story scene")
+	pm.call("close")
+	_check(get_tree().paused and not pm.visible, "pause: closing hands the pause back to the scene")
+	story.set("active", false)
+	get_tree().paused = false
+	TouchInput.pulse_pause()
+	await get_tree().process_frame
+	_check(pm.visible, "pause: opens in campaign play")
+	pm.call("close")
+	_check(not get_tree().paused, "pause: closing resumes campaign play")
+	GameState.fail_campaign_level("test")
+	m.queue_free()
+	for k in range(3):
+		await get_tree().process_frame
+	get_tree().paused = false
+	GameState.leave_campaign_run()
+	GameState.campaign_autoplay = false
+	GameState.remove_meta("auto_choice")
+	## --- WIPED results: plain lines
+	GameState.extracted = false
+	GameState.wiped = true
+	GameState.result_scrap_banked = 6
+	GameState.result_scrap_lost = 55
+	GameState.result_scrap_before = 467
+	GameState.result_scrap_after = 473
+	GameState.result_would_have = 90
+	GameState.result_lost_items = [GameState.stash[0].duplicate(true)] if not GameState.stash.is_empty() else []
+	var rs: Node = (load("res://scenes/ui/result_screen.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child(rs)
+	await get_tree().process_frame
+	var kl: Label = rs.find_child("KeepLine", true, false) as Label
+	_check(kl != null and "6 of 61" in kl.text and "10%" in kl.text, "wiped: kept X of Y (%%) — '%s'" % (kl.text if kl else ""))
+	var ll: Label = rs.find_child("ScrapLost", true, false) as Label
+	_check(ll != null and ll.text == "-55", "wiped: scrap lost line")
+	var gh: Label = rs.find_child("GearHeader", true, false) as Label
+	_check(gh != null and "GEAR LOST" in gh.text and gh.get_theme_font_size("font_size") >= UiTheme.T_H2 * 0.9, "wiped: GEAR LOST readable")
+	_check(GameState.result_lost_items.is_empty() or rs.find_child("LostGear", true, false) != null, "wiped: lost gear with icon + name")
+	rs.set("_skip", true)
+	for i in range(90):
+		await get_tree().process_frame
+		if bool(rs.get("actions_live")):
+			break
+	var tot: Label = rs.find_child("ScrapTotal", true, false) as Label
+	_check(tot != null and tot.text == "473", "wiped: bank total now (%s)" % (tot.text if tot else "none"))
+	rs.queue_free()
+	await get_tree().process_frame
+	GameState.result_lost_items = []
+	GameState.result_scrap_after = -1
+	GameState.campaign = keep_c
+	GameState.settings = keep_set
+	GameState.total_runs = keep_runs
+	GameState.successful_extracts = keep_ext
+	GameState.selected_character_id = keep_hero
+	GameState.reset_loadout_to_defaults()
+	GameState.save_profile()
+	print("PROLOGUE_FLOW_OK")
+
+
 ## Campaign collect objectives: item markers draw their icon and get minimap /
 ## edge arrows (Mayday med kits were invisible: icon set after _ready).
 func _test_campaign_items() -> void:
@@ -5102,7 +5429,8 @@ func _test_campaign_items() -> void:
 	for it in items:
 		if is_instance_valid(it) and it.get("_icon") != null:
 			drawn += 1
-	_check(items.size() == 5 and drawn == 5, "mayday med kits drawn (%d/%d)" % [drawn, items.size()])
+	var want_items := ((rn.get("obj") as Dictionary).get("items", []) as Array).size() if rn else -1
+	_check(items.size() == want_items and want_items >= 3 and drawn == want_items, "mayday med kits drawn (%d/%d)" % [drawn, items.size()])
 	var pads: Array = m.call("get_pads")
 	_check(items.size() > 0 and items[0] in pads, "med kits on the minimap / arrows")
 	m.queue_free()

@@ -10,6 +10,7 @@ const RunnerScript := preload("res://scripts/campaign/objective_runner.gd")
 const StoryScript := preload("res://scripts/campaign/story_panel.gd")
 const CardScript := preload("res://scripts/campaign/level_card.gd")
 const CinematicScript := preload("res://scripts/campaign/cinematic.gd")
+const PointerScript := preload("res://scripts/campaign/objective_pointer.gd")
 
 var level: Dictionary = {}
 var runner: Node
@@ -18,6 +19,7 @@ var card: CanvasLayer
 var level_time: float = 0.0
 var started: bool = false
 var won: bool = false
+var pointer: Node2D
 
 
 func _ready() -> void:
@@ -67,30 +69,60 @@ func _ready() -> void:
 	runner.call("setup", self, level)
 	runner.level_won.connect(_on_level_won)
 	runner.level_failed.connect(func(reason: String) -> void: _finish_wipe(reason))
+	pointer = PointerScript.new()
+	pointer.name = "ObjectivePointer"
+	pointer.set("runner", runner)
+	pointer.set("hero", player)
+	world.add_child(pointer)
 	_live_begin()
 	_start.call_deferred()
 
 
-## Campaign snapshot: the level restarts on resume, so only the clock and the
-## hero's health matter here (run power / pack / finds live in GameState).
+## Campaign snapshot: checkpoints. A resume picks the level up at the
+## objective that was running (its waves start over), with the hero's health,
+## the run's level-ups / pack / finds (GameState) and this attempt's choices.
+var _resume_from: int = -1
+
 func live_snapshot() -> Dictionary:
-	var d := {"level_time": level_time, "objective": int(runner.get("idx")) if runner else -1}
+	var d := {"v": 2, "level_time": level_time, "objective": int(runner.get("idx")) if runner else -1}
 	_snapshot_hp(d)
 	return d
 
 
 func _apply_resume(res: Dictionary) -> void:
 	level_time = maxf(0.0, float(res.get("level_time", 0.0)))
+	_resume_from = int(res.get("objective", -1))
 	_restore_hp(res)
+	_restore_hp.call_deferred(res)
+
+
+## Where a checkpoint drops the hero: the spot of the last objective before
+## `i` that has one (the crash site for the first).
+func checkpoint_pos(i: int) -> Vector2:
+	var objs: Array = level.get("objectives", [])
+	for k in range(mini(i, objs.size()) - 1, -1, -1):
+		var at: Variant = (objs[k] as Dictionary).get("at", null)
+		if at is Vector2:
+			return at
+	return Vector2.INF
 
 
 func _start() -> void:
+	if _resume_from >= 0 and not bool(level.get("cinematic", false)):
+		_start_from_checkpoint(_resume_from)
+		return
+	if str(level.get("id", "")) == "p0_mayday":
+		GameState.set_setting("prologue_starts", int(GameState.settings.get("prologue_starts", 0)) + 1)
 	var first: Dictionary = {}
 	for o in level.get("objectives", []):
 		first = o
 		break
+	card.set("skip_offer", can_skip())
 	card.call("show_intro", level, GameState.selected_character_id, GameState.selected_pet_id if bool(GameState.pet.get("active", false)) else "", str(first.get("text", level.get("goal", ""))))
-	await card.chosen
+	var a: String = await card.chosen
+	if a == "skip":
+		skip_level()
+		return
 	if bool(level.get("cinematic", false)):
 		await _cinematic()
 		return
@@ -98,6 +130,41 @@ func _start() -> void:
 		await play_scene(str(level["intro"]))
 	started = true
 	runner.call("start")
+
+
+func _start_from_checkpoint(i: int) -> void:
+	var at := checkpoint_pos(i)
+	if at != Vector2.INF and is_instance_valid(player):
+		player.global_position = at
+		player.set("velocity", Vector2.ZERO)
+		for p in get_tree().get_nodes_in_group("pets"):
+			if p is Node2D:
+				(p as Node2D).global_position = at + Vector2(-28, 20)
+	started = true
+	runner.call("start_at", i)
+	var objs: Array = level.get("objectives", [])
+	var txt := str((objs[clampi(i, 0, objs.size() - 1)] as Dictionary).get("text", "")) if not objs.is_empty() else ""
+	hud.show_banner("CHECKPOINT", txt, UiTheme.AMBER)
+	begin_resume_grace()
+
+
+## Skip offer: levels marked "skippable" (the prologue), for returning
+## players or after a death in it.
+func can_skip() -> bool:
+	return bool(level.get("skippable", false)) and GameState.prologue_skip_ok()
+
+
+## SKIP: the level counts as cleared (its story rewards land, default
+## choices), then on to the menu (fresh install) or the campaign map.
+func skip_level() -> void:
+	_ended = true
+	won = true
+	GameState.skip_campaign_level()
+	var mf: Script = load("res://scripts/ui/menu_flow.gd")
+	if bool(mf.call("is_first_wander")):
+		GameState.go_main_menu()
+	else:
+		GameState.go_campaign_map()
 
 
 ## Epilogue: no fight. The painted hangar, the story, the plane takes off.
@@ -135,6 +202,11 @@ func play_scene(id: String) -> void:
 	if lines.is_empty():
 		return
 	await story.call("play", lines)
+
+
+func pulse_pointer() -> void:
+	if is_instance_valid(pointer):
+		pointer.call("pulse")
 
 
 func radio(who: String, text: String) -> void:
@@ -291,9 +363,15 @@ func _finish_wipe(reason: String) -> void:
 	GameState.fail_campaign_level(reason)
 	Juice.sfx("wipe")
 	hud.show_banner("DOWN", reason, UiTheme.DANGER)
+	if str(level.get("id", "")) == "p0_mayday":
+		GameState.set_setting("prologue_deaths", int(GameState.settings.get("prologue_deaths", 0)) + 1)
 	await get_tree().create_timer(1.6, false).timeout
+	card.set("skip_offer", can_skip())
 	card.call("show_fail", level, reason)
 	var a: String = await card.chosen
+	if a == "skip":
+		skip_level()
+		return
 	if a == "retry":
 		GameState.go_campaign_level(str(level.get("id", "")), GameState.selected_character_id)
 	else:

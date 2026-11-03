@@ -224,10 +224,23 @@ func _drop_in_landing() -> void:
 
 
 ## Match bits for the live-run snapshot (INF schedule times stored as -1).
+## v2 (blind playtest): the exact phase clock, open pads, the hero's spot and
+## health, and the mobs on the field, so a resume puts the run back as it was.
+const SNAP_MAX_ENEMIES := 90
+const RESUME_GRACE := 2.5   ## invulnerable seconds once play resumes
+const RESUME_COUNTDOWN := 3 ## "3 · 2 · 1 · READY" (sim paused meanwhile)
+
 func live_snapshot() -> Dictionary:
+	var pads: Array = []
+	for pad in _pads:
+		if is_instance_valid(pad) and pad is Node2D and not (pad as Node).is_queued_for_deletion():
+			pads.append([(pad as Node2D).global_position.x, (pad as Node2D).global_position.y])
 	var d := {
+		"v": 2,
 		"match_time": _match_time,
 		"phase_index": _phase_index,
+		"phase_left": _phase_time_left,
+		"elapsed": _elapsed_in_phases,
 		"window_index": _window_index,
 		"wave_i": _wave_i,
 		"next_elite": _next_elite_at if _next_elite_at != INF else -1.0,
@@ -235,8 +248,15 @@ func live_snapshot() -> Dictionary:
 		"next_crew": _next_crew_at if _next_crew_at != INF else -1.0,
 		"elite_side": _elite_side,
 		"storm": _storm_left >= 0.0,
+		"storm_left": _storm_left,
+		"pads": pads,
+		"pads_for": _pads_pinged_for,
+		"pad_guards": _pad_guards,
+		"spawn_accum": _spawn_accum,
+		"rng": str(spawn_rng.state),
 	}
 	_snapshot_hp(d)
+	d["enemies"] = snapshot_enemies()
 	return d
 
 
@@ -244,6 +264,68 @@ func _snapshot_hp(d: Dictionary) -> void:
 	if is_instance_valid(player):
 		d["hp"] = float(player.get("hp"))
 		d["max_hp"] = float(player.get("max_hp"))
+		d["pos"] = [player.global_position.x, player.global_position.y]
+
+
+## Live mobs, nearest first (raider crews and brain-driven bosses respawn on
+## their own schedule, so only plain / elite / boss bodies are kept).
+func snapshot_enemies() -> Array:
+	var out: Array = []
+	if not is_instance_valid(player):
+		return out
+	var list: Array = []
+	for n in get_tree().get_nodes_in_group("enemies"):
+		if not (n is Node2D) or not is_instance_valid(n) or (n as Node).is_queued_for_deletion():
+			continue
+		if bool(n.get("_dead")) or n.get("crew") != null:
+			continue
+		list.append(n)
+	var pp := player.global_position
+	list.sort_custom(func(a: Node2D, b: Node2D) -> bool: return a.global_position.distance_squared_to(pp) < b.global_position.distance_squared_to(pp))
+	for i in range(mini(list.size(), SNAP_MAX_ENEMIES)):
+		var e: Node2D = list[i]
+		var t: Variant = e.get("traits")
+		out.append({"k": str(e.get("kind")), "x": e.global_position.x, "y": e.global_position.y,
+			"hp": float(e.get("hp")), "mx": float(e.get("max_hp")), "dmg": float(e.get("damage")),
+			"spd": float(e.get("speed")), "role": str(e.get("role")), "tr": t if t is Array else [],
+			"nm": str(e.get("display_name"))})
+	return out
+
+
+## Put the snapshot's mobs back where they stood, at the health they had.
+func restore_enemies(list: Array) -> int:
+	var n := 0
+	for v in list:
+		if typeof(v) != TYPE_DICTIONARY:
+			continue
+		var d: Dictionary = v
+		var kind := str(d.get("k", ""))
+		if EnemyDefs.get_kind(kind).is_empty():
+			continue
+		var enemy: CharacterBody2D = EnemyScene.instantiate()
+		enemy.setup(Vector2(float(d.get("x", 0.0)), float(d.get("y", 0.0))), 1.0, 1.0, 1.0, kind)
+		var role := str(d.get("role", ""))
+		if role != "":
+			enemy.call("set_role", role)
+		world.add_child(enemy)
+		var mx := maxf(1.0, float(d.get("mx", enemy.get("max_hp"))))
+		enemy.set("max_hp", mx)
+		enemy.set("hp", clampf(float(d.get("hp", mx)), 1.0, mx))
+		enemy.set("damage", float(d.get("dmg", enemy.get("damage"))))
+		enemy.set("speed", float(d.get("spd", enemy.get("speed"))))
+		var tr: Variant = d.get("tr", [])
+		if role == "elite" and tr is Array and not (tr as Array).is_empty() and enemy.has_method("set_traits"):
+			enemy.call("set_traits", tr)
+			enemy.set("max_hp", mx)
+			enemy.set("hp", clampf(float(d.get("hp", mx)), 1.0, mx))
+		if str(d.get("nm", "")) != "":
+			enemy.set("display_name", str(d["nm"]))
+		var bar: Variant = enemy.get("hp_bar")
+		if bar is ProgressBar:
+			(bar as ProgressBar).max_value = mx
+			(bar as ProgressBar).value = float(enemy.get("hp"))
+		n += 1
+	return n
 
 
 func _restore_hp(res: Dictionary) -> void:
@@ -255,11 +337,20 @@ func _restore_hp(res: Dictionary) -> void:
 	player.emit_signal("health_changed", hp, mx)
 
 
-## Rebuild from a snapshot: same run clock and schedule, the current phase /
-## window restarts from its beginning (a fresh pad pair if it was open).
+func _restore_pos(res: Dictionary) -> void:
+	var p: Variant = res.get("pos", null)
+	if not is_instance_valid(player) or not (p is Array) or (p as Array).size() < 2:
+		return
+	player.global_position = Vector2(float(p[0]), float(p[1]))
+	player.set("velocity", Vector2.ZERO)
+
+
+## Rebuild from a snapshot: the same run clock, phase clock, pads, hero spot,
+## health and mobs (v1 snapshots: the phase restarts from its beginning).
 func _apply_resume(res: Dictionary) -> void:
 	quiet = false
 	_match_time = maxf(0.0, float(res.get("match_time", 0.0)))
+	GameState.run_time = _match_time
 	_wave_i = clampi(int(res.get("wave_i", 0)), 0, OPENING_WAVES.size())
 	_elite_side = int(res.get("elite_side", 0))
 	var ne := float(res.get("next_elite", -1.0))
@@ -268,20 +359,157 @@ func _apply_resume(res: Dictionary) -> void:
 	_next_elite_at = ne if ne >= 0.0 else INF
 	_next_boss_at = nb if nb >= 0.0 else INF
 	_next_crew_at = nc if nc >= 0.0 else INF
+	_pad_guards = int(res.get("pad_guards", 0))
+	_spawn_accum = float(res.get("spawn_accum", 0.0))
+	if str(res.get("rng", "")).is_valid_int():
+		spawn_rng.state = str(res["rng"]).to_int()
+	## Clear whatever _ready spawned: the snapshot's field replaces it.
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	_restore_pos(res)
 	if not _phases.is_empty():
 		var pi := clampi(int(res.get("phase_index", 0)), 0, _phases.size() - 1)
-		var el := 0.0
-		for i in range(pi):
-			el += float(_phases[i]["duration"])
-		_elapsed_in_phases = el
-		var open := bool(_phases[pi].get("extract_open", false))
-		_window_index = maxi(0, int(res.get("window_index", 0)) - (1 if open else 0))
-		if open:
-			GameState.extract_windows_seen = maxi(0, GameState.extract_windows_seen - 1)
-		_pads_pinged_for = -1
-		_start_phase(pi)
+		if int(res.get("v", 1)) >= 2:
+			_restore_phase(pi, res)
+		else:
+			var el := 0.0
+			for i in range(pi):
+				el += float(_phases[i]["duration"])
+			_elapsed_in_phases = el
+			var open := bool(_phases[pi].get("extract_open", false))
+			_window_index = maxi(0, int(res.get("window_index", 0)) - (1 if open else 0))
+			if open:
+				GameState.extract_windows_seen = maxi(0, GameState.extract_windows_seen - 1)
+			_pads_pinged_for = -1
+			_start_phase(pi)
+	var got: Variant = res.get("enemies", [])
+	if got is Array:
+		restore_enemies(got)
 	_restore_hp(res)
+	## Max HP can settle a frame later (deferred upgrade sync): set it again.
+	_restore_hp.call_deferred(res)
 	hud.show_banner("RUN RESUMED", "%s · run Lv %d" % [str(GameState.get_character().get("display_name", "")), GameState.run_level], UiTheme.AMBER)
+	begin_resume_grace()
+
+
+## v2 snapshot: the phase exactly as it was, without re-firing its opening
+## (no new ambush, no second window count, no new pads).
+func _restore_phase(pi: int, res: Dictionary) -> void:
+	_phase_index = pi
+	var phase: Dictionary = _phases[pi]
+	_extract_open = bool(phase.get("extract_open", false))
+	_current_window_was_open = _extract_open
+	_phase_time_left = maxf(0.5, float(res.get("phase_left", phase["duration"])))
+	_elapsed_in_phases = maxf(0.0, float(res.get("elapsed", 0.0)))
+	_window_index = maxi(0, int(res.get("window_index", 0)))
+	_ping_done_for_window = true
+	GameState.last_phase_label = str(phase["label"])
+	_clear_pads()
+	var pts: Variant = res.get("pads", [])
+	var pf := int(res.get("pads_for", -1))
+	if pts is Array and not (pts as Array).is_empty() and pf >= 0 and pf < _phases.size():
+		var is_last := bool(_phases[pf].get("is_last", false))
+		var i := 0
+		for q in pts:
+			if q is Array and (q as Array).size() >= 2:
+				_make_pad(Vector2(float(q[0]), float(q[1])), i, is_last)
+				i += 1
+		_pads_pinged_for = pf
+		GameState.extract_pad_info = []
+		for pad in _pads:
+			GameState.extract_pad_info.append({"name": pad.pad_name, "position": pad.global_position})
+		if hud.has_method("ping_pads"):
+			hud.call("ping_pads")
+	elif _extract_open:
+		_pads_pinged_for = -1
+		_place_window_pads(pi)
+	else:
+		_pads_pinged_for = -1
+	_set_pads_open(_extract_open)
+	hud.set_extract_open(_extract_open)
+	if bool(res.get("storm", false)):
+		_start_dust_storm()
+		_storm_left = clampf(float(res.get("storm_left", ModeDefs.STORM_SECONDS)), 0.5, ModeDefs.STORM_SECONDS)
+
+
+## After a resume: the sim holds on a short "3 · 2 · 1 · READY" count, then
+## the hero is untouchable for RESUME_GRACE seconds.
+var resume_hold: bool = false
+var _hold_layer: CanvasLayer
+
+func begin_resume_grace() -> void:
+	if resume_hold:
+		return
+	resume_hold = true
+	_hold_layer = CanvasLayer.new()
+	_hold_layer.name = "ResumeReady"
+	_hold_layer.layer = 35
+	_hold_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_hold_layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0.04, 0.03, 0.02, 0.45)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_hold_layer.add_child(dim)
+	var lbl := UiTheme.title_label("3", UiTheme.T_TITLE_XL, UiTheme.AMBER)
+	lbl.name = "ReadyLabel"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_hold_layer.add_child(lbl)
+	var sub := UiTheme.head_label("Get your bearings", UiTheme.T_H3, UiTheme.TEXT)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	sub.position.y -= 220.0
+	_hold_layer.add_child(sub)
+	_grace(RESUME_GRACE + float(RESUME_COUNTDOWN) + 1.0)
+	_run_countdown.call_deferred(lbl)
+
+
+func _grace(sec: float) -> void:
+	if is_instance_valid(player):
+		player.set("_iframes", maxf(float(player.get("_iframes")), sec))
+
+
+func _run_countdown(lbl: Label) -> void:
+	if not is_inside_tree():
+		return
+	get_tree().paused = true
+	TouchInput.clear_sticks()
+	for i in range(RESUME_COUNTDOWN, 0, -1):
+		if not is_instance_valid(lbl):
+			break
+		lbl.text = str(i)
+		Juice.sfx("ui_tap", -6.0)
+		await get_tree().create_timer(0.75, true, false, true).timeout
+		if not is_inside_tree():
+			return
+	if is_instance_valid(lbl):
+		lbl.text = "READY"
+		lbl.add_theme_color_override("font_color", UiTheme.TEAL)
+	await get_tree().create_timer(0.5, true, false, true).timeout
+	if not is_inside_tree():
+		return
+	_end_resume_hold()
+
+
+func _end_resume_hold() -> void:
+	if not resume_hold:
+		return
+	resume_hold = false
+	if is_instance_valid(_hold_layer):
+		_hold_layer.queue_free()
+	_hold_layer = null
+	if is_inside_tree():
+		## The pause menu may have opened over the count: it owns the pause then.
+		var pm_open := false
+		for n in get_tree().get_nodes_in_group("pause_menu_open"):
+			pm_open = true
+		if not pm_open:
+			get_tree().paused = false
+	_grace(RESUME_GRACE)
 
 
 ## Tutorial move lesson done: the clock starts and three weak mobs walk in.
@@ -439,21 +667,25 @@ func _place_window_pads(phase_index: int) -> void:
 			var oc: Vector2 = twists.call("storm_origin")
 			p = oc + (p - oc).limit_length(float(twists.get("storm_radius")) * 0.8)
 		used.append(p)
-		var pad: Area2D = ExtractPadScene.instantiate()
-		pads_root.add_child(pad)
-		pad.global_position = p
-		pad.pad_name = ("Last Chance %d" if is_last else "Pad %d") % (i + 1)
-		if pad.has_method("set_last_chance"):
-			pad.call("set_last_chance", is_last)
-		if pad.has_signal("extract_requested"):
-			pad.extract_requested.connect(_on_extract_requested)
-		_pads.append(pad)
+		_make_pad(p, i, is_last)
 	_pads_pinged_for = phase_index
 	GameState.extract_pad_info = []
 	for pad in _pads:
 		GameState.extract_pad_info.append({"name": pad.pad_name, "position": pad.global_position})
 	if hud.has_method("ping_pads"):
 		hud.call("ping_pads")
+
+func _make_pad(p: Vector2, i: int, is_last: bool) -> Area2D:
+	var pad: Area2D = ExtractPadScene.instantiate()
+	pads_root.add_child(pad)
+	pad.global_position = p
+	pad.pad_name = ("Last Chance %d" if is_last else "Pad %d") % (i + 1)
+	if pad.has_method("set_last_chance"):
+		pad.call("set_last_chance", is_last)
+	if pad.has_signal("extract_requested"):
+		pad.extract_requested.connect(_on_extract_requested)
+	_pads.append(pad)
+	return pad
 
 ## No walls / props within 80 px (so a pad is never buried or unreachable).
 func _spot_clear(p: Vector2) -> bool:
@@ -1060,6 +1292,10 @@ func pull_onscreen_scrap() -> Array:
 ## Leaving the match (result screen, abandon, tests) always restores real time.
 func _exit_tree() -> void:
 	Juice.cancel_slowmo()
+	if resume_hold:
+		resume_hold = false
+		if get_tree():
+			get_tree().paused = false
 
 func _camera_punch(k: float) -> void:
 	var cam := get_viewport().get_camera_2d()

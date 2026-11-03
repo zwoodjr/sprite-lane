@@ -1,5 +1,17 @@
 # MVP status (repo mirror)
 
+**Blind playtest fixes (resume, prologue, WIPED screen, pause):** A blind tester on the 390×844 web build hit four problems.
+- **Resume.**
+  - The prologue (and every campaign level) now resumes at the objective that was running. A checkpoint is saved each time an objective starts. What earlier objectives left behind comes back without replaying them: story choices, NPCs, Noel joining. The hero starts at the last objective's spot with the health they had, and the intro card isn't shown again.
+  - False RUN INTERRUPTED after a finished run: every run end records the run's id. A leftover snapshot of a run that already ended is dropped instead of offered. On the web, two small follow-up writes after the clear make sure the delete reaches IndexedDB.
+  - Wander resume is exact. Snapshot v2 keeps the phase clock, the elapsed schedule, the marked or open pads, the hero's spot and HP, and up to 90 mobs (kind, spot, HP, role, traits). Before, the phase restarted, the field was empty and the snapshot could be 12 s stale; it is now taken every 4 s. Resuming holds the sim on a "3 · 2 · 1 · READY" count, then gives 2.5 s of invulnerability. v1 snapshots still resume the old way.
+- **Prologue: about 5–7 min, down from 15–20.** It has 7 objectives (was 8). The gator fight needs 6 kills (was 10), there are 3 med kits on the road (was 5, spread wide), the scrapyard has 2 close waves (was 4, some off-screen), and the door hold lasts 30 s (was 50). Scenes are trimmed. The bot now clears it in 64 s of play.
+  - An objective pointer circles the hero and points at the target, with the distance in metres. The tracker shows "N m" for anything you walk to. After 20 s without moving or progress, Helm radios the objective and the distance, and the pointer pulses.
+  - **SKIP PROLOGUE** is on the intro card for returning players and on the fail card after a death. It counts as cleared, so Helm, Rook, Noel and the plane part still land.
+- **WIPED results** now read as plain lines: SCRAP KEPT (+X), "X of Y (n%) came home with you", SCRAP LOST (−Z), BANK TOTAL NOW, and "Extracting would have paid N". GEAR LOST (n) is an H2 header, and each lost piece shows its icon and name.
+- **Pause works everywhere.** The cap now also opens the menu over a story scene and over the resume countdown. Closing the menu gives the pause back to the scene. The story's SKIP button moved left of the cap, and scene taps are ignored while the menu is open. Wander and campaign play were already covered.
+- **Tests:** `_test_resume_v2` checks the round trip: HP, phase timer, run clock, hero spot, pads and mob health are exact, the READY hold and grace work, and no damage lands during the grace. It also checks that extract and death leave no resume state, nothing is re-written after the end, a finished run's leftover snapshot isn't offered, and a v1 snapshot still resumes. `_test_prologue_flow` checks the tightened budget, checkpoint resume (objective, spot, Noel, choice, HP, no intro card), the pointer, distance readout and idle hint, no resume state after the prologue is finished, the skip offer, pause over a story scene, and the WIPED lines. TEST_PASS (4.6), PARSE_OK (4.3, 4.6).
+
 
 **Duo HUD fix, round 2 (L3):** Zach's second Duo screenshot still showed the old layout: the pause cap above the minimap and the MOVE hint at 26% across, which is the pre-fix code, so Xogot was most likely still running the old pull. Hardening anyway:
 - Every HUD and thumb anchor now uses the caller's own `get_viewport().get_visible_rect()`.

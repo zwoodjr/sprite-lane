@@ -162,7 +162,9 @@ const SAVE_BAK_PATH := "user://wanderer_save.bak"
 const SAVE_DAMAGED_PATH := "user://wanderer_save.damaged.json"
 ## Live-run snapshot (written while a run is in progress; gone once it ends).
 const RUN_PATH := "user://wanderer_run.json"
-const LIVE_SNAPSHOT_SEC := 12.0
+## Short: on the web a reload / tab close sends no notification, so the last
+## timed snapshot is what a resume gets (blind playtest: 12 s was too stale).
+const LIVE_SNAPSHOT_SEC := 4.0
 ## "main" | "temp" | "backup" | "fresh" | "reset" — where the profile came from.
 var load_source: String = ""
 ## One-time line for the main menu (save restored from backup, etc.).
@@ -3830,6 +3832,25 @@ func fail_campaign_level(reason: String) -> Dictionary:
 	return campaign_result
 
 
+## Skip offer for the prologue: a returning player (any run, or the prologue
+## already cleared or started before) or anyone who went down in it.
+func prologue_skip_ok() -> bool:
+	return campaign_level_done("p0_mayday") or total_runs > 0 or successful_extracts > 0 \
+		or int(settings.get("prologue_starts", 0)) >= 2 or int(settings.get("prologue_deaths", 0)) >= 1
+
+
+## SKIP PROLOGUE: the level counts as cleared (story rewards, default
+## choices), even straight after a loss in it. Clears the live run.
+func skip_campaign_level() -> Dictionary:
+	if not in_campaign_run():
+		return {}
+	run_finished = false
+	var res := complete_campaign_level(0.0)
+	_clear_live_run()
+	save_profile()
+	return res
+
+
 ## Admin / tests: mark levels done up to (not including) `id`, with a roster.
 func campaign_debug_unlock_to(id: String) -> void:
 	for lid in CampaignDefs.ORDER:
@@ -3872,6 +3893,7 @@ const LIVE_RUN_KEYS := {
 	"run_picks_taken": "a", "run_loot": "a", "run_tonics": "a", "run_supplies": "a", "run_medkit_used": "b",
 	"extract_bonus_notes": "s", "result_unlocks_pending": "s",
 	"run_time": "f", "run_dust_mods": "a", "run_kind": "t", "run_daily_date": "t",
+	"campaign_run_flags": "d",
 }
 
 
@@ -3918,7 +3940,27 @@ func live_run_begin(ctrl: Node) -> void:
 
 
 func has_live_run() -> bool:
-	return not live_run.is_empty() or FileAccess.file_exists(RUN_PATH)
+	if live_run.is_empty() and not FileAccess.file_exists(RUN_PATH):
+		return false
+	## A run that already ended (its clear never reached storage): not live.
+	var mk: Dictionary = live_run if not live_run.is_empty() else _dict_or_empty(read_live_snapshot().get("marker", {}))
+	var ended := str(settings.get("last_run_end", ""))
+	if ended != "" and _run_key(mk) == ended:
+		live_run = {}
+		for p in [RUN_PATH, RUN_PATH + ".tmp"]:
+			if FileAccess.file_exists(p):
+				DirAccess.remove_absolute(p)
+		save_profile()
+		return false
+	return true
+
+
+## Identifies one run: its seed and start time.
+func _run_key(mk: Dictionary) -> String:
+	if mk.is_empty():
+		return ""
+	## JSON brings numbers back as floats: compare as ints.
+	return "%d:%d" % [int(mk.get("id", 0)), int(mk.get("started", 0))]
 
 
 ## Write the snapshot (run vars + the controller's match bits). Returns success.
@@ -3967,6 +4009,7 @@ func live_run_info() -> Dictionary:
 	info["run_level"] = int(run.get("run_level", 1))
 	info["time"] = float(m.get("match_time", m.get("level_time", 0.0)))
 	info["hp"] = float(m.get("hp", 0.0))
+	info["objective"] = int(m.get("objective", -1))
 	info["max_hp"] = float(m.get("max_hp", 0.0))
 	var hero := str(mk.get("hero", ""))
 	var lost: Array = []
@@ -3982,6 +4025,10 @@ func live_run_info() -> Dictionary:
 
 
 func _clear_live_run() -> void:
+	## Remembered (callers save the profile next) so a leftover snapshot of
+	## this run can never come back as RUN INTERRUPTED.
+	if not live_run.is_empty():
+		settings["last_run_end"] = _run_key(live_run)
 	live_run = {}
 	_live_ctrl = null
 	_live_accum = 0.0
@@ -3989,6 +4036,32 @@ func _clear_live_run() -> void:
 	for p in [RUN_PATH, RUN_PATH + ".tmp"]:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(p)
+	_web_sync_nudge()
+
+
+## Web: user:// lives in IndexedDB and is synced after a file write closes,
+## but a sync asked for while another is still running is dropped ("Already
+## syncing"), and a delete alone never asks. A finished run's cleared marker
+## and deleted snapshot could then miss IndexedDB, and the next launch showed
+## a false RUN INTERRUPTED (blind playtest, after the prologue). Two more
+## small writes a moment later make sure a sync runs after the clear.
+const WEB_SYNC_PATH := "user://wanderer_sync.txt"
+
+func _web_sync_nudge() -> void:
+	if not OS.has_feature("web") or not is_inside_tree():
+		return
+	for d in [0.6, 2.0]:
+		get_tree().create_timer(d, true, false, true).timeout.connect(_web_sync_touch)
+
+
+func _web_sync_touch() -> void:
+	## Only once nothing is live again: a new run's marker must not be raced.
+	var f := FileAccess.open(WEB_SYNC_PATH, FileAccess.WRITE)
+	if f:
+		f.store_string(str(Time.get_ticks_msec()))
+		f.close()
+	if live_run.is_empty() and FileAccess.file_exists(RUN_PATH):
+		DirAccess.remove_absolute(RUN_PATH)
 
 
 ## ABANDON (or a resume that can't be rebuilt): counts as a death. The equipped
@@ -4091,9 +4164,8 @@ func prepare_resume() -> String:
 	wiped = false
 	pending_run_choices.clear()
 	run_level_paused = false
-	if mode == "campaign":
-		## The level restarts, so this attempt's choices are made again.
-		campaign_run_flags = {}
+	## Campaign: the level resumes at its checkpoint, so this attempt's choices
+	## (restored with the run vars) stand.
 	live_run = mk
 	live_run["resumes"] = int(mk.get("resumes", 0)) + 1
 	pending_resume = _dict_or_empty(snap.get("match", {}))

@@ -89,6 +89,46 @@ func start() -> void:
 	_next()
 
 
+## Checkpoint resume: start at objective `i`. The objectives before it are
+## not played again, but what they left in the world (story flags, NPCs, a
+## dog that joined, props) is put back without scenes, radio or spawns.
+func start_at(i: int) -> void:
+	var k := clampi(i, 0, objectives.size())
+	for j in range(k):
+		var o: Dictionary = objectives[j]
+		if not _cond_ok(o):
+			continue
+		_replay_silent(o.get("on_start", []))
+		_replay_silent(o.get("on_done", []))
+		for t in _triggers:
+			if t.has("obj") and int(t["obj"]) == j:
+				t["fired"] = true
+	idx = k - 1
+	_next()
+
+
+const SILENT_OPS := ["flag", "npc", "npc_mode", "npc_label", "npc_remove", "pet_join", "prop", "if"]
+
+func _replay_silent(list: Array) -> void:
+	for a in list:
+		if not (a is Array) or (a as Array).is_empty():
+			continue
+		var op := str(a[0])
+		if not op in SILENT_OPS:
+			continue
+		if op == "if":
+			var c: Array = a[1]
+			var ok := GameState.campaign_flag_is(str(c[0]), c[1] if c.size() > 1 else null)
+			_replay_silent(a[2] if ok else (a[3] if a.size() > 3 else []))
+		elif op == "npc_remove":
+			var n: Node = npcs.get(str(a[1]), null)
+			if n:
+				npcs.erase(str(a[1]))
+				n.queue_free()
+		else:
+			_act(a)
+
+
 ## ---------------------------------------------------------------------------
 ## Objective flow
 
@@ -119,6 +159,10 @@ func _next() -> void:
 	_trickle_t = 0.0
 	_spawned = []
 	_kills0 = _kill_count()
+	_idle_t = 0.0
+	_idle_count = -1.0
+	## Checkpoint: a reload from here resumes at this objective.
+	GameState.live_run_snapshot()
 	## Scene / setup first, then the objective starts (boss spawns, pads open).
 	_update_hud()
 	if obj.has("on_start"):
@@ -307,6 +351,7 @@ func _process(delta: float) -> void:
 		_update_hud()
 		return
 	t_obj += delta
+	_tick_idle(p, delta)
 	_tick_waves()
 	_tick_trickle(delta)
 	var typ := str(obj.get("type", "reach"))
@@ -693,6 +738,47 @@ func spawn_npc(d: Dictionary) -> Node2D:
 
 
 ## ---------------------------------------------------------------------------
+## Idle hint (blind playtest: objectives were easy to miss). 20 s without
+## moving or progress: Helm says what to do, and the pointer pulses.
+const IDLE_HINT_SEC := 20.0
+var _idle_t: float = 0.0
+var _idle_pos: Vector2 = Vector2.INF
+var _idle_count: float = -1.0
+var hints_shown: int = 0
+
+func _tick_idle(p: Node2D, delta: float) -> void:
+	var progressed := count > _idle_count + 0.001
+	_idle_count = count
+	if _idle_pos == Vector2.INF or p.global_position.distance_to(_idle_pos) > 24.0 or progressed:
+		_idle_pos = p.global_position
+		_idle_t = 0.0
+		return
+	_idle_t += delta
+	if _idle_t < IDLE_HINT_SEC:
+		return
+	_idle_t = 0.0
+	hints_shown += 1
+	var where := ""
+	var d := target_distance_m()
+	if d >= 0:
+		where = " It's %d m away: follow the arrow." % d
+	mc.call("radio", "helm", "%s.%s" % [str(obj.get("text", "Keep going")), where])
+	if mc.has_method("pulse_pointer"):
+		mc.call("pulse_pointer")
+
+
+## Metres to the current target (32 px = 1 m), or -1 when there is no spot.
+const PX_PER_M := 32.0
+
+func target_distance_m() -> int:
+	var p := player()
+	var t := current_target()
+	if p == null or t == Vector2.INF:
+		return -1
+	return int(round(p.global_position.distance_to(t) / PX_PER_M))
+
+
+## ---------------------------------------------------------------------------
 ## HUD tracker
 
 func _update_hud() -> void:
@@ -716,6 +802,11 @@ func _update_hud() -> void:
 		"boss":
 			if _boss and is_instance_valid(_boss):
 				ratio = 1.0 - float(_boss.get("hp")) / maxf(1.0, float(_boss.get("max_hp")))
+	## Distance readout for anything you walk to (and a ring you're outside).
+	var dm := target_distance_m()
+	var walk := typ in ["reach", "talk", "extract", "collect", "carry"] or (typ in ["hold", "defend"] and player() and player().global_position.distance_to(obj["at"]) > float(obj.get("r", 140.0)))
+	if dm >= 3 and walk:
+		prog = ("%s  ·  %d m" % [prog, dm]) if prog != "" else "%d m" % dm
 	var hint := str(obj.get("hint", ""))
 	if typ == "defend" and count < need and player() and player().global_position.distance_to(obj["at"]) > float(obj.get("r", 140.0)):
 		hint = "Get back in the ring!"

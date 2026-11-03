@@ -26,18 +26,42 @@ func _ready() -> void:
 	## Fold / unfold / rotate while paused: refit the frame to the new screen.
 	get_viewport().size_changed.connect(_fit_margins)
 
+## Pause works over a story scene or the resume countdown too (blind
+## playtest: the cap did nothing in the prologue). The tree was already
+## paused then, and stays paused when the menu closes.
+var _was_paused: bool = false
+
 func open() -> void:
-	if GameState.run_finished:
+	if GameState.run_finished or visible:
 		return
+	_was_paused = get_tree().paused
+	## Above the story scene (45) while it is open; back under level cards after.
+	layer = 50 if _was_paused else 40
 	get_tree().paused = true
+	add_to_group("pause_menu_open")
 	TouchInput.clear_sticks()
 	_dim.color = Color(0.04, 0.03, 0.02, 0.78)
 	visible = true
 	_show_main()
 
 func close() -> void:
-	get_tree().paused = false
+	if is_in_group("pause_menu_open"):
+		remove_from_group("pause_menu_open")
+	get_tree().paused = _was_paused and _hold_still_wanted()
+	_was_paused = false
 	visible = false
+	layer = 40
+
+
+## Whatever paused the tree before the menu still wants it paused.
+func _hold_still_wanted() -> bool:
+	var ctl := get_tree().get_first_node_in_group("match_ctl")
+	if ctl == null:
+		return false
+	if bool(ctl.get("resume_hold")):
+		return true
+	var st: Variant = ctl.get("story")
+	return st is Object and is_instance_valid(st) and bool((st as Object).get("active"))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("pause_menu"):

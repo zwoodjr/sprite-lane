@@ -7,6 +7,9 @@ extends CanvasLayer
 
 signal chosen(action: String)
 
+## Set by the controller before show_intro / show_fail: offer SKIP PROLOGUE.
+var skip_offer: bool = false
+
 const INK := Color("140c0e")
 var _root: Control
 var _box: VBoxContainer
@@ -145,6 +148,7 @@ func show_intro(lv: Dictionary, hero: String, pet: String, objective: String) ->
 	var go := UiTheme.big_button("BEGIN", UiTheme.AMBER, 80, 32)
 	go.pressed.connect(func() -> void: _choose("begin"))
 	_box.add_child(go)
+	_skip_button()
 	_maybe_auto("begin")
 
 
@@ -213,10 +217,23 @@ func show_fail(lv: Dictionary, reason: String) -> void:
 	var rb := UiTheme.big_button("RETRY", UiTheme.AMBER, 80, 32)
 	rb.pressed.connect(func() -> void: _choose("retry"))
 	_box.add_child(rb)
+	_skip_button()
 	var mb := UiTheme.big_button("CAMPAIGN MAP", UiTheme.LINE, 64, 20)
 	mb.pressed.connect(func() -> void: _choose("map"))
 	_box.add_child(mb)
 	_maybe_auto("map")
+
+
+func _skip_button() -> void:
+	if not skip_offer:
+		return
+	var sb := UiTheme.big_button("SKIP PROLOGUE", UiTheme.LINE, 64, 20)
+	sb.name = "SkipPrologue"
+	sb.pressed.connect(func() -> void: _choose("skip"))
+	_box.add_child(sb)
+	var note := UiTheme.body_label("You keep everything it unlocks: Helm, Rook, Noel and the hangar.", UiTheme.T_SMALL, UiTheme.TEXT_DIM)
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_box.add_child(note)
 
 
 func _choose(a: String) -> void:
