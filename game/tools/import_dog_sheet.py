@@ -137,8 +137,9 @@ def _bg_model(rgb, seed_mask):
     return out
 
 
-def key_cell(rgb, portrait=False):
-    """rgb float (h, w, 3) -> (fg rgb, dog alpha, shadow alpha)."""
+def key_cell(rgb, portrait=False, soft_shadows=True):
+    """rgb float (h, w, 3) -> (fg rgb, dog alpha, shadow alpha).
+    soft_shadows=False: a smooth dark area is never backdrop (black hair)."""
     t = trim_panel(rgb, bottom=not portrait)
     rgb = rgb[t[0]:t[1], t[2]:t[3]]
     h, w, _ = rgb.shape
@@ -179,6 +180,8 @@ def key_cell(rgb, portrait=False):
     mu = ndi.uniform_filter(lum, 3)
     tex = np.sqrt(np.maximum(ndi.uniform_filter(lum * lum, 3) - mu * mu, 0.0))
     soft_shadow = (dl < 0) & (dch < 8 + 0.15 * -dl) & (dl > -0.8 * blum) & (tex < 6.0)
+    if not soft_shadows:
+        soft_shadow = soft_shadow & (dl > -18)
     quiet = ((dist < 13) & (tex < 6.0)) | soft_shadow
     quiet &= ~((dl > 22) | (dch > 16))
     quiet = ndi.binary_opening(quiet, iterations=1)
