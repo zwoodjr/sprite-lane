@@ -25,24 +25,6 @@
    "cols": 32,
    "rows": 2
   },
-  "assets/sprites/enemies/coil_spider/coil_spider_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/cyber_juggernaut/cyber_juggernaut_idle.png": {
-   "n": 36,
-   "fs": 192,
-   "cols": 21,
-   "rows": 2
-  },
-  "assets/sprites/enemies/cyber_juggernaut/cyber_juggernaut_walk.png": {
-   "n": 24,
-   "fs": 192,
-   "cols": 21,
-   "rows": 2
-  },
   "assets/sprites/enemies/dread_naught/dread_naught_idle.png": {
    "n": 36,
    "fs": 256,
@@ -103,24 +85,6 @@
    "cols": 32,
    "rows": 2
   },
-  "assets/sprites/enemies/iron_horse/iron_horse_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/mech_wyrm/mech_wyrm_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/mech_wyrm_b/mech_wyrm_b_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
   "assets/sprites/enemies/muck_golem/muck_golem_idle.png": {
    "n": 36,
    "fs": 128,
@@ -151,30 +115,6 @@
    "cols": 32,
    "rows": 2
   },
-  "assets/sprites/enemies/raider_brute/raider_brute_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/raider_captain/raider_captain_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/enemies/raider_captain/raider_captain_walk.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
-   "rows": 2
-  },
-  "assets/sprites/enemies/raider_grunt/raider_grunt_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
   "assets/sprites/enemies/scav_bear/scav_bear_idle.png": {
    "n": 36,
    "fs": 128,
@@ -197,12 +137,6 @@
    "n": 24,
    "fs": 192,
    "cols": 21,
-   "rows": 2
-  },
-  "assets/sprites/enemies/scrap_hound/scrap_hound_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
    "rows": 2
   },
   "assets/sprites/enemies/toxic_scorp/toxic_scorp_idle.png": {

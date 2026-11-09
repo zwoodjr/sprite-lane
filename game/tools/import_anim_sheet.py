@@ -37,11 +37,16 @@ Spec (JSON file, or a dict passed to import_sheet()):
      {"band": 0, "id": "raider_grunt",
       "out": "assets/sprites/enemies/raider_grunt",   # dir, relative to game/
       "fs": 128, "feet": 118,                # frame px, feet line y in frame
+      "grow": 64, "grow_max": 512,           # optional: frame may grow to fit
       "target": {"h": 107} | {"gm": 80} | {"scale": 0.6},
       "measure": "A0",                       # cell the target is measured on
       "fit": ["A0", "A1", ...],              # cells that must fit (default row A)
       "shadow": true, "flying": false,
+      "reach_up": ["B1"],                    # cells whose raised weapon crosses
+                                             # the floor line into the row above
       "recolor": {"hue": -0.02, "sat": 1.2, "val": 1.1, "glow": {...}},
+      "grade": {"gamma": 0.82, "sat": 1.1, "contrast": 1.05},   # baked value grade
+      "rim": true,                           # 1 px ink outline + top-left key rim
       "states": {
         "idle": {"breathe": "A0", "n": 16, "amp": 0.014},
         "walk": ["A1", "A2", "A3", "A4", "A5"],
@@ -53,7 +58,8 @@ Spec (JSON file, or a dict passed to import_sheet()):
    ]}
 
 A frame item is a cell name or {"cell", "sx", "sy", "anchor": "paw" |
-"ground" | "cy", "feet": y, "dy": px, "reveal": 0..1}. Defaults: idle /
+"ground" | "cy", "feet": y | "bottom": px above the frame bottom, "dy": px,
+"reveal": 0..1}. Defaults: idle /
 grounded poses anchor on the lowest body px ("paw"), row A walk frames on the
 painted shadow line when there is one ("ground"), flyers on the body centre.
 
@@ -76,6 +82,7 @@ MAX_TEX = 4096
 INK = (20, 12, 14)       # style bible shadow ink
 SHADOW_MAX = 0.42        # cap on the kept painted floor shadow
 LUMA = np.array([0.299, 0.587, 0.114])
+OVERLAP = 14            # px a cell reaches past its cut into the neighbour
 
 
 # ------------------------------------------------------------------ grid (seams)
@@ -243,7 +250,8 @@ def remove_hlines(rgb):
     out = rgb.copy()
     runs = []
     for y in rows:
-        if runs and y - runs[-1][1] <= 2:
+        # merge across a thick seam's flat middle (no edge response there)
+        if runs and y - runs[-1][1] <= 8:
             runs[-1][1] = y
         else:
             runs.append([y, y])
@@ -307,10 +315,16 @@ def _bg_model(rgb, seed_mask):
     return out
 
 
-def key_cell(rgb, portrait=False, keep_shadow=True, soft_shadows=True):
+def key_cell(rgb, portrait=False, keep_shadow=True, soft_shadows=True, margins=None, trim_out=None):
     """rgb float (h, w, 3) -> (fg rgb, figure alpha, shadow alpha).
-    soft_shadows=False: a smooth dark area is never backdrop (black hair)."""
+    soft_shadows=False: a smooth dark area is never backdrop (black hair).
+    margins=(top, bottom, left, right): the cell was cut wider than its own
+    panel by this many px; blobs lying wholly inside a margin belong to the
+    neighbour and are dropped (a blade swung across the cut is kept)."""
     t = trim_panel(rgb, bottom=not portrait)
+    if trim_out is not None:
+        trim_out.extend(t)
+    H0, W0 = rgb.shape[:2]
     rgb = rgb[t[0]:t[1], t[2]:t[3]]
     h, w, _ = rgb.shape
     inset = 2
@@ -387,12 +401,54 @@ def key_cell(rgb, portrait=False, keep_shadow=True, soft_shadows=True):
         opened = ndi.binary_opening(fig, structure=np.ones((9, 1), bool))
         smear = fig & low & ~opened & (dl < 6) & (dch < 14)
         fig &= ~smear
+    if margins and margins[0] > t[0] and fig.any():
+        # Floor-line remnants in the reach-up zone: thin horizontal smears
+        # (a vertical opening keeps the blade / club that crosses the cut).
+        mt0 = margins[0] - t[0] + 3
+        opened = ndi.binary_opening(fig, structure=np.ones((9, 1), bool))
+        zone = np.zeros((h, w), bool)
+        zone[:mt0, :] = True
+        fig &= ~(zone & ~opened)
+    if margins and margins[1] > 0 and fig.any():
+        # The next row's raised blade / hands poking up into this row's feet
+        # zone: thin horizontal pieces (feet and legs are taller).
+        mb0 = max(0, margins[1] - (H0 - t[1]))
+        opened = ndi.binary_opening(fig, structure=np.ones((9, 1), bool))
+        zone = np.zeros((h, w), bool)
+        zone[h - mb0:, :] = True
+        fig &= ~(zone & ~opened)
     # Largest blob(s): drop specks / seam slivers, keep big detached bits.
     lab, n = ndi.label(fig)
     if n:
         sizes = ndi.sum(fig, lab, range(1, n + 1))
         keep = [i + 1 for i, s in enumerate(sizes) if s >= max(60, sizes.max() * 0.05)]
+        if margins:
+            mt, mb = max(0, margins[0] - t[0]), max(0, margins[1] - (H0 - t[1]))
+            ml, mr = max(0, margins[2] - t[2]), max(0, margins[3] - (W0 - t[3]))
+            zone = np.zeros((h, w), bool)
+            zone[:mt, :] = True
+            zone[h - mb:, :] = True
+            zone[:, :ml] = True
+            zone[:, w - mr:] = True
+            main = int(np.argmax(sizes)) + 1
+            inz = ndi.sum(zone, lab, range(1, n + 1))
+            keep = [i for i in keep if i == main or inz[i - 1] < 0.6 * sizes[i - 1]]
         fig = np.isin(lab, keep)
+        if margins and fig.any():
+            # Neighbour / seam bits hanging on by a thin link: judged on the
+            # figure eroded by 2 px, a part that sits mostly in the margin
+            # is cut away with its fringe.
+            er = ndi.binary_erosion(fig, iterations=2)
+            lab_e, ne = ndi.label(er)
+            if ne > 1:
+                sz_e = ndi.sum(er, lab_e, range(1, ne + 1))
+                inz_e = ndi.sum(zone, lab_e, range(1, ne + 1))
+                main_e = int(np.argmax(sz_e)) + 1
+                drop = [i + 1 for i in range(ne) if i + 1 != main_e and inz_e[i] >= 0.6 * sz_e[i]]
+                if drop:
+                    fig &= ~ndi.binary_dilation(np.isin(lab_e, drop), iterations=3)
+                    rest = ndi.binary_dilation(er & ~np.isin(lab_e, drop), iterations=3)
+                    fig &= ~(zone & ~rest)
     # Fill pinholes only (big enclosed gaps were decided by the seeds above).
     holes = ndi.binary_fill_holes(fig) & ~fig
     lab_h, nh = ndi.label(holes)
@@ -579,19 +635,101 @@ def cell_key(name):
     return (ord(name[0].upper()) - ord("A"), int(name[1:]))
 
 
-def slice_band(rgb, layout, band, shadow=True):
-    """-> {(row, col): Cell} for one band."""
+def slice_band(rgb, layout, band, shadow=True, reach_up=()):
+    """-> {(row, col): Cell} for one band. Rows are keyed top-down: an upper
+    row drops bits that only poke into its bottom OVERLAP px (the next row's
+    raised weapons), and a lower row, which reaches OVERLAP px up across the
+    cut, gives up whatever the row above kept (its feet on the floor line).
+    `reach_up` cells (e.g. ["B1"]: an axe raised across the floor line,
+    touching the feet above) win instead: what they reach up with is taken
+    out of the row above."""
     per = layout["per_band"]
+    H, W = rgb.shape[:2]
     cells = {}
+    claimed = np.zeros((H, W), bool)
+    pre = np.zeros((H, W), bool)
+    ru = {cell_key(k) for k in reach_up}
+    for (r, c) in ru:
+        ri = band * per + r
+        y0, y1 = layout["rows"][ri]
+        ey0 = max(0, y0 - OVERLAP)
+        x0, x1 = layout["cols"][ri][c]
+        strip = remove_hlines(rgb[ey0:y1])
+        t = []
+        _, al, _ = key_cell(strip[:, x0:x1], keep_shadow=False, margins=(y0 - ey0, 0, 0, 0), trim_out=t)
+        m = np.zeros((H, W), bool)
+        m[ey0 + t[0]:ey0 + t[0] + al.shape[0], x0 + t[2]:x0 + t[2] + al.shape[1]] = al > 0.05
+        m[y0:, :] = False
+        pre |= ndi.binary_dilation(m, iterations=2)
     for r in range(per):
         ri = band * per + r
         y0, y1 = layout["rows"][ri]
-        strip = remove_hlines(rgb[y0:y1])
-        for c, (x0, x1) in enumerate(layout["cols"][ri]):
-            fg, al, sh = key_cell(strip[:, x0:x1], keep_shadow=shadow)
+        # Band seams are not crossed: only rows inside one band overlap.
+        ey0 = max(0, y0 - OVERLAP) if r > 0 else y0
+        ey1 = y1
+        strip = remove_hlines(rgb[ey0:ey1])
+        band_top = y0
+        if r > 0:
+            sc = np.abs(_line_score(rgb[ey0:y0 + 4] @ LUMA, 1))[:y0 - ey0]
+            sc[:3] = 0
+            strong = np.nonzero(sc > 4.0)[0]
+            if len(strong):
+                band_top = max(ey0, ey0 + int(strong.min()) - 6)
+        cols = layout["cols"][ri]
+        new_claim = np.zeros((H, W), bool)
+        raw = []
+        for c, (x0, x1) in enumerate(cols):
+            ex0 = max(0, x0 - OVERLAP) if c > 0 else x0
+            ex1 = min(W, x1 + OVERLAP) if c < len(cols) - 1 else x1
+            mg = (y0 - ey0, OVERLAP if r < per - 1 else 0, x0 - ex0, ex1 - x1)
+            t = []
+            fg, al, sh = key_cell(strip[:, ex0:ex1], keep_shadow=shadow, margins=mg, trim_out=t)
+            sy0, sx0 = ey0 + t[0], ex0 + t[2]
+            hh, ww = al.shape
+            cl = claimed[sy0:sy0 + hh, sx0:sx0 + ww].copy()
+            if (r, c) in ru:
+                cl[:] = False
+            if r < per - 1:
+                cl |= pre[sy0:sy0 + hh, sx0:sx0 + ww]
+            if cl.any():
+                cl = ndi.binary_dilation(cl, iterations=2)
+                al = np.where(cl, 0.0, al)
+                sh = np.where(cl, 0.0, sh)
+                lab, n = ndi.label(al > 0.05)
+                if n > 1:
+                    sz = ndi.sum(al > 0.05, lab, range(1, n + 1))
+                    keep = [i + 1 for i, v in enumerate(sz) if v >= max(60, sz.max() * 0.05)]
+                    al = np.where(np.isin(lab, keep), al, 0.0)
+            if r > 0 and band_top < y0:
+                # Seam / floor line / shadow band just above the cut: keep
+                # only what crosses it (a raised blade continues above it).
+                b0, b1 = band_top - sy0, y0 - sy0
+                if b1 > 0:
+                    m = al[:max(0, b1)] > 0.05
+                    lab, n = ndi.label(m)
+                    if n:
+                        top_ids = np.unique(lab[:max(0, b0)][lab[:max(0, b0)] > 0]) if b0 > 0 else []
+                        stray = (lab > 0) & ~np.isin(lab, top_ids)
+                        stray[:max(0, b0)] = False
+                        al[:max(0, b1)][stray] = 0.0
+            raw.append((c, fg, al, sh, sy0, sx0))
+        for c, fg, al, sh, sy0, sx0 in raw:
+            hh, ww = al.shape
+            if r < per - 1:
+                m = al > 0.05
+                new_claim[sy0:sy0 + hh, sx0:sx0 + ww] |= m
+                # Feet resting on the floor line also own the strip of
+                # shadow / line under them down to the cut.
+                foot = m.copy()
+                foot[:max(0, y1 - OVERLAP - sy0), :] = False
+                xs = np.nonzero(foot.any(0))[0]
+                for x in xs:
+                    yl = sy0 + int(np.nonzero(foot[:, x])[0].max())
+                    new_claim[yl:y1 + 1, sx0 + x] = True
             if not (al > 0.05).any():
                 raise SystemExit("band %d cell %s%d is empty" % (band, chr(65 + r), c))
             cells[(r, c)] = Cell(fg, al, sh)
+        claimed = new_claim & ~pre
     return cells
 
 
@@ -630,15 +768,34 @@ def build_unit(cells, u, log=print):
             return "cy"
         return "ground" if key[0] == 0 and key != cell_key(u.get("measure", "A0")) else "paw"
 
-    # Cap the scale so the fit cells stay inside the frame.
+    # Cap the scale so the fit cells stay inside the frame. "grow": step px
+    # lets the frame grow (feet keep their distance from the bottom) until
+    # the target fits, up to "grow_max".
     fit = [cell_key(k) for k in u.get("fit", ["A%d" % i for i in range(6)])]
-    cap = 9.0
-    for k in fit:
-        c = cells[k]
-        half = max(c.cx - c.x0, c.x1 - c.cx)
-        cap = min(cap, (fs / 2.0 - margin) / half)
-        g = ground(c, default_anchor(k))
-        cap = min(cap, (feet - margin) / max(1.0, g - c.y0))
+    # "clip_ok": trailing wisps / smoke may run off the frame sides (soft
+    # 10 px fade) instead of shrinking the whole unit to fit them.
+    clip_ok = bool(u.get("clip_ok", False))
+    fade = 10 if clip_ok else 3
+
+    def cap_for(fs_, feet_):
+        cap = 9.0
+        for k in fit:
+            c = cells[k]
+            half = max(c.cx - c.x0, c.x1 - c.cx)
+            if not clip_ok:
+                cap = min(cap, (fs_ / 2.0 - margin) / half)
+            g = ground(c, default_anchor(k))
+            cap = min(cap, (feet_ - margin) / max(1.0, g - c.y0))
+        return cap
+
+    cap = cap_for(fs, feet)
+    step, gmax = int(u.get("grow", 0)), int(u.get("grow_max", fs))
+    while step and scale > cap and fs + step <= gmax:
+        fs += step
+        feet += step
+        cap = cap_for(fs, feet)
+    if fs != int(u["fs"]):
+        log("  %s: frame grown to %d px to keep the target size" % (u["id"], fs))
     if scale > cap:
         log("  %s: scale %.3f capped to %.3f to fit %d px" % (u["id"], scale, cap, fs))
         scale = cap
@@ -650,9 +807,7 @@ def build_unit(cells, u, log=print):
         k = cell_key(it["cell"])
         c = cells[k]
         anchor = it.get("anchor", default_anchor(k))
-        if flying and k == cell_key(u.get("death_cell", "B5")):
-            anchor = it.get("anchor", "paw")
-        f_feet = float(it.get("feet", u.get("ground_feet", feet) if (flying and anchor == "paw") else feet))
+        f_feet = float(fs - it["bottom"]) if "bottom" in it else float(it.get("feet", feet))
         f_feet -= float(it.get("dy", 0.0))
         g = ground(c, anchor)
         sx, sy = float(it.get("sx", 1.0)), float(it.get("sy", 1.0))
@@ -664,7 +819,9 @@ def build_unit(cells, u, log=print):
         l, r, t = ext(1.0)
         half = fs / 2.0 - margin
         shift = 0.0
-        if l + r <= 2 * half:
+        if clip_ok:
+            pass
+        elif l + r <= 2 * half:
             if r > half:
                 shift = -(r - half)
             elif l > half:
@@ -681,7 +838,7 @@ def build_unit(cells, u, log=print):
         rv = it.get("reveal")
         if rv is not None:
             out = reveal(out, float(rv), f_feet)
-        return edge_fade(out)
+        return edge_fade(out, fade)
 
     states = {}
     for st, spec in u["states"].items():
@@ -689,17 +846,22 @@ def build_unit(cells, u, log=print):
             k = cell_key(spec["breathe"])
             c = cells[k]
             anchor = spec.get("anchor", "cy" if flying else "paw")
-            states[st] = [edge_fade(f) for f in breathe(c, scale, ground(c, anchor), int(spec.get("n", 16)),
+            states[st] = [edge_fade(f, fade) for f in breathe(c, scale, ground(c, anchor), int(spec.get("n", 16)),
                                                         amp=float(spec.get("amp", 0.014)), fs=fs, feet=feet)]
         elif isinstance(spec, dict) and "reveal" in spec:
             n = int(spec.get("n", 6))
             states[st] = [frame({"cell": spec["reveal"], "reveal": (i + 1) / float(n)}, st) for i in range(n)]
         else:
             states[st] = [frame(it, st) for it in spec]
+    if u.get("grade") or u.get("rim"):
+        for st in states:
+            states[st] = [grade(f, u.get("grade")) for f in states[st]]
+            if u.get("rim"):
+                states[st] = [rim(f) for f in states[st]]
     for note in clip_notes:
         log("  %s: %s" % (u["id"], note))
     fps = dict(u.get("fps", {}))
-    return states, fps, {"scale": scale}
+    return states, fps, {"scale": scale, "fs": fs, "feet": feet}
 
 
 def reveal(fr, t, feet):
@@ -717,6 +879,51 @@ def reveal(fr, t, feet):
     cut = int(feet) + 2
     out[cut:] = 0
     return out
+
+
+def grade(fr, g):
+    """Value grade of a baked frame: gamma (< 1 lifts the mid-tones), then
+    saturation and contrast about mid-grey. Alpha untouched."""
+    if not g:
+        return fr
+    out = fr.astype(float)
+    rgb = out[..., :3] / 255.0
+    rgb = np.power(np.clip(rgb, 0, 1), float(g.get("gamma", 1.0)))
+    lum = (rgb @ LUMA)[..., None]
+    rgb = lum + (rgb - lum) * float(g.get("sat", 1.0))
+    rgb = 0.5 + (rgb - 0.5) * float(g.get("contrast", 1.0))
+    out[..., :3] = np.clip(rgb, 0, 1) * 255.0
+    out[fr[..., 3] == 0] = 0
+    return out.round().astype(np.uint8)
+
+
+RIM_LIGHT = (255, 234, 184)
+
+
+def rim(fr, light=0.55, ink=0.8):
+    """Style-bible separation baked into the frame: a 1 px INK outline just
+    outside the silhouette (bottom / right) and a warm key-light rim on the
+    top / left edge texels, so painted units read on any ground."""
+    a = fr[..., 3].astype(float) / 255.0
+    solid = a >= 0.5
+    out = fr.astype(float)
+    # outline: empty texels next to the silhouette (8-neighbour)
+    near = ndi.binary_dilation(solid, structure=np.ones((3, 3), bool)) & ~solid
+    k = np.where(near, ink * (1.0 - a), 0.0)
+    inkc = np.array(INK, float)
+    na = a + k
+    col = np.where(na[..., None] > 1e-4, (out[..., :3] * a[..., None] + inkc * k[..., None]) / np.maximum(na, 1e-4)[..., None], 0)
+    out[..., :3] = col
+    out[..., 3] = np.clip(na, 0, 1) * 255.0
+    # key light: solid texels whose upper or left neighbour is empty
+    up = np.zeros_like(solid)
+    up[1:, :] = ~solid[:-1, :]
+    lf = np.zeros_like(solid)
+    lf[:, 1:] = ~solid[:, :-1]
+    edge = solid & (up | lf)
+    lc = np.array(RIM_LIGHT, float)
+    out[..., :3] = np.where(edge[..., None], out[..., :3] * (1 - light) + lc * light, out[..., :3])
+    return np.clip(out, 0, 255).round().astype(np.uint8)
 
 
 def edge_fade(fr, px=3):
@@ -778,15 +985,15 @@ def import_sheet(spec, preview="", dry=False, only=None, grids=None, log=print):
         if only and u["id"] not in only:
             continue
         b = int(u["band"])
-        key = (b, bool(u.get("shadow", True)))
+        key = (b, bool(u.get("shadow", True)), tuple(u.get("reach_up", ())))
         if key not in cache:
-            cache[key] = slice_band(rgb, layout, b, shadow=key[1])
+            cache[key] = slice_band(rgb, layout, b, shadow=key[1], reach_up=key[2])
         cells = cache[key]
         if u.get("recolor"):
             cells = {k: recolor_cell(c, u["recolor"]) for k, c in cells.items()}
         states, fps, inf = build_unit(cells, u, log)
-        fs = int(u["fs"])
-        feet = int(round(float(u.get("feet", fs - 10))))
+        fs = int(inf.get("fs", u["fs"]))
+        feet = int(round(float(inf.get("feet", u.get("feet", fs - 10)))))
         log("%s: scale %.3f, %s" % (u["id"], inf["scale"], ", ".join("%s %d" % (k, len(v)) for k, v in states.items())))
         out_dir = _abs(u["out"])
         uid = u["id"]
