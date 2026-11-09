@@ -277,46 +277,10 @@
    "cols": 16,
    "rows": 2
   },
-  "assets/sprites/pets/bentley/bentley_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/pets/bentley/bentley_sit_idle.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
-   "rows": 2
-  },
-  "assets/sprites/pets/lillie/lillie_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/pets/lillie/lillie_sit_idle.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
-   "rows": 2
-  },
   "assets/sprites/pets/mech_hound/mech_hound_idle.png": {
    "n": 36,
    "fs": 128,
    "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/pets/noel/noel_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/pets/noel/noel_sit_idle.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
    "rows": 2
   },
   "assets/sprites/pets/rust_mule/rust_mule_idle.png": {
