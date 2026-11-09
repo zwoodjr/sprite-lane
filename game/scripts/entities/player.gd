@@ -168,7 +168,8 @@ var exposure_stage: int = -1
 @onready var label: Label = $NameLabel
 @onready var camera: Camera2D = $Camera2D
 
-## One 128 px hero frame at native density (1 texel = 1 screen px).
+## One 128-texel hero frame at native density (1 texel = 1 screen px); hd art
+## with a wider frame scales from this (UnitAnim.art_frame_world).
 const HERO_FRAME_WORLD := 128.0 * UnitAnim.TEXEL
 ## Local y where the hero's feet stand (collision centre is the origin).
 const FEET_Y := 32.0
@@ -206,18 +207,17 @@ func _apply_loadout() -> void:
 	## Cathedral Vestments (3): Last Rites — first death revives at half health.
 	_last_rites = GameState.has_set("cathedral_vestments", 3)
 	var prefix := str(_char.get("anim", "res://assets/sprites/characters/ash_rook/ash_rook"))
-	## Hero sharpness on phones: 2x in-memory strips (Lanczos), minified with
-	## linear filtering + a light sharpen (UnitAnim.load_states_2x). Env
-	## WANDERER_HERO_FILTER=old keeps the earlier nearest path for A/B renders.
-	var hf := OS.get_environment("WANDERER_HERO_FILTER")
-	if hf == "old":
-		_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y)
-		body.texture_filter = CanvasItem.TEXTURE_FILTER_PARENT_NODE
-		_anim.base_material = UnitAnim.rim_material()
-	else:
-		_anim.setup(body, prefix, HERO_FRAME_WORLD, FEET_Y, 1.0, true)
+	## Painted hero strips are baked at hd 2 (2 texture px per art texel,
+	## tools/import_band_sheet.py), minified with linear filtering + a light
+	## sharpen. A 1x set (hd 1) still draws with the nearest rim path.
+	var hd := UnitAnim.art_hd(prefix)
+	_anim.setup(body, prefix, UnitAnim.art_frame_world(prefix, HERO_FRAME_WORLD), FEET_Y, hd)
+	if hd > 1.0:
 		body.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		_anim.base_material = UnitAnim.hero_hd_material()
+	else:
+		body.texture_filter = CanvasItem.TEXTURE_FILTER_PARENT_NODE
+		_anim.base_material = UnitAnim.rim_material()
 	body.material = _anim.base_material
 	_wpn_art = UnitAnim.load_json(prefix + "_weapon.json")
 	if not _anim.frame_event.is_connected(_on_anim_frame):

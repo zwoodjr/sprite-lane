@@ -12,6 +12,8 @@ var end_frame: int = -1
 var _atlas: AtlasTexture
 var _frames: int = 1
 var _lay: Dictionary = {}
+## Fraction of each frame shown (UnitAnim.ui_window: hd heroes' 128-texel view).
+var _win: Rect2 = Rect2(0, 0, 1, 1)
 var _t: float = 0.0
 var _frame: int = -1
 
@@ -46,12 +48,20 @@ func set_strip(path: String) -> void:
 		var f: Dictionary = side.get("fps", {})
 		if f.has(st):
 			fps = float(f[st])
+	_win = UnitAnim.ui_window(path)
+	## hd art (2 px per texel) is minified: linear keeps the paint even.
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR if UnitAnim.art_hd(path.substr(0, cut)) > 1.0 else CanvasItem.TEXTURE_FILTER_NEAREST
 	_atlas = AtlasTexture.new()
 	_atlas.atlas = tex
-	_atlas.region = UnitAnim.strip_region(_lay, 0)
+	_atlas.region = _region(0)
 	texture = _atlas
 	_frame = 0
 	_t = 0.0
+
+
+func _region(f: int) -> Rect2:
+	var r := UnitAnim.strip_region(_lay, f)
+	return Rect2(r.position + _win.position * r.size, _win.size * r.size)
 
 
 func _process(delta: float) -> void:
@@ -63,4 +73,4 @@ func _process(delta: float) -> void:
 	f = f % _frames if loop else mini(f, last)
 	if f != _frame:
 		_frame = f
-		_atlas.region = UnitAnim.strip_region(_lay, f)
+		_atlas.region = _region(f)

@@ -140,8 +140,6 @@ static var _alive_cache: Dictionary = {}
 var sprite: Sprite2D
 var states: Dictionary = {}
 var frame_size: int = 128
-## 2 when the strips were upscaled in memory (load_states_2x).
-var _up: float = 1.0
 var _ffb: float = FEET_FROM_BOTTOM
 var state: String = ""
 var frame: int = 0
@@ -189,47 +187,41 @@ static func load_states(prefix: String) -> Dictionary:
 	return out
 
 
-## Heroes on phones: the 1x strips are drawn ~1.6 physical px per texel.
-## Like the dogs' 2x painted strips, an in-memory 2x copy (Lanczos per frame)
-## is then *minified* by the GPU with linear filtering, which keeps the painted
-## detail sharp and even instead of nearest's uneven texel widths. No files are
-## written; only the current hero's strips are upscaled (once, cached).
-static func load_states_2x(prefix: String) -> Dictionary:
-	var key := prefix + "@2x"
-	if _cache.has(key):
-		return _cache[key]
-	var src := load_states(prefix)
-	var out: Dictionary = {}
-	for s in src.keys():
-		var e: Dictionary = (src[s] as Dictionary).duplicate()
-		var tex: Texture2D = e["tex"]
-		var img := tex.get_image()
-		if img == null or img.is_empty():
-			out[s] = e
-			continue
-		if img.is_compressed():
-			img.decompress()
-		img.convert(Image.FORMAT_RGBA8)
-		var fs := int(e.get("fs", img.get_height()))
-		var n := int(e["n"])
-		var scols := int(e.get("cols", n))
-		## The 2x copy is folded into a grid that stays under the GPU limit
-		## (36 frames x 256 px = 9216 px in one row drew as a black box on WebGL).
-		var cols := clampi(MAX_TEX / (fs * 2), 1, n)
-		var rows := int(ceil(float(n) / float(cols)))
-		var big := Image.create(fs * 2 * cols, fs * 2 * rows, false, Image.FORMAT_RGBA8)
-		for i in range(n):
-			var fr := img.get_region(Rect2i((i % scols) * fs, (i / scols) * fs, fs, fs))
-			fr.resize(fs * 2, fs * 2, Image.INTERPOLATE_LANCZOS)
-			big.blit_rect(fr, Rect2i(0, 0, fs * 2, fs * 2), Vector2i((i % cols) * fs * 2, (i / cols) * fs * 2))
-		e["fs"] = fs * 2
-		e["cols"] = cols
-		e["rows"] = rows
-		e["tex"] = ImageTexture.create_from_image(big)
-		out[s] = e
-	_alive_cache[key] = _alive_cache.get(prefix, {})
-	_cache[key] = out
-	return out
+## Art density from the `<prefix>_anim.json` sidecar: "hd" = texture px per
+## art texel (2 for the painted hero / pet strips). Default 1.
+static func art_hd(prefix: String) -> float:
+	return maxf(1.0, float(load_json_cached(prefix + "_anim.json").get("hd", 1.0)))
+
+
+## World size of one frame of `prefix`'s strips, at native density. Units whose
+## frame is wider than 128 art texels (hd heroes: room for the lying death
+## pose) grow from `base_128` (the world size of a 128-texel frame).
+static func art_frame_world(prefix: String, base_128: float) -> float:
+	var st := load_states(prefix)
+	if st.is_empty():
+		return base_128
+	var any: Dictionary = st.get("idle", st.values()[0])
+	var fs := float(any.get("fs", (any["tex"] as Texture2D).get_height()))
+	return base_128 * (fs / art_hd(prefix)) / 128.0
+
+
+## UI views (hero select, Gear doll, menus) show the old 128-texel window of a
+## wide hd frame, so the hero fills them as before: "ui_window" [x, y, w, h]
+## in frame px from the sidecar, as a fraction of the frame. Death strips
+## (the lying pose is wider) keep the whole frame.
+static func ui_window(path: String) -> Rect2:
+	var cut := path.rfind("_")
+	if cut <= 0 or path.ends_with("_death.png"):
+		return Rect2(0, 0, 1, 1)
+	var side := load_json_cached(path.substr(0, cut) + "_anim.json")
+	var w: Array = side.get("ui_window", [])
+	if w.size() != 4:
+		return Rect2(0, 0, 1, 1)
+	var tex := load(path) as Texture2D
+	var fs := float(strip_layout(path, tex).get("fs", 1))
+	if fs <= 1.0:
+		return Rect2(0, 0, 1, 1)
+	return Rect2(float(w[0]) / fs, float(w[1]) / fs, float(w[2]) / fs, float(w[3]) / fs)
 
 
 ## --- GPU-safe strips --------------------------------------------------------
@@ -277,6 +269,8 @@ static func strip_frame(path: String, i: int = 0, sub: Rect2 = Rect2(0, 0, 1, 1)
 	if tex == null:
 		return null
 	var r := strip_region(strip_layout(path, tex), i)
+	var win := ui_window(path)
+	r = Rect2(r.position + win.position * r.size, win.size * r.size)
 	var at := AtlasTexture.new()
 	at.atlas = tex
 	at.region = Rect2(r.position + sub.position * r.size, sub.size * r.size)
@@ -342,8 +336,8 @@ void fragment() {
 
 ## Heroes on phones: 128-px frames land at ~1.6 physical px per texel (a
 ## non-integer scale); nearest gives uneven texel widths that read as "out of
-## focus" and shimmer in motion. Heroes now use 2x strips (load_states_2x) drawn
-## at hd 2 with linear filtering, like the dogs' 256-px strips.
+## focus" and shimmer in motion. Heroes are baked at hd 2 (painted strips,
+## tools/import_band_sheet.py) and drawn with linear filtering, like the dogs.
 ## Rim + a light unsharp mask for the 2x hero strips (rim offsets in 2x texels).
 static var _hd_mat: ShaderMaterial = null
 static func hero_hd_material() -> ShaderMaterial:
@@ -465,13 +459,9 @@ void fragment() {
 ## feet: local y (unit space) where the feet should stand.
 ## `hd`: texture px per art texel (2 for strips painted at 2x, e.g. pets),
 ## so the feet anchor stays at the same art texel.
-func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0, hd: float = 1.0, up2x: bool = false) -> bool:
+func setup(spr: Sprite2D, prefix: String, world_frame_px: float, feet: float = 0.0, hd: float = 1.0) -> bool:
 	sprite = spr
-	states = load_states_2x(prefix) if up2x else load_states(prefix)
-	## Sidecar points (weapon tips, hit origins) stay in 1x frame pixels.
-	_up = 2.0 if up2x else 1.0
-	if up2x:
-		hd = 2.0
+	states = load_states(prefix)
 	_alive = ALIVE.duplicate()
 	_alive.merge(_alive_cache.get(prefix, {}), true)
 	if states.is_empty() or sprite == null:
@@ -681,7 +671,7 @@ func _show(f: int, emit: bool = true) -> void:
 ## Frame-pixel point (x right, y down, origin top-left of the frame) → the
 ## unit's local space, honouring scale, feet anchor and facing flip.
 func frame_to_local(px_in: Vector2) -> Vector2:
-	var px := px_in * _up
+	var px := px_in
 	var x := (px.x - frame_size * 0.5) * _px_scale
 	if sprite != null and sprite.flip_h:
 		x = -x

@@ -69,7 +69,13 @@ func _ready() -> void:
 		fs = float(st["idle"].get("fs", (st["idle"]["tex"] as Texture2D).get_height()))
 	if enemy_art != "":
 		_feet = 16.0 * (2.05 if fs >= 256.0 else (1.5 if fs >= 192.0 else 1.0)) * UnitAnim.BODY_K
-	_anim.setup(_body, prefix, UnitAnim.native(fs), _feet)
+	## hd strips (painted heroes / pets: 2 px per art texel) keep native density.
+	var hd := UnitAnim.art_hd(prefix) if enemy_art == "" else 1.0
+	if pet != "":
+		hd = maxf(hd, float(PetDefs.get_pet(pet).get("hd", 1.0)))
+	_anim.setup(_body, prefix, UnitAnim.native(fs / hd), _feet, hd)
+	if hd > 1.0:
+		_body.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_anim.set_locomotion("idle")
 	UnitAnim.add_contact_shadow(self, 40.0 if pet != "" else 58.0, _feet, 0.5)
 	_tag = Label.new()
@@ -81,7 +87,8 @@ func _ready() -> void:
 	_tag.add_theme_color_override("font_outline_color", Color("140c0e"))
 	_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tag.size = Vector2(200, 20)
-	_tag.position = Vector2(-100, -(fs * UnitAnim.TEXEL) * 0.78 + _feet - 8.0)
+	## Tag above the head: a 128-texel frame's head height, whatever the frame width.
+	_tag.position = Vector2(-100, -(minf(fs / hd, 128.0) * UnitAnim.TEXEL) * 0.78 + _feet - 8.0)
 	_tag.z_index = 20
 	_tag.visible = label_text != ""
 	add_child(_tag)

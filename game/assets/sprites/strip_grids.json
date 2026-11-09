@@ -1,54 +1,6 @@
 {
  "max": 4096,
  "grids": {
-  "assets/sprites/characters/ash_rook/ash_rook_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/bolt_juno/bolt_juno_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/helm_wisp/helm_wisp_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/nyx_caldera/nyx_caldera_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/pebble/pebble_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/quill_marrow/quill_marrow_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/sister_cinder/sister_cinder_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/characters/vesper_thorn/vesper_thorn_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
   "assets/sprites/enemies/apocalypse_wraith/apocalypse_wraith_idle.png": {
    "n": 36,
    "fs": 128,
@@ -275,18 +227,6 @@
    "n": 24,
    "fs": 256,
    "cols": 16,
-   "rows": 2
-  },
-  "assets/sprites/pets/mech_hound/mech_hound_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/pets/rust_mule/rust_mule_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
    "rows": 2
   }
  }

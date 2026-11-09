@@ -1,6 +1,19 @@
 {
  "fps": {
-  "idle": 12,
-  "walk": 28
- }
+  "idle": 6,
+  "walk": 9,
+  "windup": 10,
+  "attack": 12,
+  "hit": 10,
+  "death": 8,
+  "dash": 24,
+  "ability": 12
+ },
+ "hd": 2,
+ "ui_window": [
+  96,
+  192,
+  256,
+  256
+ ]
 }
