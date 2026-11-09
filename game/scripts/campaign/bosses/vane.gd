@@ -3,6 +3,16 @@ extends "res://scripts/campaign/bosses/boss_brain.gd"
 ## Mother Vane (raider captain): fire bottles that leave burning ground, a
 ## rally that calls her crew in, and below half HP a shoulder-first charge.
 
+const ART := "res://assets/sprites/enemies/mother_vane/mother_vane"
+
+
+## Vane is a raider captain in stats; she wears her own painted art set.
+func setup(enemy: Node2D, controller: Node) -> void:
+	super.setup(enemy, controller)
+	if enemy != null and enemy.has_method("set_art"):
+		enemy.call("set_art", ART)
+
+
 func moves() -> Dictionary:
 	return {
 		"bottle": {"cd": 4.5, "first": 2.5, "wind": 0.8, "r": 90.0},

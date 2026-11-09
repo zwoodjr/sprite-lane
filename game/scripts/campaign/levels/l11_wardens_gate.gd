@@ -71,7 +71,7 @@ static func def() -> Dictionary:
 				"waves": [{"t": 3, "kinds": ["ash_wraiths", "t2"], "n": 4}, {"t": 13, "kinds": "swarm", "n": 7}, {"t": 23, "kinds": "t2", "n": 3}],
 				"trickle": {"every": 4.5, "kinds": ["plague", "swarm"], "cap": 9},
 				"on_done": [["if", ["vane_spared", true], [["scene", "vane_ally"],
-					["npc", {"id": "vane", "enemy": "raider_captain", "at": Vector2(-180, -1220), "label": "MOTHER VANE", "ally": true}],
+					["npc", {"id": "vane", "enemy": "mother_vane", "at": Vector2(-180, -1220), "label": "MOTHER VANE", "ally": true}],
 					["npc", {"id": "grunt1", "enemy": "raider_grunt", "at": Vector2(160, -1240), "label": "", "ally": true}],
 					["npc", {"id": "grunt2", "enemy": "raider_grunt", "at": Vector2(60, -1150), "label": "", "ally": true}],
 					["npc_mode", "vane", "ally"], ["npc_mode", "grunt1", "ally"], ["npc_mode", "grunt2", "ally"]],

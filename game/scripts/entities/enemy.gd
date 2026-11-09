@@ -191,6 +191,16 @@ func _make_trick(kind_id: String) -> RefCounted:
 		return null
 	return b as RefCounted
 
+## Own art set for a named unit (Mother Vane wears hers over the raider
+## captain's stats): swaps the strips, keeps kind, stats and size class.
+func set_art(prefix: String) -> void:
+	if prefix == "" or not UnitAnim.has_art(prefix):
+		return
+	_def = _def.duplicate()
+	_def["anim"] = prefix
+	if is_inside_tree():
+		_apply_look()
+
 ## Promote to an elite / boss (EnemyDefs.ROLE_STATS): tougher, bigger arrow, rewards.
 func set_role(r: String) -> void:
 	var st: Dictionary = EnemyDefs.ROLE_STATS.get(r, {})

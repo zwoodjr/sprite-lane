@@ -1,58 +1,46 @@
 {
  "max": 4096,
  "grids": {
-  "assets/sprites/enemies/apocalypse_wraith/apocalypse_wraith_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
+  "assets/sprites/enemies/dread_naught/dread_naught_death.png": {
+   "n": 12,
+   "fs": 512,
+   "cols": 8,
    "rows": 2
   },
   "assets/sprites/enemies/dread_naught/dread_naught_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/enemies/dread_naught/dread_naught_walk.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
+   "n": 16,
+   "fs": 512,
+   "cols": 8,
    "rows": 2
   },
   "assets/sprites/enemies/dust_warden/dust_warden_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/enemies/dust_warden/dust_warden_walk.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
+   "n": 16,
+   "fs": 320,
+   "cols": 12,
    "rows": 2
   },
-  "assets/sprites/enemies/mutant_overlord/mutant_overlord_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
+  "assets/sprites/enemies/mother_vane/mother_vane_idle.png": {
+   "n": 16,
+   "fs": 384,
+   "cols": 10,
+   "rows": 2
   },
-  "assets/sprites/enemies/mutant_overlord/mutant_overlord_walk.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
+  "assets/sprites/enemies/rad_gator_matriarch/rad_gator_matriarch_idle.png": {
+   "n": 16,
+   "fs": 320,
+   "cols": 12,
+   "rows": 2
+  },
+  "assets/sprites/enemies/wasteland_god_entity/wasteland_god_entity_death.png": {
+   "n": 12,
+   "fs": 512,
+   "cols": 8,
    "rows": 2
   },
   "assets/sprites/enemies/wasteland_god_entity/wasteland_god_entity_idle.png": {
-   "n": 36,
-   "fs": 256,
-   "cols": 16,
-   "rows": 3
-  },
-  "assets/sprites/enemies/wasteland_god_entity/wasteland_god_entity_walk.png": {
-   "n": 24,
-   "fs": 256,
-   "cols": 16,
+   "n": 16,
+   "fs": 512,
+   "cols": 8,
    "rows": 2
   }
  }
