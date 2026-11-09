@@ -7,24 +7,6 @@
    "cols": 32,
    "rows": 2
   },
-  "assets/sprites/enemies/ash_singer/ash_singer_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/ash_wraiths/ash_wraiths_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/chimera_rat/chimera_rat_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
   "assets/sprites/enemies/dread_naught/dread_naught_idle.png": {
    "n": 36,
    "fs": 256,
@@ -35,18 +17,6 @@
    "n": 24,
    "fs": 256,
    "cols": 16,
-   "rows": 2
-  },
-  "assets/sprites/enemies/dune_serpent/dune_serpent_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/dune_stalker/dune_stalker_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
    "rows": 2
   },
   "assets/sprites/enemies/dust_warden/dust_warden_idle.png": {
@@ -61,36 +31,6 @@
    "cols": 16,
    "rows": 2
   },
-  "assets/sprites/enemies/fusion_golem/fusion_golem_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/geist_alpha/geist_alpha_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/glow_moth/glow_moth_idle.png": {
-   "n": 64,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/glow_moth_queen/glow_moth_queen_idle.png": {
-   "n": 64,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/muck_golem/muck_golem_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
   "assets/sprites/enemies/mutant_overlord/mutant_overlord_idle.png": {
    "n": 36,
    "fs": 256,
@@ -101,54 +41,6 @@
    "n": 24,
    "fs": 256,
    "cols": 16,
-   "rows": 2
-  },
-  "assets/sprites/enemies/rad_bat/rad_bat_idle.png": {
-   "n": 64,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/rad_gator/rad_gator_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/scav_bear/scav_bear_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/scav_bear_cub/scav_bear_cub_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/scorpion_king/scorpion_king_idle.png": {
-   "n": 36,
-   "fs": 192,
-   "cols": 21,
-   "rows": 2
-  },
-  "assets/sprites/enemies/scorpion_king/scorpion_king_walk.png": {
-   "n": 24,
-   "fs": 192,
-   "cols": 21,
-   "rows": 2
-  },
-  "assets/sprites/enemies/toxic_scorp/toxic_scorp_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
-   "rows": 2
-  },
-  "assets/sprites/enemies/void_spider/void_spider_idle.png": {
-   "n": 36,
-   "fs": 128,
-   "cols": 32,
    "rows": 2
   },
   "assets/sprites/enemies/wasteland_god_entity/wasteland_god_entity_idle.png": {
