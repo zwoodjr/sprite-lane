@@ -32,7 +32,7 @@ const STYLES := {
 	],
 	"pebble": [
 		{"id": "maul", "name": "Scrap Maul", "desc": "The classic: a wide, heavy smash."},
-		{"id": "sweep", "name": "Sledge Sweep", "desc": "A huge horizontal sweep that clears space around her.",
+		{"id": "sweep", "name": "Sledge Sweep", "desc": "A huge horizontal sweep that clears space around him.",
 			"mul": {"damage": 0.82}, "melee_set": {"arc_deg": 210.0}, "melee_mul": {"radius": 1.12}},
 		{"id": "driver", "name": "Pile Driver", "desc": "Slow overhead blows that send enemies flying.",
 			"mul": {"damage": 1.55, "fire_rate": 0.72}, "melee_mul": {"knockback": 1.5, "arc_deg": 0.75}},
@@ -82,7 +82,7 @@ const ABILITIES := {
 		"mul": {"duration": 0.4, "speed_mult": 1.35, "cooldown": 0.8}, "set": {"end_slam_radius": 120.0, "end_slam_damage": 40.0}},
 	"vesper_thorn": {"name": "Smoke Vial", "desc": "A wider cloud that also slows everything in it.",
 		"mul": {"cloud_radius": 1.6, "vial_mult": 0.7}, "set": {"cloud_slow": 0.5}},
-	"pebble": {"name": "Quake Stomp", "desc": "No leap — she stomps where she stands: wider, longer stun.",
+	"pebble": {"name": "Quake Stomp", "desc": "No leap — he stomps where he stands: wider, longer stun.",
 		"mul": {"radius": 1.4, "stun": 1.5, "damage_mult": 0.8}, "set": {"lunge_range": 0.0, "lunge_time": 0.05}},
 	"bolt_juno": {"name": "Static Cage", "desc": "The hook round bursts into a huge cage that stuns far longer, no chain.",
 		"mul": {"burst_radius": 2.1, "stun": 1.7, "damage_mult": 0.7}, "set": {"chain": 0}},

@@ -1,7 +1,7 @@
 extends RefCounted
 
 ## CHAPTER 1 · 3 — Lights Out. Bolt Juno has kept one city block's power alive
-## by himself since the plague. The Dust is shorting his substation and the war
+## by herself since the plague. The Dust is shorting her substation and the war
 ## machines are coming for the current. Helm needs a generator. Juno needs
 ## somebody to talk to.
 
@@ -54,8 +54,8 @@ static func def() -> Dictionary:
 				["helm", "Lights. LIGHTS. Rook, look up! The hangar has a ceiling! It's ugly!", "radio"],
 				["rook", "It's been ugly the whole time. Now you can see it."],
 				["juno", "The wiring in here is a crime. A crime. Who did this? Don't answer. I'll fix it. I'll fix all of it."],
-				["pebble", "He talks a lot."],
-				["vesper", "He talks MORE than a lot."],
+				["pebble", "She talks a lot."],
+				["vesper", "She talks MORE than a lot."],
 				["juno", "Nine years alone! I'm catching up! Hello! Hi, big dog! Hi, small loud dog!"],
 			],
 		},

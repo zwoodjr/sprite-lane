@@ -61,7 +61,7 @@ static func _weapon_table() -> Dictionary:
 			"projectile_speed": 520.0,
 			"lifetime": 0.95,
 			## Greed balance (bot data): Rook died most once waves scaled — a
-			## bigger drum and a little more reach so she isn't reloading in a crowd.
+			## bigger drum and a little more reach so he isn't reloading in a crowd.
 			"mag_size": 9,
 			"reload_time": 1.7,
 			"splash_radius": 72.0,

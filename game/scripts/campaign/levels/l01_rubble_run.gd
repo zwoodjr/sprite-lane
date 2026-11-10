@@ -1,13 +1,13 @@
 extends RefCounted
 
-## CHAPTER 1 · 1 — Rubble Run. Rook walks the convoy road that came down on her
+## CHAPTER 1 · 1 — Rubble Run. Rook walks the convoy road that came down on his
 ## crew, fills the pack, and digs a giant out of a quarry office: Pebble, and
-## the two dogs she kept alive under the stone.
+## the two dogs he kept alive under the stone.
 
 static func def() -> Dictionary:
 	return {
 		"title": "Rubble Run",
-		"subtitle": "The hangar needs medicine. Rook knows a road. She'd rather not.",
+		"subtitle": "The hangar needs medicine. Rook knows a road. He'd rather not.",
 		"tier": 4,
 		"enemy_hp": 0.75,
 		"enemy_damage": 0.7,
@@ -93,7 +93,7 @@ static func def() -> Dictionary:
 					["shake", 0.4], ["scene", "out"]]},
 			{"type": "escort", "text": "Walk Pebble to the truck", "npc": "pebble", "lead": 260,
 				"path": [Vector2(-380, -2880), Vector2(-300, -3140), Vector2(-60, -3230), Vector2(160, -3300), Vector2(330, -3330)],
-				"fail": "Pebble went down. The Dust took her.",
+				"fail": "Pebble went down. The Dust took him.",
 				"waves": [{"t": 2, "kinds": "t1", "n": 4}, {"t": 10, "kinds": "swarm", "n": 6}, {"t": 18, "kinds": "scav_bear_cub", "n": 3},
 					{"t": 28, "kinds": "t1", "n": 5}, {"t": 36, "kinds": "scav_bear", "n": 1}],
 				"trickle": {"every": 4.0, "kinds": "t1", "cap": 8}},

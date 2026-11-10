@@ -31,7 +31,7 @@ static func def() -> Dictionary:
 		"outro": "outro",
 		"scenes": {
 			"intro": [
-				["", "The west wall is still smoking. Pebble is holding the door shut with her back."],
+				["", "The west wall is still smoking. Pebble is holding the door shut with his back."],
 				["helm", "They came at three. Fire bottles over the wall. Six of them, maybe eight.", "radio"],
 				["vane", "Hangar folk! You've got medicine and I've got two very loud dogs. Bring the medicine to the Pit and you get them back. Mostly.", "radio"],
 				["helm", "That's Mother Vane. She runs the biggest crew this side of the Dust.", "radio"],

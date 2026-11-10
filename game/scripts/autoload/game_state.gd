@@ -59,7 +59,7 @@ var result_auto_salvaged_n: int = 0
 var result_auto_salvaged_scrap: int = 0
 ## {rarity: count} for the result screen breakdown.
 var result_auto_salvaged_by: Dictionary = {}
-## Radio service: Pebble's Barricade (damage taken x inside her ring).
+## Radio service: Pebble's Barricade (damage taken x inside his ring).
 var zone_guard: float = 1.0
 var result_overflow_n: int = 0
 ## Rare+ (and set) finds that didn't fit a full stash: held in pending_rewards

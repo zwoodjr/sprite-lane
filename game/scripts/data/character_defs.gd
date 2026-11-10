@@ -101,16 +101,16 @@ static func _table() -> Dictionary:
 				"desc": "3s braced sprint: ram and stun foes, take half damage until 2s after, patch up 4 HP per foe rammed (20 max), ping crates within 90m.",
 				"cooldown": 10.0, "duration": 3.0, "speed_mult": 1.45,
 				"ram_damage": 22.0, "ram_radius": 36.0, "ram_knock": 380.0,
-				## balance: Rook died most in bot runs (she charges in first).
+				## balance: Rook died most in bot runs (he charges in first).
 				## Braced: less damage during the rush and just after it;
 				## rammed foes are stunned so the pack can't punish the landing.
 				"brace_mult": 0.5, "brace_after": 2.0, "ram_stun": 0.8,
-				## Rook has no heal: charging in is how she patches up.
+				## Rook has no heal: charging in is how he patches up.
 				"ram_heal": 4.0, "ram_heal_cap": 20.0,
 			},
 			"move_speed_mult": 0.96,
 			"max_hp_bonus": 25, ## balance: slow launcher, died most at Greed 2+ (bot data)
-			## Heavy frame: she eats melee hits charging in first (bot data: 11/16
+			## Heavy frame: he eats melee hits charging in first (bot data: 11/16
 			## sloppy deaths before the Braced Rush + this, field ~1/8).
 			"damage_taken_mult": 0.85,
 			"damage_mult": 1.12,

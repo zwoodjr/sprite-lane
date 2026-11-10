@@ -190,7 +190,7 @@ const LEGENDARIES := {
 		"radius": 34.0, "time": 3.0, "dps": 12.0},
 	"bellwether": {"hero": "vesper_thorn", "name": "Bellwether", "desc": "A kill shot rings a bell that slows every enemy on screen for 2s.",
 		"slow_time": 2.0, "slow_mult": 0.5, "cooldown": 1.0},
-	"gravedigger": {"hero": "pebble", "name": "Gravedigger", "desc": "Every kill adds a damage stack until she takes a hit.",
+	"gravedigger": {"hero": "pebble", "name": "Gravedigger", "desc": "Every kill adds a damage stack until he takes a hit.",
 		"per_stack": 0.04, "max_stacks": 15},
 	"live_line": {"hero": "bolt_juno", "name": "Live Line", "desc": "Every eighth round arcs lightning to the nearest enemy.",
 		"every": 8, "mult": 1.0, "range": 220.0, "stun": 0.3},

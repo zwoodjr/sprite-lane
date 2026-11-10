@@ -2,7 +2,7 @@ extends RefCounted
 
 ## CHAPTER 1 · 2 — The Bell Tower. Vesper, half-starved, alone in a bell tower
 ## for years. Tonight a stranger with a rocket launcher walks into her sights
-## with a war walker on her heels. Stay or go.
+## with a war walker on his heels. Stay or go.
 
 static func def() -> Dictionary:
 	return {
@@ -31,7 +31,7 @@ static func def() -> Dictionary:
 				["", "The dead city. A bell tower with no bell-ringer left. Except one."],
 				["vesper", "Day one thousand and something. Ate the last tin yesterday. Or the day before."],
 				["vesper", "Movement. North road. One person. Big launcher. Running."],
-				["vesper", "...And a walker behind her. Old war model. She won't outrun it."],
+				["vesper", "...And a walker behind him. Old war model. He won't outrun it."],
 				["vesper", "Not my problem."],
 				["vesper", "..."],
 				["vesper", "Fine."],
@@ -78,8 +78,8 @@ static func def() -> Dictionary:
 			],
 		},
 		"objectives": [
-			{"type": "defend", "text": "Cover the stranger", "hint": "Keep the pack off her. Stay in the ring",
-				"at": Vector2(40, -400), "r": 260, "time": 55, "hp": 200, "fail": "The stranger went down. Nobody rings for her.",
+			{"type": "defend", "text": "Cover the stranger", "hint": "Keep the pack off him. Stay in the ring",
+				"at": Vector2(40, -400), "r": 260, "time": 55, "hp": 200, "fail": "The stranger went down. Nobody rings for him.",
 				"on_start": [["npc", {"id": "rook", "hero": "ash_rook", "at": Vector2(40, -420), "label": "STRANGER", "ally": true}],
 					["npc_mode", "rook", "ally"]],
 				"waves": [{"t": 0, "kinds": "scrap_hound", "n": 4, "at": Vector2(60, -900), "r": 160},

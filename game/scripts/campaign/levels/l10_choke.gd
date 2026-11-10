@@ -47,7 +47,7 @@ static func def() -> Dictionary:
 				["vesper", "My hands aren't. The catwalk has a line on the whole yard. Somebody covers the truck or nobody leaves."],
 				["pebble", "Then we all stay."],
 				["vesper", "No. I spent three years alone in a tower so I wouldn't have to need anyone. Let me need you. Go."],
-				["vesper", "Tell Rook... tell her she took her time. Tell her I'm glad she did."],
+				["vesper", "Tell Rook... tell him he took his time. Tell him I'm glad he did."],
 			],
 			"nyx_goes": [
 				["", "Engines on the north road. Red rags on the bumpers. The crew that bought the back road has followed it here."],
@@ -60,7 +60,7 @@ static func def() -> Dictionary:
 				["vesper", "Pebble. I can walk. Let me cover the yard from the catwalk."],
 				["pebble", "No. Nobody stays. Not one of us. Hold on to my neck."],
 				["vesper", "...Fine. I trust you. That's a new one for me."],
-				["nyx", "And I'm not selling anybody anything ever again. Carry me too, big girl. I'm very light."],
+				["nyx", "And I'm not selling anybody anything ever again. Carry me too, big guy. I'm very light."],
 			],
 			"outro": [
 				["", "The truck rolls out of the Works with everyone it has left."],

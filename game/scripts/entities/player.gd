@@ -173,7 +173,7 @@ var exposure_stage: int = -1
 const HERO_FRAME_WORLD := 128.0 * UnitAnim.TEXEL
 ## Local y where the hero's feet stand (collision centre is the origin).
 const FEET_Y := 32.0
-## Melee reach grew with the native-size hero (her maul / blades reach further on screen).
+## Melee reach grew with the native-size hero (his maul / her blades reach further on screen).
 const MELEE_K := 1.25
 var _anim: UnitAnim = UnitAnim.new()
 ## <id>_weapon.json: per-state/frame weapon tip, hit_frames, melee|ranged.

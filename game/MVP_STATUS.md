@@ -1,5 +1,7 @@
 # MVP status (repo mirror)
 
+**Pronouns match the painted designs:** Bolt Juno is she/her: lore, Lights Out dialogue, the radio relay call and her hurt/death voice. Ash Rook and Pebble are painted as bearded men, so they are he/him: Logbook lore, chapter 1/2/7/10 lines, radio barks, the Gravedigger and Pebble style tooltips, and both now use the male hurt/death voice. Vesper, Cinder, Quill, Nyx and Helm stay she/her. Names are unchanged.
+
 **Bolt Juno and Quill Marrow shoot (to match their painted art):** both heroes keep their names. Their new art carries guns, so their attacks are now ranged.
 - **Juno: Chain-Fed Rifle.** A mid-range automatic: 14 damage, 6.5 rounds/s, 36-round magazine, 1.4 s reload, 380 reach. The firing strip plays once per round. **Overload** is now a chain-hook shock round: it yanks its target, bursts there, stuns, and arcs to 4 more enemies. Static Cage still works (a bigger burst where the round lands, no arcs). Live Line arcs every 8th round. Gauntlet is now her armoured gun-arm: +35 HP, 15% less damage taken.
 - **Quill: Bayonet Rifle.** A precise marksman rifle: 34 damage, 1.7 shots/s, pierces 1 enemy, 8 rounds, 470 reach. **Dissect** marks the nearest foe (+50% damage taken), then fires a round through it that pierces 3. B is now Long Shot. +30 HP, 15% less damage taken. The Bayonet run upgrade (auto-stabs foes that get too close) stays.
@@ -202,7 +204,7 @@ A maxed bunker left late saves sitting on 30k+ scrap. Four sinks, all with the H
 - **Radio pool doubled.** All new content arrives once onboarding is done.
   - Events, 6 → 12: Toxic Rain (shelter, or stay out for 1.5× scrap while it burns), Caravan Wreck (2 heavy medicine crates), Distress Flare (reach it in 25 s for scrap and tonics, plus the wave it draws), Raider Ambush (fight for loot or run), Helm's Wager (stand 3 s: loot +0.3 and Greed +1), Plague Nest (keeps spawning until burned; a rare drop).
   - Contracts, 5 → 9: Vesper's Cull (15 kills in 45 s), Juno's Power Cells (3 guarded cells), Nyx's Dead Drop (fails if you're hit on the way), Quill's Spore Samples (3 glands before time runs out).
-  - Services, 5 → 9: Juno's Turret (fight inside its circle), Pebble's Barricade (−40% damage inside her ring), Nyx's Smoke (enemies inside lose you), Quill's Scan (marks everything nearby).
+  - Services, 5 → 9: Juno's Turret (fight inside its circle), Pebble's Barricade (−40% damage inside his ring), Nyx's Smoke (enemies inside lose you), Quill's Scan (marks everything nearby).
   - Bot A/B, before vs after the new radio content (Smog, stay 3 windows, 16 runs each): deaths 14/16 vs 14/16 (the bot doesn't dodge rings), average payout 96 → 110, no script errors. Nothing got trivialized.
 
 
@@ -301,7 +303,7 @@ A maxed bunker left late saves sitting on 30k+ scrap. Four sinks, all with the H
   | A10 | Start at Greed 3 | +235% |
 
 - **Fresh install:** the Mayday prologue plays first and then returns to the main menu, where the first PLAY ("PLAY — INTO THE HAZE") drops straight into Haze with the default survivor.
-- **Rook (Braced Rush):** while she rushes and for 2 s after, she takes half damage. Rammed foes are stunned for 0.8 s (bosses are not), and each ram patches 4 HP (20 per rush). The cooldown dropped from 14 s to 10 s. She also gets a passive 15% damage reduction (heavy frame). Bot check, Haze, stay 3 windows, sloppy driver, the same 16 seeds: deaths went from 11/16 (69%) to 4/16 (25%), and survivors' end HP from 47% to 54%. For comparison, Juno ran 1/8 on the same driver.
+- **Rook (Braced Rush):** while he rushes and for 2 s after, he takes half damage. Rammed foes are stunned for 0.8 s (bosses are not), and each ram patches 4 HP (20 per rush). The cooldown dropped from 14 s to 10 s. He also gets a passive 15% damage reduction (heavy frame). Bot check, Haze, stay 3 windows, sloppy driver, the same 16 seeds: deaths went from 11/16 (69%) to 4/16 (25%), and survivors' end HP from 47% to 54%. For comparison, Juno ran 1/8 on the same driver.
 
 
 **Fix (Choose Your Wanderer, iPhone):** the ADMIN chip moved into the top safe band, right-aligned, so it can no longer cover the hero strip. Hero tiles now shrink to fit the width (76 → min 56 px, scrolling past that), so all 8 heroes and the pet tiles are reachable at 390x844 and 375x667 with a notch and XL text. Review tool: `tools/charsel_shots.tscn`.
@@ -314,7 +316,7 @@ A maxed bunker left late saves sitting on 30k+ scrap. Four sinks, all with the H
 - **Bot table (Haze, stay 3 windows, 8 heroes × clean/sloppy driver, same seeds):**
   - Before this pass: 25% deaths, survivors ended at 86% HP.
   - Final: 13% deaths (4/30), survivors end at 65% and dip to ~54% at their lowest.
-  - By hero: Vesper 0/4 (was 2/2), Helm 1/3, Rook 2/4 (still the most fragile; she also got +25 HP, a 9-rocket drum and 420 reach).
+  - By hero: Vesper 0/4 (was 2/2), Helm 1/3, Rook 2/4 (still the most fragile; he also got +25 HP, a 9-rocket drum and 420 reach).
   - Leaving at window 1: 0 deaths, ~95% HP.
 - **Hangar v5:** shared camp upgrades and survivor stations now have 3 big ranks instead of 5 small ones, for the same total cost.
   - Generator +16/32/50 HP, Radio Tower 5/10/15 s, Scrap Press +12/25/40%, Ammo Bench 3 tiers.

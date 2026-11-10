@@ -34,29 +34,29 @@ const STORY_STEPS: Array = [
 ]
 const STORIES := {
 	"ash_rook": {"title": "The Last Shift", "legendary": "last_shift", "lore": [
-		"Before the war, Rook cleared rubble so the convoys could roll. She liked the work. Honest weight.",
-		"Her crew called her Foreman. Six of them. She still counts to six before she goes through a door.",
-		"The collapse came at shift change. She heard it start and could not get them out.",
-		"Now she goes in first, every time. Somebody has to hold the ceiling up.",
-		"She welded their tags to an old launcher and called it Last Shift. It still burns hot."]},
+		"Before the war, Rook cleared rubble so the convoys could roll. He liked the work. Honest weight.",
+		"His crew called him Foreman. Six of them. He still counts to six before he goes through a door.",
+		"The collapse came at shift change. He heard it start and could not get them out.",
+		"Now he goes in first, every time. Somebody has to hold the ceiling up.",
+		"He welded their tags to an old launcher and called it Last Shift. It still burns hot."]},
 	"vesper_thorn": {"title": "The Bell Tower", "legendary": "bellwether", "lore": [
 		"Vesper shot for the army from a long way off. She never saw a single face.",
 		"When the war ended she kept walking, because stopping meant thinking.",
 		"She ended up in a bell tower with no food and a rifle with no rounds.",
-		"Rook climbed up, sat down, and said nothing for an hour. Then she shared her bread.",
+		"Rook climbed up, sat down, and said nothing for an hour. Then he shared his bread.",
 		"Vesper strung the tower's last bell to her rifle. Bellwether rings for the ones she missed."]},
 	"pebble": {"title": "Gravedigger", "legendary": "gravedigger", "lore": [
 		"Pebble worked the quarry. Hands like shovels, a laugh you could hear across the pit.",
-		"When the plague came, she carried the sick out of the city. Two at a time.",
-		"She carried the ones who didn't make it, too. Somebody had to dig.",
-		"The hangar kids named her Pebble as a joke. She kept it because it made them laugh.",
-		"Her maul is the shovel she used. Gravedigger, she calls it. It never forgets a hit."]},
+		"When the plague came, he carried the sick out of the city. Two at a time.",
+		"He carried the ones who didn't make it, too. Somebody had to dig.",
+		"The hangar kids named him Pebble as a joke. He kept it because it made them laugh.",
+		"His maul is the shovel he used. Gravedigger, he calls it. It never forgets a hit."]},
 	"bolt_juno": {"title": "Live Line", "legendary": "live_line", "lore": [
 		"Juno was an electrician's apprentice when the lights started going out.",
-		"His boss left. Juno didn't. He kept one city block lit through the whole plague.",
-		"He talked to the transformers to stay awake. He still talks too much.",
-		"He wired his own rifle from the block's last breaker. Its rounds bite.",
-		"Live Line, he named it. The hangar generator runs because Juno won't let it stop."]},
+		"Her boss left. Juno didn't. She kept one city block lit through the whole plague.",
+		"She talked to the transformers to stay awake. She still talks too much.",
+		"She wired her own rifle from the block's last breaker. Its rounds bite.",
+		"Live Line, she named it. The hangar generator runs because Juno won't let it stop."]},
 	"sister_cinder": {"title": "The Censer", "legendary": "censer", "lore": [
 		"Sister Cinder ran a field hospital in a cathedral when the plague came.",
 		"Raiders came for the medicine. She told them to wait in the nave.",
