@@ -79,8 +79,10 @@ PETS = {
 FLYERS = {"drone_bat"}
 # Units whose painted drone may hover outside the frame: pulled in.
 PULL = {"helm_wisp"}
-MELEE_HITS = {"pebble": [2], "nyx_caldera": [1, 2], "bolt_juno": [1], "quill_marrow": [1]}
-ABILITY_HITS = {"nyx_caldera": [2, 3], "quill_marrow": [2, 3]}
+# Bolt Juno (lantern-pack gunner) and Quill Marrow (hooded rifleman) shoot:
+# their painted strips show guns, so they are ranged (no melee hit frames).
+MELEE_HITS = {"pebble": [2], "nyx_caldera": [1, 2]}
+ABILITY_HITS = {"nyx_caldera": [2, 3], "bolt_juno": [1], "quill_marrow": [2]}
 
 
 # ------------------------------------------------------------------ layout
@@ -248,6 +250,28 @@ def tip_of(fr, scale, ground, fs, ffb, sx=1.0, sy=1.0):
     tx = float(np.clip((x + 0.5 - fr.cx) * scale * sx + fs / 2.0, 8, fs - 8))
     ty = float(np.clip((y - ground) * scale * sy + feet, 8, fs - 8))
     return [round(tx, 1), round(ty, 1)]
+
+
+def muzzle_fix(frame, tip):
+    """Painted fire frames: tip_of() lands on the far end of the muzzle flash.
+    Move it back to where the flash starts (the barrel's end), on the flash's
+    centre row, so bullets and the FX flash leave the gun itself."""
+    f = frame.astype(int)
+    a = f[..., 3] > 100
+    r, g, b = f[..., 0], f[..., 1], f[..., 2]
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    flash = a & (r > 170) & (r - b > 60) & (lum > 150)
+    ty = int(tip[1])
+    y0, x0 = max(0, ty - 14), int(frame.shape[1] * 0.7)
+    band = flash[y0:ty + 15, x0:]
+    if band.sum() < 6:
+        return tip
+    y = y0 + int(np.argmax(band.sum(1)))
+    row = flash[y - 3:y + 4, x0:]
+    cols = np.nonzero(row.sum(0) >= 2)[0]
+    if not len(cols):
+        return tip
+    return [float(x0 + cols.min()), float(y)]
 
 
 def write_strip(path, frames, grids, key, fs):
@@ -424,6 +448,9 @@ def main():
             json.dump(side, fh, indent=1)
         if args.kind == "heroes":
             melee = uid in MELEE_HITS
+            if not melee:
+                for k in ("attack", "ability"):
+                    tips[k] = [muzzle_fix(states[k][i], t) for i, t in enumerate(tips[k])]
             wj = {
                 "id": uid, "type": "melee" if melee else "ranged", "frame_size": fs, "baseline_y": fs - ffb,
                 "angle_convention": "degrees, 0 = pointing right (+x), positive = counter-clockwise on screen (y up)",

@@ -137,32 +137,29 @@ def k_driver(ic, st):
 
 
 def k_whip(ic, st):
-    """Live Whip: a coiled insulated cable whip with a copper tip and a handle."""
-    ic.bar((18, 80), (32, 66), 6.0, "rubber", prof="cyl")
-    ic.bar((16, 82), (20, 78), 8.0, "steel", prof="cyl")
-    pts = []
-    for k in range(60):
-        t = k / 59
-        r = 26 - t * 14
-        a = t * math.tau * 1.6 + 2.4
-        pts.append((52 + math.cos(a) * r, 44 + math.sin(a) * r * 0.8))
-    path = [(32, 66)] + pts
-    for (a, b) in zip(path[:-1], path[1:]):
-        ic.bar(a, b, 3.4, "rubber", prof="cyl")
-    ic.bar(path[-1], (path[-1][0] + 4, path[-1][1] - 4), 3.0, "copper", prof="cyl")
-    ic.scratches(count=6)
+    """Live Whip Rounds (Juno, ranged since the rifle art): one shock round,
+    copper case, a blue live tip, two short arcs off it."""
+    F = F_(ic, (22, 80), -40, 1.2)
+    F.bar(0, 0, 40, 0, 12.0, "brass", prof="cyl")
+    F.bar(0, 0, 3, 0, 13.0, tone("brass", 0.7, "rim"), prof="cyl")
+    F.bar(34, 0, 42, 0, 11.0, tone("brass", 0.85, "neck"), w1=8.5, prof="cyl")
+    F.bar(42, 0, 58, 0, 8.5, "voltp", w1=2.0, prof="cyl")
+    F.bar(12, 0, 16, 0, 12.4, "copper", prof="cyl")
+    for (u0, v0, u1, v1) in ((58, 0, 66, -6), (66, -6, 70, 2), (58, 0, 64, 7), (64, 7, 72, 6)):
+        F.bar(u0, v0, u1, v1, 1.6, "voltp")
+    ic.scratches(count=4)
 
 
 def k_knuckle(ic, st):
-    """Knuckle Duster: heavy steel knuckles with four rings, studded."""
+    """Knuckle Burst (Juno, ranged): a short stubby belt of four rounds,
+    steel links between them: close-in spray."""
     for k in range(4):
-        x = 24 + k * 16
-        ic.ellipse(x, 44, 9.5, 9.5, "gun", dome=0.9)
-        ic.ellipse(x, 44, 5.4, 5.4, "dark", dome=-0.4)
-        ic.ellipse(x, 33, 3.0, 2.4, "blade", dome=0.9)
-    ic.poly([(18, 52), (78, 52), (72, 74), (24, 74)], "gun", bevel=3.0, dome=0.9)
-    ic.bar((26, 64), (70, 64), 1.0, tone("steel", 0.6, "kg"))
-    ic.scratches(count=14)
+        F = F_(ic, (16 + k * 15, 82 - k * 9), -60, 0.8)
+        F.bar(0, 0, 34, 0, 12.0, "brass", prof="cyl")
+        F.bar(0, 0, 3, 0, 13.0, tone("brass", 0.7, "rim"), prof="cyl")
+        F.bar(34, 0, 46, 0, 9.5, "copper", w1=3.0, prof="cyl")
+        F.bar(14, -7, 14, 7, 3.0, "gun")
+    ic.scratches(count=8)
 
 
 def k_burst(ic, st):
@@ -191,35 +188,33 @@ def k_ember(ic, st):
 
 
 def k_scalpels(ic, st):
-    """Scalpel Pair: two surgical scalpels crossed: ribbed steel handles,
-    curved bright blades."""
-    for flip in (0, 1):
-        F = F_(ic, (14, 84) if not flip else (82, 84), -50 if not flip else -130, 1.0)
-        F.poly([(0, -5), (52, -4), (54, 4), (0, 5)], "steel", bevel=1.6, dome=0.9)
-        for u in range(6, 34, 4):
-            F.bar(u, -3.5, u, 3.5, 0.8, "dark")
-        F.poly([(54, -4), (76, -2.0), (90, 2.5), (70, 6), (54, 4)], "blade", bevel=1.6)
-        F.edge(56, 5.0, 86, 2.8, 0.5)
+    """Scalpel Rounds (Quill, ranged): two slim, needle-pointed steel rounds."""
+    for k in range(2):
+        F = F_(ic, (24 + k * 20, 86), -60, 1.0)
+        F.bar(0, 0, 44, 0, 9.0, "brass", prof="cyl")
+        F.bar(0, 0, 3, 0, 10.0, tone("brass", 0.7, "rim"), prof="cyl")
+        F.bar(38, 0, 46, 0, 8.0, tone("brass", 0.85, "neck"), w1=6.0, prof="cyl")
+        F.bar(46, 0, 72, 0, 6.0, "blade", w1=0.8, prof="cyl")
+        F.edge(48, -2.6, 70, -0.6, 0.5)
+    ic.scratches(count=4)
 
 
 
 def k_cleaver(ic, st):
-    """Bonesaw Cleaver: broad rectangular cleaver, saw teeth on the spine, bone grip."""
-    F = F_(ic, (12, 76), -30, 1.0)
-    F.bar(0, 0, 26, 0, 8.0, "bone", prof="cyl")
-    for u in (6, 18):
-        p = F.P(u, 0)
-        ic.rivet(p[0], p[1], 1.0, "brass")
+    """Bonesaw Slugs (Quill, ranged): one fat slug round with a saw-toothed
+    steel band and a bone-white tip."""
+    F = F_(ic, (16, 84), -42, 1.25)
+    F.bar(0, 0, 36, 0, 16.0, "brass", prof="cyl")
+    F.bar(0, 0, 3, 0, 17.0, tone("brass", 0.7, "rim"), prof="cyl")
+    F.bar(36, 0, 58, 0, 15.0, "steel", w1=12.0, prof="cyl")
     teeth = []
-    for i in range(9):
-        u = 30 + i * 6
-        teeth += [(u, -16), (u + 3, -19)]
-    F.poly([(26, -16)] + teeth + [(86, -16), (88, 12), (28, 12)], "steel", bevel=2.4)
-    F.poly([(60, -12), (78, -12), (80, 2), (62, 4)], "rust", bevel=1.0)
-    F.bar(30, -10, 80, -10, 1.2, "gun")
-    F.edge(30, 11, 86, 11, 0.5)
-    F.bar(56, 4, 76, 6, 2.2, "rust", w1=0.6)
-    ic.scratches(count=10)
+    for i in range(5):
+        u = 38 + i * 4
+        teeth += [(u, -7.5), (u + 2, -10)]
+    F.poly([(37, -7.5)] + teeth + [(58, -7.5), (58, -6), (37, -6)], "steel", bevel=1.0)
+    F.bar(58, 0, 66, 0, 12.0, "bone", w1=4.0, prof="cyl")
+    F.bar(14, 0, 18, 0, 16.4, "redp", prof="cyl")
+    ic.scratches(count=8)
 
 
 def k_long(ic, st):

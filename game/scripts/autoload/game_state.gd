@@ -645,6 +645,7 @@ func apply_save(d: Dictionary) -> void:
 		var bi: Dictionary = e["item"]
 		bi["uid"] = int(bi.get("uid", 0))
 		next_uid = maxi(next_uid, int(bi["uid"]) + 1)
+	_migrate_ranged_kits()
 	daily = _dict_or_empty(d.get("daily", {}))
 	if not (daily.get("quests", null) is Array):
 		daily = {}
@@ -716,6 +717,37 @@ func apply_save(d: Dictionary) -> void:
 	_load_campaign(d.get("campaign", {}))
 	_load_extras(d)
 	_migrate_hangar_v4()
+
+## Bolt Juno and Quill Marrow fight with rifles since their painted art (they
+## were melee). Old saves stay valid: their weapon items keep the same variant
+## ids and just take the new names, and a melee-only mod (Grip, Edge, ...) left
+## in one of their mod slots goes back to the stash (it stays usable on the
+## melee survivors). Safe to run on every load.
+const RANGED_SINCE_ART := ["bolt_juno", "quill_marrow"]
+
+func _migrate_ranged_kits() -> void:
+	var items: Array = stash.duplicate()
+	for e in salvage_bin:
+		items.append(e["item"])
+	for it in items:
+		var d: Dictionary = it
+		if str(d.get("kind", "")) != "weapon" or not str(d.get("hero", "")) in RANGED_SINCE_ART:
+			continue
+		var v := GearDefs.variant(str(d["hero"]), str(d.get("variant", "")))
+		if not v.is_empty():
+			d["name"] = str(v["name"])
+	for h in loadouts.keys():
+		if not str(h) in RANGED_SINCE_ART:
+			continue
+		var lo: Dictionary = loadouts[h]
+		for sl in ["mod1", "mod2"]:
+			if not lo.has(sl):
+				continue
+			var it := stash_item(int(lo[sl]))
+			if not it.is_empty() and not GearDefs.fits(it, sl, str(h)):
+				if int(insured.get(h, -1)) == int(lo[sl]):
+					insured.erase(h)
+				lo.erase(sl)
 
 ## Wander extras (old saves: no keys → opt-out, empty board, empty history).
 ## Entries are cleaned field by field so a hand-edited / partial save can't

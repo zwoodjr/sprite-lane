@@ -556,7 +556,7 @@ func _want_ability() -> bool:
 		return c
 	var hp_k: float = float(_p.get("hp")) / maxf(1.0, float(_p.get("max_hp")))
 	## Heading for a pad: no gap-closers that drag the hero toward enemies.
-	if _going and GameState.selected_character_id in ["nyx_caldera", "quill_marrow", "pebble"]:
+	if _going and GameState.selected_character_id in ["nyx_caldera", "pebble"]:
 		return near.call(70.0) >= 2 and _pad_dist > 120.0
 	match GameState.selected_character_id:
 		"sister_cinder":
@@ -570,9 +570,11 @@ func _want_ability() -> bool:
 		"pebble":
 			return near.call(170.0) >= 2 or near.call(90.0) >= 1
 		"bolt_juno":
-			return near.call(200.0) >= 2 or near.call(120.0) >= 1
+			## Ranged hook round: fire it into a pack, or at anything close.
+			return near.call(300.0) >= 2 or near.call(160.0) >= 1
 		"quill_marrow":
-			return near.call(260.0) >= 1
+			## Ranged marked shot: any foe in rifle reach.
+			return near.call(float(_p.call("get_trigger_range"))) >= 1
 		"nyx_caldera":
 			return near.call(240.0) >= 2 or near.call(120.0) >= 1
 	return near.call(300.0) >= 1

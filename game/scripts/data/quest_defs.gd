@@ -55,7 +55,7 @@ const STORIES := {
 		"Juno was an electrician's apprentice when the lights started going out.",
 		"His boss left. Juno didn't. He kept one city block lit through the whole plague.",
 		"He talked to the transformers to stay awake. He still talks too much.",
-		"He wired his own gauntlet from the block's last breaker. It bites.",
+		"He wired his own rifle from the block's last breaker. Its rounds bite.",
 		"Live Line, he named it. The hangar generator runs because Juno won't let it stop."]},
 	"sister_cinder": {"title": "The Censer", "legendary": "censer", "lore": [
 		"Sister Cinder ran a field hospital in a cathedral when the plague came.",

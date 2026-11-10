@@ -93,7 +93,7 @@ const STATIONS := {
 	"sister_cinder": {"name": "Cinder's Medicine Table", "power_keys": ["heal"],
 		"notes": ["Re-wrapped stock, second tonic slot", "Stronger draught, brews two at a time", "Cathedral recipe"]},
 	"quill_marrow": {"name": "Quill's Dissection Table", "power_keys": ["damage_mult", "mark_time"],
-		"notes": ["Honed bayonet, longer marks", "Deeper lunge, sharper notes", "Surgeon's eye"]},
+		"notes": ["Trued barrel, longer marks", "Heavier marked round, sharper notes", "Surgeon's eye"]},
 	"nyx_caldera": {"name": "Nyx's Smuggler Crates", "power_keys": ["damage_mult", "hit_radius"],
 		"notes": ["Balanced blades, wider rush", "Quicker rush, keener edges", "Night-runner kit"]},
 	"helm_wisp": {"name": "Helm's Drone Workbench", "power_keys": ["temp_time", "overclock_time"],

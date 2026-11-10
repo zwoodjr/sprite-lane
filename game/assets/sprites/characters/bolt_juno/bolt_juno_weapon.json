@@ -1,6 +1,6 @@
 {
  "id": "bolt_juno",
- "type": "melee",
+ "type": "ranged",
  "frame_size": 448,
  "baseline_y": 428,
  "angle_convention": "degrees, 0 = pointing right (+x), positive = counter-clockwise on screen (y up)",
@@ -9,7 +9,7 @@
    1
   ],
   "ability": [
-   3
+   1
   ]
  },
  "states": {
@@ -134,22 +134,22 @@
    },
    {
     "tip": [
-     394.6,
-     355.5
+     356.0,
+     354.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     387.9,
-     335.5
+     361.0,
+     345.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     381.2,
-     344.4
+     350.0,
+     347.0
     ],
     "angle": 0.0
    }
@@ -240,29 +240,29 @@
    },
    {
     "tip": [
-     394.6,
-     355.5
+     356.0,
+     354.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     387.9,
-     335.5
+     361.0,
+     345.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     381.2,
-     344.4
+     350.0,
+     347.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     387.9,
-     335.5
+     361.0,
+     345.0
     ],
     "angle": 0.0
    },

@@ -950,110 +950,125 @@ def gravedigger():
 
 
 def live_line():
-    """Bolt Juno: red armoured gauntlet (fist, knuckle plates, hooked claws),
-    a heavy chain wrapped off the cuff, live arcs between the claws."""
+    """Bolt Juno: lantern-pack assault rifle (painted batch-7 art). Skeleton
+    stock, red receiver, belt chain feeding a battery drum, vented handguard,
+    flash hider; on the Legendary, live arcs off the muzzle."""
     ic = Icon(41)
     import random
     rnd = random.Random(4)
-    # chain: alternating flat / edge-on links hanging down-left from the cuff
-    pts = [(26, 70), (21, 75), (17, 80), (13, 85), (10, 90)]
-    for i, (x, y) in enumerate(pts):
-        if i % 2 == 0:
-            ic.ellipse(x, y, 4.6, 3.2, "steel", dome=0.7)
-            ic.ellipse(x, y, 2.3, 1.2, "dark", dome=0.1)
+    F = Frame(ic, (4, 66), -28, 0.88)
+    # skeleton stock + buffer
+    F.bar(10, -1, 26, -1, 3.2, "gun", prof="cyl")
+    F.poly([(0, -4.5), (12, -3.4), (12, 3.0), (5, 8.5), (0, 9)], "gun", bevel=1.6)
+    F.poly([(3, -1.5), (9, -1.2), (9, 1.6), (4, 4.6)], "dark", bevel=0.6)
+    F.bar(-0.8, -4.5, -0.8, 9, 1.8, "dark")
+    # receiver (red, Juno's colour) + pistol grip + trigger
+    F.poly([(25, -7), (54, -7), (54, 3.5), (47, 4.5), (30, 4.5), (25, 2.5)], "red", bevel=1.6)
+    F.poly([(31, -5.4), (40, -5.4), (40, -3.0), (31, -3.0)], "dark", bevel=0.6)
+    F.poly([(30, 3.5), (35, 3.5), (33.5, 14), (28.5, 13)], "gun", bevel=1.4)
+    F.bar(36.6, 3.8, 37.6, 7.2, 0.9, "steel")
+    F.bar(34.5, 8.0, 41, 8.0, 0.9, "dark")
+    # battery drum (the lantern pack's feed) + chain belt up from it
+    F.ell(46, 10.5, 6.2, 6.2, "brass")
+    F.ell(46, 10.5, 3.4, 3.4, "dark")
+    F.ell(46, 10.5, 1.6, 1.6, "glass")
+    for i in range(4):
+        u, v = 52 + i * 3.2, 12 + i * 2.6
+        if i % 2:
+            F.bar(u - 1.4, v - 1.0, u + 1.4, v + 1.0, 1.8, "steel", prof="cyl")
         else:
-            ic.bar((x - 2.2, y + 2.2), (x + 2.2, y - 2.2), 2.6, "steel", prof="cyl")
-    # cuff: thick cylinder with a rust band and rivets
-    ic.bar((22, 70), (38, 54), 22, "gun", prof="cyl")
-    ic.bar((24, 68), (27, 65), 23, "rust", prof="cyl")
-    ic.bar((34, 58), (37, 55), 23, "dark", prof="cyl")
-    # back-of-hand plate (red), big
-    ic.poly([(32, 50), (52, 28), (70, 40), (52, 64)], "red", bevel=3.0)
-    ic.poly([(40, 46), (54, 32), (62, 38), (50, 54)], "dark", bevel=1.5)
-    ic.poly([(41, 45), (54, 33), (60, 37.5), (49, 52)], "red", bevel=2.0)
-    # fingers: 4 curled segments, each a knuckle plate + claw
-    for k, (bx, by) in enumerate(((52, 26), (60, 30), (66, 36), (70, 44))):
-        ang = math.radians(-55 + k * 22)
-        ex, ey = bx + math.cos(ang) * 9, by + math.sin(ang) * 9
-        ic.bar((bx - 2, by + 2), (ex, ey), 6.4, "gun", prof="cyl")
-        ic.ellipse(bx, by, 3.6, 3.6, "red", dome=0.9)
-        cx, cy = ex + math.cos(ang + 0.5) * 12, ey + math.sin(ang + 0.5) * 12
-        ic.bar((ex, ey), (cx, cy), 4.4, "blade", w1=0.7, prof="cyl")
-    # thumb
-    ic.bar((46, 58), (58, 58), 6.0, "gun", prof="cyl")
-    ic.ellipse(46, 58, 3.4, 3.4, "red", dome=0.9)
-    ic.weld((34, 52), (50, 33), 1.1)
-    for (x, y) in ((36, 52), (44, 43), (54, 56), (62, 46)):
-        ic.rivet(x, y, 1.6)
-    # capacitor coil on the wrist
-    ic.bar((40, 62), (50, 52), 4.8, "brass", prof="cyl")
-    if _detail():
-        for t in range(5):
-            x0, y0 = 41 + t * 2, 61 - t * 2
-            ic.bar((x0 - 1.8, y0 - 1.8), (x0 + 1.8, y0 + 1.8), 0.5, "dark")
-    # hydraulic piston: cylinder + bright rod into the knuckle block
-    ic.bar((30, 50), (44, 36), 3.6, "dark", prof="cyl")
-    ic.bar((43, 37), (52, 28), 1.6, "blade", prof="cyl")
-    ic.ellipse(30, 50, 2.2, 2.2, "steel")
+            F.ell(u, v, 2.0, 1.4, "steel")
+    # top rail + optic
+    F.bar(26, -8, 56, -8, 1.6, "dark")
+    F.slots(28, 54, -8, 8, w=0.8, h=1.2, mat="gun")
+    F.poly([(36, -9), (46, -9), (46, -13.5), (36, -13.5)], "gun", bevel=1.0)
+    F.ell(46.2, -11.2, 0.8, 2.0, "glass")
+    # vented handguard + barrel + flash hider
+    F.bar(54, -2.4, 80, -2.4, 7.0, "gun", prof="cyl")
+    F.slots(57, 78, -2.4, 6, w=1.0, h=2.6)
+    F.bar(80, -2.4, 98, -2.4, 2.4, "gun", prof="cyl")
+    F.bar(97, -2.4, 104, -2.4, 3.6, "dark", prof="cyl")
+    F.slots(98.5, 103, -2.4, 3, w=0.7, h=2.6)
+    F.bar(78, -6, 78, -10, 1.4, "gun")
+    F.edge(25, -6.6, 53, -6.6, 0.4)
+    for (uu, vv) in ((28, 1.5), (51, 1.5), (50, -5.4)):
+        F.screw(uu, vv, 0.6)
+    ic.patch(*F.P(66, -2.4), 7, 5, math.radians(-28), "steel")
+    ic.weld(F.P(40, 0), F.P(50, 0), 0.8)
     ic.scratches(count=26)
     if not ic.leg:
         ic.save("live_line")
         return
-    # arcs between the claw tips
+    # live arcs off the muzzle (legendary)
     im = Image.new("L", (W, W), 0)
     d = ImageDraw.Draw(im)
+    mx, my = F.P(104, -2.4)
     for k in range(3):
-        x, y = 66 + k * 5, 10 + k * 9
+        x, y = mx, my
         path = [_scr(x, y)]
         for j in range(5):
-            x += rnd.uniform(1.5, 3.5)
-            y += rnd.uniform(-2.5, 2.5) + 1.2
+            x += rnd.uniform(1.5, 3.2)
+            y += rnd.uniform(-3.0, 3.0) - 1.4 + k * 0.9
             path.append(_scr(x, y))
         d.line(path, fill=255, width=SS + 1)
     arc = np.asarray(im, np.float32) / 255.0
     nz = (np.zeros((W, W)), np.zeros((W, W)), np.ones((W, W)))
     ic._paint(arc, nz, "arc")
-    g = ic.glow(78, 24, 16, "#5cd2c0", 0.9)
-    ic.save("live_line", extra_glows=[g])
+    g = ic.glow(mx + 6, my - 4, 16, "#5cd2c0", 0.9)
+    gd = ic.glow(*F.P(46, 10.5), 7, "#ffcf6a", 0.7)
+    ic.save("live_line", extra_glows=[g, gd])
 
 
 def bonesaw():
-    """Quill Marrow: field-surgeon's saw-backed bayonet, taped grip, bone pommel."""
+    """Quill Marrow: hooded rifleman's suppressed marksman rifle (painted
+    batch-7 art). Wood furniture, long scope, can suppressor, and a
+    saw-backed bayonet under the barrel (bone-handled on the Legendary)."""
     ic = Icon(67)
-    # blade: long, slight curve, saw teeth on the spine
-    ang = math.radians(-40)
-    c, s = math.cos(ang), math.sin(ang)
-    o = (34, 62)
-
-    def P(u, v):
-        return (o[0] + u * c - v * s, o[1] + u * s + v * c)
+    F = Frame(ic, (4, 68), -30, 0.86)
+    # wood stock with cheek riser
+    F.poly([(0, -3), (6, -4.5), (24, -2.6), (32, -1.5), (32, 4.5), (26, 5), (16, 9.5), (2, 10.5), (0, 9)], "wood", bevel=2.2)
+    F.poly([(8, -4.4), (20, -3.0), (20, -6.0), (9, -6.6)], "tape", bevel=1.0)
+    F.bar(-1.2, -3.0, -1.2, 10.0, 2.4, "dark")
+    # receiver + box magazine + grip + trigger
+    F.poly([(30, -3.4), (52, -3.4), (52, 2.0), (30, 2.0)], "gun", bevel=1.4)
+    F.poly([(41, 1.5), (47, 1.5), (47.6, 10.5), (41.6, 10.5)], "dark", bevel=1.2)
+    F.bar(35, 4.2, 36.4, 7.6, 0.9, "steel")
+    F.bar(32, 8.4, 40, 8.4, 1.0, "dark")
+    # wood handguard
+    F.bar(52, 0.0, 74, 0.0, 6.0, "wood", w1=5.0)
+    # barrel + suppressor can
+    F.bar(72, -1.0, 84, -1.0, 2.4, "gun", prof="cyl")
+    F.bar(83, -1.0, 104, -1.0, 5.6, "dark", prof="cyl")
+    for uu in (88, 95):
+        F.bar(uu - 0.4, -1.0, uu + 0.4, -1.0, 6.0, "gun", prof="cyl")
+    # scope on rings
+    F.bar(30, -8.5, 62, -8.5, 3.8, "dark", prof="cyl")
+    F.bar(26, -8.5, 32, -8.5, 5.0, "dark", w1=4.0, prof="cyl")
+    F.bar(58, -8.5, 65, -8.5, 4.0, "dark", w1=6.0, prof="cyl")
+    F.ell(65.2, -8.5, 0.9, 2.6, "glass")
+    for uu in (36, 54):
+        F.bar(uu, -6.5, uu, -3.4, 2.0, "gun")
+        F.screw(uu, -5.0, 0.6)
+    # bayonet under the muzzle: lug, guard, saw-backed blade
+    F.bar(74, 4.0, 80, 4.0, 2.0, "steel")
+    F.bar(80, 2.0, 80, 6.6, 1.4, "brass")
     teeth = []
-    for i in range(10):
-        u = 6 + i * 4.4
-        teeth += [P(u, -6.5), P(u + 2.2, -9.4)]
-    edge = [P(u, 4.5 - (u / 58) ** 2 * 3) for u in range(56, 2, -6)]
-    ic.poly([P(2, -6.5)] + teeth + [P(52, -6.5), P(60, -2), P(64, 0.5)] + edge, "blade", bevel=2.4)
-    # fuller groove
-    ic.bar(P(8, -1.5), P(40, -1.5), 1.6, "gun")
-    # blood + grime streak near the edge
-    ic.bar(P(22, 3.0), P(38, 2.4), 2.0, "rust", w1=0.6)
-    # guard + muzzle ring
-    ic.poly([P(-1, -11), P(3, -11), P(3, 9), P(-1, 9)], "brass", bevel=1.2)
-    ic.ellipse(*P(1, -13), 2.6, 2.6, "steel")
-    # grip
-    ic.bar(P(-22, 0), P(-1, 0), 7.0, "tape", prof="cyl")
-    ic.bar(P(-27, 0), P(-21, 0), 8.5, "bone", prof="cyl")
-    ic.rivet(*P(-24, 0), 1.2, "steel")
-    for uu in range(-19, -2, 3):
-        ic.bar(P(uu, -3.4), P(uu, 3.4), 0.6, "dark")
-    ic.ellipse(*P(-28.5, 0), 2.6, 2.6, "steel", dome=0.8)
-    ic.ellipse(*P(-6, -3.6), 1.2, 1.2, "red", dome=0.9)
-    if _detail():
-        ic.bar(P(6, 3.4), P(56, 2.2), 0.6, "blade", prof="cyl")
-        ic.bar(P(4, -5.8), P(50, -5.8), 0.5, "blade", prof="cyl")
-    ic.weld(P(4, -6.6), P(14, -6.6), 0.8)
-    ic.scratches(count=30)
-    ic.save("bonesaw")
+    for i in range(5):
+        u = 82 + i * 3.4
+        teeth += [(u, 3.0), (u + 1.7, 1.6)]
+    F.poly([(81, 3.0)] + teeth + [(99, 3.0), (106, 5.0), (99, 7.0), (81, 7.0)], "blade", bevel=1.4)
+    F.bar(86, 5.6, 98, 5.6, 0.5, "rust")
+    F.edge(30, -10.1, 60, -10.1, 0.4)
+    ic.patch(*F.P(12, 3), 6, 4.5, math.radians(-30), "steel")
+    ic.scratches(count=28)
+    if not ic.leg:
+        ic.save("bonesaw")
+        return
+    # bone collar + red weak-spot lens (legendary)
+    F.bar(70, -1.0, 74, -1.0, 6.2, "bone", prof="cyl")
+    F.ell(65.4, -8.5, 0.8, 2.2, "red")
+    g = ic.glow(*F.P(65.4, -8.5), 7, "#e04848", 0.8)
+    ic.save("bonesaw", extra_glows=[g])
 
 
 def twin_debts():

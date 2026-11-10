@@ -1,5 +1,13 @@
 # MVP status (repo mirror)
 
+**Bolt Juno and Quill Marrow shoot (to match their painted art):** both heroes keep their names. Their new art carries guns, so their attacks are now ranged.
+- **Juno: Chain-Fed Rifle.** A mid-range automatic: 14 damage, 6.5 rounds/s, 36-round magazine, 1.4 s reload, 380 reach. The firing strip plays once per round. **Overload** is now a chain-hook shock round: it yanks its target, bursts there, stuns, and arcs to 4 more enemies. Static Cage still works (a bigger burst where the round lands, no arcs). Live Line arcs every 8th round. Gauntlet is now her armoured gun-arm: +35 HP, 15% less damage taken.
+- **Quill: Bayonet Rifle.** A precise marksman rifle: 34 damage, 1.7 shots/s, pierces 1 enemy, 8 rounds, 470 reach. **Dissect** marks the nearest foe (+50% damage taken), then fires a round through it that pierces 3. B is now Long Shot. +30 HP, 15% less damage taken. The Bayonet run upgrade (auto-stabs foes that get too close) stays.
+- Styles keep their save ids with new ranged versions: Juno has Chain-Fed Rifle, Live Whip Rounds and Knuckle Burst. Quill has Bayonet Rifle, Scalpel Rounds and Bonesaw Slugs. Weapon items, the legendary and kit icons are repainted as rifles. Lore and tooltip text were updated.
+- **Old saves:** weapon items keep their variant ids and get the new names. A melee mod left in Juno's or Quill's mod slot goes back to the stash (it still fits the melee heroes). Saved kit styles still resolve.
+- **Muzzle:** on the fire frames, the weapon-tip JSON now sits at the barrel end, not at the far end of the painted flash. `import_band_sheet.py` does this for ranged heroes on its own.
+- **Bot check** (Haze, stay 3 windows, sloppy driver, 16+ seeds per hero): Juno survived 7/16 before, 1/15 on the bare rifle, and 9/17 after tuning. Quill: 8/15, 2/16, then 5/17. The other ranged heroes range from 2/15 (Helm) to 12/15 (Cinder). Kill rate is 53/52 per min vs 53-54 for the others. Seeds 102 and 105 time out for every hero, before and after.
+
 **Blind playtest fixes (navigation, text size, render glitches, admin lock, save seal):** A blind tester on the 390×844 web build reported five problems.
 - **One navigation bar.** The Hangar had three stacked bars: the bottom tab bar, its own Camp / Crew / Kennel / Brew / Stash tabs, and the Logbook / Gear / Trophies buttons. Now the bottom tab bar (STASH · HANGAR · PLAY · KENNEL · CREW) is the only navigation.
   - BREW opens from a BREW TONICS button at the top of the HANGAR tab, with a back button in Brew.

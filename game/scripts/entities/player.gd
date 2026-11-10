@@ -115,7 +115,7 @@ var _backstab_text_cd: float = 0.0
 var _ability_pending: String = ""
 var _ability_hit_left: float = 0.0
 var _ability_target: Node2D = null
-## Ability movement (Pebble leap, Quill lunge, Nyx blade rush).
+## Ability movement (Pebble leap, Nyx blade rush; "lunge" kept for old data).
 var _amove_left: float = 0.0
 var _amove_dir: Vector2 = Vector2.RIGHT
 var _amove_speed: float = 0.0
@@ -908,14 +908,17 @@ func _ability_cast(id: String) -> bool:
 			var dist := dir.length() if t else 90.0
 			var time := clampf((dist - 40.0) / float(a.get("lunge_speed", 560.0)), 0.06, float(a.get("lunge_time", 0.2)))
 			_start_ability_move(dir, float(a.get("lunge_speed", 560.0)), time, "leap")
-		"dissect":
-			var t2 := _ability_pick(float(a.get("range", 280.0)))
+		"dissect", "overload":
+			## Ranged casts (Quill's marked shot, Juno's hook round): need a
+			## target in reach; face it now, the shot leaves on the hit frame.
+			var t2 := _ability_pick(float(a.get("range", 300.0)))
 			if t2 == null:
 				return false
 			_ability_target = t2
 			var d2 := t2.global_position - global_position
-			var time2 := maxf(0.0, d2.length() - float(a.get("stop_dist", 30.0))) / float(a.get("lunge_speed", 760.0))
-			_start_ability_move(d2, float(a.get("lunge_speed", 760.0)), clampf(time2, 0.02, 0.4), "lunge")
+			if d2.length() > 0.5:
+				_last_aim = d2.normalized()
+				_face_aim()
 		"blade_rush":
 			var t3 := _ability_pick(float(a.get("aim_range", 300.0)))
 			var mv := TouchInput.get_move()
@@ -992,18 +995,30 @@ func _fire_ability() -> void:
 		"overload":
 			_overload()
 		"dissect":
+			## Quill: mark the weak spot, then put a piercing round through it.
 			var tg := _ability_target
 			_ability_target = null
+			if tg == null or not is_instance_valid(tg):
+				tg = _ability_pick(float(a.get("range", 460.0)))
 			if tg != null and is_instance_valid(tg) and tg.has_method("apply_status"):
 				tg.call("apply_status", "mark", float(a.get("mark_time", 5.0)), float(a.get("mark_mult", 1.5)))
+				var origin3 := global_position + _muzzle_offset()
+				var d3 := tg.global_position - origin3
+				d3 = d3.normalized() if d3.length() > 1.0 else _facing_dir()
+				_last_aim = d3
+				_face_aim()
 				var roll3 := _roll_damage(float(a.get("damage_mult", 2.5)))
-				var d3 := (tg.global_position - global_position).normalized()
-				_spawn_smear("arc", {"px": "sm_bayonet", "radius": 60.0}, d3)
+				var b3 := _spawn_bullet(origin3, d3, float(roll3[0]), bool(roll3[1]), float(a.get("shot_speed", 1500.0)))
+				b3.set("style", "slug")
+				b3.set("homing_target", tg)
+				b3.set("pierce_left", int(b3.get("pierce_left")) + int(a.get("pierce", 3)))
+				b3.set("pierce_falloff", 1.0)
+				Juice.fx(MUZZLE_PX["slug"], origin3, {"dir": d3, "follow": self})
+				LightFx.flash(get_parent(), origin3, 130.0, Color(1.0, 0.7, 0.32, 0.6), 0.1)
 				Juice.fx("fx_mark", tg.global_position + Vector2(0, -10), {"follow": tg})
-				hit_enemy(tg, float(roll3[0]), d3, 220.0, true, "ability")
 				Juice.float_text(tg.global_position + Vector2(0, -40), "MARKED", UpgradeDefs.MARK_TINT, 14)
-				Juice.sfx("impact_quill", 2.0)
-				Juice.hitstop(0.05)
+				Juice.sfx("fire_quill", 2.0)
+				Juice.shake(0.08)
 		"blade_rush":
 			Juice.shake(0.1)
 			Juice.sfx("impact_nyx", 1.0)
@@ -1021,23 +1036,44 @@ func _fire_ability() -> void:
 					Juice.fx("fx_drone_call", (d as Node2D).global_position, {"follow": d})
 			Juice.float_text(global_position + Vector2(0, -44), "OVERCLOCK", Color(0.5, 1.0, 0.85), 16)
 
-## Juno OVERLOAD: burst around her, then an arc that jumps enemy to enemy.
+## Juno OVERLOAD: a chain-hook shock round from the rifle. It hooks its target
+## (yanks it out of the pack), bursts there, then arcs enemy to enemy.
 func _overload() -> void:
 	var a := _ability
 	var parent := get_parent()
 	var dmg_mult := float(a.get("damage_mult", 1.6))
 	var stun := float(a.get("stun", 1.3))
-	Juice.fx("ex_shock", global_position + Vector2(0, -6), {"follow": self})
-	RunFx.ring(parent, global_position + Vector2(0, 8), float(a.get("burst_radius", 80.0)), Color(0.5, 0.8, 1.0), 0.3)
+	var tg := _ability_target
+	_ability_target = null
+	if tg == null or not is_instance_valid(tg):
+		tg = _ability_pick(float(a.get("range", 340.0)))
+	var origin := global_position + _muzzle_offset()
+	var centre := tg.global_position if tg != null else global_position + _facing_dir() * 60.0
+	var hook := (centre - origin).normalized() if centre.distance_to(origin) > 1.0 else _facing_dir()
+	_last_aim = hook
+	_face_aim()
+	## The hook round: a thick arc from the muzzle to the target.
+	RunFx.zap(parent, origin, centre + Vector2(0, -8), Color(0.65, 0.9, 1.0), 0.3, 5.0)
+	Juice.fx(MUZZLE_PX["tracer"], origin, {"dir": hook, "follow": self})
+	Juice.fx("ex_shock", centre + Vector2(0, -6))
+	RunFx.ring(parent, centre + Vector2(0, 8), float(a.get("burst_radius", 80.0)), Color(0.5, 0.8, 1.0), 0.3)
 	var hit: Array = []
-	for e in RunFx.enemies_in(get_tree(), global_position, float(a.get("burst_radius", 80.0))):
+	if tg != null and tg.has_method("apply_status"):
+		## Chain Pull: the hooked foe is dragged a little toward her (stunned).
+		tg.call("apply_status", "stun", stun)
+		var roll0 := _roll_damage(dmg_mult)
+		hit_enemy(tg, float(roll0[0]), -hook, float(a.get("pull", 180.0)), bool(roll0[1]), "ability")
+		hit.append(tg)
+	for e in RunFx.enemies_in(get_tree(), centre, float(a.get("burst_radius", 80.0))):
+		if e in hit:
+			continue
 		e.call("apply_status", "stun", stun)
 		var roll := _roll_damage(dmg_mult)
-		hit_enemy(e, float(roll[0]), ((e as Node2D).global_position - global_position).normalized(), 200.0, bool(roll[1]), "ability")
+		hit_enemy(e, float(roll[0]), ((e as Node2D).global_position - centre).normalized(), 200.0, bool(roll[1]), "ability")
 		hit.append(e)
 	var links := int(a.get("chain", 4)) + int(GameState.up("live_wire", "extra", 0))
-	var prev := global_position + Vector2(0, -8)
-	var cur := RunFx.nearest_enemy(get_tree(), global_position, float(a.get("range", 230.0)), hit)
+	var prev := centre + Vector2(0, -8)
+	var cur := RunFx.nearest_enemy(get_tree(), centre, float(a.get("jump", 170.0)), hit)
 	var n := 0
 	while cur != null and n < links:
 		RunFx.zap(parent, prev, cur.global_position, Color(0.55, 0.85, 1.0), 0.28, 3.5)
@@ -1054,7 +1090,7 @@ func _overload() -> void:
 	if GameState.has_evo("thunderhead"):
 		_storm_left = float(GameState.up("thunderhead", "time", 5.0))
 
-## Movement abilities: leap (Pebble), lunge (Quill), blade dash (Nyx).
+## Movement abilities: leap (Pebble), blade dash (Nyx).
 func _tick_ability_move(delta: float) -> void:
 	_amove_left -= delta
 	velocity = _amove_dir * _amove_speed
@@ -1322,7 +1358,10 @@ func _fire_one_shot() -> void:
 	var tip_frame := _anim.frame
 	if velocity.length() < 60.0 and _anim.has_state("attack") and not _anim.is_playing("dash") and not _anim.is_playing("ability"):
 		var hf := int(_art_hit_frames("attack", [0])[0])
-		var atk_fps := maxf(12.0, float(_anim.frame_count("attack")) * float(_weapon.get("fire_rate", 8.0)) * _buff_firerate() * 0.5)
+		## anim_shots: rounds per firing strip (2 = the strip spans two shots).
+		## Juno's 4-frame flash strip plays once per round at her fire rate.
+		var per := maxf(0.25, float(_weapon.get("anim_shots", 2.0)))
+		var atk_fps := maxf(12.0, float(_anim.frame_count("attack")) * float(_weapon.get("fire_rate", 8.0)) * _buff_firerate() / per)
 		_anim.play("attack", atk_fps)
 		tip_state = "attack"
 		tip_frame = hf
@@ -1378,6 +1417,7 @@ func _fire_one_shot() -> void:
 			bl.set("pierce_falloff", 1.0)
 			bl.modulate = Color(0.75, 0.9, 1.4, 0.8)
 	_flash_left = 0.05
+	_live_line_swing(origin)
 	LightFx.flash(get_parent(), origin, 110.0, Color(1.0, 0.7, 0.32, 0.55), 0.09)
 	Juice.fx(MUZZLE_PX.get(str(_weapon.get("projectile", "pistol")), "mz_pistol"), origin, {"dir": aim, "follow": self})
 	Juice.sfx("shot", -4.0)
@@ -2179,8 +2219,8 @@ func _legendary_on_hit(at: Vector2, src: String) -> void:
 				RunFx.ground(get_parent(), self, at, "heal", float(lg["censer"]["radius"]), float(lg["censer"]["time"]), float(lg["censer"]["hps"]))
 
 
-## Live Line: every Nth punch arcs lightning to the nearest enemy.
-func _live_line_swing() -> void:
+## Live Line: every Nth round (or swing) arcs lightning to the nearest enemy.
+func _live_line_swing(from: Vector2 = Vector2.INF) -> void:
 	if GameState.gear_legendary() != "live_line":
 		return
 	_swing_total += 1
@@ -2190,7 +2230,8 @@ func _live_line_swing() -> void:
 	var t := RunFx.nearest_enemy(get_tree(), global_position, float(ll["range"]))
 	if t == null:
 		return
-	RunFx.zap(get_parent(), global_position + Vector2(0, -8), t.global_position, Color(0.55, 0.85, 1.0), 0.25, 3.5)
+	var src := from if from != Vector2.INF else global_position + Vector2(0, -8)
+	RunFx.zap(get_parent(), src, t.global_position, Color(0.55, 0.85, 1.0), 0.25, 3.5)
 	var roll := _roll_damage(float(ll["mult"]))
 	t.call("apply_status", "stun", float(ll["stun"]))
 	hit_enemy(t, float(roll[0]), (t.global_position - global_position).normalized(), 120.0, bool(roll[1]), "chain")

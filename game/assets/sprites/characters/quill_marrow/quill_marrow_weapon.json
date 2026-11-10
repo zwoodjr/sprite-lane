@@ -1,6 +1,6 @@
 {
  "id": "quill_marrow",
- "type": "melee",
+ "type": "ranged",
  "frame_size": 448,
  "baseline_y": 428,
  "angle_convention": "degrees, 0 = pointing right (+x), positive = counter-clockwise on screen (y up)",
@@ -9,8 +9,7 @@
    1
   ],
   "ability": [
-   2,
-   3
+   2
   ]
  },
  "states": {
@@ -135,15 +134,15 @@
    },
    {
     "tip": [
-     434.4,
-     369.6
+     376.0,
+     371.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     427.1,
-     369.6
+     375.0,
+     369.0
     ],
     "angle": 0.0
    },
@@ -241,15 +240,15 @@
    },
    {
     "tip": [
-     434.4,
-     369.6
+     376.0,
+     371.0
     ],
     "angle": 0.0
    },
    {
     "tip": [
-     427.1,
-     369.6
+     375.0,
+     369.0
     ],
     "angle": 0.0
    },
@@ -262,8 +261,8 @@
    },
    {
     "tip": [
-     427.1,
-     369.6
+     375.0,
+     369.0
     ],
     "angle": 0.0
    },

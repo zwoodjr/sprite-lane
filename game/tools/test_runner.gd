@@ -770,9 +770,15 @@ func _test_gear() -> void:
 			if GearDefs.stat_lines(it).is_empty():
 				bad += 1
 	_check(bad == 0, "gear rolls bad=%d" % bad)
-	## Melee survivors never take ranged mods (Quill counts as melee).
-	for hero in ["pebble", "bolt_juno", "nyx_caldera", "quill_marrow"]:
+	## Melee survivors never take ranged mods.
+	for hero in ["pebble", "nyx_caldera"]:
 		_check(not GearDefs.fits(GearDefs.make_mod("scope", "rare"), "mod1", hero), "%s no scope" % hero)
+		_check(GearDefs.fits(GearDefs.make_mod("coat_fire", "rare"), "mod1", hero), "%s coating ok" % hero)
+	## Juno and Quill shoot since their painted rifle art: ranged mods, no melee ones.
+	for hero in ["bolt_juno", "quill_marrow"]:
+		_check(not GearDefs.is_melee_hero(hero), "%s is ranged" % hero)
+		_check(GearDefs.fits(GearDefs.make_mod("scope", "rare"), "mod1", hero), "%s takes scope" % hero)
+		_check(not GearDefs.fits(GearDefs.make_mod("grip", "rare"), "mod1", hero), "%s no grip" % hero)
 		_check(GearDefs.fits(GearDefs.make_mod("coat_fire", "rare"), "mod1", hero), "%s coating ok" % hero)
 	_check(not GearDefs.fits(GearDefs.make_mod("grip", "rare"), "mod1", "vesper_thorn"), "vesper no grip")
 	## Quick equip (stash popup / results): every rolled drop lands in a slot.
@@ -1960,6 +1966,32 @@ func _test_depth_e5() -> void:
 	_check(not GameState.kit.has("nobody"), "e5 save drops unknown heroes")
 	GameState._load_depth({})
 	_check(GameState.kit.is_empty() and GameState.kit_style("vesper_thorn") == "bolt", "e5 old saves default kit")
+	## Old saves from when Juno / Quill were melee: kit ids, weapon items and a
+	## melee mod in their mod slot all load cleanly.
+	GameState._load_depth({"kit": {"bolt_juno": {"style": "knuckle", "ability": "b", "quirk": "berserker"},
+		"quill_marrow": {"style": "cleaver", "ability": "a", "quirk": ""}}})
+	_check(GameState.kit_of("bolt_juno")["style"] == "knuckle" and GameState.kit_of("quill_marrow")["style"] == "cleaver", "ranged juno/quill keep old style ids")
+	var old_save := {"stash": [
+		{"uid": 501, "kind": "weapon", "slot": "weapon", "rarity": "rare", "hero": "bolt_juno", "variant": "coiled", "name": "Coiled Gauntlet", "legendary": "", "stats": {}, "set": "", "coat": ""},
+		{"uid": 502, "kind": "mod", "slot": "mod", "rarity": "rare", "mod": "grip", "name": "Rare Grip", "stats": {}, "set": "", "hero": "", "mod_kind": "melee", "coat": ""},
+		{"uid": 503, "kind": "weapon", "slot": "weapon", "rarity": "epic", "hero": "quill_marrow", "variant": "autopsy", "name": "Autopsy Bayonet", "legendary": "", "stats": {}, "set": "", "coat": "poison"}],
+		"loadouts": {"bolt_juno": {"weapon": 501, "mod1": 502}, "quill_marrow": {"weapon": 503}}, "next_uid": 504}
+	var keep_stash := GameState.stash.duplicate(true)
+	var keep_lo := GameState.loadouts.duplicate(true)
+	GameState.stash = (old_save["stash"] as Array).duplicate(true)
+	GameState.loadouts = (old_save["loadouts"] as Dictionary).duplicate(true)
+	GameState.salvage_bin = []
+	GameState._migrate_ranged_kits()
+	_check(str(GameState.stash_item(501)["name"]) == "Coiled Rifle" and str(GameState.stash_item(503)["name"]) == "Autopsy Bayonet Rifle", "old juno/quill weapons renamed")
+	_check(not GameState.loadout_of("bolt_juno").has("mod1") and not GameState.stash_item(502).is_empty(), "old melee mod leaves juno's slot, stays in stash")
+	_check(int(GameState.loadout_of("bolt_juno")["weapon"]) == 501, "old juno weapon stays equipped")
+	for hero in ["bolt_juno", "quill_marrow"]:
+		var ow := GearDefs.apply_weapon(KitDefs.apply_style(LoadoutStubs.weapon_for_character(hero), hero, GameState.kit_style(hero)),
+			GameState.stash_item(501 if hero == "bolt_juno" else 503), [])
+		_check(not ow.has("melee") and int(ow["mag_size"]) > 0 and float(ow["damage"]) > 0.0, "%s old kit builds a gun" % hero)
+	GameState.stash = keep_stash
+	GameState.loadouts = keep_lo
+	GameState._load_depth({})
 	## Melee survivors ignore ranged-only quirks.
 	GameState.selected_character_id = "pebble"
 	GameState.reset_loadout_to_defaults()
@@ -2016,6 +2048,27 @@ func _test_depth_e5() -> void:
 	player.set("hp", float(player.get("max_hp")) * 0.3)
 	_check(is_equal_approx(q0, 1.0) and float(player.call("_quirk_damage")) > 1.3, "e5 berserker")
 	await _end_depth_match(m)
+	## Ranged Quill / Juno: guns, and the abilities fire from the muzzle.
+	for hero in ["quill_marrow", "bolt_juno"]:
+		GameState.kit = {}
+		m = await _depth_match("smog", hero)
+		player = m.get_node("World/Player")
+		_check(not bool(player.call("is_melee")) and int(player.call("_mag_size")) > 0, "%s shoots" % hero)
+		var rtgt := _mob(m, "scav_bear", player.global_position + Vector2(220, 0))
+		rtgt.set("max_hp", 99999.0)
+		rtgt.set("hp", 99999.0)
+		await get_tree().process_frame
+		player.call("_try_ability")
+		_check(str(player.get("_ability_pending")) != "", "%s ability casts at range" % hero)
+		player.call("_fire_ability")
+		for i in range(20):
+			await get_tree().physics_frame
+		if hero == "quill_marrow":
+			_check(bool(rtgt.call("has_status", "mark")) and float(rtgt.get("hp")) < 99999.0, "quill dissect marks and shoots")
+		else:
+			_check(bool(rtgt.call("has_status", "stun")) and float(rtgt.get("hp")) < 99999.0, "juno overload hooks and stuns")
+		_check(float(player.call("muzzle_global").x) > player.global_position.x + 10.0, "%s muzzle at the gun" % hero)
+		await _end_depth_match(m)
 	## Prep screen builds, respects locks, and routes the gear button.
 	GameState.camp.clear()
 	GameState.kit = {}

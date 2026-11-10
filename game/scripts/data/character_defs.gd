@@ -190,25 +190,31 @@ static func _table() -> Dictionary:
 		BOLT_JUNO_ID: {
 			"id": BOLT_JUNO_ID,
 			"display_name": "Bolt Juno",
-			"fantasy": "Boosted scrap-fist + flail pull — yank, then punch",
+			"fantasy": "Lantern-pack gunner — steady auto-rifle, chain-hook shock round",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/bolt_juno/bolt_juno.png",
 			"anim": "res://assets/sprites/characters/bolt_juno/bolt_juno",
 			"color": Color(0.80, 0.25, 0.22),
 			"accent": Color(0.95, 0.40, 0.30),
 			"perks": [
-				{"id": "chain_pull", "name": "Chain Pull", "desc": "Abilities drag foes slightly closer."},
-				{"id": "gauntlet", "name": "Gauntlet", "desc": "+armor feel via extra HP."},
+				{"id": "chain_pull", "name": "Chain Pull", "desc": "Overload's hook round yanks its target out of the pack."},
+				{"id": "gauntlet", "name": "Gauntlet", "desc": "Armoured gun-arm: extra HP, takes 15% less damage."},
 			],
 			"equipment_unlocks": [],
 			"ability": {
 				"id": "overload", "name": "Overload", "short": "ZAP",
-				"desc": "Electric burst that arcs between nearby enemies and stuns them.",
-				"cooldown": 11.0, "range": 230.0, "jump": 170.0, "chain": 4,
-				"damage_mult": 1.6, "stun": 1.3, "burst_radius": 80.0,
+				"desc": "Fire a chain-hook shock round: it yanks its target, bursts, then arcs between nearby enemies and stuns them.",
+				## Ranged since the painted rifle art: range = hook-shot reach,
+				## the burst and the arcs start at the target.
+				"cooldown": 11.0, "range": 340.0, "jump": 170.0, "chain": 4,
+				"damage_mult": 1.6, "stun": 1.3, "burst_radius": 80.0, "pull": 180.0,
 			},
 			"move_speed_mult": 1.02,
-			"max_hp_bonus": 20,
+			## Ranged since the rifle art: she lost the gauntlet's lifesteal /
+			## guard, so the armoured gun-arm (Gauntlet perk) carries her (bot
+			## data: 1/15 survived on the bare rifle, Haze stay 3 sloppy).
+			"max_hp_bonus": 35,
+			"damage_taken_mult": 0.85,
 			"damage_mult": 1.05,
 			"heal_amount": 0,
 			"heal_cd": 999.0,
@@ -254,7 +260,7 @@ static func _table() -> Dictionary:
 		QUILL_MARROW_ID: {
 			"id": QUILL_MARROW_ID,
 			"display_name": "Quill Marrow",
-			"fantasy": "Dustcoat cutthroat — bayonet knife, carve through the pack",
+			"fantasy": "Hooded dustcoat rifleman — find the weak spot, put a round through it",
 			"playable": true,
 			"sprite": "res://assets/sprites/characters/quill_marrow/quill_marrow.png",
 			"anim": "res://assets/sprites/characters/quill_marrow/quill_marrow",
@@ -267,12 +273,16 @@ static func _table() -> Dictionary:
 			"equipment_unlocks": [],
 			"ability": {
 				"id": "dissect", "name": "Dissect", "short": "MARK",
-				"desc": "Mark the nearest foe (+50% damage taken), lunge in and stab it.",
-				"cooldown": 9.0, "range": 280.0, "lunge_speed": 760.0, "stop_dist": 30.0,
+				"desc": "Mark the nearest foe (+50% damage taken), then fire a piercing round through it.",
+				## Ranged since the painted rifle art: a marked-target piercing shot.
+				"cooldown": 9.0, "range": 460.0, "shot_speed": 1500.0, "pierce": 3,
 				"mark_mult": 1.5, "mark_time": 5.0, "damage_mult": 2.5,
 			},
 			"move_speed_mult": 1.1,
-			"max_hp_bonus": 20,
+			## Ranged since the rifle art: no more knife lifesteal / guard, so a
+			## heavier dustcoat (bot data: 2/16 survived on the bare rifle).
+			"max_hp_bonus": 30,
+			"damage_taken_mult": 0.85,
 			"damage_mult": 1.1,
 			"heal_amount": 0,
 			"heal_cd": 999.0,
